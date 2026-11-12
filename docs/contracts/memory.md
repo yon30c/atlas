@@ -1,0 +1,3 @@
+# Contrato de memoria
+
+Los estados iniciales son `proposed`, `active`, `archived` y `rejected`. Las memorias tienen propietario explícito. `MemoryGateway` es la única frontera de acceso: ofrece lectura contextual y recepción de propuestas; no expone sesiones, consultas SQL, archivos ni repositorios subyacentes. Una propuesta no se vuelve activa por el mero hecho de registrarse. El adaptador futuro deberá autorizar tanto la lectura como cada transición.

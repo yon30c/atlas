@@ -1,0 +1,1 @@
+"""Tipos y reglas centrales de Atlas."""

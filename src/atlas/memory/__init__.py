@@ -1,0 +1,1 @@
+"""Modelos de memoria; el acceso pasa por MemoryGateway."""
