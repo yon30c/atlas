@@ -418,5 +418,24 @@ class MemoryConsistencyModelTests(unittest.TestCase):
             )
 
 
+    def test_invalidation_receipt_binds_generation_and_affected_admissions(self):
+        from atlas.memory.consistency import InvalidationReceipt
+        receipt = InvalidationReceipt(
+            invalidation_id="invalidate-1",
+            new_generation=4,
+            affected_admission_ids=frozenset({"admission-1", "admission-2"}),
+            accepted_at=NOW,
+        )
+        self.assertEqual(receipt.new_generation, 4)
+        self.assertEqual(len(receipt.affected_admission_ids), 2)
+        with self.assertRaises(ContractError):
+            InvalidationReceipt(
+                invalidation_id="invalidate-1",
+                new_generation=0,
+                affected_admission_ids=frozenset(),
+                accepted_at=NOW,
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
