@@ -126,7 +126,7 @@ class FakeReadAuthority:
         self.admissions = []
         self.acks = []
 
-    def admit_read(self, snapshot, routes):
+    def admit_read(self, snapshot, routes, now):
         admission = ReadAdmission(
             admission_id=f"admission-{len(self.admissions) + 1}",
             snapshot_id=snapshot.snapshot_id,
