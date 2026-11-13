@@ -14,6 +14,7 @@ class AuthenticatedUserSubject:
     actor_identity_id: str
     subject_user_id: str
     is_active: bool
+    revision: int
 
     def __post_init__(self) -> None:
         for field in ("actor_identity_id", "subject_user_id"):
@@ -22,6 +23,8 @@ class AuthenticatedUserSubject:
                 raise ContractError(f"{field} debe ser una cadena no vacía")
         if not isinstance(self.is_active, bool):
             raise ContractError("is_active debe ser bool")
+        if isinstance(self.revision, bool) or not isinstance(self.revision, int) or self.revision < 1:
+            raise ContractError("revision debe ser un entero positivo")
 
 
 class IdentitySubjectBindingPort(Protocol):
