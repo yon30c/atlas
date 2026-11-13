@@ -1,6 +1,9 @@
 """Frontera de lectura autorizada y entrega protegida de memoria."""
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta
+import secrets
+from threading import RLock
 
 from atlas.authorization.memory_service import MemoryAuthorizationService
 from atlas.authorization.models import AuthorizationDecision, AuthorizationResult
@@ -19,6 +22,14 @@ from atlas.ports.protected_memory_read import (
     ProtectedMemoryRead,
     ReadConsistencyAuthorityPort,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class _ProtectedReadSession:
+    snapshot: object
+    admission: object
+    handle: object
+    operation_id: str
 
 
 class MemoryGatewayService:
@@ -44,6 +55,10 @@ class MemoryGatewayService:
         self._egress = egress
         self._routes = routes
         self._clock = clock
+        # Solo el Gateway conserva referencias internas al snapshot/admisión/handle.
+        # El registro es local al proceso y no sustituye la recuperación durable.
+        self._read_sessions: dict[str, _ProtectedReadSession] = {}
+        self._read_sessions_lock = RLock()
 
     @staticmethod
     def _valid_utc(value: object) -> bool:
@@ -167,17 +182,30 @@ class MemoryGatewayService:
                 return None
 
             try:
-                return ProtectedMemoryRead(
+                read_id = secrets.token_urlsafe(32)
+                session = _ProtectedReadSession(
                     snapshot=snapshot,
                     admission=admission,
                     handle=handle,
                     operation_id=operation_id,
                 )
+                with self._read_sessions_lock:
+                    if read_id in self._read_sessions:
+                        self._finish_empty_admission(admission, operation_id)
+                        return None
+                    self._read_sessions[read_id] = session
+                return ProtectedMemoryRead(read_id=read_id)
             except Exception:
                 self._finish_empty_admission(admission, operation_id)
                 return None
         except Exception:
             return None
+
+    def _resolve_read(self, read: ProtectedMemoryRead) -> _ProtectedReadSession | None:
+        if not isinstance(read, ProtectedMemoryRead):
+            return None
+        with self._read_sessions_lock:
+            return self._read_sessions.get(read.read_id)
 
     def emit_version(
         self,
@@ -187,8 +215,9 @@ class MemoryGatewayService:
         sequence: int,
     ) -> EgressReceipt | None:
         """Compromete una unidad en el último punto controlado de entrega."""
+        session = self._resolve_read(read)
         if (
-            not isinstance(read, ProtectedMemoryRead)
+            session is None
             or not isinstance(endpoint_id, str)
             or not endpoint_id.strip()
             or not isinstance(emission_id, str)
@@ -198,18 +227,18 @@ class MemoryGatewayService:
             or sequence < 1
         ):
             return None
-        if endpoint_id not in read.admission.route_ids:
+        if endpoint_id not in session.admission.route_ids:
             return None
         try:
             now = self._clock.now()
             if not self._valid_utc(now):
                 return None
-            expires_at = read.snapshot.grant_expires_at
+            expires_at = session.snapshot.grant_expires_at
             if expires_at is not None and now >= expires_at:
                 return None
             return self._egress.commit_and_emit(
-                read.admission,
-                read.handle,
+                session.admission,
+                session.handle,
                 endpoint_id,
                 emission_id,
                 sequence,
@@ -225,8 +254,9 @@ class MemoryGatewayService:
         final_sequence: int,
     ) -> bool:
         """Registra la finalización verificable de un endpoint de entrega."""
+        session = self._resolve_read(read)
         if (
-            not isinstance(read, ProtectedMemoryRead)
+            session is None
             or not isinstance(endpoint_id, str)
             or not endpoint_id.strip()
             or isinstance(final_sequence, bool)
@@ -234,15 +264,15 @@ class MemoryGatewayService:
             or final_sequence < 0
         ):
             return False
-        if endpoint_id not in read.admission.route_ids:
+        if endpoint_id not in session.admission.route_ids:
             return False
         try:
             now = self._clock.now()
             if not self._valid_utc(now):
                 return False
             receipt = self._egress.finish(
-                read.admission,
-                read.operation_id,
+                session.admission,
+                session.operation_id,
                 endpoint_id,
                 final_sequence,
                 now,
@@ -257,9 +287,19 @@ class MemoryGatewayService:
         self, read: ProtectedMemoryRead
     ) -> ReconciliationResult | None:
         """Revisa si todos los endpoints finalizaron; no fuerza terminalidad."""
-        if not isinstance(read, ProtectedMemoryRead):
+        session = self._resolve_read(read)
+        if session is None:
             return None
         try:
-            return self._authority.reconcile(read.operation_id)
+            result = self._authority.reconcile(session.operation_id)
+            if (
+                result is not None
+                and session.admission.admission_id in result.resolved_admission_ids
+            ):
+                with self._read_sessions_lock:
+                    current = self._read_sessions.get(read.read_id)
+                    if current is session:
+                        self._read_sessions.pop(read.read_id, None)
+            return result
         except Exception:
             return None
