@@ -446,7 +446,7 @@ El conjunto de pruebas de autoridad/egress contiene actualmente 15 métodos de p
 Se sustituyó la ruta anterior de lectura cruda por el siguiente flujo de frontera:
 
 1. `MemoryGatewayService.get_version()` obtiene un resultado CAM. Solo continúa si es `AuthorizationResult(ALLOW, snapshot)` y el snapshot identifica exactamente la memoria, versión y acción solicitadas.
-2. El Gateway obtiene tiempo UTC confiable inmediatamente antes de admitir y solicita `admit_read(snapshot, routes, now)`. La autoridad debe validar revisiones actuales, supresión, generación, expiración de Grant y el conjunto completo de rutas registradas.
+2. Después de CAM, el Gateway obtiene una segunda lectura de tiempo UTC confiable y solicita `admit_read(snapshot, routes, now)`. Si el Grant expiró entre CAM y admisión, rechaza la lectura. La autoridad debe validar revisiones actuales, supresión, generación, expiración de Grant y el conjunto completo de rutas registradas.
 3. El Gateway valida que la admisión devuelta coincida exactamente con snapshot, objetivo, propietario, scope y rutas configuradas.
 4. Solo entonces llama a `ProtectedMemoryContentPort.read_version_if_admitted(snapshot, admission)`.
 5. El puerto de contenido devuelve un `ProtectedContentHandle` opaco. El Gateway valida IDs, admisión y clasificación y construye `ProtectedMemoryRead`; nunca devuelve `MemoryVersion` ni su contenido.
@@ -472,4 +472,4 @@ Esta integración define el camino protegido, pero no acredita la garantía comp
 - No se ha implementado aún `begin_forget` ni el inventario verificable de destinos de persistencia/derivados.
 - No hay adaptadores reales, persistencia durable, transporte ni recuperación distribuida.
 
-Los tests escritos para esta integración incluyen 15 casos unitarios del Gateway, 9 casos CAM/Gateway y 3 casos de seguridad de frontera. Usan fakes donde corresponde. No se han ejecutado en esta etapa y no prueban comportamiento de runtime. Esta implementación no habilita todavía lectura protegida en producción.
+Los tests escritos para esta integración incluyen 16 casos unitarios del Gateway, 9 casos CAM/Gateway y 3 casos de seguridad de frontera. Usan fakes donde corresponde. No se han ejecutado en esta etapa y no prueban comportamiento de runtime. Esta implementación no habilita todavía lectura protegida en producción.
