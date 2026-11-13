@@ -193,6 +193,7 @@ Cada recurso protegido tendrá un marcador de contenido único y sintético. Los
 | QA-VER-14 | Crear nueva versión con clasificación heredada | Hereda la clasificación aprobada vigente, salvo una decisión directa del propietario registrada para el cambio exacto. |
 | QA-VER-15 | Intentar downgrade automático por resumen, importación, transformación u origen distinto | Se rechaza; no se reduce clasificación por inferencia. |
 | QA-VER-16 | Operar con clasificación RESTRICTED sin controles adicionales definidos/disponibles | La operación que dependa de esos controles deniega. No se interpreta RESTRICTED como permiso adicional. |
+| QA-VER-17 | Intentar una transición no listada, incluida una transición desde estado terminal | Se rechaza sin mutar la versión ni el puntero vigente. |
 
 ### 6.3 Propuestas, atomicidad e idempotencia
 
@@ -222,6 +223,9 @@ Cada recurso protegido tendrá un marcador de contenido único y sintético. Los
 | QA-AUTH-05 | Leer memory-B omitiendo project_id | Se deniega. |
 | QA-AUTH-06 | Leer memory-B indicando project-B | Se deniega por discrepancia de proyecto. |
 | QA-AUTH-07 | Intentar leer memory-C desde contexto project-A | Se deniega; no hay herencia ni cruce de proyectos. |
+| QA-AUTH-08 | actor_identity y context.user_id son distintos | No se equiparan automáticamente; la autorización utiliza identidad autenticada y reglas CT-02. user_id contextual por sí solo no demuestra propiedad ni autoridad. |
+| QA-AUTH-09 | Operación delegada con Grant limitado a otro recurso | Se deniega; delegación no amplía el alcance ni convierte al delegado en propietario. |
+| QA-AUTH-10 | Recurso requiere environment_id y el contexto omite o declara otro entorno | Se deniega; no hay herencia implícita entre entornos. |
 | QA-CAM-01 | Solicitar operación sobre recurso concreto sin resource_id | Se deniega. |
 | QA-CAM-02 | Solicitar un resource_id distinto al recurso resuelto | Se deniega; no se sustituye por un recurso parecido ni por tipo. |
 | QA-CAM-03 | Usar grant-type-only sin resource_ids explícitos para leer una instancia | Se deniega. |
@@ -237,6 +241,7 @@ Cada recurso protegido tendrá un marcador de contenido único y sintético. Los
 | QA-CAM-13 | Crear memoria PROJECT con proyecto inexistente, suspendido o no verificable | Se deniega. |
 | QA-CAM-14 | Usar Grant expirado, revocado o fuera de alcance | Se deniega. |
 | QA-CAM-15 | Intentar ampliar resource_ids por delegación o por creación automática de versión | Se deniega; la ampliación requiere decisión del propietario. |
+| QA-CAM-16 | resource_id coincide, pero owner, project o environment no coincide con el Grant/metadatos | Se deniega; la coincidencia de ID no omite las demás dimensiones de ResourceIdentity. |
 
 ### 6.5 Autoridad de metadatos y fail-closed
 
@@ -255,6 +260,7 @@ Cada recurso protegido tendrá un marcador de contenido único y sintético. Los
 | QA-FAIL-05 | Resolver devuelve relación padre/hijo no verificable | Se deniega. |
 | QA-FAIL-06 | Error de autorización o not-found para recurso protegido | No revela si el recurso existe ni expone contenido o metadatos protegidos. |
 | QA-FAIL-07 | Cualquier fallo de autorización | No activa fallback por tipo, acceso directo, consulta sin filtro de scope ni uso de contenido previo. |
+| QA-FAIL-08 | Identidad se suspende/revoca durante una operación dependiente | Se detienen nuevas operaciones y se aplica el tratamiento cooperativo definido en CT-01; la identidad revocada no continúa como si siguiera activa. |
 
 ### 6.6 Decisiones directas del propietario
 
@@ -270,6 +276,7 @@ Cada recurso protegido tendrá un marcador de contenido único y sintético. Los
 | QA-OWNER-08 | Delegación activa o prueba con delegation distinta de NONE | Se deniega para approve/reject/forget. |
 | QA-OWNER-09 | Assistant, Memory Engine, Watcher, Analysis Engine o Skill intenta aprobar/rechazar | Se deniega; ninguno posee esa autoridad. |
 | QA-OWNER-10 | No existe emisor de autenticación confiable en integración | approve/reject/forget permanecen deshabilitados; no se introduce bypass provisional. |
+| QA-OWNER-11 | Proof contiene request_id distinto, action distinta, recurso/propuesta/version distinta o nonce no válido | Se deniega; la prueba está ligada a la solicitud y recursos exactos y no puede reutilizarse en otra operación. |
 
 Las pruebas QA-OWNER-01 y QA-OWNER-02 pueden ejecutarse contra un emisor/verificador de prueba aislado para verificar el contrato. Esto no equivale a aceptar el proveedor real de autenticación.
 
