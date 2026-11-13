@@ -15,6 +15,7 @@ from atlas.memory.consistency import (
     EndpointDeliveryStatus,
     EndpointFenceReceipt,
     ReadAdmission,
+    ReadAdmissionStatus,
     ReconciliationResult,
 )
 from atlas.memory.models import MemoryClassification
@@ -55,6 +56,11 @@ class ProtectedMemoryRead:
             raise ContractError("admission debe ser ReadAdmission")
         if self.admission.snapshot_id != self.snapshot.snapshot_id:
             raise ContractError("admission no corresponde al snapshot")
+        if self.admission.status not in (
+            ReadAdmissionStatus.ADMITTED,
+            ReadAdmissionStatus.ACTIVE,
+        ):
+            raise ContractError("la admisión no está abierta para entrega")
         if self.operation_id != f"read:{self.admission.admission_id}":
             raise ContractError("operation_id no corresponde a la admisión")
         target = self.admission.target
