@@ -186,7 +186,16 @@ class MemoryGatewayService:
         sequence: int,
     ) -> EgressReceipt | None:
         """Compromete una unidad en el último punto controlado de entrega."""
-        if not isinstance(read, ProtectedMemoryRead):
+        if (
+            not isinstance(read, ProtectedMemoryRead)
+            or not isinstance(endpoint_id, str)
+            or not endpoint_id.strip()
+            or not isinstance(emission_id, str)
+            or not emission_id.strip()
+            or isinstance(sequence, bool)
+            or not isinstance(sequence, int)
+            or sequence < 1
+        ):
             return None
         if endpoint_id not in read.admission.route_ids:
             return None
@@ -215,7 +224,14 @@ class MemoryGatewayService:
         final_sequence: int,
     ) -> bool:
         """Registra la finalización verificable de un endpoint de entrega."""
-        if not isinstance(read, ProtectedMemoryRead):
+        if (
+            not isinstance(read, ProtectedMemoryRead)
+            or not isinstance(endpoint_id, str)
+            or not endpoint_id.strip()
+            or isinstance(final_sequence, bool)
+            or not isinstance(final_sequence, int)
+            or final_sequence < 0
+        ):
             return False
         if endpoint_id not in read.admission.route_ids:
             return False
