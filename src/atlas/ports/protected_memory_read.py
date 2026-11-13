@@ -200,3 +200,15 @@ class ProtectedEgressPort(Protocol):
         endpoint_id: str,
     ) -> EndpointDeliveryStatus:
         """Verifica el estado real del endpoint; timeout no equivale a fencing."""
+
+
+class ProtectedMemoryConsistencyPort(
+    ReadConsistencyAuthorityPort, ProtectedEgressPort, Protocol
+):
+    """Frontera compuesta única para consistencia y entrega protegida.
+
+    El Gateway recibe una sola instancia de este protocolo. La implementación
+    debe ordenar admisión, Forget, invalidación y compromiso de egress mediante
+    el mismo estado y la misma relación lógica de orden; implementar las facetas
+    por separado sin coordinación atómica no satisface este contrato.
+    """
