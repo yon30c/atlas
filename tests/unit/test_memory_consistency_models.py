@@ -73,6 +73,7 @@ def admission(status=ReadAdmissionStatus.ADMITTED):
         route_ids=frozenset({"assistant-response"}),
         status=status,
         admitted_at=NOW,
+        terminal_evidence_id=("receipt-1" if status in (ReadAdmissionStatus.COMPLETED, ReadAdmissionStatus.CANCELLED) else None),
     )
 
 
