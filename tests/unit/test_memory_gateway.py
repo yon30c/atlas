@@ -144,10 +144,32 @@ class StubAuthority:
         self.acks = []
         self.reconciliations = []
         self.reconcile_result = None
+        self.emissions = []
+        self.finishes = []
 
     def admit_read(self, snapshot, routes, now):
         self.admit_calls.append((snapshot, routes))
         return self.admission
+
+    def commit_and_emit(self, admission, handle, endpoint_id, emission_id, sequence, now):
+        self.emissions.append((admission, handle, endpoint_id, emission_id, sequence, now))
+        return EgressReceipt(
+            admission.admission_id, endpoint_id, emission_id, sequence,
+            admission.generation, now
+        )
+
+    def finish(self, admission, operation_id, endpoint_id, final_sequence, now):
+        self.finishes.append((admission, operation_id, endpoint_id, final_sequence, now))
+        return EndpointCompletionReceipt(
+            operation_id, admission.admission_id, endpoint_id,
+            admission.generation, final_sequence, now
+        )
+
+    def fence(self, admission, operation_id, endpoint_id, new_generation, now):
+        raise AssertionError("no debe llamarse desde el flujo de lectura normal")
+
+    def reconcile_endpoint(self, admission, endpoint_id):
+        raise AssertionError("no se usa en estas pruebas")
 
     def record_endpoint_ack(self, receipt):
         self.acks.append(receipt)
@@ -290,7 +312,8 @@ class MemoryGatewayServiceTests(unittest.TestCase):
             AuthorizationResult(AuthorizationDecision.ALLOW, self.snapshot)
         )
         self.authority = StubAuthority(self.admission)
-        self.egress = StubEgress()
+        # Una sola instancia implementa autoridad y egress.
+        self.egress = self.authority
         self.handle = FakeHandle(self.admission)
         self.content = StubContent(self.handle)
         self.clock = StubClock()
@@ -298,7 +321,6 @@ class MemoryGatewayServiceTests(unittest.TestCase):
             self.authorization,
             self.content,
             self.authority,
-            self.egress,
             DeliveryRouteSet(ROUTES),
             self.clock,
         )
