@@ -167,6 +167,53 @@ Se adopta como dirección de diseño que:
 
 Esta recomendación no cambia la regla de que CAM autoriza cada recurso concreto, ni convierte el snapshot en un Grant. Tampoco decide todavía cómo se propagan las revisiones de Grants/identidades ni qué mecanismo técnico comunica su revocación a los puntos de entrega.
 
+### 4.8 Revisiones canónicas de metadatos — recomendación adoptada
+
+Los snapshots de autorización necesitan detectar cualquier cambio en los hechos canónicos que CAM utilizó. Se adopta una revisión monotónica por agregado/autoridad como abstracción lógica; no se fija su representación física.
+
+El snapshot debe vincular revisiones independientes para todos los hechos mutables que puedan cambiar la decisión o la visibilidad:
+
+- Memory: propietario, scope, proyecto y puntero a la versión aprobada vigente.
+- MemoryVersion: pertenencia a la memoria, estado y clasificación. Aunque el contenido de una versión sea inmutable, sus transiciones de estado requieren una nueva revisión de metadatos.
+- Project y Environment: estado y atributos que condicionen el acceso.
+- Identity: estado y revisión de autoridad del actor autenticado.
+- Grant: identidad exacta del Grant, alcance, acciones, vigencia, revocación y revisión aplicable.
+- Supresión/admisión: generación de fencing y estado de cierre del conjunto de recursos.
+
+Cada cambio que pueda afectar autorización o visibilidad DEBE incrementar la revisión correspondiente en la misma operación lógica que hace efectivo el cambio. No se permite reutilizar revisiones, retrocederlas ni inferir que un valor idéntico implica que no hubo cambio. El cambio del puntero vigente, el supersede y la revisión del agregado Memory deben permanecer coherentes con la atomicidad ya exigida por DM-01.
+
+La validación no compara solo un número aislado: comprueba identidad exacta, relación padre/hijo y revisión de cada autoridad implicada. Una revisión ausente, repetida, regresiva, no verificable o incoherente produce rechazo. Una nueva autorización debe crear una nueva admisión; no se reescribe el snapshot anterior.
+
+Los snapshots son pruebas de los hechos evaluados, no permisos autónomos. Su integridad y origen deben estar protegidos por la frontera confiable, pero esta decisión no selecciona firma, MAC, formato de token ni proveedor criptográfico.
+
+### 4.9 Revocación y expiración durante la entrega — semántica adoptada
+
+Se adopta la siguiente regla de orden: una revocación, suspensión, reducción de alcance o expiración aplicable debe invalidar las admisiones afectadas para cualquier emisión posterior. El punto efectivo de revocación debe quedar serializado respecto de las emisiones, no depender de propagación eventual no verificable.
+
+Para una transición administrativa de Identity o Grant, el sistema debe cerrar o invalidar las admisiones afectadas y obtener fencing de los puntos de entrega antes de considerar efectiva la transición frente a contenido protegido. Esto no autoriza a retrasar indefinidamente una revocación: si no puede detenerse una ruta, se bloquea esa ruta y se falla cerrado. En ningún caso una identidad REVOKED puede seguir participando en operaciones dependientes, ni una identidad SUSPENDED puede ampliar o continuar una operación más allá del punto seguro permitido por CT-01.
+
+La expiración no necesita una mutación administrativa: cada emisión debe comprobar que el instante confiable no excede la vigencia del Grant y que la revisión/época sigue vigente. Si el reloj confiable no está disponible o su resultado es ambiguo, no se emite contenido. Los límites de expiración conservan la semántica exacta del contrato de Grant; esta propuesta no inventa tolerancias ni periodos de gracia.
+
+La autoridad lógica de admisión/supresión coordina la invalidez y el fencing, pero CAM conserva la responsabilidad de decidir si la acción está autorizada. La autoridad de admisión no crea Grants, no interpreta políticas alternativas y no sustituye la reevaluación CAM para una nueva lectura.
+
+No se admite una ventana en la que una revocación ya efectiva en la fuente autoritativa todavía permita emisiones por retraso de una notificación. La implementación deberá lograr orden consistente entre cambio autoritativo, avance del fencing y emisión. Si no puede demostrarlo, la transición o la emisión queda bloqueada; no se acepta consistencia eventual para este límite de seguridad.
+
+### 4.10 Inventarios separados y evidencia de cobertura — recomendación adoptada
+
+Se mantendrán dos inventarios relacionados, pero distintos:
+
+**A. Inventario de persistencia y derivados:** almacenes primarios, versiones/copias históricas, índices, embeddings, cachés persistentes, réplicas, backups, exportaciones y cualquier otro lugar donde el contenido pueda sobrevivir o reconstruirse. Determina el alcance de eliminación y verificación física conforme a CT-05.
+
+**B. Inventario de rutas de entrega:** Gateway, endpoints, respuestas completas, streaming, fragmentos, buffers, colas, exportaciones/descargas, cachés que sirvan contenido, intermediarios y cualquier componente que pueda emitir o liberar contenido a un consumidor. Determina el alcance de admisión, revocación y fencing.
+
+Cada entrada debe identificar responsable lógico, tipo de capacidad, recursos/ámbitos que puede contener o entregar, rutas de entrada/salida, mecanismo de supresión o fencing requerido y evidencia de verificación. Los nombres de tecnologías concretas y los adaptadores permanecen pendientes hasta que exista un inventario real.
+
+La cobertura no se prueba únicamente enumerando componentes conocidos. Cada ruta de lectura/entrega debe poder trazarse desde la entrada pública hasta el último punto que puede liberar contenido; cada destino de persistencia debe tener un responsable y un procedimiento de verificación. Los componentes inexistentes deben registrarse como no aplicables con evidencia de alcance, no omitirse silenciosamente.
+
+Todo componente que pueda entregar contenido protegido y no esté registrado o no pueda demostrar fencing queda fuera de servicio para ese contenido. Todo destino de persistencia desconocido o no verificable impide declarar Forget completado. El inventario debe revisarse cuando se agregue, quite o cambie una ruta, adaptador, exportación, integración, backup o mecanismo de recuperación.
+
+La evidencia de cobertura puede demostrar qué se inspeccionó y qué se encontró; no debe incluir contenido olvidado, payloads, hashes de contenido ni datos privados innecesarios.
+
 ## 5. Reglas de fallo cerrado
 
 - Snapshot ausente, inválido, caducado o con IDs distintos: no leer.
@@ -227,12 +274,14 @@ Las pruebas de concurrencia deben usar eventos/barreras explícitas, no sleeps n
 
 ## 8. Decisiones pendientes antes de implementar
 
-1. Definir la autoridad única de supresión y cómo la consultan todos los destinos.
-2. Definir cómo se versionan los metadatos canónicos y cómo se detecta un cambio desde el snapshot CAM.
-3. Definir la semántica de lease/admisión y su recuperación ante caída del proceso, respetando la política aceptada para lecturas en curso.
-4. Definir cómo una revocación de Grant o expiración durante el intervalo se refleja en la admisión de lectura.
-5. Inventariar destinos reales antes de afirmar que la supresión es global.
-6. Definir evidencia verificable para que Forget avance de supresión lógica a eliminación física y finalmente a `forgotten`.
+Los bloqueos conceptuales de esta etapa quedan resueltos mediante las direcciones técnicas adoptadas en §§4.8–4.10. Antes de implementar siguen siendo necesarios trabajos de especificación y evidencia:
+
+1. Traducir las revisiones canónicas a contratos de puertos y snapshots, sin escoger todavía almacenamiento físico.
+2. Definir el protocolo de orden entre mutaciones de Identity/Grant, fencing y emisiones; cualquier transición no verificable debe fallar cerrado.
+3. Completar por inspección el inventario real de persistencia/derivados y el inventario real de rutas de entrega.
+4. Definir la evidencia verificable por tipo de destino para eliminación física, reconciliación y restauración, incluidos backups.
+5. Especificar el registro durable de admisiones, cierres, generaciones y acknowledgements, manteniendo los resultados idempotentes y correlacionados.
+6. Derivar pruebas deterministas para cambios de revisión, revocación, expiración, inventario incompleto y recuperación.
 
 **Decisión 1 — aceptada:** las lecturas admitidas antes de comenzar Forget deben finalizar o cancelarse de forma verificable antes de confirmar la supresión lógica. No se confirma la supresión si una lectura previa aún puede entregar contenido o si su estado no puede determinarse.
 
@@ -248,6 +297,16 @@ Las pruebas de concurrencia deben usar eventos/barreras explícitas, no sleeps n
 
 **Decisión 7 — recomendación adoptada para continuar el diseño:** una admisión no congela la autorización CAM durante toda la entrega. La revocación de Grant, suspensión/revocación de identidad u otra invalidación aplicable debe impedir emisiones posteriores en todos los puntos de entrega, con confirmación verificable de detención antes de declarar cancelada la admisión.
 
+**Decisión 8 — recomendación adoptada para continuar el diseño:** los hechos canónicos mutables que intervienen en autorización/visibilidad tendrán revisiones monotónicas e independientes por autoridad/agregado. El snapshot CAM vincula las revisiones exactas de Memory, MemoryVersion, Project/Environment, Identity, Grant y supresión/admisión que sean aplicables. Cualquier cambio relevante invalida la admisión anterior; revisión ausente o incoherente produce DENY.
+
+**Decisión 9 — recomendación adoptada para continuar el diseño:** una revocación, suspensión o reducción de alcance no puede depender de propagación eventual para detener entregas. El cambio autoritativo y el fencing deben quedar ordenados respecto de las emisiones. Si no puede probarse ese orden, no se permite emitir contenido ni declarar efectiva la transición para esa ruta hasta bloquearla de forma segura.
+
+**Decisión 10 — recomendación adoptada para continuar el diseño:** la vigencia temporal de Grants se comprueba en cada emisión usando tiempo confiable. La expiración no se extiende por una admisión previa ni por un snapshot antiguo. Falta de reloj confiable o resultado ambiguo produce rechazo.
+
+**Decisión 11 — recomendación adoptada para continuar el diseño:** se mantienen inventarios separados de destinos de persistencia/derivados y de rutas de entrega. El primero determina eliminación/verificación física; el segundo determina fencing y revocación de emisiones. Ninguno puede sustituir al otro.
+
+**Decisión 12 — recomendación adoptada para continuar el diseño:** componentes de entrega no inventariados o incapaces de demostrar fencing no pueden servir contenido protegido. Destinos de persistencia desconocidos/no verificables impiden declarar Forget completado. La cobertura exige trazabilidad de rutas y evidencia de inspección, incluidos componentes declarados no aplicables.
+
 Ninguno de estos puntos autoriza a seleccionar una base de datos, caché, índice, proveedor, scheduler o plataforma.
 
 ## 9. Criterio de salida
@@ -255,7 +314,9 @@ Ninguno de estos puntos autoriza a seleccionar una base de datos, caché, índic
 ME-03 de diseño estará listo para implementación cuando se hayan aceptado las garantías de §3–4 y cerrado los bloqueos de §8 que afecten al límite de lectura. La implementación posterior deberá:
 
 - cambiar el contrato del puerto para exigir lectura condicional;
-- vincular el resultado CAM con el snapshot exacto;
+- vincular el resultado CAM con el snapshot exacto y las revisiones monotónicas de todas las autoridades aplicables;
+- ordenar mutaciones de Identity/Grant, fencing y emisiones sin depender de propagación eventual;
+- mantener inventarios separados y verificables de persistencia/derivados y rutas de entrega;
 - comprobar la supresión en el mismo límite de admisión/lectura;
 - coordinar lecturas en curso con Forget;
 - aplicar fencing en cada punto efectivo de emisión y cubrir buffers/intermediarios;
