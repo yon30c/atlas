@@ -12,13 +12,14 @@ from atlas.memory.consistency import (
     AuthorityKind,
     AuthorizationRevisionSet,
     ReadAdmissionStatus,
+    ReadTarget,
 )
 from atlas.memory.journal import (
     ConsistencyRecordKind,
     ConsistencyRecoveryState,
     ConsistencyTransition,
 )
-from atlas.memory.models import MemoryScopeKind
+from atlas.memory.models import MemoryScope, MemoryScopeKind
 
 
 class EndpointProjectionStatus(str, Enum):
@@ -96,6 +97,45 @@ class ConsistencyProjection:
     invalidations: tuple[InvalidationProjection, ...]
     idempotency_records: tuple[IdempotencyProjection, ...]
     receipt_ids: frozenset[str]
+
+
+def reconstruct_read_target(admission: AdmissionProjection) -> ReadTarget | None:
+    """Reconstruct only the exact v2 target; never infer a legacy scope."""
+    if not isinstance(admission, AdmissionProjection) or not admission.recoverable:
+        return None
+    if not isinstance(admission.owner_id, str) or not admission.owner_id.strip():
+        return None
+    try:
+        if admission.scope_kind is MemoryScopeKind.PRIVATE:
+            if admission.scope_project_id is not None:
+                return None
+            scope = MemoryScope(MemoryScopeKind.PRIVATE)
+        elif admission.scope_kind is MemoryScopeKind.PROJECT:
+            if (
+                not isinstance(admission.scope_project_id, str)
+                or not admission.scope_project_id.strip()
+            ):
+                return None
+            scope = MemoryScope(
+                MemoryScopeKind.PROJECT,
+                admission.scope_project_id,
+            )
+            project_revision = admission.revisions.project_revision
+            if (
+                project_revision is None
+                or project_revision.authority_id != admission.scope_project_id
+            ):
+                return None
+        else:
+            return None
+        return ReadTarget(
+            memory_id=admission.memory_id,
+            version_id=admission.version_id,
+            owner_id=admission.owner_id,
+            scope=scope,
+        )
+    except (ContractError, AttributeError, TypeError):
+        return None
 
 
 class ConsistencyJournalReducer:
