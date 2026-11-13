@@ -257,3 +257,22 @@ Pruebas nuevas:
 CI de la reconstrucción exacta: [Atlas CI #43529942908](https://github.com/yon30c/atlas/actions/runs/43529942908), Python 3.10, 3.11, 3.12 y 3.13: éxito.
 
 **Pendiente:** clasificar y recuperar estados de endpoint con verificación independiente de recibos. La reconstrucción de `ReadTarget` no crea una sesión de lectura, no autoriza contenido y no reactiva emisores antiguos. No se ha implementado recuperación distribuida ni persistencia durable.
+
+## 17. ME-03G — Verificación independiente de recibos terminales
+
+Se implementó la frontera tipada para verificar recibos terminales sin confundir una referencia del journal con prueba de que un endpoint terminó o fue cercado.
+
+Componentes:
+- `src/atlas/memory/receipt_verification.py`: solicitudes cerradas por tipo, resultados VERIFIED/REJECTED/UNAVAILABLE, recibos atestados y comparación exacta de todos los campos.
+- `src/atlas/ports/terminal_receipt_verifier.py`: puerto cuya implementación resuelve emisores confiables desde su propia configuración; el journal no elige el emisor confiable.
+- `src/atlas/memory/terminal_recovery.py`: valida admisiones terminales solo después de verificar individualmente todos los recibos de endpoints y el recibo terminal de la admisión.
+- `journal_reducer.py`: ahora conserva operación, generación y secuencia final exactas de cada endpoint, además de la operación/generación del recibo terminal de admisión.
+
+Los recibos de fencing vinculan la generación anterior con la nueva. Las finalizaciones vinculan la secuencia final. Se exige que la lista de endpoints coincida exactamente con las rutas persistidas. Recibos ausentes, no confiables, rechazados, ambiguos, contradictorios o con campos diferentes dejan la recuperación sin evidencia aceptada.
+
+Pruebas:
+- 22 casos en `tests/unit/test_memory_terminal_receipt_verification.py`.
+- Pruebas de proyección ampliadas en `tests/unit/test_memory_journal_recovery_projection_v2.py`.
+- CI [#43530661316](https://github.com/yon30c/atlas/actions/runs/43530661316): Python 3.10–3.13, todos exitosos.
+
+**Límite:** la implementación no verifica firmas criptográficas ni contacta endpoints reales. Tampoco restaura admisiones no terminales. La evidencia verificada no es una capacidad de lectura ni una autorización CAM. La siguiente etapa es recuperar las admisiones pendientes como UNRESOLVED, mantener cerrado el gate y exigir fencing real de todos los endpoints con generación nueva y recibos verificados.
