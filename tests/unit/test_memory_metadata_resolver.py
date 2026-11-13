@@ -151,6 +151,35 @@ class MemoryMetadataResolverTests(unittest.TestCase):
         self.environment_port.result = EnvironmentMetadata("other", "active", 1)
         self.assertIsNone(self.resolver.resolve_environment("environment-1"))
 
+    def test_memory_and_version_revisions_are_positive(self):
+        from atlas.memory.models import MemoryVersion, MemoryProvenance, ProvenanceContext, SourceKind
+        provenance = MemoryProvenance(
+            source_kind=SourceKind.USER_INPUT,
+            source_ref=None,
+            captured_at=NOW,
+            captured_by="identity-1",
+            origin_context=ProvenanceContext(
+                origin="test",
+                actor_identity_id="identity-1",
+                request_id="request-1",
+                correlation_id="correlation-1",
+            ),
+        )
+        with self.assertRaises(ContractError):
+            MemoryVersion(
+                version_id=VERSION_ID,
+                memory_id=MEMORY_ID,
+                version_number=1,
+                content="content",
+                classification=MemoryClassification.CONFIDENTIAL,
+                status=MemoryVersionStatus.PENDING_REVIEW,
+                provenance=provenance,
+                parent_version_id=None,
+                created_at=NOW,
+                submitted_at=NOW,
+                revision=0,
+            )
+
     def test_memory_revision_is_positive_and_immutable(self):
         with self.assertRaises(ContractError):
             Memory(
