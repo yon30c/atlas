@@ -10,6 +10,7 @@ from atlas.core.errors import ContractError
 from atlas.memory.consistency import (
     AuthorityKind,
     AuthorizationRevisionSet,
+    ReadAdmissionStatus,
 )
 from atlas.memory.identifiers import validate_atlas_id
 
@@ -94,6 +95,9 @@ class ConsistencyTransition:
     receipt_id: str | None = None
     proof_reference: str | None = None
     checkpoint_reference: str | None = None
+    previous_revision: int | None = None
+    new_revision: int | None = None
+    admission_terminal_status: ReadAdmissionStatus | None = None
     route_ids: frozenset[str] = frozenset()
     affected_admission_ids: frozenset[str] = frozenset()
 
@@ -129,6 +133,14 @@ class ConsistencyTransition:
             raise ContractError("authority_kind debe ser AuthorityKind")
         if self.generation is not None:
             _positive(self.generation, "generation")
+        for field in ("previous_revision", "new_revision"):
+            value = getattr(self, field)
+            if value is not None:
+                _positive(value, field)
+        if self.admission_terminal_status is not None and not isinstance(
+            self.admission_terminal_status, ReadAdmissionStatus
+        ):
+            raise ContractError("admission_terminal_status debe ser ReadAdmissionStatus")
         if self.emission_sequence is not None:
             _positive(self.emission_sequence, "emission_sequence")
         if self.final_sequence is not None:
@@ -163,9 +175,11 @@ class ConsistencyTransition:
             ),
             ConsistencyRecordKind.INVALIDATION_CLOSED: (
                 "authority_kind", "authority_id", "generation",
+                "previous_revision", "new_revision",
             ),
             ConsistencyRecordKind.ADMISSION_RECONCILED: (
                 "admission_id", "generation", "receipt_id",
+                "admission_terminal_status",
             ),
             ConsistencyRecordKind.FORGET_SUPPRESSED: (
                 "memory_id", "generation",
@@ -199,6 +213,20 @@ class ConsistencyTransition:
             ConsistencyRecordKind.INVALIDATION_RECONCILED,
         ) and bool(self.route_ids) != bool(self.affected_admission_ids):
             raise ContractError("rutas y admisiones afectadas deben estar vacías o presentes juntas")
+        if self.record_kind is ConsistencyRecordKind.INVALIDATION_CLOSED:
+            if self.new_revision <= self.previous_revision:
+                raise ContractError("new_revision debe ser mayor que previous_revision")
+        if self.record_kind is ConsistencyRecordKind.ADMISSION_RECONCILED:
+            if self.admission_terminal_status not in (
+                ReadAdmissionStatus.COMPLETED, ReadAdmissionStatus.CANCELLED
+            ):
+                raise ContractError("ADMISSION_RECONCILED requiere estado terminal COMPLETED o CANCELLED")
+        if self.record_kind is not ConsistencyRecordKind.ADMISSION_RECONCILED and self.admission_terminal_status is not None:
+            raise ContractError("admission_terminal_status solo aplica a ADMISSION_RECONCILED")
+        if self.record_kind is not ConsistencyRecordKind.INVALIDATION_CLOSED and any(
+            value is not None for value in (self.previous_revision, self.new_revision)
+        ):
+            raise ContractError("previous_revision/new_revision solo aplican a INVALIDATION_CLOSED")
         if self.record_kind is ConsistencyRecordKind.FORGET_CLOSED:
             if self.subject_user_id != self.owner_id:
                 raise ContractError("FORGET_CLOSED requiere sujeto autenticado igual al propietario")
