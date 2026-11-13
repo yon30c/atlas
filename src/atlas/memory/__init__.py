@@ -31,14 +31,24 @@ from atlas.memory.consistency import (
     ReadTarget,
     ReconciliationResult,
 )
-from atlas.memory.forget import (\n    ForgetClosure,\n    ForgetClosureStatus,\n    ForgetRecoverySnapshot,\n    ForgetTarget,\n)\nfrom atlas.memory.validation import (
+from atlas.memory.forget import (
+    ForgetClosure,
+    ForgetClosureStatus,
+    ForgetRecoverySnapshot,
+    ForgetTarget,
+)
+from atlas.memory.validation import (
     validate_memory_aggregate,
     validate_proposal_links,
     validate_version_transition,
 )
 
 __all__ = [
-    "ForgetClosure",\n    "ForgetClosureStatus",\n    "ForgetRecoverySnapshot",\n    "ForgetTarget",\n    "AuthorityKind",
+    "ForgetClosure",
+    "ForgetClosureStatus",
+    "ForgetRecoverySnapshot",
+    "ForgetTarget",
+    "AuthorityKind",
     "AuthorityRevision",
     "AuthorizationInvalidation",
     "AuthorizationRevisionSet",
