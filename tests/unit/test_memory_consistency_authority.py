@@ -694,6 +694,9 @@ class FakeReadConsistencyAndEgress:
                 or not operation["pending"]
                 or operation.get("kind") not in ("invalidation", "forget")
                 or admission.admission_id not in operation["affected"]
+                or not self._same_admission(
+                    self.admissions.get(admission.admission_id), admission
+                )
                 or endpoint_id not in admission.route_ids
                 or new_generation <= admission.generation
                 or new_generation != operation.get("generation")
