@@ -148,6 +148,21 @@ class MemoryMetadataResolverTests(unittest.TestCase):
         self.environment_port.result = EnvironmentMetadata("other", "active", 1)
         self.assertIsNone(self.resolver.resolve_environment("environment-1"))
 
+    def test_metadata_requires_positive_canonical_revisions(self):
+        with self.assertRaises(Exception):
+            MemoryVersionMetadata(
+                version_id=VERSION_ID,
+                memory_id=MEMORY_ID,
+                status=MemoryVersionStatus.APPROVED,
+                classification=MemoryClassification.CONFIDENTIAL,
+                parent_version_id=None,
+                revision=0,
+            )
+        with self.assertRaises(Exception):
+            ProjectMetadata("project-1", "active", 0)
+        with self.assertRaises(Exception):
+            EnvironmentMetadata("environment-1", "active", 0)
+
     def test_invalid_ids_fail_closed_without_port_calls(self):
         self.assertIsNone(self.resolver.resolve_memory(""))
         self.assertIsNone(self.resolver.resolve_version(MEMORY_ID, ""))
