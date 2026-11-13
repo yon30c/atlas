@@ -473,3 +473,22 @@ Esta integración define el camino protegido, pero no acredita la garantía comp
 - No hay adaptadores reales, persistencia durable, transporte ni recuperación distribuida.
 
 Los tests escritos para esta integración incluyen 16 casos unitarios del Gateway, 9 casos CAM/Gateway y 3 casos de seguridad de frontera. Usan fakes donde corresponde. No se han ejecutado en esta etapa y no prueban comportamiento de runtime. Esta implementación no habilita todavía lectura protegida en producción.
+
+### 14.3 Contrato inicial de cierre lógico Forget
+
+Se añadieron `src/atlas/memory/forget.py` y los siguientes modelos puros:
+
+- `ForgetTarget`: identifica la Memory lógica exacta. Forget v1 cubre esa memoria y todas sus versiones; no admite seleccionar una versión aislada.
+- `ForgetClosure`: conserva el ID de cierre, operación, clave de idempotencia, objetivo, generación de fencing, conjunto de admisiones previas, conjunto aún no resuelto, rutas de entrega y estado operativo.
+- `ForgetClosureStatus`: distingue `CLOSING` de `SUPPRESSED`. El segundo solo es válido cuando el conjunto no resuelto está vacío. Los IDs de admisiones afectadas se conservan como evidencia mínima incluso después de reconciliarse.
+
+El modelo no contiene payload, fragmentos, hashes ni contenido derivado. `SUPPRESSED` describe exclusivamente el cierre lógico de exposición; no representa eliminación física, no cambia MemoryVersion a `forgotten` y no permite comunicar que el olvido completo terminó.
+
+Se amplió `ReadConsistencyAuthorityPort` con:
+
+- `begin_forget(target, authorization, idempotency_key, now)`: exige una autorización ya verificada y consumida por CAM/OwnerDecisionVerifier; debe serializarse atómicamente con `admit_read`, cerrar nuevas admisiones, avanzar generación y capturar todas las admisiones/rutas anteriores.
+- `reconcile_forget(operation_id)`: mantiene `CLOSING` mientras cualquier admisión previa esté no resuelta y solo devuelve `SUPPRESSED` tras evidencia correlacionada de finalización o fencing de todos los endpoints.
+
+El protocolo `VerifiedForgetAuthorization` representa la frontera tipada para la evidencia ya verificada. No implementa un emisor ni un verificador: el repositorio aún no dispone de un emisor confiable de OwnerDecisionProof. Por tanto, este contrato **no habilita una operación Forget invocable** ni admite sustituir la prueba por un booleano, texto de chat o afirmación del Assistant.
+
+Se añadieron siete pruebas de modelo en `tests/unit/test_memory_forget.py`; son pruebas escritas y no ejecutadas. Aún falta implementar la semántica en el fake de autoridad/egress, cubrir idempotencia, carrera con admisión, acknowledgements parciales, fencing y recuperación, y después revisar todos los canales de entrega. No hay persistencia durable, supresión global ni eliminación física implementadas.
