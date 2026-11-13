@@ -65,7 +65,7 @@ class GrantTests(unittest.TestCase):
                 subject_identity_id="agent-001",
                 project_id="atlas",
                 environment="development",
-                resource_type="files",
+                resource_scope=GrantResourceScope("files", frozenset({"file-001"})),
                 actions=frozenset(),
                 issued_at=self.issued_at,
                 expires_at=self.issued_at + timedelta(days=7),
