@@ -263,7 +263,10 @@ class MemoryGatewayAuthorizationIntegrationTests(unittest.TestCase):
         result = self.gateway.get_version(make_context(), MEMORY_ID, VERSION_ID)
 
         self.assertIsNotNone(result)
-        self.assertIs(result.handle, self.content.handle)
+        self.assertFalse(hasattr(result, "handle"))
+        self.assertFalse(hasattr(result, "snapshot"))
+        self.assertFalse(hasattr(result, "admission"))
+        self.assertIsNotNone(self.content.handle)
         self.assertEqual(len(self.content.calls), 1)
         self.assertEqual(self.identity_port.calls, ["identity-1"])
         self.assertEqual(self.grant_repository.owner_requests, [])
