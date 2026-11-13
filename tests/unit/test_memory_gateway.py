@@ -295,6 +295,16 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         )
         self.assertEqual(len(self.egress.finishes), len(ROUTES))
 
+    def test_handle_for_another_memory_or_version_is_rejected(self):
+        self.content.handle = FakeHandle(self.admission)
+        self.content.handle.version_id = "018bcfe5-7b3a-7cc2-98c4-dc0c0c073a13"
+
+        result = self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
+
+        self.assertIsNone(result)
+        self.assertEqual(len(self.egress.finishes), len(ROUTES))
+        self.assertEqual(len(self.authority.acks), len(ROUTES))
+
     def test_emit_requires_registered_endpoint_and_returns_egress_receipt(self):
         read = self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
         receipt = self.gateway.emit_version(
