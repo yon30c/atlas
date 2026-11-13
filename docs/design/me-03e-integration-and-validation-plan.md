@@ -208,3 +208,19 @@ Por tanto, el fake de recuperación ahora:
 Se añadieron pruebas para verificar el rechazo de una proyección con una admisión ADMITTED sin resolver y la conservación de la clave de idempotencia de Forget tras restaurar un cierre terminal.
 
 **Límite deliberado:** esto mejora el comportamiento fail-closed del fake; no completa la recuperación de admisiones activas. El siguiente trabajo de diseño debe ampliar el sobre journalizado de READ_ADMITTED con los datos mínimos de target/scope, definir cómo se revalidan recibos y reconstruir estados de endpoint/admisión sin confiar únicamente en el reducer. El esquema actual no se considera suficiente para recuperación durable.
+
+## 15. Validación del límite de recuperación fail-closed
+
+El commit de pruebas `619e7d8345437f78a341b4e38d647dc836b7a912` añadió la comprobación de que una proyección con una admisión no terminal no puede restaurarse descartando esa admisión. También verifica que una clave de idempotencia de Forget sobreviva como tombstone opaco al restaurar una proyección terminal.
+
+GitHub Actions ejecutó correctamente la matriz completa:
+- Python 3.10: éxito.
+- Python 3.11: éxito.
+- Python 3.12: éxito.
+- Python 3.13: éxito.
+
+Workflow de pruebas: [Atlas CI #43529302568](https://github.com/yon30c/atlas/actions/runs/43529302568).
+
+El commit documental actual `e2e2d31cb407b9deb33c401ff74bb32457e6b40c` también pasó la misma matriz: [Atlas CI #43529334129](https://github.com/yon30c/atlas/actions/runs/43529334129).
+
+Esto valida los tests puros y el fake de proceso único. No valida recuperación durable ni reconstrucción de admisiones activas.
