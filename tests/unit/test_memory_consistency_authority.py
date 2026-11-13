@@ -542,7 +542,17 @@ class FakeReadConsistencyAndEgress:
             fence_acks = self.fence_acks.get(operation_id, set())
             completion_acks = self.completion_acks.get(operation_id, set())
             for admission_id in operation["affected"]:
-                admission = self.admissions[admission_id]
+                admission = self.admissions.get(admission_id)
+                if admission is None:
+                    unresolved.add(admission_id)
+                    continue
+                if admission.status in (
+                    ReadAdmissionStatus.COMPLETED, ReadAdmissionStatus.CANCELLED
+                ):
+                    # A separate invalidation/closure may already have made this
+                    # admission terminal with verified evidence.
+                    resolved.add(admission_id)
+                    continue
                 required = {(admission_id, endpoint) for endpoint in admission.route_ids}
                 if required.issubset(completion_acks):
                     evidence = f"completion:{operation_id}:{admission_id}"
@@ -813,6 +823,32 @@ class FakeHandle:
 
 
 class MemoryConsistencyAuthorityTests(unittest.TestCase):
+
+    def test_read_operation_reconciles_from_terminal_invalidation_evidence(self):
+        admission = self.authority.admit_read(
+            private_snapshot(), DeliveryRouteSet(ROUTES)
+        )
+        invalidation = AuthorizationInvalidation(
+            "invalidate-read-operation", AuthorityKind.IDENTITY, "identity-1",
+            1, 2, frozenset({admission.admission_id})
+        )
+        receipt = self.authority.begin_invalidation(invalidation)
+        for endpoint in sorted(admission.route_ids):
+            fence = self.egress.fence(
+                admission, invalidation.invalidation_id, endpoint,
+                receipt.new_generation, NOW
+            )
+            self.assertIsNotNone(fence)
+            self.assertTrue(self.authority.record_endpoint_ack(fence))
+        invalidation_result = self.authority.reconcile(invalidation.invalidation_id)
+        self.assertEqual(
+            invalidation_result.resolved_admission_ids,
+            frozenset({admission.admission_id})
+        )
+        read_result = self.authority.reconcile(f"read:{admission.admission_id}")
+        self.assertEqual(read_result.resolved_admission_ids, frozenset({admission.admission_id}))
+        self.assertFalse(read_result.unresolved_admission_ids)
+
 
     def test_egress_rechecks_project_grant_expiry_at_each_emission(self):
         from atlas.memory.consistency import AuthorityRevision, AuthorizationRevisionSet
