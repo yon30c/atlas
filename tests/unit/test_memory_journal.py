@@ -1,6 +1,7 @@
 """Pruebas puras del sobre y posiciones del journal de consistencia ME-03."""
 import unittest
-from datetime import datetime, timezone
+from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 
 from atlas.core.errors import ContractError
 from atlas.memory.consistency import (
@@ -27,13 +28,14 @@ RECORD_2 = "018bcfe5-7b3a-7cc2-98c4-dc0c0c073a14"
 CHECKPOINT_ID = "018bcfe5-7b3a-7cc2-98c4-dc0c0c073a15"
 
 
-def read_admitted(record_id=RECORD_1):
+def read_admitted(record_id=RECORD_1, idempotency_key=None, occurred_at=NOW):
     return ConsistencyTransition(
         record_id=record_id,
         schema_version=1,
         record_kind=ConsistencyRecordKind.READ_ADMITTED,
         operation_id="read:admission-1",
-        occurred_at=NOW,
+        occurred_at=occurred_at,
+        idempotency_key=idempotency_key,
         memory_id=MEMORY_ID,
         version_id=VERSION_ID,
         snapshot_id="snapshot-1",
@@ -51,6 +53,111 @@ def read_admitted(record_id=RECORD_1):
 
 def position(sequence, domain=DOMAIN, epoch=1):
     return ConsistencyPosition(domain, epoch, sequence)
+
+
+class InMemoryConsistencyJournalFake:
+    """Fake determinista de proceso único; no demuestra durabilidad real."""
+
+    def __init__(self, domain=DOMAIN, epoch=1):
+        self.domain = domain
+        self.epoch = epoch
+        self.sequence = 0
+        self.entries = []
+        self.checkpoint = None
+        self.idempotency = {}
+        self.record_ids = {}
+
+    def _position(self):
+        return ConsistencyPosition(self.domain, self.epoch, self.sequence)
+
+    @staticmethod
+    def _canonical(transition):
+        return replace(
+            transition,
+            record_id=RECORD_1,
+            occurred_at=NOW,
+        )
+
+    def append_transition(self, expected_position, transition):
+        if not isinstance(transition, ConsistencyTransition):
+            return None
+        if not isinstance(expected_position, ConsistencyPosition):
+            return None
+        if (
+            expected_position.consistency_domain_id != self.domain
+            or expected_position.authority_epoch != self.epoch
+        ):
+            return None
+
+        if transition.idempotency_key is not None:
+            existing = self.idempotency.get(transition.idempotency_key)
+            if existing is not None:
+                canonical, commit = existing
+                if canonical != self._canonical(transition):
+                    return None
+                return replace(commit, replayed=True)
+
+        existing_record = self.record_ids.get(transition.record_id)
+        if existing_record is not None:
+            return None
+        if expected_position != self._position():
+            return None
+
+        self.sequence += 1
+        position = self._position()
+        entry = JournalEntry(position, transition)
+        commit = JournalCommit(position, transition.record_id, False)
+        self.entries.append(entry)
+        self.record_ids[transition.record_id] = entry
+        if transition.idempotency_key is not None:
+            self.idempotency[transition.idempotency_key] = (
+                self._canonical(transition), commit
+            )
+        return commit
+
+    def load_recovery_state(self, domain_id):
+        if domain_id != self.domain:
+            return None
+        checkpoint_sequence = (
+            self.checkpoint.position.sequence if self.checkpoint else 0
+        )
+        entries = tuple(
+            entry for entry in self.entries
+            if entry.position.sequence > checkpoint_sequence
+        )
+        return ConsistencyRecoveryState(
+            domain_id=self.domain,
+            authority_epoch=self.epoch,
+            checkpoint=self.checkpoint,
+            entries=entries,
+            head_sequence=self.sequence,
+            continuity_reference="fake-only-untrusted-watermark",
+        )
+
+    def load_endpoint_receipts(self, admission_id):
+        receipt_kinds = {
+            ConsistencyRecordKind.EGRESS_COMMITTED,
+            ConsistencyRecordKind.ENDPOINT_COMPLETED,
+            ConsistencyRecordKind.ENDPOINT_FENCED,
+        }
+        return tuple(
+            entry for entry in self.entries
+            if entry.transition.admission_id == admission_id
+            and entry.transition.record_kind in receipt_kinds
+        )
+
+    def commit_checkpoint(self, checkpoint, expected_position):
+        if not isinstance(checkpoint, ConsistencyCheckpoint):
+            return None
+        if expected_position != self._position() or checkpoint.position != expected_position:
+            return None
+        if (
+            checkpoint.position.consistency_domain_id != self.domain
+            or checkpoint.position.authority_epoch != self.epoch
+        ):
+            return None
+        self.checkpoint = checkpoint
+        return JournalCommit(checkpoint.position, checkpoint.checkpoint_id, False)
 
 
 class ConsistencyJournalModelTests(unittest.TestCase):
