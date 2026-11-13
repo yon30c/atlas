@@ -121,6 +121,26 @@ Si la autoridad lógica no está disponible, no se admiten lecturas ni se confir
 
 **Dirección de diseño aceptada por el propietario del proyecto:** adoptar una única autoridad lógica de admisión y supresión, independiente de los proveedores físicos y responsable de serializar admisiones, cierre por Forget y resolución verificable de lecturas en curso. Esta aceptación fija la arquitectura lógica objetivo; no la convierte por sí sola en contrato normativo ni selecciona un mecanismo de implementación.
 
+### 4.6 Recuperación de admisiones abandonadas — propuesta
+
+La expiración de una lease no demuestra que el proceso titular haya dejado de ejecutarse. Un proceso pausado puede reanudarse después del timeout; por tanto, una lease vencida no debe convertir automáticamente una admisión pendiente en cancelada.
+
+Se propone utilizar **generaciones de admisión y fencing** como abstracción lógica, sin fijar todavía su implementación:
+
+1. Cada admisión recibe un identificador único y queda vinculada a una generación vigente de la memoria/versión.
+2. Al comenzar Forget, la autoridad cierra nuevas admisiones e incrementa la generación o emite una época de fencing superior, invalidando todas las admisiones anteriores para futuras entregas.
+3. Todo punto capaz de emitir contenido debe validar la generación vigente antes de permitir la entrega. No puede existir una ruta de salida que acepte contenido de una admisión antigua sin comprobar ese fencing.
+4. La autoridad solo marca una admisión antigua como cancelada cuando el sistema de entrega confirma que el token quedó cercado y que el emisor ya no puede producir más contenido.
+5. Si el proceso antiguo se reanuda, sus intentos de continuar deben ser rechazados por el punto de entrega, incluso si el proceso conserva memoria local o una respuesta previamente preparada.
+
+El fencing debe cubrir la salida completa, no solo la lectura del almacén: streaming, buffers administrados por la aplicación, fragmentos, exportaciones y cualquier otro canal que pueda seguir emitiendo contenido. Antes de confirmar la supresión también deben quedar resueltos los datos ya aceptados por componentes intermedios que todavía puedan entregarse al consumidor.
+
+**Caída del coordinador:** el reinicio no debe asumir que las admisiones desaparecieron. Debe recuperar el estado durable de cierre, generación y admisiones; mantener cerrado el acceso mientras reconcilia estados; y volver a cercar cualquier admisión cuyo resultado no sea verificable.
+
+**Condición de seguridad:** si no existe un punto de entrega que pueda hacer cumplir fencing de forma verificable, el sistema no puede declarar cancelada una admisión abandonada ni confirmar la supresión lógica. Debe permanecer bloqueado/fail-closed.
+
+Esta propuesta no afirma que un contador, token, lease o registro local sea suficiente por sí solo. La propiedad decisiva es que un emisor antiguo no pueda reanudar la entrega después de que Forget haya confirmado la supresión. La semántica concreta de persistencia, fencing y recuperación queda pendiente de revisión.
+
 ## 5. Reglas de fallo cerrado
 
 - Snapshot ausente, inválido, caducado o con IDs distintos: no leer.
