@@ -202,9 +202,9 @@ class MemoryMetadataResolverTests(unittest.TestCase):
                 parent_version_id=None,
                 revision=0,
             )
-        with self.assertRaises(Exception):
+        with self.assertRaises(ContractError):
             ProjectMetadata("project-1", "active", 0)
-        with self.assertRaises(Exception):
+        with self.assertRaises(ContractError):
             EnvironmentMetadata("environment-1", "active", 0)
 
     def test_invalid_ids_fail_closed_without_port_calls(self):
