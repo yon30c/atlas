@@ -263,4 +263,13 @@ Las pruebas deberán cubrir también valores de severidad válidos e inválidos,
 
 Las pruebas deberán cubrir casos positivos y negativos, incluyendo mappings mutables, clasificaciones inválidas, correlaciones diferentes, acceso no autorizado y fallos de persistencia.
 
+## 12. Referencias a CT-08
+
+CT-08 complementa este contrato como matriz transversal; las resoluciones siguientes precisan su aplicación sin duplicar sus reglas:
+
+- [CT-08 R08-05](consistency-matrix-ct-08.md#r08-05-separacion-de-actor-origen-fuente-y-contexto): Separación entre actor, origen, fuente y contexto conservando la correlación.
+- [CT-08 R08-06](consistency-matrix-ct-08.md#r08-06-clasificacion-y-proteccion-de-evidencia-derivada): Protección de la clasificación y de la evidencia derivada.
+- [CT-08 R08-07](consistency-matrix-ct-08.md#r08-07-diferencia-entre-finding-followuprecord-e-incidence): Distinción entre Finding, FollowUpRecord e incidencia y sus ciclos de vida.
+- [CT-08 R08-11](consistency-matrix-ct-08.md#r08-11-separacion-entre-eventos-y-securityaudit): Los eventos funcionales no sustituyen SecurityAudit.
+
 **Fin del contrato.**
