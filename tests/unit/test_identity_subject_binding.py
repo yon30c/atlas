@@ -6,6 +6,7 @@ from atlas.authorization.identity_binding import (
     resolve_authenticated_user_subject,
 )
 from atlas.core.context import OperationContext
+from atlas.core.errors import ContractError
 from atlas.core.identity import Identity, IdentityKind, IdentityStatus
 
 
@@ -87,7 +88,7 @@ class IdentitySubjectBindingTests(unittest.TestCase):
         self.assertIsNone(resolve_authenticated_user_subject(make_context(), port))
 
     def test_invalid_binding_values_are_rejected(self):
-        with self.assertRaises(Exception):
+        with self.assertRaises(ContractError):
             AuthenticatedUserSubject("", "user-7", True)
         with self.assertRaises(Exception):
             AuthenticatedUserSubject("identity-user-1", "user-7", 1)
