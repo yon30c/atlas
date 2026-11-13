@@ -13,18 +13,34 @@ Los eventos permiten reconstruir qué ocurrió y bajo qué contexto, sin convert
 
 ## 2. Modelo lógico
 
-`DomainEvent` representa un evento inmutable y contiene, como mínimo:
+`DomainEvent` representa un hecho inmutable. Su estructura lógica debe contemplar, según corresponda a la naturaleza del evento, los siguientes campos:
 
 | Campo | Significado |
 |---|---|
-| `event_id` | Identificador del evento. |
+| `event_id` | Identificador único del evento. |
 | `event_type` | Tipo de hecho registrado. |
+| `schema_version` | Versión del esquema utilizado para representar el evento. |
 | `occurred_at` | Instante UTC en que ocurrió el hecho. |
-| `context` | `OperationContext` asociado al evento. |
-| `classification` | Clasificación de seguridad del evento conforme al catálogo del contrato principal. |
-| `attributes` | Datos estructurados necesarios para describir el hecho. |
+| `observed_at` | Instante UTC en que Atlas detectó u observó el hecho. |
+| `project_id` | Proyecto al que pertenece el evento, cuando corresponda. |
+| `source` | Identificación de la fuente que produjo u originó el evento. |
+| `actor` | Identidad asociada al actor, cuando corresponda. |
+| `classification` | Clasificación de seguridad conforme al catálogo aprobado en el contrato principal. |
+| `severity` | Severidad del evento conforme al catálogo aprobado. |
+| `subject` | Entidad o recurso al que se refiere el evento, cuando corresponda. |
+| `data` | Datos estructurados necesarios para describir el hecho. |
+| `correlation_id` | Identificador que permite relacionar el evento con un contexto de trabajo. |
+| `deduplication_key` | Clave opcional para identificar eventos duplicados o relacionados. |
+| `evidence` | Referencias a evidencias asociadas al evento, cuando corresponda. |
+| `related_event_ids` | Identificadores de otros eventos relacionados, cuando corresponda. |
 
-La identidad del actor, el origen, el propósito y la correlación se obtienen del contexto asociado, sin duplicar esos datos innecesariamente en el evento.
+Los campos opcionales deben utilizarse según la naturaleza del evento. Su ausencia no invalida un evento cuando el campo no resulte aplicable.
+
+El `OperationContext` asociado conserva el contexto de operación de Atlas. La información de `source` y `actor` describe, respectivamente, el origen del evento y la identidad del actor. Estos conceptos no deben considerarse equivalentes automáticamente a `context.origin` o `context.actor`.
+
+La correlación del evento debe conservarse de manera coherente con `context.correlation_id`.
+
+La representación interna del código podrá utilizar nombres o estructuras diferentes, siempre que preserve la semántica de los campos definidos por el contrato principal y permita su correspondencia inequívoca.
 
 La representación física podrá variar, pero deberá preservar la semántica y las garantías de este contrato.
 
@@ -46,9 +62,37 @@ La retención indefinida es una decisión de diseño aprobada. No determina por 
 
 ## 4. Clasificación y datos
 
-`classification` utilizará los valores definidos en §4.7 del contrato principal. Este contrato no introduce categorías alternativas ni modifica dicho catálogo.
+`classification` utilizará exclusivamente los valores definidos en §4.7 del contrato principal:
+
+- `public`
+- `internal`
+- `sensitive`
+- `restricted`
+
+Estos valores constituyen el catálogo aprobado de clasificación general de eventos. No deben introducirse categorías alternativas ni valores adicionales para representar restricciones particulares de un canal de notificación.
 
 La clasificación debe conservarse con el evento y aplicarse conforme a las políticas de acceso y tratamiento correspondientes.
+
+### Severidad
+
+El campo `severity` utilizará exclusivamente los valores definidos en §4.7 del contrato principal:
+
+- `critical`
+- `important`
+- `informational`
+- `debug`
+
+La severidad representa la importancia operativa del evento y no debe confundirse con su clasificación de seguridad.
+
+**APROBADO:**
+
+- Los valores de severidad están controlados.
+- No se puede declarar arbitrariamente un evento como `critical`.
+- La asignación debe respetar las reglas y criterios aprobados para el tipo de evento.
+
+Permanecen pendientes las definiciones operativas completas y los mecanismos técnicos para aplicar los criterios de severidad.
+
+### Reglas técnicas pendientes de clasificación
 
 Permanecen pendientes las reglas técnicas completas para:
 
@@ -114,6 +158,18 @@ La implementación deberá respetar:
 
 No se presume idempotencia de `append()` ni deduplicación automática por `event_id`. Esas garantías solo podrán establecerse mediante una especificación explícita de la operación.
 
+### Deduplicación e idempotencia
+
+El campo `deduplication_key` es opcional y debe incluirse cuando exista una clave estable que resulte útil para identificar eventos duplicados o relacionados.
+
+La ausencia de `deduplication_key` no invalida un evento que, por lo demás, sea válido.
+
+La deduplicación de eventos y la idempotencia de operaciones son mecanismos independientes.
+
+La presencia de una `deduplication_key` no demuestra que `append()` sea idempotente ni garantiza que un proveedor externo impida la repetición de una operación.
+
+Cualquier garantía de deduplicación deberá establecerse mediante una especificación explícita del comportamiento esperado, sin atribuir a la clave garantías que no hayan sido definidas.
+
 Tampoco se establece todavía un orden global de lectura, entrega garantizada, suscripciones, reintentos o semántica de procesamiento exactamente una vez.
 
 ## 8. Límites de autoridad
@@ -131,18 +187,29 @@ El acceso y la exportación de eventos deberán respetar identidad, autorizació
 
 ## 9. Parámetros técnicos pendientes
 
-Las siguientes decisiones no reabren las garantías aprobadas:
+Las siguientes decisiones técnicas permanecen pendientes y no reabren las garantías ni los catálogos aprobados en el contrato principal.
 
-1. Catálogo completo de tipos de eventos.
-2. Definiciones operativas y reglas de asignación de severidades.
+1. Catálogo completo y versionado de tipos de eventos.
+2. Definiciones operativas y reglas de asignación de severidades, respetando los valores aprobados.
 3. Reglas de aplicación y tratamiento de las clasificaciones de §4.7.
-4. Formato físico y tecnología de almacenamiento.
-5. Mecanismos de integridad criptográfica.
-6. Acceso, consulta y exportación.
-7. Límites de almacenamiento, alertas y operación.
-8. Reconciliación de efectos externos y resultados inciertos.
-9. Semántica de orden, causalidad y deduplicación cuando corresponda.
-10. Mecanismos de privacidad y anonimización compatibles con retención indefinida.
+4. Correspondencia entre el modelo lógico del contrato y las estructuras internas utilizadas por la implementación.
+5. Formato físico y tecnología de almacenamiento.
+6. Mecanismos de integridad criptográfica.
+7. Acceso, consulta y exportación.
+8. Límites de almacenamiento, alertas y operación.
+9. Reconciliación de efectos externos y resultados inciertos.
+10. Semántica de orden, causalidad y deduplicación cuando corresponda.
+11. Mecanismos de privacidad y anonimización compatibles con la retención indefinida.
+12. Reglas técnicas para preservar referencias a evidencias y eventos relacionados.
+
+Los siguientes elementos ya están aprobados y no deben tratarse como decisiones pendientes:
+
+- Clasificaciones: `public`, `internal`, `sensitive` y `restricted`.
+- Severidades: `critical`, `important`, `informational` y `debug`.
+- `deduplication_key` opcional.
+- La ausencia de `deduplication_key` no invalida un evento.
+- La deduplicación no sustituye la idempotencia de operaciones.
+- Retención indefinida, inmutabilidad y registro append-only.
 
 No se selecciona todavía un broker, base de datos, transporte, mecanismo de entrega ni despliegue.
 
@@ -183,6 +250,15 @@ Antes de considerar implementado el sistema de eventos deberán verificarse, com
 | EVT-10 | Separación | Las incidencias y conclusiones no sustituyen ni reescriben eventos originales. |
 | EVT-11 | Autoridad | La lectura o publicación de un evento no concede permisos ni ejecuta operaciones. |
 | EVT-12 | Fallos | Los errores de persistencia o consulta no se presentan como registros completados. |
+| EVT-13 | Estructura lógica | El evento conserva los campos aplicables de §4.7 del contrato principal. |
+| EVT-14 | Tiempo de observación | Cuando corresponda, `observed_at` conserva el instante UTC en que Atlas detectó el hecho, sin confundirlo con `occurred_at`. |
+| EVT-15 | Origen y actor | La fuente y el actor se representan sin confundirlos automáticamente con el origen o actor del `OperationContext`. |
+| EVT-16 | Severidad | Cada evento utiliza un valor permitido del catálogo aprobado y respeta las reglas de asignación. |
+| EVT-17 | Deduplicación opcional | La ausencia de `deduplication_key` no invalida un evento. |
+| EVT-18 | Separación de garantías | La presencia de `deduplication_key` no se interpreta como garantía de idempotencia. |
+| EVT-19 | Evidencias y relaciones | Las referencias a evidencias y eventos relacionados se conservan cuando correspondan, sin conceder permisos de acceso. |
+
+Las pruebas deberán cubrir también valores de severidad válidos e inválidos, ausencia de `deduplication_key`, separación entre `occurred_at` y `observed_at`, y correspondencia entre `source`, `actor` y `OperationContext`.
 
 Las pruebas deberán cubrir casos positivos y negativos, incluyendo mappings mutables, clasificaciones inválidas, correlaciones diferentes, acceso no autorizado y fallos de persistencia.
 
