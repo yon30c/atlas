@@ -55,6 +55,7 @@ def inventory(
     complete=True,
     retention_policy_reference=None,
     memory_id=MEMORY_ID,
+    operation_id="forget-op-1",
 ):
     if destinations is None:
         destinations = (
@@ -63,7 +64,7 @@ def inventory(
         )
     return ForgetDestinationInventory(
         inventory_id=f"inventory-{revision}",
-        operation_id="forget-op-1",
+        operation_id=operation_id,
         target=ForgetTarget(memory_id),
         revision=revision,
         destinations=destinations,
@@ -474,6 +475,30 @@ class ForgetCoordinatorReducerTests(unittest.TestCase):
         self.assertIs(blocked.state, ForgetOperationState.BLOCKED)
         self.assertIs(blocked.block_reason, ForgetBlockReason.INVENTORY_CHANGED)
 
+
+
+    def test_d32_inventory_must_be_bound_to_exact_forget_operation(self):
+        reducer, operation = suppressed_operation()
+        operation = reducer.request_inventory(operation)
+        with self.assertRaises(ContractError):
+            reducer.accept_inventory(
+                operation, inventory(operation_id="another-forget-operation")
+            )
+
+    def test_d33_destination_id_cannot_change_kind_between_inventory_revisions(self):
+        reducer, operation = begin_purging()
+        with self.assertRaises(ContractError):
+            reducer.accept_inventory(
+                operation,
+                inventory(
+                    revision=2,
+                    destinations=(
+                        ForgetDestination("primary-store", ForgetDestinationKind.BACKUP),
+                        ForgetDestination("history-store", ForgetDestinationKind.VERSION_HISTORY),
+                    ),
+                    retention_policy_reference="backup-policy",
+                ),
+            )
 
     def test_d31_canonical_receipt_must_match_expected_compare_and_swap_revision(self):
         reducer, operation = begin_purging()
