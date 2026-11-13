@@ -1,6 +1,6 @@
 # ME-03 — Contratos tipados de consistencia y entrega protegida
 
-**Estado:** especificación técnica propuesta para revisión de implementación.  
+**Estado:** diseño aceptado para implementación incremental; implementación en curso.  
 **Rama:** `implementation/me-01-to-me-04-memory-engine`  
 **Dependencias:** ME-01, ME-02, ME-03 §§4.8–4.11, DM-01, CT-01 y CT-05.  
 **Alcance:** contratos lógicos de snapshots CAM, revisiones, admisiones, supresión, invalidaciones y entrega protegida.  
@@ -380,3 +380,26 @@ Cada paso debe conservar fail-closed y pruebas unitarias. Los fakes demuestran e
 5. Convertir estos contratos en pruebas unitarias deterministas antes de escribir adaptadores.
 
 **Estado:** especificación documental. No modifica código, contratos normativos, infraestructura ni producción.
+
+
+## 12. Estado de implementación — revisiones canónicas y snapshot CAM
+
+La primera parte de la implementación de los contratos de revisión quedó incorporada en la rama de trabajo:
+
+- `Memory` y `MemoryVersion` exponen revisión positiva, con revisión inicial 1 para agregados recién creados.
+- `MemoryVersionMetadata`, `ProjectMetadata` y `EnvironmentMetadata` requieren revisión positiva explícita desde sus puertos.
+- `Identity` expone su revisión; la vinculación confiable `AuthenticatedUserSubject` también expone revisión y se rechaza si no coincide con la revisión del actor autenticado.
+- `Grant` expone revisión; revocación y aprobación de renovación avanzan la revisión.
+- `AuthorizationEvaluator` devuelve una evaluación interna que conserva el Grant exacto que coincidió. Esa evaluación interna no constituye por sí sola una autorización pública.
+- `AuthorizationResult` exige un `AuthorizationSnapshot` para ALLOW y prohíbe snapshots para DENY o REQUIRE_APPROVAL.
+- `MemoryAuthorizationService` genera snapshots privados y de proyecto con las revisiones de memoria, versión e identidad; PROJECT incluye además las revisiones exactas de proyecto, entorno y Grant.
+
+### Límites pendientes
+
+1. La revisión inicial 1 es válida para creación de un agregado nuevo. Los adaptadores futuros deben persistirla y recuperarla explícitamente; no deben reconstruir revisiones a partir de valores predeterminados al hidratar datos antiguos.
+2. Todavía no existe una autoridad persistente que garantice incrementos monotónicos y compare-and-swap para Memory, MemoryVersion, Identity, Project, Environment y Grant.
+3. Las transiciones de estado de Identity, Memory y MemoryVersion aún no están integradas con invalidación/fencing.
+4. El Gateway todavía no consume el snapshot para admisión y egress protegidos; su ruta antigua de lectura sigue pendiente de migración y no debe considerarse compatible con la garantía ME-03 completa.
+5. No hay adaptadores reales ni almacenamiento implementado en esta etapa.
+
+**Verificación:** se añadieron y actualizaron pruebas unitarias para revisiones y snapshots, pero no se ha ejecutado la suite ni existe un workflow/status check asociado al commit de esta implementación. No se declara validación de runtime.
