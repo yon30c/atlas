@@ -1,11 +1,11 @@
 # DM-01 — Especificación del modelo de dominio de Atlas Core
 
-**Estado:** borrador técnico para revisión del propietario.  
+**Estado:** recomendaciones técnicas aprobadas por el propietario; decisiones de detalle pendientes.  
 **Rama base:** `main`  
 **Commit base:** `8832e59c8d6895750bfc7053a26bf4f4f3932437`  
 **Alcance:** modelo de dominio, identidad de recursos y contrato lógico de autorización requerido para Memory Engine / Memory Gateway.  
 **Implementación:** no incluida. Este documento no modifica ni sustituye los contratos normativos.  
-**Autoridad:** el contrato principal de Atlas v1 prevalece sobre este documento. Las propuestas técnicas aquí descritas requieren aprobación antes de implementarse.
+**Autoridad:** el contrato principal de Atlas v1 prevalece sobre este documento. El propietario aprobó las recomendaciones técnicas identificadas en el registro de decisiones de §9. Las decisiones de detalle que continúan pendientes no se consideran aprobadas por inferencia.
 
 ---
 
@@ -326,17 +326,17 @@ Reglas propuestas:
 6. Un Grant que no tenga alcance de recurso verificable no autoriza una operación sobre una instancia.
 7. La ampliación del conjunto de recursos es una modificación de alcance y requiere decisión del propietario; no se produce por delegación ni por creación automática de una nueva versión.
 
-Este diseño es una recomendación, no una modificación aprobada del esquema de Grant.
+**APROBADO POR EL PROPIETARIO:** adoptar este diseño como dirección técnica para el alcance de recursos de Grant. La implementación deberá conservar las reglas normativas y los criterios de aceptación de QA-01.
 
 ### 6.3 Operaciones colectivas
 
-**PROPUESTA TÉCNICA RECOMENDADA PARA LA PRIMERA IMPLEMENTACIÓN**
+**APROBADO POR EL PROPIETARIO — dirección técnica para la primera implementación**
 
 No habilitar Grants genéricos por tipo ni comodines.
 
 - `list_visible` debe filtrar candidatos por scope y después autorizar cada memoria por su identidad concreta antes de devolver contenido o metadatos protegidos.
 - No debe devolver conteos, fragmentos, embeddings, contenido ni metadatos de elementos no autorizados.
-- Una creación de memoria PROJECT puede evaluarse contra el recurso contenedor explícito del proyecto (`resource_type=project`, `resource_id=project_id`) y la acción `memory.propose`. La memoria creada obtiene después su propio ID y scope. Esta convención requiere aprobación.
+- Una creación de memoria PROJECT puede evaluarse contra el recurso contenedor explícito del proyecto (`resource_type=project`, `resource_id=project_id`) y la acción `memory.propose`. La memoria creada obtiene después su propio ID y scope. Esta convención queda aprobada como dirección técnica: la creación PROJECT se autoriza sobre el ID exacto del proyecto contenedor, mediante CAM.
 - Las operaciones colectivas por tipo quedan deshabilitadas hasta que tengan semántica, permiso y criterios de aceptación propios.
 
 La enumeración de candidatos requiere una fuente de metadatos que no exponga contenido antes de autorización. La interfaz y confianza de esa fuente permanecen pendientes.
@@ -347,9 +347,9 @@ La enumeración de candidatos requiere una fuente de metadatos que no exponga co
 
 El propietario puede acceder a su propia memoria PRIVATE mediante una regla explícita evaluada por CAM. No necesita un Grant de proyecto. MemoryGateway y CAM siguen siendo obligatorios. Ningún otro actor obtiene acceso por defecto.
 
-**PROPUESTA TÉCNICA**
+**APROBADO POR EL PROPIETARIO — dirección técnica**
 
-La regla de propietario privado debe evaluarse como una ruta explícita y limitada, separada de la coincidencia de Grants:
+La regla de propietario privado se evalúa como una ruta explícita y limitada, separada de la coincidencia de Grants:
 
 - actor de tipo `USER`;
 - identidad activa;
@@ -366,9 +366,9 @@ El conjunto exacto de acciones que puede ejecutar el propietario sobre su memori
 
 ### 6.5 Solicitud de autorización tipada
 
-**PROPUESTA TÉCNICA**
+**APROBADO POR EL PROPIETARIO — dirección técnica**
 
-La solicitud de CAM debería transportar una referencia tipada al recurso, en lugar de confiar en campos sueltos que no expresen el scope:
+La solicitud de CAM transportará una referencia tipada al recurso, en lugar de confiar en campos sueltos que no expresen el scope:
 
 ```text
 AuthorizationRequest
@@ -500,13 +500,28 @@ Estas invariantes deben traducirse en QA-01:
 | DM-01-19 | CAM no disponible, error, scope incompleto o metadatos no verificables producen denegación. |
 | DM-01-20 | No existe fallback a autorización por tipo ni a consulta sin filtro de scope. |
 
-## 9. Decisiones pendientes que bloquean implementación
+## 9. Registro de aprobación y decisiones pendientes
+
+El propietario aprobó las recomendaciones técnicas de DM-01. La aprobación fija las direcciones de diseño que se enumeran a continuación; no sustituye las reglas normativas de CT-01 a CT-08 ni resuelve detalles que el documento no especificaba.
+
+### 9.1 Recomendaciones aprobadas
+
+| Referencia | Dirección aprobada |
+|---|---|
+| §5.2 | Toda operación sobre una versión debe vincularla y validarla contra su memoria padre; la semántica exacta del ID usado por el Grant se resolverá en DM-P02. |
+| §6.2 | GrantResourceScope utiliza IDs explícitos e inmutables por tipo de recurso; no hay wildcard ni autorización por tipo solamente. |
+| §6.3 | `list_visible` autoriza individualmente cada recurso antes de devolver contenido o metadatos protegidos; las operaciones colectivas permanecen deshabilitadas salvo alcance explícito. |
+| §6.3 | La creación de memoria PROJECT se autoriza mediante CAM sobre el ID exacto del proyecto contenedor. |
+| §6.4 | La memoria PRIVATE del propietario usa una ruta explícita y limitada de CAM, sin Grant de proyecto y sin omitir Gateway/CAM. |
+| §6.5 | AuthorizationRequest adopta una referencia tipada al recurso, con scope y relación padre cuando corresponda. |
+
+### 9.2 Decisiones que continúan pendientes
 
 | ID | Decisión | Recomendación inicial | Estado |
 |---|---|---|---|
-| DM-P01 | Representación del alcance de recursos en Grant | Conjunto explícito e inmutable de IDs; sin wildcard | Requiere aprobación |
+| DM-P01 | Representación del alcance de recursos en Grant | Conjunto explícito e inmutable de IDs; sin wildcard | **Aprobado** |
 | DM-P02 | Semántica de acceso a versiones | Decidir si Grant apunta a memory_id o version_id, conservando vínculo padre | Requiere aprobación |
-| DM-P03 | Autorización de creación PROJECT | Autorizar la acción sobre el ID exacto del proyecto contenedor | Requiere aprobación |
+| DM-P03 | Autorización de creación PROJECT | Autorizar la acción sobre el ID exacto del proyecto contenedor | **Aprobado** |
 | DM-P04 | Fuente autoritativa de metadatos | Definir un puerto/fuente confiable para owner, scope y relación padre | Bloqueante |
 | DM-P05 | Catálogo de clasificación | Definir valores y propagación | Pendiente |
 | DM-P06 | Evidencia directa del propietario | Definir mecanismo verificable y no delegable | Bloqueante para review/forget |
@@ -515,9 +530,9 @@ Estas invariantes deben traducirse en QA-01:
 | DM-P09 | Semántica de propuestas | Definir creación transaccional de Memory/Version/Proposal | Pendiente antes de ME-01 |
 | DM-P10 | Retención histórica y referencias de procedencia | Definir política sin debilitar olvido | Pendiente |
 | DM-P11 | Catálogo SourceKind y estructura ProvenanceContext | Definir tipos permitidos y minimización de datos | Pendiente |
-| DM-P12 | Operaciones colectivas | Deshabilitadas salvo autorización explícita de un contenedor concreto | Requiere aprobación |
+| DM-P12 | Operaciones colectivas | Deshabilitadas salvo autorización explícita de un contenedor concreto | **Aprobado** |
 
-No se debe implementar una decisión pendiente por inferencia ni introducirla accidentalmente en un constructor de dataclass.
+No se debe implementar una decisión pendiente por inferencia ni introducirla accidentalmente en un constructor de dataclass. La aprobación de §9.1 no resuelve DM-P02, DM-P04, DM-P05, DM-P06 ni las demás decisiones que conservan estado pendiente.
 
 ## 10. Exclusiones
 
@@ -550,4 +565,4 @@ DM-01 no define:
 - `docs/contracts/consistency-matrix-ct-08.md`: resoluciones R08-01 a R08-12 y criterios C08-AC.
 - `docs/design/memory-engine-technical-contract.md`: modelo conceptual, Gateway, CAM, criterios MEM-01 a MEM-15 y decisiones consolidadas §13.
 
-**Nota final:** DM-01 es un borrador de especificación. Ninguna propuesta técnica de este documento se considera aprobada por el mero hecho de estar escrita, y ninguna capacidad descrita se considera implementada.
+**Nota final:** DM-01 registra recomendaciones técnicas aprobadas por el propietario y decisiones de detalle todavía pendientes. La aprobación documental no significa que las capacidades estén implementadas, probadas o desplegadas.
