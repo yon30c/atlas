@@ -119,7 +119,7 @@ Si la autoridad lógica no está disponible, no se admiten lecturas ni se confir
 
 **Límite de la garantía:** esta coordinación impide nuevas exposiciones después de confirmar la supresión y resuelve entregas que estaban en curso dentro del sistema. No puede retirar copias que un consumidor ya recibió legítimamente antes de comenzar Forget.
 
-Esta sección es una recomendación de arquitectura lógica para revisión; todavía no constituye una decisión normativa ni selecciona un mecanismo de implementación.
+**Dirección de diseño aceptada por el propietario del proyecto:** adoptar una única autoridad lógica de admisión y supresión, independiente de los proveedores físicos y responsable de serializar admisiones, cierre por Forget y resolución verificable de lecturas en curso. Esta aceptación fija la arquitectura lógica objetivo; no la convierte por sí sola en contrato normativo ni selecciona un mecanismo de implementación.
 
 ## 5. Reglas de fallo cerrado
 
@@ -176,6 +176,8 @@ Las pruebas de concurrencia deben usar eventos/barreras explícitas, no sleeps n
 6. Definir evidencia verificable para que Forget avance de supresión lógica a eliminación física y finalmente a `forgotten`.
 
 **Decisión 1 — aceptada:** las lecturas admitidas antes de comenzar Forget deben finalizar o cancelarse de forma verificable antes de confirmar la supresión lógica. No se confirma la supresión si una lectura previa aún puede entregar contenido o si su estado no puede determinarse.
+
+**Decisión 2 — aceptada:** la dirección de diseño será una autoridad lógica única que coordine admisión de lecturas y supresión. Su mecanismo físico, disponibilidad y recuperación ante fallos siguen pendientes de diseño.
 
 Ninguno de estos puntos autoriza a seleccionar una base de datos, caché, índice, proveedor, scheduler o plataforma.
 
