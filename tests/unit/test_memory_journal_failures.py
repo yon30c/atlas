@@ -114,7 +114,8 @@ class EndpointReceipt:
     endpoint_id: str
     generation: int
     receipt_id: str
-    emission_sequence: int = 1
+    emission_id: str
+    emission_sequence: int
 
 
 class FaultInjectingJournalFake:
@@ -284,6 +285,17 @@ class OneShotOwnerProofVerifierFake:
         return True
 
 
+def receipt_matches_transition(receipt, transition):
+    return (
+        receipt.admission_id == transition.admission_id
+        and receipt.endpoint_id == transition.endpoint_id
+        and receipt.generation == transition.generation
+        and receipt.receipt_id == transition.receipt_id
+        and receipt.emission_id == transition.emission_id
+        and receipt.emission_sequence == transition.emission_sequence
+    )
+
+
 def begin_forget_with_proof(journal, verifier, proof_id):
     if not verifier.verify_and_consume(proof_id):
         return False
@@ -379,6 +391,8 @@ class MemoryJournalFailureScenarios(unittest.TestCase):
                 endpoint_id="assistant-response",
                 generation=1,
                 receipt_id="receipt-c45",
+                emission_id="emission-c45",
+                emission_sequence=1,
             )
         }
         transition = egress_committed()
@@ -386,11 +400,20 @@ class MemoryJournalFailureScenarios(unittest.TestCase):
         self.assertIsNone(journal.append_transition(journal.position(), transition))
         self.assertEqual(journal.sequence, 0)
         external_receipt = endpoint_store["receipt-c45"]
-        self.assertEqual(external_receipt.admission_id, "admission-c45")
-        # Reconciliación: se consulta el recibo externo y se registra su evidencia.
+        self.assertTrue(receipt_matches_transition(external_receipt, transition))
+        # Solo después de validar todos los campos correlacionados se registra el recibo.
         recovered = journal.append_transition(journal.position(), transition)
         self.assertEqual(recovered.position.sequence, 1)
         self.assertEqual(journal.sequence, 1)
+
+        mismatches = (
+            replace(external_receipt, endpoint_id="api-response"),
+            replace(external_receipt, generation=2),
+            replace(external_receipt, emission_id="different-emission"),
+            replace(external_receipt, emission_sequence=2),
+            replace(external_receipt, receipt_id="different-receipt"),
+        )
+        self.assertTrue(all(not receipt_matches_transition(item, transition) for item in mismatches))
 
     def test_c52_identical_endpoint_receipt_is_idempotent(self):
         journal = FaultInjectingJournalFake()
