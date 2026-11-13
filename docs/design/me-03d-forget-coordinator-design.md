@@ -220,7 +220,7 @@ Los nombres expresan responsabilidades y no fijan todavía firmas finales, stora
 | D29 | Tombstone eliminado mientras existe backup recuperable | Prohibido. |
 | D30 | Forget de una memoria con múltiples versiones/propuestas | Alcance completo y exacto; no omitir subrecursos. |
 
-Las pruebas D01–D30 serán inicialmente pruebas puras/fakes. No demuestran eliminación real ni inventario de producción.
+Las pruebas D01–D37 serán inicialmente pruebas puras/fakes. No demuestran eliminación real ni inventario de producción.
 
 ## 13. Límites pendientes explícitos
 
@@ -269,9 +269,13 @@ Se implementó una primera capa pura en `src/atlas/memory/forget_coordinator.py`
 - gate de política de retención cuando el inventario incluye BACKUP/RESTORE_SOURCE;
 - actualización canónica y tombstone obligatorios antes de COMPLETED;
 - inventario nuevo no puede retroceder ni omitir destinos anteriores sin evidencia de retiro;
-- reintentos de COMPLETED son idempotentes y no reabren la memoria.
+- reintentos de COMPLETED son idempotentes y no reabren la memoria;
+- inventario y recibo canónico quedan ligados a la operación/objetivo exactos;
+- el recibo canónico valida expected_revision y new_revision;
+- destino estable no puede cambiar de clase entre revisiones;
+- intentos UNKNOWN deben reconciliarse antes de refresh o reintento.
 
-Se exportaron los modelos desde `atlas.memory` y se añadieron 30 métodos de prueba D01–D30 en `tests/unit/test_memory_forget_coordinator.py`.
+Se exportaron los modelos desde `atlas.memory` y se añadieron 37 métodos de prueba D01–D30 en `tests/unit/test_memory_forget_coordinator.py`.
 
 En el commit `49244706a3f93f09ec7b1f2b7e350124b2715216`, GitHub Actions ejecutó la suite completa: Python 3.10, 3.11, 3.12 y 3.13 finalizaron correctamente. Python 3.11 reportó `Ran 360 tests`, `OK`. Workflow: [Atlas CI #43526491006](https://github.com/yon30c/atlas/actions/runs/43526491006).
 

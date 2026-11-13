@@ -152,7 +152,7 @@ Se renombró la consulta de estado de un endpoint a `reconcile_endpoint(admissio
 
 Los fakes de Gateway fueron adaptados para implementar ambas facetas sobre la misma instancia. El fake de autoridad de consistencia ya serializa admisión, invalidación y compromiso de egress bajo su lock de proceso único; la prueba concurrente existente cubre ese orden local mediante barrera determinista.
 
-**Limitaciones:** el fake no demuestra linealizabilidad distribuida, persistencia durable, atomicidad real con transporte, recuperación tras reinicio ni fencing de endpoints reales. Las pruebas fueron modificadas, pero no se han ejecutado en esta etapa. No se declara validación automatizada ni CI exitoso.
+**Limitaciones:** el fake no demuestra linealizabilidad distribuida, persistencia durable, atomicidad real con transporte, recuperación tras reinicio ni fencing de endpoints reales. La integración y las pruebas de Gateway quedaron incluidas en la suite de 360 tests que pasó en Python 3.10–3.13 ([Atlas CI #43526491006](https://github.com/yon30c/atlas/actions/runs/43526491006)).
 
 
 ## 12. Validación automatizada posterior

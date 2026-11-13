@@ -426,4 +426,4 @@ La revisión del reducer corrigió una distinción importante del contrato de eg
 
 **Límite:** el reducer valida estructura y semántica de los registros entregados. No autentica su origen, no demuestra continuidad/anti-rollback, no consulta endpoints y no habilita rutas. Una referencia opaca de continuidad no se trata como prueba verificada.
 
-**Validación:** 78 métodos de prueba están escritos en los tres archivos de journal/reducer; ninguno se ha ejecutado en esta etapa. No existe journal durable ni adaptador real y no se declara CI exitoso.
+**Validación:** 78 métodos de prueba están escritos en los tres archivos de journal/reducer y se ejecutaron dentro de la suite completa de 360 tests, con éxito en Python 3.10–3.13 ([Atlas CI #43526491006](https://github.com/yon30c/atlas/actions/runs/43526491006)). No existe journal durable ni adaptador real; el resultado no demuestra persistencia o recuperación distribuida.

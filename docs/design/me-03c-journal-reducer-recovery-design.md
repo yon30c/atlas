@@ -164,7 +164,7 @@ Se amplía C45–C64 con escenarios ME-03C:
 | C86 | Reutilización de idempotency_key en otra operación | Rechazo por conflicto. |
 | C87 | Recuperación con clave de idempotencia vigente | La proyección conserva el tombstone opaco para impedir replay.
 
-Los escenarios C65–C87 se implementarán inicialmente como pruebas puras del validador/reducer y fakes. No prueban persistencia durable, anti-rollback criptográfico ni endpoints reales.
+Los escenarios C65–C87 están implementados como pruebas puras del validador/reducer y fakes. No prueban persistencia durable, anti-rollback criptográfico ni endpoints reales.
 
 ## 8. Secuencia de implementación
 
@@ -183,7 +183,7 @@ ME-03C no se declara cerrado hasta que:
 - un checkpoint no se utiliza hasta que su proyección base esté decodificada y verificada;
 - los registros desconocidos o ambiguos fallan cerrados;
 - se diferencia estructuralidad de continuidad confiable;
-- C45–C87 están representados y ejecutados en entorno de pruebas;
+- C45–C87 están representados y ejecutados en CI;
 - no se afirma persistencia, recuperación real o Forget completado sin adaptadores/evidencia reales.
 
 

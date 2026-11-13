@@ -579,7 +579,7 @@ La composición del protocolo hace que la configuración del Gateway exija ambas
 
 El fake de autoridad ya contiene los métodos de admisión, Forget, invalidación y egress bajo un mismo lock de proceso único; el Gateway deja de envolverlo en un segundo fake de egress. Esto sirve para validar la forma de integración y el orden determinista local, no para afirmar durabilidad, coordinación distribuida ni fencing de transporte real.
 
-**Estado:** contrato compuesto e integración del Gateway implementados parcialmente en el código; pendientes revisión final y validación automatizada. Sin adaptadores reales ni validación de runtime declarada.
+**Estado:** contrato compuesto e integración del Gateway implementados parcialmente; incluidos en la suite de 360 tests que pasó en Python 3.10–3.13. Sin adaptadores reales ni validación de transporte/runtime distribuido.
 
 
 ## 17. ME-03C — Reducer semántico del journal
