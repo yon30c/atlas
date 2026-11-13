@@ -1,11 +1,12 @@
 """Servicio CAM para autorizar lecturas de memoria sin exponer contenido."""
 
 from datetime import datetime, timedelta
+from uuid import uuid4
 
 from atlas.authorization.evaluator import AuthorizationEvaluator
 from atlas.authorization.identity_binding import (
     IdentitySubjectBindingPort,
-    resolve_authenticated_user_subject,
+    resolve_authenticated_user_binding,
 )
 from atlas.authorization.memory_metadata_resolver import MemoryMetadataResolver
 from atlas.authorization.models import (
@@ -16,6 +17,12 @@ from atlas.authorization.models import (
 )
 from atlas.core.context import OperationContext
 from atlas.core.identity import IdentityStatus
+from atlas.memory.consistency import (
+    AuthorityKind,
+    AuthorityRevision,
+    AuthorizationRevisionSet,
+    AuthorizationSnapshot,
+)
 from atlas.memory.models import (
     MemoryClassification,
     MemoryId,
@@ -99,12 +106,39 @@ class MemoryAuthorizationService:
                     return self._deny()
                 if context.actor.kind.value != "user":
                     return self._deny()
-                subject_user_id = resolve_authenticated_user_subject(
+                binding = resolve_authenticated_user_binding(
                     context, self._identity_binding
                 )
-                if subject_user_id is None or subject_user_id != memory.owner_id:
+                if binding is None or binding.subject_user_id != memory.owner_id:
                     return self._deny()
-                return AuthorizationResult(AuthorizationDecision.ALLOW)
+                revisions = AuthorizationRevisionSet(
+                    memory_revision=AuthorityRevision(
+                        AuthorityKind.MEMORY, memory.memory_id, memory.revision
+                    ),
+                    version_revision=AuthorityRevision(
+                        AuthorityKind.MEMORY_VERSION, version.version_id, version.revision
+                    ),
+                    identity_revision=AuthorityRevision(
+                        AuthorityKind.IDENTITY, context.actor.identity_id, context.actor.revision
+                    ),
+                )
+                snapshot = AuthorizationSnapshot(
+                    snapshot_id=uuid4().hex,
+                    decision_id=uuid4().hex,
+                    request_id=context.request_id,
+                    action=self.READ_ACTION,
+                    actor_identity_id=context.actor.identity_id,
+                    subject_user_id=binding.subject_user_id,
+                    memory_id=memory.memory_id,
+                    version_id=version.version_id,
+                    owner_id=memory.owner_id,
+                    scope=memory.scope,
+                    revisions=revisions,
+                    version_status=version.status,
+                    classification=version.classification,
+                    issued_at=now,
+                )
+                return AuthorizationResult(AuthorizationDecision.ALLOW, snapshot)
 
             if memory.scope.kind is not MemoryScopeKind.PROJECT:
                 return self._deny()
@@ -133,6 +167,51 @@ class MemoryAuthorizationService:
                 not isinstance(grant, Grant) for grant in grants
             ):
                 return self._deny()
-            return self._evaluator.evaluate(request, grants, now)
+            evaluation = self._evaluator.evaluate(request, grants, now)
+            if evaluation.decision is not AuthorizationDecision.ALLOW:
+                return self._deny()
+            grant = evaluation.matched_grant
+            if not isinstance(grant, Grant):
+                return self._deny()
+            revisions = AuthorizationRevisionSet(
+                memory_revision=AuthorityRevision(
+                    AuthorityKind.MEMORY, memory.memory_id, memory.revision
+                ),
+                version_revision=AuthorityRevision(
+                    AuthorityKind.MEMORY_VERSION, version.version_id, version.revision
+                ),
+                identity_revision=AuthorityRevision(
+                    AuthorityKind.IDENTITY, context.actor.identity_id, context.actor.revision
+                ),
+                project_revision=AuthorityRevision(
+                    AuthorityKind.PROJECT, project.project_id, project.revision
+                ),
+                environment_revision=AuthorityRevision(
+                    AuthorityKind.ENVIRONMENT, environment.environment_id, environment.revision
+                ),
+                grant_revision=AuthorityRevision(
+                    AuthorityKind.GRANT, grant.grant_id, grant.revision
+                ),
+            )
+            snapshot = AuthorizationSnapshot(
+                snapshot_id=uuid4().hex,
+                decision_id=uuid4().hex,
+                request_id=context.request_id,
+                action=self.READ_ACTION,
+                actor_identity_id=context.actor.identity_id,
+                subject_user_id=None,
+                memory_id=memory.memory_id,
+                version_id=version.version_id,
+                owner_id=memory.owner_id,
+                scope=memory.scope,
+                revisions=revisions,
+                version_status=version.status,
+                classification=version.classification,
+                issued_at=now,
+                project_id=project.project_id,
+                environment_id=environment.environment_id,
+                grant_expires_at=grant.expires_at,
+            )
+            return AuthorizationResult(AuthorizationDecision.ALLOW, snapshot)
         except Exception:
             return self._deny()
