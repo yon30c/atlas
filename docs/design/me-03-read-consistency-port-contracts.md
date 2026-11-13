@@ -546,3 +546,18 @@ Se incorporó una primera capa sin infraestructura:
 - El mismo archivo contiene un fake de proceso único que simula append condicional, replay idempotente, conflicto de clave, carga tras checkpoint, rechazo de checkpoint obsoleto y consulta correlacionada de recibos de endpoint.
 
 Los modelos y el puerto no persisten datos, no verifican por sí mismos la autenticidad del watermark y no garantizan atomicidad distribuida. `ConsistencyTransition` limita schema_version a la versión soportada 1, exige la revisión anterior/nueva en INVALIDATION_CLOSED y el resultado terminal explícito en ADMISSION_RECONCILED. C51 valida la correlación completa del recibo externo antes de registrar evidencia. Los fakes y las 20 pruebas C45–C64 son secuenciales y de protocolo: no prueban concurrencia real, durabilidad, protección antitruncamiento ni recuperación de procesos reales. Las 52 pruebas están escritas, no ejecutadas. C45–C64 tienen cobertura de escenarios sobre fakes, pero siguen pendientes de validación de integración contra la autoridad, Gateway, egress y un journal durable.
+
+
+## 15. ME-03A — Capacidad opaca de lectura
+
+La implementación de Gateway adopta el contrato detallado en `me-03a-protected-read-capability-design.md`.
+
+- `ProtectedMemoryRead` expone únicamente `read_id`, un identificador aleatorio bearer; no contiene snapshot, admisión, handle ni operation_id.
+- El Gateway mantiene un registro privado de sesiones que vincula la capacidad con el snapshot CAM, la admisión, el handle interno y la operación exacta.
+- `emit_version`, `finish_version` y `reconcile_version` resuelven la capacidad dentro del Gateway. Capacidades desconocidas o falsificadas fallan cerrado.
+- Una reconciliación retira la sesión local solo cuando la admisión exacta aparece en `resolved_admission_ids`. Resultados unresolved, ambiguos o errores no liberan la sesión.
+- El registro es local al proceso y no es durable. Tras reinicio, las capacidades anteriores no son reutilizables; la autoridad de consistencia y el egress deben mantener el fencing y la recuperación de admisiones no terminales.
+- El bloqueo del registro protege únicamente concurrencia local. No implementa el ordenamiento compartido de ME-03B.
+- El diseño no protege contra introspección o ejecución arbitraria de código Python dentro del mismo proceso. Consumidores mutuamente no confiables requieren aislamiento de proceso/IPC autenticado.
+
+**Cobertura escrita:** pruebas unitarias verifican que el objeto público no expone snapshot/admission/handle, que una capacidad inventada no permite operaciones y que una reconciliación resuelta retira la capacidad local. La integración sigue usando adaptadores fake; no demuestra aislamiento de proceso, persistencia durable, fencing real ni seguridad de transporte.
