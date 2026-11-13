@@ -39,6 +39,9 @@ def _utc(value: object, field: str) -> None:
         raise ContractError(f"{field} debe ser un datetime UTC")
 
 
+SUPPORTED_CONSISTENCY_SCHEMA_VERSIONS = frozenset({1})
+
+
 class ConsistencyRecordKind(str, Enum):
     READ_ADMITTED = "read_admitted"
     READ_ACTIVATED = "read_activated"
@@ -104,6 +107,8 @@ class ConsistencyTransition:
     def __post_init__(self) -> None:
         validate_atlas_id(self.record_id, "record_id")
         _positive(self.schema_version, "schema_version")
+        if self.schema_version not in SUPPORTED_CONSISTENCY_SCHEMA_VERSIONS:
+            raise ContractError("schema_version de transición no soportada")
         if not isinstance(self.record_kind, ConsistencyRecordKind):
             raise ContractError("record_kind debe ser ConsistencyRecordKind")
         _required(self.operation_id, "operation_id")
