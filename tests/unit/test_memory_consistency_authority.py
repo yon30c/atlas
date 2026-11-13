@@ -989,6 +989,11 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
                 "post-restart-stale-emission", 1, NOW
             )
         )
+        stale_ack = EndpointFenceReceipt(
+            closure.operation_id, admission.admission_id, "assistant-response",
+            closure.generation - 1, NOW, True
+        )
+        self.assertFalse(recovered.record_endpoint_ack(stale_ack))
 
         for endpoint in sorted(admission.route_ids):
             receipt = FakeProtectedEgress(recovered).fence(
