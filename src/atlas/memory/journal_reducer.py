@@ -230,7 +230,8 @@ class ConsistencyJournalReducer:
                 ConsistencyRecordKind.ENDPOINT_COMPLETED,
                 ConsistencyRecordKind.ENDPOINT_FENCED,
             ):
-                item = admission_for(transition)
+                item = admissions.get(transition.admission_id)
+                self._require(item is not None, "recibo referencia una admisión inexistente")
                 endpoint = item["endpoints"].get(transition.endpoint_id)
                 self._require(endpoint is not None, "recibo usa endpoint no admitido")
                 self._require(
@@ -238,19 +239,48 @@ class ConsistencyJournalReducer:
                     "endpoint ya tiene estado terminal",
                 )
                 if kind is ConsistencyRecordKind.ENDPOINT_COMPLETED:
+                    if transition.operation_id == item["operation_id"]:
+                        expected_generation = item["generation"]
+                        self._require(
+                            transition.admission_id not in invalidated_admissions
+                            and not any(
+                                transition.admission_id in closure["affected_admission_ids"]
+                                for closure in forgets.values()
+                            ),
+                            "finalización de lectura usa operación anterior al cierre",
+                        )
+                    else:
+                        closure = forgets.get(transition.operation_id)
+                        invalidation = invalidations.get(transition.operation_id)
+                        operation = closure if closure is not None else invalidation
+                        self._require(
+                            operation is not None
+                            and transition.admission_id in operation["affected_admission_ids"],
+                            "finalización no corresponde a la lectura o cierre exacto",
+                        )
+                        expected_generation = operation["generation"]
+                    self._require(
+                        transition.generation == expected_generation,
+                        "generación del recibo de finalización no coincide con la operación",
+                    )
                     self._require(
                         transition.final_sequence >= endpoint["last_sequence"],
                         "final_sequence precede una emisión comprometida",
                     )
                     endpoint["status"] = EndpointProjectionStatus.COMPLETED
                 else:
+                    closure = forgets.get(transition.operation_id)
+                    invalidation = invalidations.get(transition.operation_id)
+                    operation = closure if closure is not None else invalidation
                     self._require(
-                        transition.admission_id in invalidated_admissions
-                        or any(
-                            transition.admission_id in closure["affected_admission_ids"]
-                            for closure in forgets.values()
-                        ),
-                        "ENDPOINT_FENCED requiere un cierre o invalidación previo",
+                        operation is not None
+                        and transition.admission_id in operation["affected_admission_ids"],
+                        "ENDPOINT_FENCED requiere el cierre exacto que afecta la admisión",
+                    )
+                    self._require(
+                        transition.generation == operation["generation"]
+                        and transition.generation > item["generation"],
+                        "ENDPOINT_FENCED debe usar la nueva generación del cierre",
                     )
                     endpoint["status"] = EndpointProjectionStatus.FENCED
                 add_receipt(transition.receipt_id)
@@ -259,7 +289,24 @@ class ConsistencyJournalReducer:
                 continue
 
             if kind is ConsistencyRecordKind.ADMISSION_RECONCILED:
-                item = admission_for(transition)
+                item = admissions.get(transition.admission_id)
+                self._require(item is not None, "reconciliación referencia una admisión inexistente")
+                self._require(
+                    transition.operation_id == item["operation_id"]
+                    or (
+                        transition.operation_id in forgets
+                        and transition.admission_id in forgets[transition.operation_id]["affected_admission_ids"]
+                    )
+                    or (
+                        transition.operation_id in invalidations
+                        and transition.admission_id in invalidations[transition.operation_id]["affected_admission_ids"]
+                    ),
+                    "reconciliación no corresponde a la operación exacta",
+                )
+                self._require(
+                    transition.generation == item["generation"],
+                    "ADMISSION_RECONCILED debe identificar la generación de la admisión",
+                )
                 self._require(
                     item["status"] not in (
                         ReadAdmissionStatus.COMPLETED,
@@ -378,7 +425,7 @@ class ConsistencyJournalReducer:
                     if (
                         revision is not None
                         and revision.authority_id == transition.authority_id
-                        and revision.revision <= transition.previous_revision
+                        and revision.revision == transition.previous_revision
                     ):
                         related[admission_id] = item
                 expected_ids = frozenset(related)
