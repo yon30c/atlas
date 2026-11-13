@@ -80,6 +80,7 @@ class FakeReadConsistencyAndEgress:
         self.registered_routes = set(ROUTES)
         self.generation = 1
         self.admissions = {}
+        self.admission_snapshots = {}
         self.operations = {}
         self.fence_acks = {}
         self.completion_acks = {}
@@ -129,6 +130,7 @@ class FakeReadConsistencyAndEgress:
                 admitted_at=NOW,
             )
             self.admissions[admission_id] = admission
+            self.admission_snapshots[admission_id] = snapshot
             return admission
 
     def begin_invalidation(self, invalidation):
@@ -144,6 +146,32 @@ class FakeReadConsistencyAndEgress:
                 admission_id not in self.admissions
                 for admission_id in invalidation.affected_admission_ids
             ):
+                return None
+            expected_affected = set()
+            for admission_id, admission in self.admissions.items():
+                if admission.status in (
+                    ReadAdmissionStatus.COMPLETED,
+                    ReadAdmissionStatus.CANCELLED,
+                ):
+                    continue
+                snapshot = self.admission_snapshots[admission_id]
+                revisions = (
+                    snapshot.revisions.memory_revision,
+                    snapshot.revisions.version_revision,
+                    snapshot.revisions.identity_revision,
+                    snapshot.revisions.project_revision,
+                    snapshot.revisions.environment_revision,
+                    snapshot.revisions.grant_revision,
+                )
+                if any(
+                    revision is not None
+                    and revision.authority_kind is invalidation.authority
+                    and revision.authority_id == invalidation.authority_id
+                    and revision.revision == invalidation.previous_revision
+                    for revision in revisions
+                ):
+                    expected_affected.add(admission_id)
+            if expected_affected != set(invalidation.affected_admission_ids):
                 return None
             self.revisions[key] = invalidation.new_revision
             self.generation += 1
@@ -365,6 +393,22 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
                 NOW,
             )
         )
+
+    def test_invalidation_rejects_incomplete_or_unrelated_admission_inventory(self):
+        admission = self.authority.admit_read(
+            private_snapshot(), DeliveryRouteSet(ROUTES)
+        )
+        incomplete = AuthorizationInvalidation(
+            "invalidate-incomplete", AuthorityKind.IDENTITY, "identity-1", 1, 2,
+            frozenset()
+        )
+        unrelated = AuthorizationInvalidation(
+            "invalidate-unrelated", AuthorityKind.IDENTITY, "identity-1", 1, 2,
+            frozenset({"not-an-admission"})
+        )
+        self.assertIsNone(self.authority.begin_invalidation(incomplete))
+        self.assertIsNone(self.authority.begin_invalidation(unrelated))
+        self.assertEqual(self.authority.admissions[admission.admission_id].status, ReadAdmissionStatus.ADMITTED)
 
     def test_invalidation_remains_unresolved_until_every_endpoint_is_fenced(self):
         admission = self.authority.admit_read(
