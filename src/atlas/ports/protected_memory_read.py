@@ -176,11 +176,11 @@ class ReadConsistencyAuthorityPort(Protocol):
     def get_nonterminal_admissions(
         self,
         operation_id: str,
-    ) -> tuple[ReadAdmission, ...]:
-        """Enumera admisiones aún no terminales para la operación."""
+    ) -> tuple[ReadAdmission, ...] | None:
+        """Enumera admisiones aún no terminales; None indica operación desconocida."""
 
-    def reconcile(self, operation_id: str) -> ReconciliationResult:
-        """Devuelve admisiones resueltas y no resueltas con evidencia verificable."""
+    def reconcile(self, operation_id: str) -> ReconciliationResult | None:
+        """Devuelve None si la operación no existe; si existe, informa evidencia verificable."""
 
 
 class ProtectedEgressPort(Protocol):
