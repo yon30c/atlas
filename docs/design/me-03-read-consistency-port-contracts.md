@@ -149,8 +149,14 @@ class ReadConsistencyAuthorityPort(Protocol):
     def begin_forget(
         self,
         target: ForgetTarget,
-        authorization: ForgetAuthorizationReceipt,
+        authorization: VerifiedForgetAuthorization,
         idempotency_key: str,
+        now: datetime,
+    ) -> ForgetClosure | None: ...
+
+    def reconcile_forget(
+        self,
+        operation_id: str,
     ) -> ForgetClosure | None: ...
 
     def begin_invalidation(
@@ -160,18 +166,18 @@ class ReadConsistencyAuthorityPort(Protocol):
 
     def record_endpoint_ack(
         self,
-        receipt: EndpointFenceReceipt,
+        receipt: EndpointFenceReceipt | EndpointCompletionReceipt,
     ) -> bool: ...
 
     def get_nonterminal_admissions(
         self,
         operation_id: str,
-    ) -> tuple[ReadAdmission, ...]: ...
+    ) -> tuple[ReadAdmission, ...] | None: ...
 
     def reconcile(
         self,
         operation_id: str,
-    ) -> ReconciliationResult: ...
+    ) -> ReconciliationResult | None: ...
 ```
 
 Semántica:
