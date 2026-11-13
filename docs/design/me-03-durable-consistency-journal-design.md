@@ -349,7 +349,7 @@ Los escenarios siguientes amplían la cobertura C01–C44. Se añadieron 20 prue
 | C53 | Recibo contradictorio, de otro endpoint o generación | Rechazado; operación no se declara resuelta. |
 | C54 | Secuencia duplicada con contenido de registro distinto | Dominio en cuarentena; no se elige una versión arbitrariamente. |
 | C55 | Journal truncado o con hueco no explicado | Dominio en cuarentena y rutas cerradas. |
-| C56 | Checkpoint de época/secuencia anterior al watermark confiable | Rechazado por rollback. |
+| C56 | Head del journal anterior al watermark confiable | Recuperación rechazada por rollback; el fake actual no modela un checkpoint real. |
 | C57 | Checkpoint omite admisión, cierre o endpoint activo | Rechazado; no se reabre tráfico. |
 | C58 | Fallo entre consumo de OwnerDecisionProof y FORGET_CLOSED | No se reejecuta con prueba consumida; reconciliación o nueva prueba válida. |
 | C59 | Verificador no disponible o prueba no verificable | Forget no inicia. |
