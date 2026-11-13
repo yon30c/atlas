@@ -42,6 +42,8 @@ class GrantManagementService:
             raise AuthorizationError(
                 "El entorno del Grant no coincide con el contexto"
             )
+        if grant.revision != 1:
+            raise ContractError("un Grant nuevo debe iniciar en revision 1")
         if grant.issued_at != now:
             raise ContractError(
                 "issued_at debe coincidir con el momento de emisión"
