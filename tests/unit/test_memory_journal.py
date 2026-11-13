@@ -3,7 +3,11 @@ import unittest
 from datetime import datetime, timezone
 
 from atlas.core.errors import ContractError
-from atlas.memory.consistency import AuthorityKind
+from atlas.memory.consistency import (
+    AuthorityKind,
+    AuthorityRevision,
+    AuthorizationRevisionSet,
+)
 from atlas.memory.journal import (
     ConsistencyCheckpoint,
     ConsistencyPosition,
@@ -33,6 +37,12 @@ def read_admitted(record_id=RECORD_1):
         memory_id=MEMORY_ID,
         version_id=VERSION_ID,
         snapshot_id="snapshot-1",
+        actor_identity_id="identity-1",
+        revisions=AuthorizationRevisionSet(
+            memory_revision=AuthorityRevision(AuthorityKind.MEMORY, MEMORY_ID, 1),
+            version_revision=AuthorityRevision(AuthorityKind.MEMORY_VERSION, VERSION_ID, 1),
+            identity_revision=AuthorityRevision(AuthorityKind.IDENTITY, "identity-1", 1),
+        ),
         admission_id="admission-1",
         generation=1,
         route_ids=frozenset({"assistant-response", "api-response"}),
@@ -67,6 +77,12 @@ class ConsistencyJournalModelTests(unittest.TestCase):
                 memory_id=MEMORY_ID,
                 version_id=VERSION_ID,
                 snapshot_id="snapshot-2",
+                actor_identity_id="identity-1",
+                revisions=AuthorizationRevisionSet(
+                    memory_revision=AuthorityRevision(AuthorityKind.MEMORY, MEMORY_ID, 1),
+                    version_revision=AuthorityRevision(AuthorityKind.MEMORY_VERSION, VERSION_ID, 1),
+                    identity_revision=AuthorityRevision(AuthorityKind.IDENTITY, "identity-1", 1),
+                ),
                 admission_id="admission-2",
                 generation=1,
             )
@@ -125,6 +141,43 @@ class ConsistencyJournalModelTests(unittest.TestCase):
                 generation=1,
                 payload="must-not-be-accepted",
             )
+
+    def test_read_admitted_requires_revision_ids_to_match_exact_resources(self):
+        with self.assertRaises(ContractError):
+            ConsistencyTransition(
+                record_id=RECORD_2,
+                schema_version=1,
+                record_kind=ConsistencyRecordKind.READ_ADMITTED,
+                operation_id="read:admission-2",
+                occurred_at=NOW,
+                memory_id=MEMORY_ID,
+                version_id=VERSION_ID,
+                snapshot_id="snapshot-2",
+                actor_identity_id="another-identity",
+                revisions=AuthorizationRevisionSet(
+                    memory_revision=AuthorityRevision(AuthorityKind.MEMORY, MEMORY_ID, 1),
+                    version_revision=AuthorityRevision(AuthorityKind.MEMORY_VERSION, VERSION_ID, 1),
+                    identity_revision=AuthorityRevision(AuthorityKind.IDENTITY, "identity-1", 1),
+                ),
+                admission_id="admission-2",
+                generation=1,
+                route_ids=frozenset({"assistant-response"}),
+            )
+
+    def test_endpoint_completion_allows_empty_final_sequence(self):
+        item = ConsistencyTransition(
+            record_id=RECORD_2,
+            schema_version=1,
+            record_kind=ConsistencyRecordKind.ENDPOINT_COMPLETED,
+            operation_id="read:admission-empty",
+            occurred_at=NOW,
+            admission_id="admission-empty",
+            endpoint_id="assistant-response",
+            generation=1,
+            receipt_id="completion-receipt-1",
+            final_sequence=0,
+        )
+        self.assertEqual(item.final_sequence, 0)
 
     def test_transition_requires_utc_timestamp(self):
         with self.assertRaises(ContractError):
