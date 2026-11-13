@@ -146,8 +146,7 @@ class FaultInjectingJournalFake:
         if not isinstance(expected, ConsistencyPosition):
             return None
         if (
-            expected != self.position()
-            or expected.consistency_domain_id != self.domain
+            expected.consistency_domain_id != self.domain
             or expected.authority_epoch != self.epoch
             or transition.schema_version != 1
         ):
@@ -169,6 +168,8 @@ class FaultInjectingJournalFake:
                     return None
                 return replace(commit, replayed=True)
 
+        if expected != self.position():
+            return None
         if transition.record_id in self.record_ids:
             return None
         if self.fail_before_append:
