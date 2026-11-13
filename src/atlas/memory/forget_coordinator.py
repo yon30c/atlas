@@ -396,6 +396,7 @@ class ForgetCoordinatorReducer:
                     and inventory.retention_policy_reference == previous.retention_policy_reference,
                     "misma revisión de inventario con contenido contradictorio",
                 )
+                return operation
             else:
                 previous_ids = {item.destination_id for item in previous.destinations}
                 new_ids = {item.destination_id for item in inventory.destinations}
@@ -412,6 +413,7 @@ class ForgetCoordinatorReducer:
                 resume_state=ForgetOperationState.INVENTORY_PENDING,
                 canonical_state_revision=None,
                 tombstone_reference=None,
+                canonical_receipt=None,
             )
         has_backup = any(
             item.kind in (
@@ -429,6 +431,7 @@ class ForgetCoordinatorReducer:
                 resume_state=ForgetOperationState.INVENTORY_PENDING,
                 canonical_state_revision=None,
                 tombstone_reference=None,
+                canonical_receipt=None,
             )
         if previous is not None and inventory.revision > previous.revision:
             return replace(
@@ -439,6 +442,7 @@ class ForgetCoordinatorReducer:
                 resume_state=None,
                 canonical_state_revision=None,
                 tombstone_reference=None,
+                canonical_receipt=None,
             )
         return replace(
             operation,
