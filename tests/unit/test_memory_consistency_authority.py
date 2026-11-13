@@ -922,19 +922,21 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
             self.authority.admit_read(private_snapshot(), DeliveryRouteSet(ROUTES))
         )
 
-        first = EndpointFenceReceipt(
-            closure.operation_id, admission.admission_id, "assistant-response",
-            closure.generation, NOW, True
+        first = self.egress.fence(
+            admission, closure.operation_id, "assistant-response",
+            closure.generation, NOW
         )
+        self.assertIsNotNone(first)
         self.assertTrue(self.authority.record_endpoint_ack(first))
         partial = self.authority.reconcile_forget(closure.operation_id)
         self.assertEqual(partial.status, ForgetClosureStatus.CLOSING)
         self.assertEqual(partial.unresolved_admission_ids, frozenset({admission.admission_id}))
 
-        second = EndpointFenceReceipt(
-            closure.operation_id, admission.admission_id, "api-response",
-            closure.generation, NOW, True
+        second = self.egress.fence(
+            admission, closure.operation_id, "api-response",
+            closure.generation, NOW
         )
+        self.assertIsNotNone(second)
         self.assertTrue(self.authority.record_endpoint_ack(second))
         final = self.authority.reconcile_forget(closure.operation_id)
         self.assertEqual(final.status, ForgetClosureStatus.SUPPRESSED)
