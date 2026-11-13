@@ -62,15 +62,17 @@ Los límites de frecuencia, concurrencia y duración quedan sujetos a decisiones
 Proactivity:
 
 - No ejecuta operaciones de negocio ni operaciones del sistema.
-- No modifica archivos, configuraciones, proyectos o recursos.
+- No modifica archivos, configuraciones, proyectos o recursos observados ni recursos externos.
 - No crea, modifica ni revoca Grants.
 - No aprueba ni rechaza solicitudes de autorización.
 - No realiza operaciones protegidas directamente.
-- No accede a almacenamiento protegido evitando Memory Gateway y CAM.
+- No accede a almacenamiento protegido evitando MemoryGateway y CAM.
 - No invoca operaciones mutables de Atlas Broker.
 - No ejecuta herramientas, agentes o Skills como consecuencia de una observación.
 - No transforma una propuesta en una tarea admitida o autorizada.
 - No interpreta el silencio del usuario como aprobación.
+
+Proactivity puede crear y actualizar sus propios registros internos de observación, análisis y seguimiento. Estas escrituras se limitan a datos bajo su responsabilidad y no pueden modificar los recursos observados, alterar datos protegidos ni ampliar permisos. Esta capacidad no autoriza operaciones sobre recursos externos ni operaciones de negocio.
 
 Una propuesta de Proactivity no equivale a una instrucción del usuario, autorización, Grant, admisión de tarea ni resultado de ejecución.
 
@@ -143,7 +145,7 @@ El MVP puede considerar fuentes internas como:
 - Estado de proyectos.
 - Indicadores operativos internos.
 - Resultados de análisis autorizados.
-- Información de memoria a través de Memory Gateway y CAM, cuando corresponda.
+- Información de memoria a través de MemoryGateway y CAM, cuando corresponda.
 
 Esta lista define categorías posibles, no concede acceso automático a todos sus datos.
 
@@ -163,7 +165,7 @@ Su incorporación futura requerirá una política explícita que determine:
 
 ### 6.3 Acceso a memoria
 
-Toda lectura de memoria protegida debe realizarse a través de Memory Gateway y CAM.
+Toda lectura de memoria protegida debe realizarse a través de MemoryGateway y CAM.
 
 Proactivity no puede acceder directamente a los almacenes de memoria, índices protegidos, réplicas o mecanismos internos para evitar los controles de acceso.
 
@@ -198,6 +200,8 @@ Se utiliza el catálogo definido en CT-04:
 - `important`
 - `informational`
 - `debug`
+
+Cuando Proactivity reutiliza estos valores para expresar la severidad de un hallazgo, esa reutilización es únicamente una convención de clasificación analítica. No convierte el hallazgo en un evento ni lo registra automáticamente como tal. La severidad tampoco sustituye la clasificación de seguridad definida en CT-04.
 
 Proactivity no debe introducir un catálogo incompatible.
 
@@ -323,7 +327,7 @@ Los mecanismos de reintento, recuperación y persistencia quedan sujetos a decis
 - **CT-04 Events:** define la estructura, clasificación, severidad e inmutabilidad de los eventos.
 - **CT-05 Memory:** define los límites de acceso y ciclo de vida de la memoria.
 - **CT-06 Atlas Assistant:** define la responsabilidad de recibir propuestas, gestionar la interacción y respetar los niveles de autonomía.
-- **CAM y Memory Gateway:** mantienen la autoridad sobre las lecturas protegidas.
+- **CAM y MemoryGateway:** mantienen la autoridad sobre las lecturas protegidas.
 - **Scheduler y ejecutores:** conservan sus responsabilidades independientes de admisión y ejecución.
 
 Proactivity no sustituye ninguno de estos componentes.
@@ -343,7 +347,7 @@ Proactivity no sustituye ninguno de estos componentes.
 ### Permisos y memoria
 
 - **PRO-08:** Proactivity no puede omitir los controles de autorización de una fuente.
-- **PRO-09:** Toda lectura protegida de memoria utiliza Memory Gateway y CAM.
+- **PRO-09:** Toda lectura protegida de memoria utiliza MemoryGateway y CAM.
 - **PRO-10:** Una referencia de evidencia no concede permiso de lectura.
 - **PRO-11:** Una observación no amplía los permisos de Proactivity.
 - **PRO-12:** No existe acceso cruzado entre scopes de memoria sin autorización explícita.
