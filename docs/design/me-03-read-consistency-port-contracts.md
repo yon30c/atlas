@@ -425,9 +425,9 @@ Se añadió `tests/unit/test_memory_consistency_authority.py` con un fake determ
 
 ### Límites explícitos del fake
 
-El fake es una herramienta de prueba, no un adaptador de producción. Usa memoria local y un lock de proceso único. No prueba persistencia durable, compare-and-swap distribuido, fencing entre procesos, transporte de red, recuperación tras reinicio ni cobertura real de todos los endpoints. Tampoco implementa Forget ni supresión física/lógica global.
+El fake es una herramienta de prueba, no un adaptador de producción. Usa memoria local y un lock de proceso único. No prueba persistencia durable, compare-and-swap distribuido, fencing entre procesos, transporte de red, recuperación tras reinicio ni cobertura real de todos los endpoints. Tampoco implementa persistencia durable, recuperación tras reinicio, supresión global ni eliminación física. La extensión del fake para Forget en §14.3 solo prueba el contrato lógico en memoria y proceso único.
 
-La interfaz de `ReadConsistencyAuthorityPort` sigue necesitando integrar el ciclo completo de Forget con autorización verificable y evidencia CT-05 antes de que pueda considerarse completa. No se selecciona todavía almacenamiento ni transporte.
+La interfaz de `ReadConsistencyAuthorityPort` ya declara el inicio y la reconciliación del cierre lógico Forget. La autoridad concreta todavía debe implementar el ciclo completo con autorización verificable y evidencia CT-05 antes de que pueda considerarse completa. No se selecciona todavía almacenamiento ni transporte.
 
 **Verificación:** se incorporaron pruebas adicionales para admisión, inventario de invalidación, fencing, finalización y egress. No se ha ejecutado la suite ni existe status check/workflow asociado a estos commits. No se afirma validación de runtime.
 
@@ -469,7 +469,7 @@ Esta integración define el camino protegido, pero no acredita la garantía comp
 - La configuración de `DeliveryRouteSet` debe provenir de composición confiable y representar todas las rutas que puedan emitir contenido. No debe aceptar rutas elegidas libremente por el solicitante.
 - La autoridad concreta debe crear atómicamente la operación `read:{admission_id}` junto con la admisión y comprobar supresión, revisiones, generación y cobertura.
 - El egress concreto debe ordenar cada compromiso respecto de invalidaciones/Forget y validar revisiones y expiración de Grant por unidad.
-- No se ha implementado aún `begin_forget` ni el inventario verificable de destinos de persistencia/derivados.
+- `begin_forget` y `reconcile_forget` están definidos en el puerto y cubiertos por un fake de proceso único; no existe autoridad durable ni emisor/verificador confiable de OwnerDecisionProof. El inventario verificable de destinos de persistencia/derivados sigue pendiente.
 - No hay adaptadores reales, persistencia durable, transporte ni recuperación distribuida.
 
 Los tests escritos para esta integración incluyen 16 casos unitarios del Gateway, 9 casos CAM/Gateway y 3 casos de seguridad de frontera. Usan fakes donde corresponde. No se han ejecutado en esta etapa y no prueban comportamiento de runtime. Esta implementación no habilita todavía lectura protegida en producción.
