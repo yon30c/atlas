@@ -149,7 +149,7 @@ E01–E10 tienen cobertura parcial o completa a nivel fake-in-process con tests 
 
 1. Ejecutar CI completa después de los tests concurrentes y Gateway añadidos.
 2. [x] Añadir prueba Gateway-session vs Forget race usando la frontera única.
-3. Añadir recuperación integrada journal → reducer → autoridad fake, sin checkpoint no verificado.
+3. [~] Se añadió replay journal → reducer → restauración del gate Forget en el fake. Falta reconstruir admisiones no terminales y conectar un journal durable.
 4. Añadir seguridad: rutas de contenido, capacidades, recibos, ids y payload ausentes.
 5. Ejecutar suite y revisar los resultados por versión Python.
 6. Mantener bloqueados adaptadores reales hasta resolver prerrequisitos de §7.
@@ -173,3 +173,12 @@ En `tests/unit/test_memory_gateway_authorization_integration.py` se añadió la 
 El commit de código `a1e58b0f148cebf9e3f9c0b817b113fdd083ef4c` pasó GitHub Actions en Python 3.10, 3.11, 3.12 y 3.13. Python 3.11 reportó `Ran 366 tests`, `OK`. Workflow: [Atlas CI #43527225373](https://github.com/yon30c/atlas/actions/runs/43527225373).
 
 **Nivel demostrado:** fake integrado y concurrencia dentro de un proceso. No demuestra orden entre procesos/nodos, durabilidad, recuperación tras reinicio ni transporte real. Siguen pendientes E11–E26 y el nivel adapter-integration/distributed.
+
+
+## 12. Recuperación integrada parcial y validación actualizada
+
+Se añadió una prueba que construye una secuencia journal válida (`READ_ADMITTED`, `FORGET_CLOSED`, fencing de endpoint, `ADMISSION_RECONCILED`, `FORGET_SUPPRESSED`), ejecuta `ConsistencyJournalReducer`, restaura el gate de un fake desde la proyección y comprueba que una nueva admisión para esa memoria se rechaza.
+
+La prueba demuestra que la proyección reducida conserva suficiente información para reestablecer el cierre lógico de Forget en el fake. No reconstruye todos los detalles de admisiones activas, recibos externos ni operaciones de purga; tampoco prueba persistencia o recuperación tras reinicio real.
+
+El commit de código `9ff06d402e182bb3f488ade3248ea11a087e7ad3` pasó la suite completa en Python 3.10, 3.11, 3.12 y 3.13. Python 3.11 reportó `Ran 367 tests`, `OK`. Workflow: [Atlas CI #43527488512](https://github.com/yon30c/atlas/actions/runs/43527488512).
