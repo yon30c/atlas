@@ -186,6 +186,11 @@ class InMemoryConsistencyJournalFake:
 
 class ConsistencyJournalModelTests(unittest.TestCase):
 
+
+    def test_transition_rejects_fields_not_allowed_for_record_kind(self):
+        with self.assertRaises(ContractError):
+            replace(read_admitted(), receipt_id="not-applicable-to-read-admitted")
+
     def test_transition_rejects_unsupported_schema_version(self):
         # The schema is closed: unknown versions cannot enter a recovery state.
         with self.assertRaises(ContractError):
