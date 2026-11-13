@@ -525,8 +525,8 @@ class MemoryJournalFailureScenarios(unittest.TestCase):
         journal = FaultInjectingJournalFake()
         journal.unsupported_schema = True
         self.assertIsNone(journal.load_recovery_state(DOMAIN))
-        unknown = replace(admitted(), schema_version=2)
-        self.assertIsNone(journal.append_transition(journal.position(), unknown))
+        with self.assertRaises(ContractError):
+            replace(admitted(), schema_version=2)
         self.assertEqual(journal.sequence, 0)
 
     def test_c63_endpoint_fence_without_correlated_journal_receipt_does_not_suppress(self):
