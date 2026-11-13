@@ -23,6 +23,7 @@ from atlas.memory.consistency import (
     ReadTarget,
     ReconciliationResult,
 )
+from atlas.memory.forget import ForgetClosure, ForgetClosureStatus, ForgetTarget
 from atlas.memory.models import (
     MemoryClassification,
     MemoryScope,
@@ -67,6 +68,23 @@ def private_snapshot(identity_revision=1):
     )
 
 
+class FakeVerifiedForgetAuthorization:
+    """Solo test double; no representa un emisor/verificador confiable."""
+
+    def __init__(
+        self,
+        memory_id=MEMORY_ID,
+        owner_id="owner-1",
+        subject_user_id="owner-1",
+    ):
+        self.decision_id = "decision-forget-1"
+        self.request_id = "request-forget-1"
+        self.actor_identity_id = "identity-1"
+        self.subject_user_id = subject_user_id
+        self.memory_id = memory_id
+        self.owner_id = owner_id
+
+
 class FakeReadConsistencyAndEgress:
     """Fake atómico, determinista y de proceso único para probar los contratos."""
 
@@ -90,6 +108,10 @@ class FakeReadConsistencyAndEgress:
         self.emissions = {}
         self.fenced_endpoints = set()
         self._next_admission = 1
+        self.memory_owners = {MEMORY_ID: "owner-1"}
+        self.suppressed_memories = set()
+        self.forget_idempotency = {}
+        self.forget_closures = {}
 
     @staticmethod
     def _same_admission(current, candidate):
@@ -114,6 +136,8 @@ class FakeReadConsistencyAndEgress:
                 or now.tzinfo is None
                 or now.utcoffset().total_seconds() != 0
             ):
+                return None
+            if snapshot.memory_id in self.suppressed_memories:
                 return None
             if snapshot.grant_expires_at is not None and now >= snapshot.grant_expires_at:
                 return None
@@ -179,6 +203,118 @@ class FakeReadConsistencyAndEgress:
                 "kind": "read",
             }
             return admission
+
+    def begin_forget(self, target, authorization, idempotency_key, now=NOW):
+        with self._lock:
+            if not isinstance(target, ForgetTarget):
+                return None
+            if (
+                not isinstance(now, datetime)
+                or now.tzinfo is None
+                or now.utcoffset().total_seconds() != 0
+                or not isinstance(idempotency_key, str)
+                or not idempotency_key.strip()
+            ):
+                return None
+            required = (
+                "decision_id", "request_id", "actor_identity_id",
+                "subject_user_id", "memory_id", "owner_id",
+            )
+            if any(
+                not isinstance(getattr(authorization, field, None), str)
+                or not getattr(authorization, field).strip()
+                for field in required
+            ):
+                return None
+            if (
+                authorization.memory_id != target.memory_id
+                or authorization.subject_user_id != authorization.owner_id
+                or self.memory_owners.get(target.memory_id) != authorization.owner_id
+            ):
+                return None
+            binding = (
+                target.memory_id,
+                authorization.decision_id,
+                authorization.request_id,
+                authorization.actor_identity_id,
+                authorization.subject_user_id,
+                authorization.owner_id,
+            )
+            prior = self.forget_idempotency.get(idempotency_key)
+            if prior is not None:
+                prior_binding, prior_closure = prior
+                return prior_closure if prior_binding == binding else None
+            if target.memory_id in self.suppressed_memories:
+                return None
+
+            affected = frozenset(
+                admission_id
+                for admission_id, admission in self.admissions.items()
+                if admission.target.memory_id == target.memory_id
+                and admission.status not in (
+                    ReadAdmissionStatus.COMPLETED,
+                    ReadAdmissionStatus.CANCELLED,
+                )
+            )
+            if any(
+                operation["pending"]
+                and operation.get("kind") == "invalidation"
+                and (
+                    operation.get("authority_kind") is AuthorityKind.MEMORY
+                    and operation.get("authority_id") == target.memory_id
+                    or bool(affected.intersection(operation["affected"]))
+                )
+                for operation in self.operations.values()
+            ):
+                return None
+
+            routes = frozenset(
+                endpoint
+                for admission_id in affected
+                for endpoint in self.admissions[admission_id].route_ids
+            )
+            self.generation += 1
+            self.suppressed_memories.add(target.memory_id)
+            closure_id = "018bcfe5-7b3a-7cc2-98c4-dc0c0c073a14"
+            operation_id = f"forget:{closure_id}"
+            closure = ForgetClosure(
+                closure_id=closure_id,
+                operation_id=operation_id,
+                idempotency_key=idempotency_key,
+                target=target,
+                generation=self.generation,
+                affected_admission_ids=affected,
+                unresolved_admission_ids=affected,
+                delivery_route_ids=routes,
+                status=ForgetClosureStatus.CLOSING,
+            )
+            self.operations[operation_id] = {
+                "affected": affected,
+                "pending": True,
+                "kind": "forget",
+            }
+            self.forget_idempotency[idempotency_key] = (binding, closure)
+            self.forget_closures[operation_id] = closure
+            return closure
+
+    def reconcile_forget(self, operation_id):
+        with self._lock:
+            closure = self.forget_closures.get(operation_id)
+            if closure is None:
+                return None
+            result = self.reconcile(operation_id)
+            status = (
+                ForgetClosureStatus.SUPPRESSED
+                if not result.unresolved_admission_ids
+                else ForgetClosureStatus.CLOSING
+            )
+            updated = replace(
+                closure,
+                unresolved_admission_ids=result.unresolved_admission_ids,
+                status=status,
+            )
+            self.forget_closures[operation_id] = updated
+            return updated
 
     def begin_invalidation(self, invalidation):
         with self._lock:
@@ -763,6 +899,124 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
         self.assertEqual(
             self.authority.admissions[admission.admission_id].status,
             ReadAdmissionStatus.COMPLETED,
+        )
+
+    def test_forget_closes_new_admissions_and_waits_for_every_endpoint_fence(self):
+        admission = self.authority.admit_read(
+            private_snapshot(), DeliveryRouteSet(ROUTES)
+        )
+        authorization = FakeVerifiedForgetAuthorization()
+        closure = self.authority.begin_forget(
+            ForgetTarget(MEMORY_ID), authorization, "forget-key-1", NOW
+        )
+        self.assertEqual(closure.status, ForgetClosureStatus.CLOSING)
+        self.assertEqual(closure.affected_admission_ids, frozenset({admission.admission_id}))
+        self.assertEqual(closure.generation, 2)
+        self.assertIsNone(
+            self.authority.admit_read(private_snapshot(), DeliveryRouteSet(ROUTES))
+        )
+
+        first = EndpointFenceReceipt(
+            closure.operation_id, admission.admission_id, "assistant-response",
+            closure.generation, NOW, True
+        )
+        self.assertTrue(self.authority.record_endpoint_ack(first))
+        partial = self.authority.reconcile_forget(closure.operation_id)
+        self.assertEqual(partial.status, ForgetClosureStatus.CLOSING)
+        self.assertEqual(partial.unresolved_admission_ids, frozenset({admission.admission_id}))
+
+        second = EndpointFenceReceipt(
+            closure.operation_id, admission.admission_id, "api-response",
+            closure.generation, NOW, True
+        )
+        self.assertTrue(self.authority.record_endpoint_ack(second))
+        final = self.authority.reconcile_forget(closure.operation_id)
+        self.assertEqual(final.status, ForgetClosureStatus.SUPPRESSED)
+        self.assertFalse(final.unresolved_admission_ids)
+        self.assertEqual(final.affected_admission_ids, frozenset({admission.admission_id}))
+        self.assertEqual(
+            self.authority.admissions[admission.admission_id].status,
+            ReadAdmissionStatus.CANCELLED,
+        )
+
+    def test_forget_is_idempotent_and_rejects_idempotency_key_reuse(self):
+        authorization = FakeVerifiedForgetAuthorization()
+        first = self.authority.begin_forget(
+            ForgetTarget(MEMORY_ID), authorization, "forget-key-2", NOW
+        )
+        repeated = self.authority.begin_forget(
+            ForgetTarget(MEMORY_ID), authorization, "forget-key-2", NOW
+        )
+        self.assertEqual(first, repeated)
+        self.assertEqual(self.authority.generation, 2)
+        other_target = ForgetTarget("018bcfe5-7b3a-7cc2-98c4-dc0c0c073a15")
+        self.assertIsNone(
+            self.authority.begin_forget(other_target, authorization, "forget-key-2", NOW)
+        )
+        self.assertEqual(self.authority.generation, 2)
+
+    def test_forget_rejects_owner_or_target_mismatch(self):
+        wrong_owner = FakeVerifiedForgetAuthorization(owner_id="someone-else")
+        self.assertIsNone(
+            self.authority.begin_forget(
+                ForgetTarget(MEMORY_ID), wrong_owner, "forget-key-3", NOW
+            )
+        )
+        wrong_memory = FakeVerifiedForgetAuthorization(memory_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c073a15")
+        self.assertIsNone(
+            self.authority.begin_forget(
+                ForgetTarget(MEMORY_ID), wrong_memory, "forget-key-4", NOW
+            )
+        )
+        self.assertEqual(self.authority.generation, 1)
+
+    def test_forget_without_prior_reads_suppresses_only_after_reconciliation(self):
+        closure = self.authority.begin_forget(
+            ForgetTarget(MEMORY_ID), FakeVerifiedForgetAuthorization(),
+            "forget-key-5", NOW
+        )
+        self.assertEqual(closure.status, ForgetClosureStatus.CLOSING)
+        self.assertFalse(closure.affected_admission_ids)
+        final = self.authority.reconcile_forget(closure.operation_id)
+        self.assertEqual(final.status, ForgetClosureStatus.SUPPRESSED)
+        self.assertFalse(final.affected_admission_ids)
+        self.assertIsNone(
+            self.authority.admit_read(private_snapshot(), DeliveryRouteSet(ROUTES))
+        )
+
+    def test_admission_and_forget_are_serialized_by_the_same_lock(self):
+        barrier = threading.Barrier(3)
+        admitted = []
+        forgotten = []
+
+        def read():
+            barrier.wait()
+            admitted.append(
+                self.authority.admit_read(private_snapshot(), DeliveryRouteSet(ROUTES))
+            )
+
+        def forget():
+            barrier.wait()
+            forgotten.append(
+                self.authority.begin_forget(
+                    ForgetTarget(MEMORY_ID), FakeVerifiedForgetAuthorization(),
+                    "forget-race", NOW
+                )
+            )
+
+        read_thread = threading.Thread(target=read)
+        forget_thread = threading.Thread(target=forget)
+        read_thread.start()
+        forget_thread.start()
+        barrier.wait()
+        read_thread.join()
+        forget_thread.join()
+
+        self.assertIsNotNone(forgotten[0])
+        if admitted[0] is not None:
+            self.assertIn(admitted[0].admission_id, forgotten[0].affected_admission_ids)
+        self.assertIsNone(
+            self.authority.admit_read(private_snapshot(), DeliveryRouteSet(ROUTES))
         )
 
     def test_conditional_content_read_requires_exact_snapshot_and_admission(self):
