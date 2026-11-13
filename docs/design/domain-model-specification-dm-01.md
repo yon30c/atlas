@@ -1,0 +1,553 @@
+# DM-01 — Especificación del modelo de dominio de Atlas Core
+
+**Estado:** borrador técnico para revisión del propietario.  
+**Rama base:** `main`  
+**Commit base:** `8832e59c8d6895750bfc7053a26bf4f4f3932437`  
+**Alcance:** modelo de dominio, identidad de recursos y contrato lógico de autorización requerido para Memory Engine / Memory Gateway.  
+**Implementación:** no incluida. Este documento no modifica ni sustituye los contratos normativos.  
+**Autoridad:** el contrato principal de Atlas v1 prevalece sobre este documento. Las propuestas técnicas aquí descritas requieren aprobación antes de implementarse.
+
+---
+
+## 1. Objetivo
+
+Convertir las decisiones ya aprobadas para Memory Engine y CAM en una especificación de dominio verificable, sin introducir decisiones de persistencia, infraestructura o despliegue.
+
+DM-01 debe permitir que QA-01 derive pruebas de aceptación y que ME-01 implemente modelos sin inferir reglas de seguridad.
+
+Objetivos concretos:
+
+1. Definir los conceptos y relaciones del dominio de memoria.
+2. Separar la identidad lógica de una memoria de sus versiones.
+3. Representar explícitamente los scopes `PRIVATE` y `PROJECT`.
+4. Precisar la identidad de un recurso protegido y el significado de `resource_id`.
+5. Especificar un alcance de Grant que no permita autorizar instancias por compartir solamente el tipo.
+6. Definir cómo se aplican las reglas especiales de memoria privada del propietario.
+7. Identificar las decisiones técnicas que todavía bloquean una implementación completa.
+
+## 2. Autoridad y vocabulario
+
+Se utilizan estas etiquetas:
+
+- **APROBADO:** regla que ya está establecida en el contrato principal o en los contratos CT.
+- **PROPUESTA TÉCNICA:** representación o mecanismo recomendado en DM-01. No se considera aprobado hasta que el propietario lo confirme.
+- **PENDIENTE:** dato o mecanismo que debe decidirse explícitamente antes de implementar el flujo afectado.
+- **FUERA DE ALCANCE:** cuestión que DM-01 no debe resolver.
+
+En caso de contradicción, prevalecen el contrato principal y los contratos CT-01 a CT-08.
+
+DM-01 no autoriza cambios en Atlas Broker, Registry v2, infraestructura protegida ni producción. Tampoco selecciona base de datos, motor semántico, embeddings, proveedor de modelos, scheduler, RLM o despliegue.
+
+## 3. Hallazgos de la implementación actual
+
+La inspección estática de `main` en el commit base identificó:
+
+| Elemento | Implementación actual | Brecha respecto al diseño aprobado |
+|---|---|---|
+| `Memory` | `memory_id`, `owner_id`, `content`, `status`, `created_at` | No separa versiones ni representa scope o puntero vigente. |
+| `MemoryProposal` | `owner_id`, `content`, `context` | No identifica crear memoria frente a crear versión. |
+| `MemoryStatus` | `proposed`, `active`, `archived`, `rejected` | No coincide con el ciclo normativo de CT-05. |
+| `MemoryGateway` | `list_visible`, `submit_proposal` | No integra CAM ni representa revisión, versión u olvido. |
+| `AuthorizationRequest` | acción, tipo, ID y propietario del recurso | No incorpora un scope tipado ni una relación explícita con el recurso padre. |
+| `Grant` | tipo de recurso y acciones | No contiene un conjunto de identificadores concretos autorizados. |
+| `AuthorizationEvaluator` | valida tipo, acción, actor, owner, proyecto, entorno y vigencia | No compara el `resource_id` solicitado con el alcance autorizado. |
+
+La prueba actual `tests/unit/test_evaluator.py::test_matching_grant_allows_resource_type_not_specific_id` confirma que un Grant permite actualmente otro ID del mismo tipo. Ese comportamiento contradice el requisito aprobado y debe sustituirse por una prueba negativa.
+
+Esta tabla describe código observado; no certifica comportamiento de runtime ni ejecución de la suite.
+
+## 4. Modelo de memoria
+
+### 4.1 MemoryScope
+
+**APROBADO**
+
+- El scope solo puede ser `PRIVATE` o `PROJECT`.
+- `PRIVATE` no lleva `project_id`.
+- `PROJECT` requiere un `project_id` explícito, válido y coincidente.
+- El propietario se representa una sola vez, en `Memory.owner_id`.
+- Un scope ausente, inválido, ambiguo o inconsistente produce denegación.
+- El scope no se infiere del contexto, la conversación, el origen o la procedencia.
+- No hay transferencia ni reclasificación implícita entre scopes.
+
+**PROPUESTA TÉCNICA**
+
+Representación lógica:
+
+```text
+MemoryScope
+  kind: PRIVATE | PROJECT
+  project_id: ProjectId | null
+```
+
+Invariantes de construcción:
+
+- `PRIVATE` exige `project_id = null`.
+- `PROJECT` exige `project_id` no vacío.
+- No se normaliza ni transforma el identificador silenciosamente.
+- La validación sintáctica del identificador no demuestra que el proyecto exista; su validación semántica corresponde a una autoridad de proyectos que deberá definirse.
+
+### 4.2 Memory
+
+**APROBADO**
+
+`Memory` representa la identidad lógica estable de una memoria, su propietario canónico, su scope y la referencia a la versión aprobada vigente.
+
+**PROPUESTA TÉCNICA**
+
+```text
+Memory
+  memory_id: MemoryId
+  owner_id: UserId
+  scope: MemoryScope
+  current_approved_version_id: MemoryVersionId | null
+  created_at: Instant
+  updated_at: Instant
+```
+
+Invariantes:
+
+1. `memory_id` identifica una memoria lógica y no se reutiliza.
+2. `owner_id` es la única representación canónica del propietario.
+3. `scope` es obligatorio.
+4. `current_approved_version_id` puede ser nulo mientras la memoria no tenga una versión aprobada.
+5. Si no es nulo, debe apuntar a una versión perteneciente a esa misma memoria y cuyo estado sea `approved`.
+6. Una memoria no puede apuntar a una versión de otra memoria.
+7. La identidad lógica y su scope no se modifican mediante una actualización ordinaria.
+8. Los timestamps son instantes UTC con zona horaria explícita.
+
+La consistencia entre la memoria y las versiones relacionadas requiere validación de dominio/servicio; no puede garantizarse únicamente con la validación aislada de una dataclass.
+
+### 4.3 MemoryVersion
+
+**APROBADO**
+
+- Cada versión es inmutable después de su creación.
+- Cada versión tiene clasificación y procedencia propias.
+- Una versión nueva no reduce automáticamente la clasificación anterior.
+- Una versión pendiente no sustituye a la aprobada vigente.
+- La aprobación de una versión nueva, la transición de la anterior a `superseded` y el cambio del puntero vigente son atómicos.
+- El historial no concede acceso por sí mismo.
+
+**PROPUESTA TÉCNICA**
+
+```text
+MemoryVersion
+  version_id: MemoryVersionId
+  memory_id: MemoryId
+  version_number: PositiveInteger
+  content: Content
+  classification: MemoryClassification
+  status: MemoryVersionStatus
+  provenance: MemoryProvenance
+  parent_version_id: MemoryVersionId | null
+  created_at: Instant
+  submitted_at: Instant
+  reviewed_at: Instant | null
+  reviewed_by: UserId | null
+```
+
+Invariantes:
+
+1. `version_id` es único y no se reutiliza.
+2. `version_number` es positivo, monotónico dentro de una memoria y no se reutiliza.
+3. `memory_id` debe referir a la memoria propietaria de la versión.
+4. `parent_version_id`, cuando exista, debe referir a una versión de la misma memoria.
+5. `content`, `classification` y `provenance` no se modifican en sitio.
+6. Una corrección crea otra versión.
+7. La clasificación es obligatoria, pero su catálogo y reglas de propagación siguen pendientes.
+8. Los campos de revisión son nulos mientras la versión no haya sido decidida y deben ser coherentes con el resultado de revisión.
+
+### 4.4 Estados de MemoryVersion
+
+**APROBADO — conjunto cerrado**
+
+- `pending_review`
+- `approved`
+- `rejected`
+- `superseded`
+- `forgotten`
+
+Transiciones permitidas:
+
+```text
+pending_review -> approved
+pending_review -> rejected
+approved       -> superseded
+approved       -> forgotten
+```
+
+No se agregan estados alternativos como `proposed`, `active` o `archived`.
+
+Reglas:
+
+- `rejected`, `superseded` y `forgotten` no son conocimiento aprobado vigente.
+- Una versión rechazada no se reactiva.
+- Una versión `forgotten` solo refleja una eliminación completada y verificada.
+- El estado del proceso de supresión pertenece a otro modelo y no amplía este conjunto.
+
+### 4.5 MemoryProposal
+
+**APROBADO**
+
+Una propuesta debe identificar si pretende crear una memoria lógica nueva o una versión nueva de una memoria existente. Debe vincularse con la memoria y la versión sometida a revisión, sin modificar una versión aprobada.
+
+**PROPUESTA TÉCNICA**
+
+```text
+MemoryProposal
+  proposal_id: ProposalId
+  intent: CREATE_MEMORY | NEW_VERSION
+  memory_id: MemoryId
+  version_id: MemoryVersionId
+  submitted_by: IdentityId
+  submitted_at: Instant
+```
+
+Semántica propuesta:
+
+- `CREATE_MEMORY`: identifica una nueva memoria lógica con scope explícito y una primera versión en `pending_review`. Su puntero aprobado permanece nulo hasta la aprobación.
+- `NEW_VERSION`: identifica una memoria existente y una nueva versión pendiente; hereda propietario y scope de la memoria objetivo. La propuesta no puede cambiar propietario ni scope.
+- El contenido y la clasificación propuestos pertenecen a la versión, no a una copia mutable dentro de la propuesta.
+- La propuesta no es por sí misma una memoria aprobada ni un permiso de lectura.
+- La relación exacta entre persistencia de la propuesta y creación de la memoria lógica queda sujeta a la estrategia transaccional que se defina; no se selecciona almacenamiento aquí.
+
+### 4.6 MemoryProvenance
+
+**APROBADO**
+
+La procedencia es obligatoria por versión. Las referencias a fuentes y evidencias no conceden autorización. Si una fuente desaparece, se conserva la referencia histórica y se identifica como no disponible.
+
+**PROPUESTA TÉCNICA**
+
+```text
+MemoryProvenance
+  source_kind: SourceKind
+  source_ref: OpaqueReference | null
+  captured_at: Instant
+  captured_by: IdentityId
+  origin_context: ProvenanceContext
+  transformation: TransformationSummary | null
+  evidence_refs: tuple[OpaqueReference, ...]
+```
+
+Reglas:
+
+- La estructura es inmutable.
+- No se copian secretos ni payloads innecesarios.
+- Una referencia de evidencia se resuelve bajo sus propios controles de acceso.
+- La procedencia no sustituye identidad, autenticación, scope ni CAM.
+- Los catálogos de `SourceKind`, la retención de referencias y la estructura exacta de `ProvenanceContext` siguen pendientes.
+
+## 5. Identidad de recursos protegidos
+
+### 5.1 Identidad compuesta
+
+**APROBADO**
+
+Cuando una operación identifica un recurso concreto, CAM debe verificar el `resource_id` exacto. Un permiso sobre el tipo no autoriza todas sus instancias. Un ID ausente, distinto o no verificable produce denegación.
+
+**PROPUESTA TÉCNICA**
+
+Un recurso se identifica dentro de un contexto de autorización por la tupla:
+
+```text
+ResourceIdentity
+  resource_type
+  resource_id
+  owner_id
+  project_id
+  environment_id
+```
+
+La comparación de autorización no debe depender de `resource_id` aislado. Debe validar conjuntamente:
+
+- Identidad autenticada y actor efectivo.
+- Acción solicitada.
+- Tipo e ID exactos del recurso.
+- Propietario canónico del recurso.
+- Proyecto y entorno aplicables.
+- Scope del recurso.
+- Vigencia y estado del Grant, cuando la operación dependa de uno.
+- Restricciones especiales de la operación, incluidas las decisiones no delegables del propietario.
+
+Los IDs son opacos en esta fase. No se decide formato, UUID, normalización, longitud o sensibilidad a mayúsculas.
+
+### 5.2 Vinculación de versiones con la memoria
+
+**PROPUESTA TÉCNICA**
+
+Toda operación dirigida a una `MemoryVersion` debe incluir o resolver también su `memory_id` padre. El sistema debe comprobar que la versión pertenece a esa memoria y hereda su propietario y scope.
+
+No se acepta como autoridad un `owner_id`, `project_id` o scope declarado libremente por el solicitante. Esos datos deben proceder de una fuente de metadatos confiable.
+
+**PENDIENTE**
+
+Debe decidirse si el permiso sobre una versión se representa mediante:
+
+1. el ID de la versión concreta, junto con su memoria padre; o
+2. el ID de la memoria lógica, con la versión como subrecurso validado.
+
+La implementación no debe elegir una de estas semánticas por accidente. La decisión debe considerar cómo se espera que los Grants vigentes se comporten cuando se crea una versión nueva.
+
+## 6. Alcance de Grants y corrección de CAM
+
+### 6.1 Regla normativa
+
+**APROBADO**
+
+- Un Grant está limitado a un proyecto, entorno, operaciones, recursos y límites autorizados.
+- CAM verifica el alcance exacto.
+- No existe herencia automática entre proyectos o entornos.
+- La delegación no amplía el Grant.
+- Ningún componente puede concederse permisos.
+- Un tipo de recurso no sustituye la identidad de una instancia concreta.
+- Una operación colectiva solo puede autorizarse por tipo cuando su semántica y alcance estén expresamente definidos y autorizados.
+
+### 6.2 Alcance exacto de recurso
+
+**PROPUESTA TÉCNICA RECOMENDADA**
+
+Extender el modelo lógico de Grant con un conjunto explícito de IDs:
+
+```text
+GrantResourceScope
+  resource_type: ResourceType
+  resource_ids: frozenset[ResourceId]
+```
+
+Reglas propuestas:
+
+1. `resource_ids` debe ser no vacío para un Grant que autorice operaciones sobre recursos concretos.
+2. Cada ID es explícito; no se admiten `*`, prefijos, rangos implícitos ni coincidencia por tipo.
+3. Todos los IDs del conjunto pertenecen al mismo `resource_type`, proyecto, entorno y propietario del Grant.
+4. Una solicitud solo coincide si su `resource_id` aparece exactamente en el conjunto.
+5. Un Grant puede autorizar varios recursos, pero cada uno debe estar enumerado explícitamente.
+6. Un Grant que no tenga alcance de recurso verificable no autoriza una operación sobre una instancia.
+7. La ampliación del conjunto de recursos es una modificación de alcance y requiere decisión del propietario; no se produce por delegación ni por creación automática de una nueva versión.
+
+Este diseño es una recomendación, no una modificación aprobada del esquema de Grant.
+
+### 6.3 Operaciones colectivas
+
+**PROPUESTA TÉCNICA RECOMENDADA PARA LA PRIMERA IMPLEMENTACIÓN**
+
+No habilitar Grants genéricos por tipo ni comodines.
+
+- `list_visible` debe filtrar candidatos por scope y después autorizar cada memoria por su identidad concreta antes de devolver contenido o metadatos protegidos.
+- No debe devolver conteos, fragmentos, embeddings, contenido ni metadatos de elementos no autorizados.
+- Una creación de memoria PROJECT puede evaluarse contra el recurso contenedor explícito del proyecto (`resource_type=project`, `resource_id=project_id`) y la acción `memory.propose`. La memoria creada obtiene después su propio ID y scope. Esta convención requiere aprobación.
+- Las operaciones colectivas por tipo quedan deshabilitadas hasta que tengan semántica, permiso y criterios de aceptación propios.
+
+La enumeración de candidatos requiere una fuente de metadatos que no exponga contenido antes de autorización. La interfaz y confianza de esa fuente permanecen pendientes.
+
+### 6.4 Memoria PRIVATE del propietario
+
+**APROBADO**
+
+El propietario puede acceder a su propia memoria PRIVATE mediante una regla explícita evaluada por CAM. No necesita un Grant de proyecto. MemoryGateway y CAM siguen siendo obligatorios. Ningún otro actor obtiene acceso por defecto.
+
+**PROPUESTA TÉCNICA**
+
+La regla de propietario privado debe evaluarse como una ruta explícita y limitada, separada de la coincidencia de Grants:
+
+- actor de tipo `USER`;
+- identidad activa;
+- `actor.identity_id == context.user_id == Memory.owner_id`;
+- scope de la memoria explícitamente `PRIVATE`;
+- acción dentro del conjunto permitido para la operación;
+- recurso exacto y metadatos confiables.
+
+Esta regla no autoriza memoria PROJECT, memoria de otro propietario, ni operaciones administrativas de otros dominios.
+
+Para `memory.approve`, `memory.reject` y `memory.forget`, la coincidencia de propietario no es suficiente: también se exige evidencia verificable de una decisión iniciada directamente por el propietario. Un Grant no sustituye esa evidencia.
+
+El conjunto exacto de acciones que puede ejecutar el propietario sobre su memoria privada debe alinearse con el catálogo de permisos y con las restricciones de no delegabilidad antes de implementar.
+
+### 6.5 Solicitud de autorización tipada
+
+**PROPUESTA TÉCNICA**
+
+La solicitud de CAM debería transportar una referencia tipada al recurso, en lugar de confiar en campos sueltos que no expresen el scope:
+
+```text
+AuthorizationRequest
+  context: OperationContext
+  action: Permission
+  target:
+    resource_type: ResourceType
+    resource_id: ResourceId
+    owner_id: UserId
+    scope:
+      kind: PRIVATE | PROJECT
+      project_id: ProjectId | null
+    parent_resource_id: ResourceId | null
+```
+
+La estructura es conceptual. No obliga a cambiar inmediatamente la API pública existente.
+
+Invariantes:
+
+- `target.resource_id` es obligatorio para operaciones sobre una instancia concreta.
+- `target.owner_id` y `target.scope` deben provenir de metadatos confiables, no del payload no verificado del solicitante.
+- `PRIVATE` exige `project_id = null`.
+- `PROJECT` exige `project_id` explícito, válido y coincidente con `context.project_id`.
+- `parent_resource_id` permite vincular una versión u otro subrecurso con su contenedor lógico.
+- Una referencia padre/hijo inconsistente deniega.
+- CAM debe fallar cerrado si no puede verificar cualquiera de estas condiciones.
+
+### 6.6 Fuente confiable de metadatos
+
+**PENDIENTE BLOQUEANTE**
+
+Debe identificarse qué componente proporciona a CAM o a Gateway la relación autoritativa entre:
+
+- recurso e ID;
+- propietario;
+- scope;
+- proyecto;
+- entorno;
+- recurso padre, cuando corresponda.
+
+El solicitante no puede ser esa fuente. Tampoco se debe asumir que el Registry del Broker es la fuente de metadatos de memoria: su alcance es independiente y está protegido.
+
+La solución puede ser un puerto de resolución de metadatos o una fuente autoritativa equivalente, pero su interfaz, confianza, orden de consulta y garantías deben aprobarse antes de implementar Gateway/CAM. No se define aquí una base de datos ni un adaptador.
+
+## 7. Flujos de dominio
+
+Los siguientes flujos describen orden lógico, no implementación física.
+
+### 7.1 Lectura de una memoria
+
+1. El consumidor solicita lectura mediante MemoryGateway.
+2. Gateway valida contexto e identidad.
+3. Gateway obtiene metadatos autoritativos del recurso sin exponer contenido.
+4. CAM evalúa acción, ID exacto, propietario, scope, proyecto, entorno y autorización aplicable.
+5. Si CAM no devuelve `ALLOW`, no se recupera ni expone contenido.
+6. Solo después de la autorización se recupera el contenido.
+7. La respuesta no incluye referencias o versiones fuera del alcance autorizado.
+
+### 7.2 Enumeración de memorias visibles
+
+1. Gateway recibe el contexto.
+2. Se determina el scope explícito permitido; no se infiere uno global.
+3. Se obtienen candidatos mediante una fuente que no revele contenido.
+4. Cada candidato se autoriza por su identidad concreta.
+5. Solo se devuelven los autorizados.
+6. Errores de evaluación, metadatos incompletos o CAM no disponible excluyen el candidato y no producen fallback abierto.
+
+La paginación, filtros, búsqueda y garantías de rendimiento quedan fuera de DM-01.
+
+### 7.3 Propuesta de memoria nueva
+
+1. Se define un scope explícito.
+2. Se genera una identidad lógica y una versión pendiente, conforme a la estrategia de IDs que se apruebe.
+3. En PRIVATE, CAM evalúa la regla explícita del propietario.
+4. En PROJECT, la operación debe estar autorizada sobre el recurso contenedor del proyecto o bajo otra semántica explícita aprobada.
+5. Se conserva la procedencia.
+6. La versión queda en `pending_review`; no se expone como memoria aprobada.
+
+### 7.4 Propuesta de nueva versión
+
+1. La propuesta identifica la memoria existente.
+2. El propietario y scope se heredan de la memoria; no se aceptan cambios declarados por el solicitante.
+3. CAM evalúa `memory.propose` sobre el recurso concreto.
+4. Se crea una versión inmutable en `pending_review`.
+5. La versión aprobada vigente no cambia.
+
+### 7.5 Aprobación y rechazo
+
+1. Se identifica la propuesta y la versión exacta.
+2. Se verifica la identidad del propietario.
+3. Se verifica evidencia de que la acción fue iniciada directamente por el propietario.
+4. Se valida que la versión no haya cambiado desde la revisión.
+5. Se ejecuta la transición permitida.
+6. En aprobación de nueva versión, aprobación, supersession y puntero vigente se actualizan atómicamente.
+7. Assistant, agentes, servicios, Watchers y Skills no pueden decidir en nombre del propietario.
+
+La representación técnica de la evidencia directa sigue pendiente.
+
+### 7.6 Olvido
+
+El olvido requiere CAM y decisión directa no delegable del propietario. La supresión lógica, inventario de destinos, reconciliación y verificación física siguen el contrato CT-05 y no se detallan como implementación en DM-01.
+
+No se marca `forgotten` ni se comunica éxito antes de la verificación completa. Los estados operativos del proceso de supresión permanecen separados de los estados de MemoryVersion.
+
+## 8. Invariantes de dominio y seguridad
+
+Estas invariantes deben traducirse en QA-01:
+
+| ID | Invariante |
+|---|---|
+| DM-01-01 | Todo objeto Memory tiene un propietario canónico y un scope explícito. |
+| DM-01-02 | PRIVATE no contiene project_id; PROJECT requiere project_id explícito. |
+| DM-01-03 | MemoryScope no contiene owner_id. |
+| DM-01-04 | Una MemoryVersion pertenece a una única Memory. |
+| DM-01-05 | La versión vigente pertenece a la Memory y está en approved. |
+| DM-01-06 | El contenido, clasificación y procedencia de una versión son inmutables. |
+| DM-01-07 | Los estados y transiciones de MemoryVersion son exactamente los aprobados. |
+| DM-01-08 | Una propuesta distingue CREATE_MEMORY de NEW_VERSION. |
+| DM-01-09 | Una propuesta pendiente nunca se expone como conocimiento aprobado. |
+| DM-01-10 | La procedencia no concede acceso. |
+| DM-01-11 | Una operación concreta exige resource_id no vacío y exacto. |
+| DM-01-12 | Un Grant por tipo sin IDs explícitos no autoriza una instancia concreta. |
+| DM-01-13 | Un Grant solo autoriza IDs incluidos explícitamente en su alcance. |
+| DM-01-14 | Propietario, scope y proyecto se obtienen de metadatos confiables, no del solicitante. |
+| DM-01-15 | PROJECT exige coincidencia explícita entre scope y contexto. |
+| DM-01-16 | PRIVATE solo habilita la regla explícita del propietario y nunca omite CAM/Gateway. |
+| DM-01-17 | Las decisiones approve/reject/forget requieren acción directa y no delegable del propietario. |
+| DM-01-18 | La versión solicitada debe estar vinculada a su Memory padre. |
+| DM-01-19 | CAM no disponible, error, scope incompleto o metadatos no verificables producen denegación. |
+| DM-01-20 | No existe fallback a autorización por tipo ni a consulta sin filtro de scope. |
+
+## 9. Decisiones pendientes que bloquean implementación
+
+| ID | Decisión | Recomendación inicial | Estado |
+|---|---|---|---|
+| DM-P01 | Representación del alcance de recursos en Grant | Conjunto explícito e inmutable de IDs; sin wildcard | Requiere aprobación |
+| DM-P02 | Semántica de acceso a versiones | Decidir si Grant apunta a memory_id o version_id, conservando vínculo padre | Requiere aprobación |
+| DM-P03 | Autorización de creación PROJECT | Autorizar la acción sobre el ID exacto del proyecto contenedor | Requiere aprobación |
+| DM-P04 | Fuente autoritativa de metadatos | Definir un puerto/fuente confiable para owner, scope y relación padre | Bloqueante |
+| DM-P05 | Catálogo de clasificación | Definir valores y propagación | Pendiente |
+| DM-P06 | Evidencia directa del propietario | Definir mecanismo verificable y no delegable | Bloqueante para review/forget |
+| DM-P07 | Formato y generación de IDs | Mantener IDs opacos hasta decisión | Pendiente |
+| DM-P08 | Transferencia/reclasificación de scope | Mantener prohibición de cambios implícitos; definir flujo explícito | Pendiente |
+| DM-P09 | Semántica de propuestas | Definir creación transaccional de Memory/Version/Proposal | Pendiente antes de ME-01 |
+| DM-P10 | Retención histórica y referencias de procedencia | Definir política sin debilitar olvido | Pendiente |
+| DM-P11 | Catálogo SourceKind y estructura ProvenanceContext | Definir tipos permitidos y minimización de datos | Pendiente |
+| DM-P12 | Operaciones colectivas | Deshabilitadas salvo autorización explícita de un contenedor concreto | Requiere aprobación |
+
+No se debe implementar una decisión pendiente por inferencia ni introducirla accidentalmente en un constructor de dataclass.
+
+## 10. Exclusiones
+
+DM-01 no define:
+
+- Base de datos, ORM, esquema SQL o migraciones.
+- Motor de búsqueda, vector store, embeddings o Cognee.
+- Persistencia, réplicas, cachés o estrategia de backup.
+- Scheduler, RLM, Broker, Registry v2 o runtime.
+- SecurityAudit (su implementación sigue postergada).
+- API HTTP, transporte, interfaz de usuario o integración con Telegram.
+- Algoritmos de clasificación o catálogo de niveles todavía no aprobados.
+- Retención y purga física del proceso de olvido.
+
+## 11. Secuencia posterior
+
+1. Revisar y aprobar/rechazar las propuestas DM-P01 a DM-P12.
+2. Cerrar la fuente confiable de metadatos y la semántica de IDs/recurso.
+3. Preparar QA-01 con pruebas positivas, negativas, aislamiento y concurrencia.
+4. Implementar ME-01: modelos y validaciones puras, sin adaptadores de infraestructura.
+5. Implementar ME-02: MemoryGateway y CAM, únicamente después de que la autorización exacta por recurso esté probada.
+6. Abordar Review y Forget en fases separadas, según evidencia de propietario y estrategia de supresión.
+
+## 12. Fuentes normativas
+
+- `Contrato-de-diseno-Atlas-v1.md`: §§ 4.3–4.4, 5.4–5.7, 9 y 20.5.
+- `docs/contracts/identity.md`: modelo y lifecycle de Identity.
+- `docs/contracts/operation-context.md`: contexto como atribución/correlación, no autorización.
+- `docs/contracts/memory.md`: §§ 3–13, especialmente scopes, recurso concreto, Gateway, autoridad del propietario y olvido.
+- `docs/contracts/consistency-matrix-ct-08.md`: resoluciones R08-01 a R08-12 y criterios C08-AC.
+- `docs/design/memory-engine-technical-contract.md`: modelo conceptual, Gateway, CAM, criterios MEM-01 a MEM-15 y decisiones consolidadas §13.
+
+**Nota final:** DM-01 es un borrador de especificación. Ninguna propuesta técnica de este documento se considera aprobada por el mero hecho de estar escrita, y ninguna capacidad descrita se considera implementada.
