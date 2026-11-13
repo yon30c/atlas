@@ -161,6 +161,95 @@ class InMemoryConsistencyJournalFake:
 
 
 class ConsistencyJournalModelTests(unittest.TestCase):
+    def test_fake_journal_appends_with_compare_and_swap_position(self):
+        journal = InMemoryConsistencyJournalFake()
+        first = journal.append_transition(position(0), read_admitted())
+        self.assertEqual(first.position.sequence, 1)
+        self.assertIsNone(
+            journal.append_transition(position(0), read_admitted(RECORD_2))
+        )
+        second_transition = ConsistencyTransition(
+            record_id=RECORD_2,
+            schema_version=1,
+            record_kind=ConsistencyRecordKind.READ_ACTIVATED,
+            operation_id="read:admission-1",
+            occurred_at=NOW,
+            admission_id="admission-1",
+            generation=1,
+        )
+        second = journal.append_transition(position(1), second_transition)
+        self.assertEqual(second.position.sequence, 2)
+
+    def test_fake_journal_replays_same_idempotent_request(self):
+        journal = InMemoryConsistencyJournalFake()
+        first_transition = read_admitted(idempotency_key="read-key-1")
+        first = journal.append_transition(position(0), first_transition)
+        retry = read_admitted(
+            record_id=RECORD_2,
+            idempotency_key="read-key-1",
+            occurred_at=NOW + timedelta(seconds=5),
+        )
+        repeated = journal.append_transition(position(0), retry)
+        self.assertEqual(repeated.position, first.position)
+        self.assertEqual(repeated.record_id, first.record_id)
+        self.assertTrue(repeated.replayed)
+        self.assertEqual(len(journal.entries), 1)
+
+    def test_fake_journal_rejects_idempotency_key_reuse_for_other_request(self):
+        journal = InMemoryConsistencyJournalFake()
+        journal.append_transition(
+            position(0), read_admitted(idempotency_key="read-key-conflict")
+        )
+        changed = replace(
+            read_admitted(record_id=RECORD_2, idempotency_key="read-key-conflict"),
+            route_ids=frozenset({"assistant-response"}),
+        )
+        self.assertIsNone(journal.append_transition(position(0), changed))
+        self.assertEqual(len(journal.entries), 1)
+
+    def test_fake_journal_recovers_only_entries_after_checkpoint(self):
+        journal = InMemoryConsistencyJournalFake()
+        first = journal.append_transition(position(0), read_admitted())
+        checkpoint = ConsistencyCheckpoint(
+            checkpoint_id=CHECKPOINT_ID,
+            position=first.position,
+            state_reference="opaque-state-reference",
+            integrity_reference="fake-integrity-reference",
+            created_at=NOW,
+        )
+        self.assertIsNotNone(journal.commit_checkpoint(checkpoint, first.position))
+        second_transition = ConsistencyTransition(
+            record_id=RECORD_2,
+            schema_version=1,
+            record_kind=ConsistencyRecordKind.READ_ACTIVATED,
+            operation_id="read:admission-1",
+            occurred_at=NOW,
+            admission_id="admission-1",
+            generation=1,
+        )
+        journal.append_transition(first.position, second_transition)
+        state = journal.load_recovery_state(DOMAIN)
+        self.assertEqual(state.checkpoint, checkpoint)
+        self.assertEqual(len(state.entries), 1)
+        self.assertEqual(state.entries[0].position.sequence, 2)
+        self.assertEqual(state.head_sequence, 2)
+
+    def test_fake_journal_rejects_checkpoint_behind_current_head(self):
+        journal = InMemoryConsistencyJournalFake()
+        first = journal.append_transition(position(0), read_admitted())
+        stale_checkpoint = ConsistencyCheckpoint(
+            checkpoint_id=CHECKPOINT_ID,
+            position=position(0),
+            state_reference="opaque-state-reference",
+            integrity_reference="fake-integrity-reference",
+            created_at=NOW,
+        )
+        self.assertIsNone(journal.commit_checkpoint(stale_checkpoint, first.position))
+
+    def test_fake_journal_load_rejects_unknown_domain(self):
+        journal = InMemoryConsistencyJournalFake()
+        self.assertIsNone(journal.load_recovery_state("unknown-domain"))
+
     def test_position_allows_genesis_sequence_zero(self):
         self.assertEqual(position(0).sequence, 0)
 
