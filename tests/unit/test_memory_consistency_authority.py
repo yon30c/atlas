@@ -384,17 +384,19 @@ class FakeProtectedEgress:
         self.authority = authority
 
     def commit_and_emit(self, admission, handle, endpoint_id, emission_id, sequence, now):
-        return self.egress.commit_and_emit(
+        return self.authority.commit_and_emit(
             admission, handle, endpoint_id, emission_id, sequence, now
         )
 
     def finish(self, admission, endpoint_id, final_sequence, now):
-        return self.egress.finish(admission, endpoint_id, final_sequence, now)
+        return self.authority.finish(admission, endpoint_id, final_sequence, now)
 
     def fence(self, admission, endpoint_id, new_generation, now):
-        return self.egress.fence(admission, endpoint_id, new_generation, now)
+        return self.authority.fence(admission, endpoint_id, new_generation, now)
 
     def reconcile(self, admission, endpoint_id):
+        if endpoint_id not in admission.route_ids:
+            return EndpointDeliveryStatus.UNRESOLVED
         return self.authority.reconcile_endpoint(admission, endpoint_id)
 
 
@@ -646,9 +648,9 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
             self.egress.reconcile(admission, "assistant-response"),
             EndpointDeliveryStatus.ACTIVE,
         )
-        self.assertIsNone(
-            self.egress.reconcile(admission, "unregistered-endpoint")
-            if False else None
+        self.assertIs(
+            self.egress.reconcile(admission, "unregistered-endpoint"),
+            EndpointDeliveryStatus.UNRESOLVED,
         )
 
     def test_egress_rejects_handle_for_another_admission_target(self):
