@@ -394,6 +394,13 @@ class FakeReadConsistencyAndEgress:
             key = (admission.admission_id, endpoint_id)
             if key in self.fenced_endpoints:
                 return None
+            if operation.get("kind") == "read" and any(
+                pending["pending"]
+                and pending.get("kind") == "invalidation"
+                and admission.admission_id in pending["affected"]
+                for pending in self.operations.values()
+            ):
+                return None
             if final_sequence != self.emissions.get(key, 0):
                 return None
             return EndpointCompletionReceipt(
@@ -687,6 +694,12 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
         self.assertIsNone(
             self.egress.commit_and_emit(
                 admission, handle, "assistant-response", "after-close", 2, NOW
+            )
+        )
+        self.assertIsNone(
+            self.egress.finish(
+                admission, f"read:{admission.admission_id}",
+                "assistant-response", 1, NOW
             )
         )
         completion = self.egress.finish(
