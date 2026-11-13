@@ -45,7 +45,10 @@ La propuesta separa la identidad lógica de la memoria de sus versiones. Así se
 
 **APROBADO por el contrato:**
 
-- El scope distingue memoria privada del usuario y memoria asociada a un proyecto.
+- El scope distingue memoria privada del propietario y memoria asociada a un proyecto.
+- El propietario accede a su propia memoria privada mediante una regla explícita evaluada por CAM, sin requerir un Grant de proyecto. Memory Gateway sigue siendo obligatorio.
+- Ningún otro actor obtiene acceso a esa memoria privada por defecto.
+- El acceso a memoria de proyecto requiere un `project_id` explícito, válido y coincidente, además de autorización CAM.
 - La memoria de un proyecto no puede acceder a la memoria privada de otro proyecto por defecto.
 - CAM controla el acceso y el alcance.
 - Un índice global puede localizar referencias, pero no revelar contenido privado.
@@ -55,7 +58,6 @@ La propuesta separa la identidad lógica de la memoria de sus versiones. Así se
 ```text
 MemoryScope
   kind: PRIVATE | PROJECT
-  owner_id: UserId
   project_id: ProjectId | null
 ```
 
@@ -66,6 +68,11 @@ Invariantes:
 - No se infiere el scope a partir de `OperationContext.project_id`. El scope forma parte explícita de la memoria o propuesta.
 - Un scope ausente, mal formado o ambiguo produce denegación; nunca se interpreta como acceso global.
 - Una memoria de proyecto no se convierte en privada ni viceversa mediante una actualización ordinaria. Un cambio de scope requiere una operación explícita, revisada y autorizada; el mecanismo concreto queda pendiente.
+- `Memory.owner_id` es la representación canónica del propietario; no se duplica en `MemoryScope`.
+- Para `PRIVATE`, `project_id` debe ser `null` y el propietario canónico de `Memory` identifica al titular.
+- Para `PROJECT`, `project_id` es obligatorio y debe identificar un proyecto válido.
+- En memoria privada, la ausencia de `project_id` en el contexto de operación es válida solo cuando el scope `PRIVATE` está explícito. No implica acceso global.
+- En memoria de proyecto, un `project_id` ausente, ambiguo o diferente del scope produce denegación.
 - El owner identifica al propietario de la memoria. No sustituye la autorización de acceso al proyecto.
 
 **PENDIENTE:** formato definitivo de los identificadores y política para transferir o reclasificar una memoria entre scopes.
@@ -88,6 +95,7 @@ MemoryVersion
   memory_id: MemoryId
   version_number: PositiveInteger
   content: Content
+  classification: MemoryClassification
   status: MemoryStatus
   provenance: MemoryProvenance
   parent_version_id: MemoryVersionId | null
@@ -101,6 +109,7 @@ Reglas:
 
 - `memory_id` identifica la memoria lógica; `version_id` identifica una versión concreta e inmutable.
 - `version_number` aumenta dentro de una misma memoria y no se reutiliza.
+- `classification` es explícita por versión. Una versión nueva no puede reducir automáticamente la clasificación anterior; cualquier cambio requiere revisión y decisión directa del propietario.
 - `parent_version_id` conserva la relación con la versión anterior cuando corresponda.
 - El contenido de una versión no se modifica después de su creación. Una corrección crea otra versión y pasa por revisión.
 - `current_approved_version_id` solo puede apuntar a una versión `approved`.
@@ -109,6 +118,12 @@ Reglas:
 - El historial no autoriza a exponer versiones anteriores a un actor que no pueda leer la memoria correspondiente.
 
 La representación física puede variar, pero debe preservar estas propiedades.
+
+### Propuestas y versiones
+
+Una `MemoryProposal` identifica de forma inequívoca si solicita crear una nueva identidad lógica o una nueva versión de una memoria existente. Debe mantener referencias a la propuesta, la memoria objetivo cuando exista y la versión creada para revisión. La propuesta no altera directamente una versión aprobada. Toda propuesta admitida al proceso de revisión genera una versión `pending_review`; mientras permanezca pendiente, la versión aprobada anterior continúa siendo la vigente. La aprobación y sustitución se realizan atómicamente conforme a §3.3.
+
+La clasificación de memoria tendrá un catálogo propio que deberá definirse antes de implementar las políticas de clasificación. El catálogo de clasificación de eventos del contrato principal no se reutiliza por inferencia.
 
 ### 3.3 Estados y transiciones
 
@@ -318,19 +333,25 @@ Esta correspondencia es una inspección del código disponible en la revisión d
 
 ## 11. Parámetros técnicos pendientes de especificación
 
-1. Aprobar o ajustar la representación propuesta de `MemoryScope` y sus invariantes.
-2. Confirmar el modelo de identidad lógica + versiones inmutables y el comportamiento de sustitución.
-3. Definir cómo se demuestra técnicamente la aprobación directa del propietario.
-4. Resolver autorización granular por recurso en CAM/Gateway sin ampliar permisos de forma accidental.
-5. Definir la política de retención de versiones históricas.
-6. Definir el registro de supresión y los criterios de verificación de respaldos, réplicas e índices.
-7. Definir el límite de contenido y metadatos que puede devolver el índice global.
+Las siguientes decisiones de diseño ya fueron confirmadas y no deben volver a tratarse como pendientes: scopes `PRIVATE` y `PROJECT`, regla de acceso privado del propietario evaluada por CAM, autorización de proyecto con scope explícito, autorización granular por recurso, separación entre `Memory` y `MemoryVersion`, clasificación por versión, procedencia obligatoria, aprobación exclusiva del propietario, sustitución atómica de versiones y separación del proceso de supresión respecto al ciclo de vida de versiones.
+
+Permanecen pendientes los parámetros y mecanismos de implementación siguientes:
+
+1. Formato definitivo de identificadores y política de transferencia/reclasificación entre scopes.
+2. Catálogo de clasificación específico de Memory Engine y sus reglas de propagación.
+3. Evidencia técnica verificable de que una decisión fue iniciada directamente por el propietario.
+4. Política de retención de versiones históricas.
+5. Registro de supresión: formato, almacenamiento, reconciliación y resistencia a restauraciones/importaciones.
+6. Inventario de almacenes, índices, cachés, réplicas y respaldos, junto con plazos y criterios de verificación de supresión.
+7. Semántica técnica de operaciones colectivas autorizadas por tipo de recurso.
+8. Límite de contenido y metadatos que puede devolver el índice global.
+9. Permisos específicos para proponer cada clase de memoria.
 
 No se requiere seleccionar todavía base de datos, Cognee, motor de embeddings, scheduler, Telegram ni despliegue. Cognee permanece sin instalar, y SecurityAudit permanece postergado.
 
 ## 12. Secuencia de implementación propuesta
 
-Una vez revisado y aceptado el diseño:
+Con las decisiones de diseño consolidadas, la implementación solo avanzará después de especificar los parámetros técnicos que bloqueen cada flujo y validar sus criterios de aceptación:
 
 1. **Modelos y contratos:** scopes, estados, versiones, procedencia y validaciones puras.
 2. **Pruebas de dominio:** transiciones válidas/ inválidas, inmutabilidad, ownership y scopes.
