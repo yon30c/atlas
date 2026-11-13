@@ -200,15 +200,17 @@ class FaultInjectingJournalFake:
             or self.sequence < self.trusted_watermark
         ):
             return None
-        state = ConsistencyRecoveryState(
-            domain_id=self.domain,
-            authority_epoch=self.epoch,
-            checkpoint=None,
-            entries=tuple(self.entries),
-            head_sequence=self.sequence,
-            continuity_reference="fake-watermark-not-cryptographic",
-        )
-        return state
+        try:
+            return ConsistencyRecoveryState(
+                domain_id=self.domain,
+                authority_epoch=self.epoch,
+                checkpoint=None,
+                entries=tuple(self.entries),
+                head_sequence=self.sequence,
+                continuity_reference="fake-watermark-not-cryptographic",
+            )
+        except ContractError:
+            return None
 
     def load_endpoint_receipts(self, admission_id):
         return tuple(
@@ -332,7 +334,7 @@ class MemoryJournalFailureScenarios(unittest.TestCase):
         journal.append_transition(journal.position(), admitted())
         different = replace(
             admitted(record_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074005"),
-            memory_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074099",
+            snapshot_id="different-snapshot-for-same-idempotency-key",
         )
         self.assertIsNone(journal.append_transition(journal.position(), different))
         self.assertEqual(len(journal.entries), 1)
@@ -352,16 +354,25 @@ class MemoryJournalFailureScenarios(unittest.TestCase):
         self.assertTrue(restored_gate.closed)
         self.assertFalse(restored_gate.admit(admitted(record_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074005")))
 
-    def test_c51_unknown_append_after_egress_is_reconciled_by_receipt(self):
+    def test_c51_endpoint_commit_before_journal_ack_is_reconciled_by_receipt(self):
         journal = FaultInjectingJournalFake()
+        endpoint_store = {
+            "receipt-c45": EndpointReceipt(
+                admission_id="admission-c45",
+                endpoint_id="assistant-response",
+                generation=1,
+                receipt_id="receipt-c45",
+            )
+        }
         transition = egress_committed()
-        journal.fail_after_append = True
-        with self.assertRaises(AppendOutcomeUnknown):
-            journal.append_transition(journal.position(), transition)
-        receipts = journal.load_endpoint_receipts("admission-c45")
-        self.assertEqual(len(receipts), 1)
-        replay = journal.append_transition(pos(0), transition)
-        self.assertTrue(replay.replayed)
+        journal.fail_before_append = True
+        self.assertIsNone(journal.append_transition(journal.position(), transition))
+        self.assertEqual(journal.sequence, 0)
+        external_receipt = endpoint_store["receipt-c45"]
+        self.assertEqual(external_receipt.admission_id, "admission-c45")
+        # Reconciliación: se consulta el recibo externo y se registra su evidencia.
+        recovered = journal.append_transition(journal.position(), transition)
+        self.assertEqual(recovered.position.sequence, 1)
         self.assertEqual(journal.sequence, 1)
 
     def test_c52_identical_endpoint_receipt_is_idempotent(self):
