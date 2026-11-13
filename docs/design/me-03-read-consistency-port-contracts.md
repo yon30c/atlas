@@ -229,9 +229,11 @@ class ProtectedEgressPort(Protocol):
     def commit_and_emit(
         self,
         admission: ReadAdmission,
+        handle: ProtectedContentHandle,
+        endpoint_id: str,
         emission_id: str,
         sequence: int,
-        unit: ProtectedContentUnit,
+        now: datetime,
     ) -> EgressReceipt | None: ...
 
     def finish(
@@ -255,6 +257,7 @@ class ProtectedEgressPort(Protocol):
     def reconcile(
         self,
         admission: ReadAdmission,
+        endpoint_id: str,
     ) -> EndpointDeliveryStatus: ...
 ```
 
