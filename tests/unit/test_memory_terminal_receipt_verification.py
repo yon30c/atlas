@@ -188,6 +188,35 @@ class TerminalReceiptVerificationTests(unittest.TestCase):
             admission(), "consistency-domain", 7, verifier
         ))
 
+    def test_wrong_operation_binding_fails_closed(self):
+        verifier = FakeVerifier(mismatch_field="operation_id")
+        self.assertIsNone(verify_terminal_admission_projection(
+            admission(), "consistency-domain", 7, verifier
+        ))
+
+    def test_wrong_admission_binding_fails_closed(self):
+        verifier = FakeVerifier(mismatch_field="admission_id")
+        self.assertIsNone(verify_terminal_admission_projection(
+            admission(), "consistency-domain", 7, verifier
+        ))
+
+    def test_wrong_endpoint_binding_fails_closed(self):
+        verifier = FakeVerifier(mismatch_field="endpoint_id")
+        self.assertIsNone(verify_terminal_admission_projection(
+            admission(), "consistency-domain", 7, verifier
+        ))
+
+    def test_wrong_generation_binding_fails_closed(self):
+        verifier = FakeVerifier(mismatch_field="generation")
+        self.assertIsNone(verify_terminal_admission_projection(
+            admission(), "consistency-domain", 7, verifier
+        ))
+
+    def test_missing_verifier_fails_closed(self):
+        self.assertIsNone(verify_terminal_admission_projection(
+            admission(), "consistency-domain", 7, object()
+        ))
+
     def test_missing_endpoint_receipt_prevents_terminal_recovery(self):
         item = admission()
         endpoints = (replace(item.endpoints[0], terminal_receipt_id=None), item.endpoints[1])
