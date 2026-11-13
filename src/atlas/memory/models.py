@@ -204,8 +204,11 @@ class MemoryVersion:
     submitted_at: datetime
     reviewed_at: datetime | None = None
     reviewed_by: UserId | None = None
+    revision: int = 1
 
     def __post_init__(self) -> None:
+        if isinstance(self.revision, bool) or not isinstance(self.revision, int) or self.revision < 1:
+            raise ContractError("revision debe ser un entero positivo")
         validate_atlas_id(self.version_id, "version_id")
         validate_atlas_id(self.memory_id, "memory_id")
         if isinstance(self.version_number, bool) or not isinstance(self.version_number, int) or self.version_number < 1:
