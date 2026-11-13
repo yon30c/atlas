@@ -86,6 +86,7 @@ class FakeReadConsistencyAndEgress:
         self.invalidation_receipts = {}
         self.fence_acks = {}
         self.completion_acks = {}
+        self.ack_receipts = {}
         self.emissions = {}
         self.fenced_endpoints = set()
         self._next_admission = 1
@@ -246,8 +247,11 @@ class FakeReadConsistencyAndEgress:
     def record_endpoint_ack(self, receipt):
         with self._lock:
             operation = self.operations.get(receipt.operation_id)
-            if operation is None or not operation["pending"]:
+            if operation is None:
                 return False
+            ack_key = (receipt.operation_id, receipt.admission_id, receipt.endpoint_id)
+            if not operation["pending"]:
+                return self.ack_receipts.get(ack_key) == receipt
             admission = self.admissions.get(receipt.admission_id)
             if admission is None or receipt.admission_id not in operation["affected"]:
                 return False
@@ -260,12 +264,14 @@ class FakeReadConsistencyAndEgress:
                 if not receipt.confirmed:
                     return False
                 self.fence_acks.setdefault(receipt.operation_id, set()).add(key)
+                self.ack_receipts[ack_key] = receipt
                 return True
             if isinstance(receipt, EndpointCompletionReceipt):
                 last_sequence = self.emissions.get(key, 0)
                 if receipt.final_sequence != last_sequence:
                     return False
                 self.completion_acks.setdefault(receipt.operation_id, set()).add(key)
+                self.ack_receipts[ack_key] = receipt
                 return True
             return False
 
@@ -626,6 +632,7 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
         final = self.authority.reconcile("invalidate-2")
         self.assertEqual(final.resolved_admission_ids, frozenset({admission.admission_id}))
         self.assertEqual(self.authority.admissions[admission.admission_id].status, ReadAdmissionStatus.CANCELLED)
+        self.assertTrue(self.authority.record_endpoint_ack(second))
         reopened = self.authority.admit_read(
             private_snapshot(identity_revision=2), DeliveryRouteSet(ROUTES)
         )
