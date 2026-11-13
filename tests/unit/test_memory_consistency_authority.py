@@ -486,7 +486,7 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
             )
         )
         self.assertIsNone(
-            self.authority.commit_and_emit(
+            self.egress.commit_and_emit(
                 admission,
                 FakeHandle(admission),
                 "assistant-response",
@@ -569,7 +569,7 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
             private_snapshot(), DeliveryRouteSet(ROUTES)
         )
         handle = FakeHandle(admission)
-        committed = self.authority.commit_and_emit(
+        committed = self.egress.commit_and_emit(
             admission, handle, "assistant-response", "before-close", 1, NOW
         )
         self.assertIsNotNone(committed)
@@ -579,11 +579,11 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
         )
         closure = self.authority.begin_invalidation(invalidation)
         self.assertIsNone(
-            self.authority.commit_and_emit(
+            self.egress.commit_and_emit(
                 admission, handle, "assistant-response", "after-close", 2, NOW
             )
         )
-        completion = self.authority.finish(
+        completion = self.egress.finish(
             admission, "assistant-response", 1, NOW
         )
         self.assertEqual(completion.operation_id, "invalidate-after-emit")
@@ -660,7 +660,7 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
         handle = FakeHandle(admission)
         handle.version_id = "018bcfe5-7b3a-7cc2-98c4-dc0c0c073a13"
         self.assertIsNone(
-            self.authority.commit_and_emit(
+            self.egress.commit_and_emit(
                 admission, handle, "assistant-response", "wrong-target", 1, NOW
             )
         )
@@ -670,7 +670,7 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
             private_snapshot(), DeliveryRouteSet(ROUTES)
         )
         handle = FakeHandle(admission)
-        first = self.authority.commit_and_emit(
+        first = self.egress.commit_and_emit(
             admission, handle, "assistant-response", "emission-1", 1, NOW
         )
         self.assertIsNotNone(first)
@@ -679,15 +679,15 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
             ReadAdmissionStatus.ACTIVE,
         )
         self.assertIsNone(
-            self.authority.commit_and_emit(
+            self.egress.commit_and_emit(
                 admission, handle, "assistant-response", "emission-2", 3, NOW
             )
         )
         self.assertIsNotNone(
-            self.authority.fence(admission, "assistant-response", 2, NOW)
+            self.egress.fence(admission, "assistant-response", 2, NOW)
         )
         self.assertIsNone(
-            self.authority.commit_and_emit(
+            self.egress.commit_and_emit(
                 admission, handle, "assistant-response", "emission-2", 2, NOW
             )
         )
