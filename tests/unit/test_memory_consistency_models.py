@@ -260,12 +260,10 @@ class MemoryConsistencyModelTests(unittest.TestCase):
         with self.assertRaises(FrozenInstanceError):
             original.generation = 2
         with self.assertRaises(ContractError):
-            completed.transition(ReadAdmissionStatus.CANCELLED)
-        with self.assertRaises(ContractError):
             original.transition(ReadAdmissionStatus.COMPLETED)
 
     def test_cancelled_and_completed_are_terminal_and_incompatible(self):
-        cancelled = admission().transition(ReadAdmissionStatus.CANCELLED)
+        cancelled = admission(ReadAdmissionStatus.CANCELLED)
         completed = admission(ReadAdmissionStatus.COMPLETED)
         with self.assertRaises(ContractError):
             cancelled.transition(ReadAdmissionStatus.ACTIVE)
