@@ -331,6 +331,9 @@ class ForgetCoordinatorReducer:
     def mark_suppressed(
         self, operation: ForgetOperation, closure: ForgetClosure
     ) -> ForgetOperation:
+        if operation.state is ForgetOperationState.SUPPRESSED:
+            self._require(closure == operation.closure, "reintento SUPPRESSED contradictorio")
+            return operation
         self._require(operation.state is ForgetOperationState.CLOSING, "operación no está CLOSING")
         self._require(
             closure.closure_id == operation.closure.closure_id
@@ -350,6 +353,8 @@ class ForgetCoordinatorReducer:
         return replace(operation, closure=closure, state=ForgetOperationState.SUPPRESSED)
 
     def request_inventory(self, operation: ForgetOperation) -> ForgetOperation:
+        if operation.state is ForgetOperationState.INVENTORY_PENDING:
+            return operation
         self._require(
             operation.state is ForgetOperationState.SUPPRESSED,
             "inventario solo puede solicitarse después de SUPPRESSED",
@@ -514,19 +519,24 @@ class ForgetCoordinatorReducer:
         receipt_id: str,
     ) -> ForgetOperation:
         _required(receipt_id, "receipt_id")
-        self._require(
-            operation.state is ForgetOperationState.BLOCKED
-            and operation.block_reason is ForgetBlockReason.DELETE_OUTCOME_UNKNOWN
-            and operation.inventory is not None,
-            "no hay intento UNKNOWN pendiente",
-        )
         index = next(
             (i for i, item in enumerate(operation.deletion_attempts) if item.attempt_id == attempt_id),
             None,
         )
         self._require(index is not None, "attempt_id desconocido")
         old = operation.deletion_attempts[index]
-        self._require(old.outcome is ForgetDeletionOutcome.UNKNOWN, "el intento no es UNKNOWN")
+        if old.outcome is not ForgetDeletionOutcome.UNKNOWN:
+            self._require(
+                old.outcome is reconciled_outcome and old.receipt_id == receipt_id,
+                "reconciliación repetida con resultado contradictorio",
+            )
+            return operation
+        self._require(
+            operation.state is ForgetOperationState.BLOCKED
+            and operation.block_reason is ForgetBlockReason.DELETE_OUTCOME_UNKNOWN
+            and operation.inventory is not None,
+            "no hay intento UNKNOWN pendiente",
+        )
         self._require(
             reconciled_outcome in (
                 ForgetDeletionOutcome.ACKNOWLEDGED,
@@ -550,6 +560,8 @@ class ForgetCoordinatorReducer:
         return updated
 
     def begin_verification(self, operation: ForgetOperation) -> ForgetOperation:
+        if operation.state is ForgetOperationState.VERIFYING:
+            return operation
         self._require(operation.state is ForgetOperationState.PURGING, "operación no está PURGING")
         self._require(operation.inventory is not None and operation.inventory.complete, "inventario incompleto")
         for destination in operation.inventory.destinations:
