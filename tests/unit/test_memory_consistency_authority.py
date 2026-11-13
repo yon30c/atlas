@@ -1026,6 +1026,35 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             replace(snapshot, admissions=())
 
+    def test_recovery_rejects_incomplete_delivery_route_inventory(self):
+        self.authority.admit_read(
+            private_snapshot(), DeliveryRouteSet(ROUTES)
+        )
+        closure = self.authority.begin_forget(
+            ForgetTarget(MEMORY_ID), FakeVerifiedForgetAuthorization(),
+            "forget-route-inventory-key", NOW
+        )
+        snapshot = self.authority.export_forget_recovery(closure.operation_id)
+        incomplete_closure = replace(
+            snapshot.closure,
+            delivery_route_ids=frozenset({"assistant-response"}),
+        )
+        with self.assertRaises(ContractError):
+            replace(snapshot, closure=incomplete_closure)
+
+    def test_recovery_rejects_admission_from_current_or_future_generation(self):
+        admission = self.authority.admit_read(
+            private_snapshot(), DeliveryRouteSet(ROUTES)
+        )
+        closure = self.authority.begin_forget(
+            ForgetTarget(MEMORY_ID), FakeVerifiedForgetAuthorization(),
+            "forget-admission-generation-key", NOW
+        )
+        snapshot = self.authority.export_forget_recovery(closure.operation_id)
+        same_generation = replace(admission, generation=closure.generation)
+        with self.assertRaises(ContractError):
+            replace(snapshot, admissions=(same_generation,))
+
     def test_recovery_rejects_generation_rollback(self):
         admission = self.authority.admit_read(
             private_snapshot(), DeliveryRouteSet(ROUTES)
