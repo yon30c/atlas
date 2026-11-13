@@ -169,6 +169,32 @@ class VerifiedAdmissionTerminalEvidence:
             raise ContractError("endpoint_receipts contiene evidencia inválida")
         if not isinstance(self.admission_receipt, VerifiedTerminalReceipt):
             raise ContractError("admission_receipt debe estar verificado")
+        expected_admission_kind = (
+            TerminalReceiptKind.ADMISSION_COMPLETED
+            if self.terminal_status is ReadAdmissionStatus.COMPLETED
+            else TerminalReceiptKind.ADMISSION_CANCELLED
+        )
+        if (
+            self.admission_receipt.admission_id != self.admission_id
+            or self.admission_receipt.kind is not expected_admission_kind
+        ):
+            raise ContractError("admission_receipt no corresponde al estado terminal")
+        endpoint_receipt_ids = set()
+        verification_ids = {self.admission_receipt.verification_id}
+        for receipt in self.endpoint_receipts:
+            if (
+                receipt.admission_id != self.admission_id
+                or receipt.kind not in (
+                    TerminalReceiptKind.ENDPOINT_COMPLETED,
+                    TerminalReceiptKind.ENDPOINT_FENCED,
+                )
+                or receipt.endpoint_id is None
+                or receipt.receipt_id in endpoint_receipt_ids
+                or receipt.verification_id in verification_ids
+            ):
+                raise ContractError("endpoint receipt duplicado o no corresponde a la admisión")
+            endpoint_receipt_ids.add(receipt.receipt_id)
+            verification_ids.add(receipt.verification_id)
 
 
 def match_verified_receipt(
