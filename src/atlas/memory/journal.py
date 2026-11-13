@@ -1,0 +1,270 @@
+"""Modelos puros del registro durable de consistencia ME-03.
+
+No implementan persistencia, orden distribuido ni verificación criptográfica.
+"""
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from enum import Enum
+
+from atlas.core.errors import ContractError
+from atlas.memory.consistency import AuthorityKind
+from atlas.memory.identifiers import validate_atlas_id
+
+
+def _required(value: object, field: str) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise ContractError(f"{field} debe ser una cadena no vacía")
+
+
+def _positive(value: object, field: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ContractError(f"{field} debe ser un entero positivo")
+
+
+def _non_negative(value: object, field: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ContractError(f"{field} debe ser un entero no negativo")
+
+
+def _utc(value: object, field: str) -> None:
+    if (
+        not isinstance(value, datetime)
+        or value.tzinfo is None
+        or value.utcoffset() != timedelta(0)
+    ):
+        raise ContractError(f"{field} debe ser un datetime UTC")
+
+
+class ConsistencyRecordKind(str, Enum):
+    READ_ADMITTED = "read_admitted"
+    READ_ACTIVATED = "read_activated"
+    EGRESS_COMMITTED = "egress_committed"
+    ENDPOINT_COMPLETED = "endpoint_completed"
+    ENDPOINT_FENCED = "endpoint_fenced"
+    FORGET_CLOSED = "forget_closed"
+    INVALIDATION_CLOSED = "invalidation_closed"
+    ADMISSION_RECONCILED = "admission_reconciled"
+    FORGET_SUPPRESSED = "forget_suppressed"
+    INVALIDATION_RECONCILED = "invalidation_reconciled"
+    CHECKPOINT_COMMITTED = "checkpoint_committed"
+
+
+@dataclass(frozen=True, slots=True)
+class ConsistencyPosition:
+    consistency_domain_id: str
+    authority_epoch: int
+    sequence: int
+
+    def __post_init__(self) -> None:
+        _required(self.consistency_domain_id, "consistency_domain_id")
+        _positive(self.authority_epoch, "authority_epoch")
+        _non_negative(self.sequence, "sequence")
+
+
+@dataclass(frozen=True, slots=True)
+class ConsistencyTransition:
+    """Transición sin payload; los campos opcionales dependen de record_kind."""
+
+    record_id: str
+    schema_version: int
+    record_kind: ConsistencyRecordKind
+    operation_id: str
+    occurred_at: datetime
+    idempotency_key: str | None = None
+    request_id: str | None = None
+    correlation_id: str | None = None
+    actor_identity_id: str | None = None
+    subject_user_id: str | None = None
+    memory_id: str | None = None
+    version_id: str | None = None
+    snapshot_id: str | None = None
+    authority_kind: AuthorityKind | None = None
+    authority_id: str | None = None
+    admission_id: str | None = None
+    endpoint_id: str | None = None
+    generation: int | None = None
+    emission_id: str | None = None
+    emission_sequence: int | None = None
+    receipt_id: str | None = None
+    proof_reference: str | None = None
+    route_ids: frozenset[str] = frozenset()
+    affected_admission_ids: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        validate_atlas_id(self.record_id, "record_id")
+        _positive(self.schema_version, "schema_version")
+        if not isinstance(self.record_kind, ConsistencyRecordKind):
+            raise ContractError("record_kind debe ser ConsistencyRecordKind")
+        _required(self.operation_id, "operation_id")
+        _utc(self.occurred_at, "occurred_at")
+
+        for field in (
+            "idempotency_key", "request_id", "correlation_id",
+            "actor_identity_id", "subject_user_id", "snapshot_id",
+            "authority_id", "admission_id", "endpoint_id", "emission_id",
+            "receipt_id", "proof_reference",
+        ):
+            value = getattr(self, field)
+            if value is not None:
+                _required(value, field)
+
+        if self.memory_id is not None:
+            validate_atlas_id(self.memory_id, "memory_id")
+        if self.version_id is not None:
+            validate_atlas_id(self.version_id, "version_id")
+        if self.authority_kind is not None and not isinstance(
+            self.authority_kind, AuthorityKind
+        ):
+            raise ContractError("authority_kind debe ser AuthorityKind")
+        if self.generation is not None:
+            _positive(self.generation, "generation")
+        if self.emission_sequence is not None:
+            _positive(self.emission_sequence, "emission_sequence")
+        for field in ("route_ids", "affected_admission_ids"):
+            values = getattr(self, field)
+            if not isinstance(values, frozenset):
+                raise ContractError(f"{field} debe ser frozenset")
+            for value in values:
+                _required(value, field)
+
+        required_by_kind = {
+            ConsistencyRecordKind.READ_ADMITTED: (
+                "memory_id", "version_id", "snapshot_id", "admission_id",
+                "generation", "route_ids",
+            ),
+            ConsistencyRecordKind.READ_ACTIVATED: ("admission_id", "generation"),
+            ConsistencyRecordKind.EGRESS_COMMITTED: (
+                "admission_id", "endpoint_id", "generation", "emission_id",
+                "emission_sequence", "receipt_id",
+            ),
+            ConsistencyRecordKind.ENDPOINT_COMPLETED: (
+                "admission_id", "endpoint_id", "generation", "receipt_id",
+            ),
+            ConsistencyRecordKind.ENDPOINT_FENCED: (
+                "admission_id", "endpoint_id", "generation", "receipt_id",
+            ),
+            ConsistencyRecordKind.FORGET_CLOSED: (
+                "memory_id", "generation", "proof_reference", "idempotency_key",
+                "route_ids", "affected_admission_ids",
+            ),
+            ConsistencyRecordKind.INVALIDATION_CLOSED: (
+                "authority_kind", "authority_id", "generation",
+                "route_ids", "affected_admission_ids",
+            ),
+            ConsistencyRecordKind.ADMISSION_RECONCILED: (
+                "admission_id", "generation", "receipt_id",
+            ),
+            ConsistencyRecordKind.FORGET_SUPPRESSED: (
+                "memory_id", "generation", "route_ids", "affected_admission_ids",
+            ),
+            ConsistencyRecordKind.INVALIDATION_RECONCILED: (
+                "authority_kind", "authority_id", "generation",
+                "route_ids", "affected_admission_ids",
+            ),
+        }
+        for field in required_by_kind.get(self.record_kind, ()):
+            value = getattr(self, field)
+            if field in ("route_ids", "affected_admission_ids"):
+                if not value:
+                    raise ContractError(f"{field} es obligatorio para {self.record_kind.value}")
+            elif value is None:
+                raise ContractError(f"{field} es obligatorio para {self.record_kind.value}")
+
+        if self.record_kind is ConsistencyRecordKind.FORGET_CLOSED:
+            if self.authority_kind is not None or self.authority_id is not None:
+                raise ContractError("FORGET_CLOSED usa memory_id, no authority genérica")
+        if self.record_kind is ConsistencyRecordKind.EGRESS_COMMITTED:
+            if self.receipt_id is None:
+                raise ContractError("EGRESS_COMMITTED requiere recibo durable del endpoint")
+
+
+@dataclass(frozen=True, slots=True)
+class JournalCommit:
+    position: ConsistencyPosition
+    record_id: str
+    replayed: bool
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.position, ConsistencyPosition):
+            raise ContractError("position debe ser ConsistencyPosition")
+        validate_atlas_id(self.record_id, "record_id")
+        if not isinstance(self.replayed, bool):
+            raise ContractError("replayed debe ser bool")
+
+
+@dataclass(frozen=True, slots=True)
+class JournalEntry:
+    position: ConsistencyPosition
+    transition: ConsistencyTransition
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.position, ConsistencyPosition):
+            raise ContractError("position debe ser ConsistencyPosition")
+        if not isinstance(self.transition, ConsistencyTransition):
+            raise ContractError("transition debe ser ConsistencyTransition")
+
+
+@dataclass(frozen=True, slots=True)
+class ConsistencyCheckpoint:
+    checkpoint_id: str
+    position: ConsistencyPosition
+    state_reference: str
+    integrity_reference: str
+    created_at: datetime
+
+    def __post_init__(self) -> None:
+        validate_atlas_id(self.checkpoint_id, "checkpoint_id")
+        if not isinstance(self.position, ConsistencyPosition):
+            raise ContractError("position debe ser ConsistencyPosition")
+        _required(self.state_reference, "state_reference")
+        _required(self.integrity_reference, "integrity_reference")
+        _utc(self.created_at, "created_at")
+
+
+@dataclass(frozen=True, slots=True)
+class ConsistencyRecoveryState:
+    """Estado reconstruible y verificado; estados no verificables se representan como None."""
+
+    domain_id: str
+    authority_epoch: int
+    checkpoint: ConsistencyCheckpoint | None
+    entries: tuple[JournalEntry, ...]
+    head_sequence: int
+    continuity_reference: str
+
+    def __post_init__(self) -> None:
+        _required(self.domain_id, "domain_id")
+        _positive(self.authority_epoch, "authority_epoch")
+        _non_negative(self.head_sequence, "head_sequence")
+        _required(self.continuity_reference, "continuity_reference")
+        if not isinstance(self.entries, tuple):
+            raise ContractError("entries debe ser tuple")
+        if self.checkpoint is not None:
+            if not isinstance(self.checkpoint, ConsistencyCheckpoint):
+                raise ContractError("checkpoint debe ser ConsistencyCheckpoint")
+            if (
+                self.checkpoint.position.consistency_domain_id != self.domain_id
+                or self.checkpoint.position.authority_epoch != self.authority_epoch
+            ):
+                raise ContractError("checkpoint pertenece a otro dominio o época")
+        start = self.checkpoint.position.sequence if self.checkpoint else 0
+        expected = start + 1
+        seen_record_ids = set()
+        for entry in self.entries:
+            if not isinstance(entry, JournalEntry):
+                raise ContractError("entries solo puede contener JournalEntry")
+            position = entry.position
+            if (
+                position.consistency_domain_id != self.domain_id
+                or position.authority_epoch != self.authority_epoch
+            ):
+                raise ContractError("entry pertenece a otro dominio o época")
+            if position.sequence != expected:
+                raise ContractError("journal contiene huecos o secuencias fuera de orden")
+            if entry.transition.record_id in seen_record_ids:
+                raise ContractError("record_id duplicado en journal")
+            seen_record_ids.add(entry.transition.record_id)
+            expected += 1
+        actual_head = expected - 1
+        if actual_head != self.head_sequence:
+            raise ContractError("head_sequence no coincide con checkpoint y entries")
