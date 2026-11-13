@@ -154,7 +154,7 @@ Cada recurso protegido tendrá un marcador de contenido único y sintético. Los
 | DM-01-17 — approve/reject/forget directos y no delegables | QA-OWNER-01 a QA-OWNER-08 |
 | DM-01-18 — versión vinculada a Memory padre | QA-VER-01, QA-CAM-06 a QA-CAM-08 |
 | DM-01-19 — fallos e incertidumbre deniegan | QA-FAIL-01 a QA-FAIL-07 |
-| DM-01-20 — sin fallback por tipo ni consulta sin scope | QA-CAM-03, QA-LIST-01 a QA-LIST-04 |
+| DM-01-20 — sin fallback por tipo ni consulta sin scope | QA-CAM-03, QA-GW-05 a QA-GW-08 |
 
 ## 6. Escenarios de aceptación
 
