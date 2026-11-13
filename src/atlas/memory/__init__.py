@@ -37,6 +37,15 @@ from atlas.memory.forget import (
     ForgetRecoverySnapshot,
     ForgetTarget,
 )
+from atlas.memory.journal import (
+    ConsistencyCheckpoint,
+    ConsistencyPosition,
+    ConsistencyRecordKind,
+    ConsistencyRecoveryState,
+    ConsistencyTransition,
+    JournalCommit,
+    JournalEntry,
+)
 from atlas.memory.validation import (
     validate_memory_aggregate,
     validate_proposal_links,
@@ -48,6 +57,13 @@ __all__ = [
     "ForgetClosureStatus",
     "ForgetRecoverySnapshot",
     "ForgetTarget",
+    "ConsistencyCheckpoint",
+    "ConsistencyPosition",
+    "ConsistencyRecordKind",
+    "ConsistencyRecoveryState",
+    "ConsistencyTransition",
+    "JournalCommit",
+    "JournalEntry",
     "AuthorityKind",
     "AuthorityRevision",
     "AuthorizationInvalidation",
