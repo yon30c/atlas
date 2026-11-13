@@ -23,7 +23,7 @@ from atlas.memory.consistency import (
     ReadTarget,
     ReconciliationResult,
 )
-from atlas.memory.forget import ForgetClosure, ForgetClosureStatus, ForgetTarget
+from atlas.memory.forget import (\n    ForgetClosure, ForgetClosureStatus, ForgetRecoverySnapshot, ForgetTarget,\n)
 from atlas.memory.models import (
     MemoryClassification,
     MemoryScope,
@@ -115,6 +115,57 @@ class FakeReadConsistencyAndEgress:
         self.suppressed_memories = set()
         self.forget_idempotency = {}
         self.forget_closures = {}
+
+    def export_forget_recovery(self, operation_id):
+        with self._lock:
+            closure = self.forget_closures.get(operation_id)
+            if closure is None:
+                return None
+            admissions = tuple(
+                self.admissions[item]
+                for item in sorted(closure.affected_admission_ids)
+            )
+            return ForgetRecoverySnapshot(
+                generation=self.generation,
+                closure=closure,
+                admissions=admissions,
+            )
+
+    @classmethod
+    def restore_forget_recovery(cls, snapshot):
+        if not isinstance(snapshot, ForgetRecoverySnapshot):
+            return None
+        restored = cls()
+        with restored._lock:
+            restored.generation = snapshot.generation
+            restored.suppressed_memories.add(snapshot.closure.target.memory_id)
+            restored.forget_closures[snapshot.closure.operation_id] = snapshot.closure
+            pending = snapshot.closure.status is ForgetClosureStatus.CLOSING
+            restored.operations[snapshot.closure.operation_id] = {
+                "affected": snapshot.closure.affected_admission_ids,
+                "pending": pending,
+                "kind": "forget",
+            }
+            for admission in snapshot.admissions:
+                recovered = admission
+                if admission.status not in (
+                    ReadAdmissionStatus.COMPLETED,
+                    ReadAdmissionStatus.CANCELLED,
+                ):
+                    recovered = replace(
+                        admission,
+                        status=ReadAdmissionStatus.UNRESOLVED,
+                        terminal_evidence_id=None,
+                    )
+                restored.admissions[recovered.admission_id] = recovered
+                restored.operations[f"read:{recovered.admission_id}"] = {
+                    "affected": frozenset({recovered.admission_id}),
+                    "pending": False,
+                    "kind": "read",
+                }
+            # No se restauran acknowledgements en memoria: cada endpoint debe
+            # demostrar de nuevo finalización o fencing en la generación vigente.
+        return restored
 
     @staticmethod
     def _same_admission(current, candidate):
