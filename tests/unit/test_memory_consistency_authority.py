@@ -82,6 +82,8 @@ class FakeReadConsistencyAndEgress:
         self.admissions = {}
         self.admission_snapshots = {}
         self.operations = {}
+        self.invalidation_requests = {}
+        self.invalidation_receipts = {}
         self.fence_acks = {}
         self.completion_acks = {}
         self.emissions = {}
@@ -115,7 +117,11 @@ class FakeReadConsistencyAndEgress:
                     snapshot.revisions.memory_revision,
                     snapshot.revisions.version_revision,
                     snapshot.revisions.identity_revision,
+                    snapshot.revisions.project_revision,
+                    snapshot.revisions.environment_revision,
+                    snapshot.revisions.grant_revision,
                 )
+                if revision is not None
             ):
                 return None
             if any(
@@ -149,6 +155,11 @@ class FakeReadConsistencyAndEgress:
         with self._lock:
             if not isinstance(invalidation, AuthorizationInvalidation):
                 return None
+            prior = self.invalidation_requests.get(invalidation.invalidation_id)
+            if prior is not None:
+                if prior != invalidation:
+                    return None
+                return self.invalidation_receipts[invalidation.invalidation_id]
             key = (invalidation.authority, invalidation.authority_id)
             if self.revisions.get(key) != invalidation.previous_revision:
                 return None
@@ -192,12 +203,15 @@ class FakeReadConsistencyAndEgress:
                 "affected": invalidation.affected_admission_ids,
                 "pending": True,
             }
-            return InvalidationReceipt(
+            receipt = InvalidationReceipt(
                 invalidation.invalidation_id,
                 self.generation,
                 invalidation.affected_admission_ids,
                 NOW,
             )
+            self.invalidation_requests[invalidation.invalidation_id] = invalidation
+            self.invalidation_receipts[invalidation.invalidation_id] = receipt
+            return receipt
 
     def record_endpoint_ack(self, receipt):
         with self._lock:
@@ -289,7 +303,8 @@ class FakeReadConsistencyAndEgress:
                 getattr(handle, "admission_id", None) != admission.admission_id
                 or getattr(handle, "memory_id", None) != admission.target.memory_id
                 or getattr(handle, "version_id", None) != admission.target.version_id
-                or getattr(handle, "classification", None) is MemoryClassification.RESTRICTED
+                or not isinstance(getattr(handle, "classification", None), MemoryClassification)
+                or handle.classification is MemoryClassification.RESTRICTED
                 or not getattr(handle, "handle_id", None)
             ):
                 return None
@@ -364,7 +379,11 @@ class FakeReadConsistencyAndEgress:
         with self._lock:
             if admission.admission_id not in self.admissions:
                 return None
-            if endpoint_id not in admission.route_ids or new_generation <= admission.generation:
+            if (
+                endpoint_id not in admission.route_ids
+                or new_generation <= admission.generation
+                or new_generation != self.generation
+            ):
                 return None
             self.fenced_endpoints.add((admission.admission_id, endpoint_id))
             return EndpointFenceReceipt(
@@ -427,7 +446,14 @@ class FakeProtectedMemoryContent:
         if admission.status not in (ReadAdmissionStatus.ADMITTED, ReadAdmissionStatus.ACTIVE):
             return None
         handle = self.handles.get((snapshot.memory_id, snapshot.version_id))
-        if handle is None or handle.admission_id != admission.admission_id:
+        if (
+            handle is None
+            or handle.admission_id != admission.admission_id
+            or handle.memory_id != admission.target.memory_id
+            or handle.version_id != admission.target.version_id
+            or not isinstance(handle.classification, MemoryClassification)
+            or handle.classification is MemoryClassification.RESTRICTED
+        ):
             return None
         return handle
 
@@ -495,6 +521,25 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
                 NOW,
             )
         )
+
+    def test_invalidation_is_idempotent_for_same_request_and_rejects_key_reuse(self):
+        admission = self.authority.admit_read(
+            private_snapshot(), DeliveryRouteSet(ROUTES)
+        )
+        request = AuthorizationInvalidation(
+            "invalidate-idempotent", AuthorityKind.IDENTITY, "identity-1", 1, 2,
+            frozenset({admission.admission_id})
+        )
+        first = self.authority.begin_invalidation(request)
+        repeated = self.authority.begin_invalidation(request)
+        self.assertEqual(first, repeated)
+        self.assertEqual(self.authority.generation, 2)
+        reused = AuthorizationInvalidation(
+            "invalidate-idempotent", AuthorityKind.MEMORY, MEMORY_ID, 1, 2,
+            frozenset({admission.admission_id})
+        )
+        self.assertIsNone(self.authority.begin_invalidation(reused))
+        self.assertEqual(self.authority.generation, 2)
 
     def test_invalidation_rejects_incomplete_or_unrelated_admission_inventory(self):
         admission = self.authority.admit_read(
