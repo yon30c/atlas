@@ -320,5 +320,72 @@ class MemoryConsistencyModelTests(unittest.TestCase):
             )
 
 
+    def test_private_snapshot_requires_authenticated_subject_to_be_owner(self):
+        with self.assertRaises(ContractError):
+            AuthorizationSnapshot(
+                snapshot_id="s",
+                decision_id="d",
+                request_id="r",
+                action="memory.read",
+                actor_identity_id="identity-1",
+                subject_user_id="different-user",
+                memory_id=MEMORY_ID,
+                version_id=VERSION_ID,
+                owner_id="user-1",
+                scope=MemoryScope(MemoryScopeKind.PRIVATE),
+                revisions=private_revisions(),
+                version_status=MemoryVersionStatus.APPROVED,
+                classification=MemoryClassification.CONFIDENTIAL,
+                issued_at=NOW,
+            )
+
+    def test_cam_snapshot_cannot_preassign_admission_generation(self):
+        revisions = AuthorizationRevisionSet(
+            memory_revision=revision(AuthorityKind.MEMORY, MEMORY_ID),
+            version_revision=revision(AuthorityKind.MEMORY_VERSION, VERSION_ID),
+            identity_revision=revision(AuthorityKind.IDENTITY, "identity-1"),
+            admission_generation=1,
+        )
+        with self.assertRaises(ContractError):
+            AuthorizationSnapshot(
+                snapshot_id="s",
+                decision_id="d",
+                request_id="r",
+                action="memory.read",
+                actor_identity_id="identity-1",
+                subject_user_id="user-1",
+                memory_id=MEMORY_ID,
+                version_id=VERSION_ID,
+                owner_id="user-1",
+                scope=MemoryScope(MemoryScopeKind.PRIVATE),
+                revisions=revisions,
+                version_status=MemoryVersionStatus.APPROVED,
+                classification=MemoryClassification.INTERNAL,
+                issued_at=NOW,
+            )
+
+    def test_completion_receipt_and_reconciliation_are_typed_and_disjoint(self):
+        from atlas.memory.consistency import EndpointCompletionReceipt, ReconciliationResult
+        receipt = EndpointCompletionReceipt(
+            admission_id="admission-1",
+            endpoint_id="assistant-response",
+            final_sequence=0,
+            completed_at=NOW,
+        )
+        self.assertEqual(receipt.final_sequence, 0)
+        result = ReconciliationResult(
+            operation_id="invalidate-1",
+            resolved_admission_ids=frozenset({"admission-1"}),
+            unresolved_admission_ids=frozenset({"admission-2"}),
+        )
+        self.assertEqual(result.resolved_admission_ids, frozenset({"admission-1"}))
+        with self.assertRaises(ContractError):
+            ReconciliationResult(
+                operation_id="invalidate-1",
+                resolved_admission_ids=frozenset({"admission-1"}),
+                unresolved_admission_ids=frozenset({"admission-1"}),
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
