@@ -639,16 +639,19 @@ class ForgetCoordinatorReducer:
         self,
         operation: ForgetOperation,
         expected_inventory_revision: int,
+        expected_canonical_revision: int,
         receipt: ForgetCanonicalStateReceipt,
     ) -> ForgetOperation:
         _positive(expected_inventory_revision, "expected_inventory_revision")
+        _positive(expected_canonical_revision, "expected_canonical_revision")
         self._require(
             isinstance(receipt, ForgetCanonicalStateReceipt),
             "receipt debe ser ForgetCanonicalStateReceipt",
         )
         self._require(
             receipt.operation_id == operation.closure.operation_id
-            and receipt.memory_id == operation.closure.target.memory_id,
+            and receipt.memory_id == operation.closure.target.memory_id
+            and receipt.expected_revision == expected_canonical_revision,
             "recibo canónico no corresponde a operación/objetivo exactos",
         )
         self._require(operation.state is ForgetOperationState.VERIFYING, "operación no está VERIFYING")
