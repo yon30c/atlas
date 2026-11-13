@@ -101,3 +101,21 @@ All return no verified recovery object.
 ## 9. Limits
 
 This validates a typed boundary and deterministic fake only. Trust-store design, cryptographic verification, issuer lifecycle, anti-replay persistence, endpoint liveness and durable recovery require real adapters and operational decisions that remain intentionally unselected.
+
+## 10. Initial implementation and validation
+
+Implemented:
+- `TerminalReceiptVerificationRequest`, with closed receipt kinds and cross-field rules for endpoint completion, endpoint fencing, and admission terminal outcomes;
+- `VerifiedTerminalReceipt` and `ReceiptVerificationResult`;
+- exact field-for-field binding through `match_verified_receipt()`;
+- `TerminalReceiptVerifierPort`, whose implementation must resolve trusted issuers from its own trust configuration;
+- reducer projection of terminal operation ID, generation, and final sequence for each endpoint, plus terminal operation/generation for the admission;
+- `verify_terminal_admission_projection()`, which verifies every endpoint receipt and the admission-level receipt, checks exact route coverage and status consistency, and returns metadata-only evidence;
+- stricter invariants on `VerifiedAdmissionTerminalEvidence` to prevent cross-admission, duplicate, or mismatched terminal-outcome evidence.
+
+Validation:
+- 22 focused tests in `tests/unit/test_memory_terminal_receipt_verification.py`;
+- projection assertions extended in `tests/unit/test_memory_journal_recovery_projection_v2.py`;
+- GitHub Actions [Atlas CI #43530661316](https://github.com/yon30c/atlas/actions/runs/43530661316): Python 3.10, 3.11, 3.12 and 3.13 all successful.
+
+The fake verifier validates the typed contract only. It does not implement cryptographic verification, trust-store management, replay protection across restarts, endpoint contact, or durable recovery. Nonterminal admissions are still not restored or fenced by this implementation.
