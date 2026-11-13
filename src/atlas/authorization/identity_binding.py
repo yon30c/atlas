@@ -1,0 +1,62 @@
+"""Vinculación fail-closed entre actores USER y sujetos autenticados."""
+from dataclasses import dataclass
+from typing import Protocol
+
+from atlas.core.context import OperationContext
+from atlas.core.errors import ContractError
+from atlas.core.identity import IdentityKind, IdentityStatus
+
+
+@dataclass(frozen=True, slots=True)
+class AuthenticatedUserSubject:
+    """Vinculación emitida por una frontera de identidad confiable."""
+
+    actor_identity_id: str
+    subject_user_id: str
+    is_active: bool
+
+    def __post_init__(self) -> None:
+        for field in ("actor_identity_id", "subject_user_id"):
+            value = getattr(self, field)
+            if not isinstance(value, str) or not value.strip():
+                raise ContractError(f"{field} debe ser una cadena no vacía")
+        if not isinstance(self.is_active, bool):
+            raise ContractError("is_active debe ser bool")
+
+
+class IdentitySubjectBindingPort(Protocol):
+    """Resuelve la vinculación desde evidencia autenticada, no del contexto."""
+
+    def resolve_user_subject(
+        self,
+        actor_identity_id: str,
+    ) -> AuthenticatedUserSubject | None:
+        """Devuelve la vinculación verificada para el actor indicado."""
+
+
+def resolve_authenticated_user_subject(
+    context: OperationContext,
+    binding_port: IdentitySubjectBindingPort,
+) -> str | None:
+    """Devuelve el sujeto solo si la frontera confiable confirma la vinculación."""
+    if not isinstance(context, OperationContext):
+        return None
+    if context.actor.kind is not IdentityKind.USER:
+        return None
+    if context.actor.status is not IdentityStatus.ACTIVE:
+        return None
+    if not callable(getattr(binding_port, "resolve_user_subject", None)):
+        return None
+
+    try:
+        binding = binding_port.resolve_user_subject(context.actor.identity_id)
+    except Exception:
+        return None
+
+    if not isinstance(binding, AuthenticatedUserSubject):
+        return None
+    if not binding.is_active:
+        return None
+    if binding.actor_identity_id != context.actor.identity_id:
+        return None
+    return binding.subject_user_id
