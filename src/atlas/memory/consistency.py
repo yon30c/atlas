@@ -153,6 +153,8 @@ class AuthorizationSnapshot:
             if self.grant_expires_at is None:
                 raise ContractError("PROJECT requiere grant_expires_at")
             _utc(self.grant_expires_at, "grant_expires_at")
+            if self.grant_expires_at <= self.issued_at:
+                raise ContractError("grant_expires_at debe ser posterior a issued_at")
 
 
 @dataclass(frozen=True, slots=True)
