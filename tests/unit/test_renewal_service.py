@@ -222,6 +222,7 @@ class GrantRenewalServiceTests(unittest.TestCase):
         )
         updated_request = self.renewal_repository.get(request.renewal_id)
         self.assertEqual(updated_grant.expires_at, self.proposed_expires_at)
+        self.assertEqual(updated_grant.revision, self.grant.revision + 1)
         self.assertEqual(
             self.grant_repository.get(self.grant.grant_id),
             updated_grant,
