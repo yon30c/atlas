@@ -1,7 +1,6 @@
 """Servicio CAM para autorizar lecturas de memoria sin exponer contenido."""
 
 from datetime import datetime, timedelta
-from collections.abc import Iterable
 
 from atlas.authorization.evaluator import AuthorizationEvaluator
 from atlas.authorization.identity_binding import (
@@ -24,10 +23,11 @@ from atlas.memory.models import (
     MemoryVersionId,
     MemoryVersionStatus,
 )
+from atlas.ports.grants import GrantRepository
 
 
 class MemoryAuthorizationService:
-    """Evalúa acceso a una memoria usando solo metadatos autoritativos."""
+    """Evalúa acceso a una memoria usando metadatos y Grants autoritativos."""
 
     READ_ACTION = "memory.read"
 
@@ -36,10 +36,12 @@ class MemoryAuthorizationService:
         metadata_resolver: MemoryMetadataResolver,
         identity_binding_port: IdentitySubjectBindingPort,
         evaluator: AuthorizationEvaluator | None = None,
+        grant_repository: GrantRepository | None = None,
     ) -> None:
         self._metadata = metadata_resolver
         self._identity_binding = identity_binding_port
         self._evaluator = evaluator or AuthorizationEvaluator()
+        self._grant_repository = grant_repository
 
     @staticmethod
     def _deny() -> AuthorizationResult:
@@ -58,13 +60,13 @@ class MemoryAuthorizationService:
         context: OperationContext,
         memory_id: MemoryId,
         now: datetime,
-        grants: Iterable[Grant] = (),
         version_id: MemoryVersionId | None = None,
     ) -> AuthorizationResult:
         """Autoriza la memoria exacta y, opcionalmente, su versión exacta.
 
-        Este método no devuelve ni consulta contenido. Un fallo de identidad,
-        metadatos, scope, clasificación o CAM produce DENY.
+        Los Grants se obtienen internamente desde el repositorio confiable,
+        utilizando el owner_id canónico de Memory. El solicitante no puede
+        suministrar permisos. Este método nunca recupera contenido.
         """
         if not isinstance(context, OperationContext) or not self._valid_utc(now):
             return self._deny()
@@ -109,7 +111,7 @@ class MemoryAuthorizationService:
             project_id = memory.scope.project_id
             if project_id is None or context.project_id != project_id:
                 return self._deny()
-            if context.environment is None:
+            if context.environment is None or self._grant_repository is None:
                 return self._deny()
 
             project = self._metadata.resolve_project(project_id)
@@ -126,6 +128,11 @@ class MemoryAuthorizationService:
                 resource_id=memory_id,
                 resource_owner_id=memory.owner_id,
             )
+            grants = self._grant_repository.list_by_owner(memory.owner_id)
+            if not isinstance(grants, tuple) or any(
+                not isinstance(grant, Grant) for grant in grants
+            ):
+                return self._deny()
             return self._evaluator.evaluate(request, grants, now)
         except Exception:
             return self._deny()
