@@ -533,4 +533,12 @@ El registro se mantiene separado de EventStore y SecurityAudit. EventStore no se
 
 **Brechas detectadas para la futura implementación:** el protocolo actual `VerifiedForgetAuthorization` no expone por sí solo issuer, proof_id/nonce, acción ni evidencia de consumo de un solo uso; el journal no existe; tampoco hay watermark confiable, checkpoint durable ni protección antitruncamiento. Forget continúa deshabilitado hasta resolver OwnerDecisionProof conforme a DM-P06.
 
-Este documento es una propuesta técnica de diseño y no cambia CT-04, CT-05, EventStore, SecurityAudit ni los contratos normativos. No se ha implementado ni ejecutado C45–C64.
+Este documento es una propuesta técnica de diseño y no cambia CT-04, CT-05, EventStore, SecurityAudit ni los contratos normativos.
+
+Se incorporó una primera capa sin infraestructura:
+
+- `src/atlas/memory/journal.py`: modelos puros de `ConsistencyPosition`, `ConsistencyTransition`, `JournalCommit`, `JournalEntry`, `ConsistencyCheckpoint` y `ConsistencyRecoveryState`, con validación de secuencia, época, dominio, IDs y revisiones exactas en READ_ADMITTED.
+- `src/atlas/ports/consistency_journal.py`: protocolo tipado para append condicional, carga de estado de recuperación, consulta de recibos y commit de checkpoints.
+- `tests/unit/test_memory_journal.py`: 18 pruebas unitarias escritas para posiciones, transiciones, revisiones, recibos, checkpoints y secuencias de recuperación.
+
+Los modelos y el puerto no persisten datos, no verifican por sí mismos la autenticidad del watermark y no garantizan atomicidad distribuida. No hay fake del journal ni adaptador durable todavía. Las 18 pruebas están escritas, no ejecutadas; C45–C64 siguen siendo escenarios de aceptación pendientes.
