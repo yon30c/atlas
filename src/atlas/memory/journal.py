@@ -41,6 +41,20 @@ def _utc(value: object, field: str) -> None:
 
 SUPPORTED_CONSISTENCY_SCHEMA_VERSIONS = frozenset({1})
 
+class ConsistencyRecordKind(str, Enum):
+    READ_ADMITTED = "read_admitted"
+    READ_ACTIVATED = "read_activated"
+    EGRESS_COMMITTED = "egress_committed"
+    ENDPOINT_COMPLETED = "endpoint_completed"
+    ENDPOINT_FENCED = "endpoint_fenced"
+    FORGET_CLOSED = "forget_closed"
+    INVALIDATION_CLOSED = "invalidation_closed"
+    ADMISSION_RECONCILED = "admission_reconciled"
+    FORGET_SUPPRESSED = "forget_suppressed"
+    INVALIDATION_RECONCILED = "invalidation_reconciled"
+    CHECKPOINT_COMMITTED = "checkpoint_committed"
+
+
 _COMMON_TRANSITION_FIELDS = frozenset({
     "record_id", "schema_version", "record_kind", "operation_id", "occurred_at",
 })
@@ -86,21 +100,6 @@ _TRANSITION_FIELDS_BY_KIND = {
         "checkpoint_reference",
     }),
 }
-
-
-
-class ConsistencyRecordKind(str, Enum):
-    READ_ADMITTED = "read_admitted"
-    READ_ACTIVATED = "read_activated"
-    EGRESS_COMMITTED = "egress_committed"
-    ENDPOINT_COMPLETED = "endpoint_completed"
-    ENDPOINT_FENCED = "endpoint_fenced"
-    FORGET_CLOSED = "forget_closed"
-    INVALIDATION_CLOSED = "invalidation_closed"
-    ADMISSION_RECONCILED = "admission_reconciled"
-    FORGET_SUPPRESSED = "forget_suppressed"
-    INVALIDATION_RECONCILED = "invalidation_reconciled"
-    CHECKPOINT_COMMITTED = "checkpoint_committed"
 
 
 @dataclass(frozen=True, slots=True)
