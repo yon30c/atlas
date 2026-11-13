@@ -422,7 +422,6 @@ La confirmación de las reglas anteriores no cierra los detalles operativos que 
 - Plazos de propagación y criterios verificables para declarar una supresión completada.
 - Representación técnica del registro de supresión y su reconciliación durante restauraciones/importaciones.
 - Proveedor/emisor de autenticación confiable capaz de emitir la prueba definida por OwnerDecisionVerifier en DM-01 §9.3.4; si no existe, approve/reject/forget permanecen deshabilitados.
-- Operaciones colectivas por tipo: deshabilitadas en v1 conforme a DM-01 §9.3.11; cualquier futura habilitación exige una especificación y aprobación separadas.
 - Límites de metadatos/contenido expuestos por índices y política operativa de inventario/supresión; la política de dominio de retención histórica sin TTL automático está definida en DM-01 §9.3.8.
 
 Estos parámetros no autorizan a relajar las invariantes confirmadas ni a declarar implementada una capacidad todavía inexistente.
