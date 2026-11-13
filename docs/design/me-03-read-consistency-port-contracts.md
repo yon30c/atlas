@@ -438,7 +438,7 @@ Las firmas tipadas de `ProtectedEgressPort.finish()` y `fence()` requieren `oper
 
 El fake de pruebas implementa la correlación explícita, acknowledgements idempotentes y generaciones de fencing vinculadas a cada admisión afectada, en lugar de invalidar lecturas no relacionadas al incrementar el contador monotónico del dominio. Las operaciones que se solapen sobre una misma admisión se rechazan mientras exista un cierre pendiente. Las operaciones conservan su propia generación para validar recibos aunque otras operaciones disjuntas avancen después el contador del dominio. Los reintentos de Forget devuelven el estado más reciente de la clausura; una operación desconocida devuelve `None` al consultar reconciliación/inventario, no un conjunto vacío que pudiera confundirse con éxito.
 
-El conjunto de pruebas de autoridad/egress contiene actualmente 32 métodos de prueba, incluidos los escenarios de cierre lógico, generaciones disjuntas, recibos contradictorios, operación desconocida y recuperación Forget descritos en §§14.3–14.4. Este número describe pruebas escritas, no pruebas ejecutadas.
+El conjunto de pruebas de autoridad/egress contiene actualmente 35 métodos de prueba, incluidos los escenarios de cierre lógico, generaciones disjuntas, recibos contradictorios, operación desconocida y recuperación Forget descritos en §§14.3–14.4. Este número describe pruebas escritas, no pruebas ejecutadas.
 
 
 ## 14. Estado de integración del Gateway protegido
