@@ -315,11 +315,19 @@ class FakeReadConsistencyAndEgress:
                 return None
             if final_sequence != self.emissions.get(key, 0):
                 return None
+            pending = next(
+                (
+                    operation_id
+                    for operation_id, operation in self.operations.items()
+                    if operation["pending"] and admission.admission_id in operation["affected"]
+                ),
+                None,
+            )
             return EndpointCompletionReceipt(
-                operation_id=f"completion:{admission.admission_id}",
+                operation_id=pending or f"completion:{admission.admission_id}",
                 admission_id=admission.admission_id,
                 endpoint_id=endpoint_id,
-                generation=admission.generation,
+                generation=self.generation,
                 final_sequence=final_sequence,
                 completed_at=now,
             )
@@ -481,6 +489,43 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
         )
         self.assertFalse(self.authority.record_endpoint_ack(unknown))
         self.assertFalse(self.authority.record_endpoint_ack(stale))
+
+    def test_preclose_emission_can_be_completed_after_close_without_new_emission(self):
+        admission = self.authority.admit_read(
+            private_snapshot(), DeliveryRouteSet(ROUTES)
+        )
+        handle = FakeHandle(admission)
+        committed = self.authority.commit_and_emit(
+            admission, handle, "assistant-response", "before-close", 1, NOW
+        )
+        self.assertIsNotNone(committed)
+        invalidation = AuthorizationInvalidation(
+            "invalidate-after-emit", AuthorityKind.IDENTITY, "identity-1", 1, 2,
+            frozenset({admission.admission_id})
+        )
+        closure = self.authority.begin_invalidation(invalidation)
+        self.assertIsNone(
+            self.authority.commit_and_emit(
+                admission, handle, "assistant-response", "after-close", 2, NOW
+            )
+        )
+        completion = self.authority.finish(
+            admission, "assistant-response", 1, NOW
+        )
+        self.assertEqual(completion.operation_id, "invalidate-after-emit")
+        self.assertEqual(completion.generation, closure.new_generation)
+        self.assertTrue(self.authority.record_endpoint_ack(completion))
+        other = EndpointFenceReceipt(
+            "invalidate-after-emit", admission.admission_id, "api-response",
+            closure.new_generation, NOW, True
+        )
+        self.assertTrue(self.authority.record_endpoint_ack(other))
+        result = self.authority.reconcile("invalidate-after-emit")
+        self.assertEqual(result.resolved_admission_ids, frozenset({admission.admission_id}))
+        self.assertEqual(
+            self.authority.admissions[admission.admission_id].status,
+            ReadAdmissionStatus.CANCELLED,
+        )
 
     def test_invalidation_can_resolve_after_all_endpoints_complete(self):
         admission = self.authority.admit_read(
