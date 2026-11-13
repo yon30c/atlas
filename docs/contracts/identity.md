@@ -106,15 +106,25 @@ Una identidad inválida, un tipo que no sea `IdentityKind`, o un estado que no s
 
 ## 7. Decisiones técnicas abiertas
 
-Los documentos arquitectónicos aprobados no fijan los siguientes detalles. Deben decidirse antes de depender de ellos:
+Las políticas fundamentales de identidad y sus estados están definidas en este contrato y en el contrato principal de arquitectura. Esta sección recoge únicamente decisiones técnicas que todavía no han sido resueltas.
 
-- Formato, longitud, sensibilidad a mayúsculas, espacio de nombres, unicidad y generación de `identity_id`.
-- Si se permiten espacios iniciales o finales en identificadores y, de ser así, cómo se comparan. El código actual los conserva.
-- Si existe normalización o una representación canónica de identificadores entre sistemas.
-- Significado operacional detallado de cada `IdentityKind`, más allá de clasificar el actor.
-- Semántica de cada estado fuera del efecto CAM documentado para estados distintos de `ACTIVE`.
-- Transiciones permitidas, iniciadores autorizados, revisión, persistencia e historial de cambios de estado.
-- Mecanismo de autenticación y vínculo entre una identidad del dominio y una credencial o cuenta.
-- Si las identidades eliminadas pueden reutilizar sus identificadores y cómo se conserva la atribución histórica.
+Quedan pendientes de definición:
 
-Hasta que se resuelvan, no deben suponerse formatos, políticas de autenticación, poderes asociados a tipos ni transiciones del ciclo de vida.
+- **Identificadores:** formato, longitud, sensibilidad a mayúsculas, espacio de nombres, unicidad y mecanismo de generación de `identity_id`.
+- **Normalización:** si se permiten espacios iniciales o finales en los identificadores y si existirá una representación canónica para compararlos entre sistemas. El código actual conserva el valor original.
+- **Tipos de identidad:** significado operacional detallado de cada `IdentityKind`, más allá de su función de clasificación. Ningún tipo concede permisos automáticamente.
+- **Transiciones de estado:** mecanismo técnico para solicitar, validar, ejecutar y persistir las transiciones permitidas, respetando las políticas aprobadas de suspensión, reactivación y revocación.
+- **Administración:** procedimientos, actores autorizados y controles necesarios para gestionar el ciclo de vida de las identidades.
+- **Persistencia e historial:** representación del estado, conservación del historial de cambios y trazabilidad de las operaciones administrativas.
+- **Autenticación:** mecanismo para comprobar la identidad de un actor y vincular un `identity_id` con una credencial o cuenta externa.
+- **Identificadores revocados:** política de conservación y prevención de reutilización de identificadores para proteger la atribución histórica.
+
+### 7.1. Límites de estas decisiones pendientes
+
+Estas decisiones técnicas no reabren ni modifican las políticas ya aprobadas:
+
+- `ACTIVE` permite participar en operaciones únicamente cuando las autorizaciones correspondientes son válidas.
+- `SUSPENDED` bloquea nuevas operaciones y permite reactivación mediante un procedimiento autorizado.
+- `REVOKED` es definitivo para la identidad afectada y no permite reactivar esa misma identidad como si la revocación no hubiera ocurrido.
+
+La implementación deberá respetar estas reglas y no podrá introducir transiciones o capacidades incompatibles con ellas sin una revisión explícita del contrato arquitectónico.
