@@ -164,6 +164,10 @@ class MemoryAuthorizationServiceTests(unittest.TestCase):
     def test_private_owner_is_allowed_using_trusted_subject(self):
         result = self.service.authorize_read(make_context(), MEMORY_ID, NOW)
         self.assertIs(self.decision(result), AuthorizationDecision.ALLOW)
+        self.assertIsNotNone(result.snapshot)
+        self.assertEqual(result.snapshot.revisions.memory_revision.revision, 1)
+        self.assertEqual(result.snapshot.revisions.version_revision.revision, 1)
+        self.assertEqual(result.snapshot.revisions.identity_revision.revision, 1)
         self.assertEqual(self.binding.calls, ["identity-1"])
         self.assertEqual(self.grant_repository.owner_requests, [])
 
@@ -171,6 +175,7 @@ class MemoryAuthorizationServiceTests(unittest.TestCase):
         self.binding.subject = "another-user"
         result = self.service.authorize_read(make_context(), MEMORY_ID, NOW)
         self.assertIs(self.decision(result), AuthorizationDecision.DENY)
+        self.assertIsNone(result.snapshot)
 
     def test_private_non_user_actor_and_missing_binding_are_denied(self):
         agent_context = make_context(kind=IdentityKind.AGENT)
@@ -189,6 +194,11 @@ class MemoryAuthorizationServiceTests(unittest.TestCase):
         context = make_context(project_id="project-1", environment="development")
         result = self.service.authorize_read(context, MEMORY_ID, NOW)
         self.assertIs(self.decision(result), AuthorizationDecision.ALLOW)
+        self.assertIsNotNone(result.snapshot)
+        self.assertEqual(result.snapshot.revisions.project_revision.authority_id, "project-1")
+        self.assertEqual(result.snapshot.revisions.environment_revision.authority_id, "development")
+        self.assertEqual(result.snapshot.revisions.grant_revision.authority_id, "grant-1")
+        self.assertEqual(result.snapshot.grant_expires_at, make_grant().expires_at)
         self.assertEqual(self.grant_repository.owner_requests, ["owner-1"])
 
     def test_project_memory_denies_cross_project_or_missing_grant(self):
