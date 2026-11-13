@@ -592,7 +592,7 @@ La semántica de generación queda diferenciada: `ENDPOINT_FENCED.generation` es
 
 **Límite:** el reducer solo valida la estructura y el significado de los registros que recibe. No autentica el journal, no verifica el watermark, no consulta endpoints y no habilita rutas. Rechaza recuperaciones con checkpoint si no se suministra una proyección base reconstruida y validada; no interpreta una referencia de checkpoint como estado vacío. Una `continuity_reference` opaca no se convierte en una prueba confiable por pasar el reducer. No existe adaptador durable.
 
-**Cobertura escrita:** 33 métodos en `test_memory_journal.py`, 20 en `test_memory_journal_failures.py` y 22 en `test_memory_journal_reducer.py` (75 en total). No se han ejecutado.
+**Cobertura:** 33 métodos en `test_memory_journal.py`, 20 en `test_memory_journal_failures.py` y 25 en `test_memory_journal_reducer.py` (78 en total). Ejecutados dentro de la suite completa de 360 tests, con éxito en Python 3.10–3.13 ([Atlas CI #43526491006](https://github.com/yon30c/atlas/actions/runs/43526491006)).
 
 
 ## 18. ME-03D — Forget Coordinator puro

@@ -239,7 +239,7 @@ Las pruebas D01–D37 serán inicialmente pruebas puras/fakes. No demuestran eli
 2. Añadir reducer/validador de estados monotónicos del Coordinator.
 3. Definir puertos tipados para inventario, eliminación, verificación y estado canónico.
 4. Integrar con `ProtectedMemoryConsistencyPort` sin crear una segunda autoridad de admisión/fencing.
-5. Implementar fakes deterministas y D01–D30.
+5. Implementar fakes deterministas y D01–D37.
 6. Revisar la política pendiente de backups/retención antes de cualquier adaptador real.
 7. No elegir storage ni desplegar; no declarar Forget físico completo sin destinos reales y evidencia.
 
@@ -251,7 +251,7 @@ ME-03D solo puede declararse completo como diseño/modelos cuando:
 - cada destino exige intento y verificación separados;
 - el inventario es completo, versionado y estable;
 - tombstones e idempotencia sobreviven recuperación;
-- D01–D30 están representados y ejecutados;
+- D01–D37 están representados y ejecutados;
 - el diseño mantiene explícitos los límites de backups/retención.
 
 La implementación real de Forget seguirá pendiente hasta disponer de inventario aprobado, política de backups/retención, adaptadores verificables y pruebas de recuperación.
@@ -275,7 +275,7 @@ Se implementó una primera capa pura en `src/atlas/memory/forget_coordinator.py`
 - destino estable no puede cambiar de clase entre revisiones;
 - intentos UNKNOWN deben reconciliarse antes de refresh o reintento.
 
-Se exportaron los modelos desde `atlas.memory` y se añadieron 37 métodos de prueba D01–D30 en `tests/unit/test_memory_forget_coordinator.py`.
+Se exportaron los modelos desde `atlas.memory` y se añadieron 37 métodos de prueba D01–D37 en `tests/unit/test_memory_forget_coordinator.py`.
 
 En el commit `49244706a3f93f09ec7b1f2b7e350124b2715216`, GitHub Actions ejecutó la suite completa: Python 3.10, 3.11, 3.12 y 3.13 finalizaron correctamente. Python 3.11 reportó `Ran 360 tests`, `OK`. Workflow: [Atlas CI #43526491006](https://github.com/yon30c/atlas/actions/runs/43526491006).
 
