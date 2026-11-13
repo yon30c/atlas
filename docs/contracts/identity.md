@@ -34,19 +34,65 @@ Los valores de tipo y estado deben ser instancias de sus enumeraciones respectiv
 
 El tipo clasifica al actor. La enumeración, por sí misma, no le otorga capacidades o permisos.
 
-## 4. Estados de identidad
+## 4. Ciclo de vida y estados de identidad
 
-`IdentityStatus` admite exactamente estos valores:
+Los estados de una identidad determinan si esta puede participar en nuevas operaciones y cómo deben tratarse las operaciones que ya están en curso.
 
-| Miembro | Valor serializado |
-|---|---|
-| `ACTIVE` | `active` |
-| `SUSPENDED` | `suspended` |
-| `REVOKED` | `revoked` |
+Los estados definidos son:
 
-El evaluador CAM actual deniega solicitudes cuyo actor no está en estado `ACTIVE`. Esto describe el efecto comprobado en esa frontera; el estado no sustituye la evaluación de Grants ni concede acceso cuando es `ACTIVE`.
+- `ACTIVE`: identidad habilitada para participar en operaciones, siempre que las autorizaciones correspondientes sean válidas.
+- `SUSPENDED`: identidad suspendida temporalmente. No puede iniciar nuevas operaciones mientras permanezca en este estado.
+- `REVOKED`: identidad revocada definitivamente. No puede iniciar nuevas operaciones ni continuar participando en operaciones que dependan de esa identidad.
 
-Este contrato no define cambios de estado ni autoriza transiciones entre ellos. La creación, suspensión, reactivación o revocación de identidades y quién puede iniciarlas son **decisiones técnicas abiertas**. Ninguna transición debe inferirse de la enumeración.
+### 4.1. Suspensión
+
+La suspensión es una medida temporal.
+
+Cuando una identidad pasa a `SUSPENDED`:
+
+1. Se bloquea inmediatamente el inicio de nuevas operaciones.
+2. Se identifican las tareas activas que dependan de esa identidad.
+3. Se inicia la detención cooperativa de dichas tareas.
+4. Si una interrupción inmediata pudiera comprometer la integridad de datos o recursos, se permite que la tarea alcance un punto seguro de consistencia.
+5. Durante ese intervalo no se permiten nuevas operaciones ni la ampliación del alcance de las operaciones existentes.
+6. Se preservan los resultados parciales y el estado de ejecución.
+7. Las tareas independientes ejecutadas por otras identidades pueden continuar si sus propias autorizaciones siguen siendo válidas.
+
+La identidad suspendida puede ser reactivada por su propietario mediante un procedimiento autorizado.
+
+### 4.2. Revocación
+
+La revocación es definitiva para la identidad afectada.
+
+Cuando una identidad pasa a `REVOKED`:
+
+1. Se bloquea el inicio de nuevas operaciones.
+2. Se impide que las operaciones dependientes continúen utilizando la identidad revocada.
+3. Se detienen de forma segura las operaciones activas, permitiendo alcanzar un punto seguro de consistencia cuando sea necesario para proteger la integridad.
+4. Se preservan y registran los resultados parciales y el estado de ejecución.
+5. La misma identidad no puede reactivarse como si la revocación no hubiera ocurrido.
+
+Si en el futuro se necesita una identidad equivalente, deberá crearse una identidad independiente y concedérsele las autorizaciones correspondientes.
+
+### 4.3. Relación entre identidad y autorización
+
+El estado `ACTIVE` es una condición necesaria para que una identidad pueda participar en nuevas operaciones, pero no concede permisos por sí mismo.
+
+Toda operación protegida debe seguir pasando por el mecanismo de autorización correspondiente (CAM). Una identidad activa no puede ejecutar una acción si no dispone de una autorización válida para el recurso y la operación solicitados.
+
+### 4.4. Decisiones técnicas pendientes
+
+Las políticas operativas de suspensión y revocación descritas anteriormente están aprobadas en el contrato principal de arquitectura, sección 16.2.
+
+Quedan pendientes de definición los detalles técnicos de implementación, entre ellos:
+
+- El mecanismo mediante el cual se solicitan y ejecutan las transiciones de estado.
+- La persistencia del estado y del historial de cambios.
+- El registro y la trazabilidad de las operaciones administrativas.
+- Los procedimientos técnicos para ejecutar la suspensión, reactivación y revocación.
+- La representación y gestión de las identidades revocadas para impedir su reutilización accidental.
+
+Estas decisiones de implementación no modifican las políticas operativas ya aprobadas.
 
 ## 5. Uso con el contexto de operación
 
