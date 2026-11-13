@@ -653,6 +653,50 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
             EndpointDeliveryStatus.UNRESOLVED,
         )
 
+    def test_commit_and_invalidation_share_one_ordering_lock(self):
+        admission = self.authority.admit_read(
+            private_snapshot(), DeliveryRouteSet(ROUTES)
+        )
+        handle = FakeHandle(admission)
+        barrier = threading.Barrier(3)
+        emitted = []
+        invalidated = []
+
+        def emit():
+            barrier.wait()
+            emitted.append(
+                self.egress.commit_and_emit(
+                    admission, handle, "assistant-response", "racing-emission", 1, NOW
+                )
+            )
+
+        def invalidate():
+            barrier.wait()
+            invalidated.append(
+                self.authority.begin_invalidation(
+                    AuthorizationInvalidation(
+                        "racing-invalidation", AuthorityKind.IDENTITY,
+                        "identity-1", 1, 2, frozenset({admission.admission_id})
+                    )
+                )
+            )
+
+        first = threading.Thread(target=emit)
+        second = threading.Thread(target=invalidate)
+        first.start()
+        second.start()
+        barrier.wait()
+        first.join()
+        second.join()
+
+        self.assertIsNotNone(invalidated[0])
+        self.assertEqual(len(emitted), 1)
+        self.assertIsNone(
+            self.egress.commit_and_emit(
+                admission, handle, "assistant-response", "late-emission", 2, NOW
+            )
+        )
+
     def test_egress_rejects_handle_for_another_admission_target(self):
         admission = self.authority.admit_read(
             private_snapshot(), DeliveryRouteSet(ROUTES)
