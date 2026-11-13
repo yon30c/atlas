@@ -153,6 +153,20 @@ La garantía se refiere a emisiones futuras controladas por Atlas. No puede reti
 
 Esta garantía es un requisito de arquitectura aceptado, no una afirmación de que el código actual disponga de fencing ni una selección de su mecanismo físico.
 
+### 4.7 Revocación de autorización durante una lectura admitida — recomendación adoptada
+
+La admisión de una lectura no debe convertir una autorización CAM revocable en un permiso irrevocable durante toda la vida del stream. El snapshot CAM vincula la decisión que permitió iniciar la operación, pero no debe impedir que una suspensión de identidad, revocación de Grant, expiración aplicable o cambio de autoridad detenga entregas futuras.
+
+Se adopta como dirección de diseño que:
+
+1. La admisión conserva la identidad del actor, el recurso exacto y la revisión/época de autorización que justificó el acceso.
+2. Una revocación, suspensión o invalidación de esa autoridad debe invalidar las admisiones afectadas para emisiones futuras.
+3. Cada punto de entrega debe hacer cumplir tanto el fencing de supresión/Forget como la vigencia de la autorización vinculada a la admisión. Son controles independientes: superar uno no sustituye al otro.
+4. Una admisión invalidada por revocación solo puede considerarse cancelada cuando los puntos de entrega confirmen que ya no pueden emitir contenido. Se aplica la misma regla de buffers e intermediarios que para Forget.
+5. Si no puede comprobarse la vigencia de autorización en el límite requerido, no se entrega contenido adicional. No se renueva ni sustituye silenciosamente el snapshot dentro de la misma admisión; una nueva lectura requiere una nueva operación y autorización CAM.
+
+Esta recomendación no cambia la regla de que CAM autoriza cada recurso concreto, ni convierte el snapshot en un Grant. Tampoco decide todavía cómo se propagan las revisiones de Grants/identidades ni qué mecanismo técnico comunica su revocación a los puntos de entrega.
+
 ## 5. Reglas de fallo cerrado
 
 - Snapshot ausente, inválido, caducado o con IDs distintos: no leer.
@@ -205,6 +219,9 @@ Antes de integrar un proveedor real, construir pruebas deterministas con puertos
 | C18 | Forget de memoria afecta varias versiones, propuestas y destinos | El cierre cubre el conjunto completo autorizado; ninguna versión o ruta derivada queda accesible |
 | C19 | Forget de una versión concreta | El cierre afecta exactamente el alcance autorizado y no amplía silenciosamente la supresión a otras versiones |
 | C20 | Llegan acknowledgements duplicados, tardíos o de una generación distinta | No alteran el estado terminal de otra admisión ni permiten confirmar con evidencia no correlacionada |
+| C21 | Se revoca el Grant después de admitir una lectura y antes del siguiente fragmento | El punto de entrega rechaza nuevas emisiones y la admisión no se considera cancelada hasta confirmación de fencing |
+| C22 | La identidad del actor pasa a SUSPENDED o REVOKED durante una lectura | Se detienen nuevas emisiones; no se conserva el permiso por el snapshot inicial |
+| C23 | No se puede consultar/verificar la vigencia de autorización para una emisión | No se entrega contenido adicional; no se renueva el snapshot por fallback |
 
 Las pruebas de concurrencia deben usar eventos/barreras explícitas, no sleeps ni temporizadores, para que los intercalados sean reproducibles.
 
@@ -228,6 +245,8 @@ Las pruebas de concurrencia deben usar eventos/barreras explícitas, no sleeps n
 **Decisión 5 — recomendación adoptada para continuar el diseño:** cada admisión debe estar correlacionada con un identificador único, el conjunto exacto de recursos afectados, la generación/fencing vigente y los puntos de entrega que puedan emitir contenido. La terminación debe registrar un resultado verificable por admisión y por punto de entrega aplicable.
 
 **Decisión 6 — recomendación adoptada para continuar el diseño:** la cobertura de Forget se determina por su alcance autorizado y por un inventario verificable de destinos y canales de entrega. Un canal que no pueda aplicar o demostrar fencing se excluye de la exposición de contenido protegido; no puede tratarse como una excepción silenciosa.
+
+**Decisión 7 — recomendación adoptada para continuar el diseño:** una admisión no congela la autorización CAM durante toda la entrega. La revocación de Grant, suspensión/revocación de identidad u otra invalidación aplicable debe impedir emisiones posteriores en todos los puntos de entrega, con confirmación verificable de detención antes de declarar cancelada la admisión.
 
 Ninguno de estos puntos autoriza a seleccionar una base de datos, caché, índice, proveedor, scheduler o plataforma.
 
