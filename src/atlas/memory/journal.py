@@ -78,6 +78,7 @@ class ConsistencyTransition:
     correlation_id: str | None = None
     actor_identity_id: str | None = None
     subject_user_id: str | None = None
+    owner_id: str | None = None
     memory_id: str | None = None
     version_id: str | None = None
     snapshot_id: str | None = None
@@ -105,7 +106,7 @@ class ConsistencyTransition:
 
         for field in (
             "idempotency_key", "request_id", "correlation_id",
-            "actor_identity_id", "subject_user_id", "snapshot_id",
+            "actor_identity_id", "subject_user_id", "owner_id", "snapshot_id",
             "authority_id", "admission_id", "endpoint_id", "emission_id",
             "receipt_id", "proof_reference",
         ):
@@ -157,6 +158,7 @@ class ConsistencyTransition:
             ),
             ConsistencyRecordKind.FORGET_CLOSED: (
                 "memory_id", "generation", "proof_reference", "idempotency_key",
+                "request_id", "actor_identity_id", "subject_user_id", "owner_id",
             ),
             ConsistencyRecordKind.INVALIDATION_CLOSED: (
                 "authority_kind", "authority_id", "generation",
@@ -196,6 +198,8 @@ class ConsistencyTransition:
         ) and bool(self.route_ids) != bool(self.affected_admission_ids):
             raise ContractError("rutas y admisiones afectadas deben estar vacías o presentes juntas")
         if self.record_kind is ConsistencyRecordKind.FORGET_CLOSED:
+            if self.subject_user_id != self.owner_id:
+                raise ContractError("FORGET_CLOSED requiere sujeto autenticado igual al propietario")
             if self.authority_kind is not None or self.authority_id is not None:
                 raise ContractError("FORGET_CLOSED usa memory_id, no authority genérica")
         if self.record_kind is ConsistencyRecordKind.EGRESS_COMMITTED:
