@@ -782,13 +782,14 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
             restored.admission_generations[admission.admission_id],
             closure.generation,
         )
+        restored_egress = FakeProtectedEgress(restored)
         for endpoint in sorted(admission.route_ids):
-            receipt = self.egress.fence(
+            receipt = restored_egress.fence(
                 admission, closure.operation_id, endpoint, closure.generation, NOW
             )
             self.assertIsNotNone(receipt)
-            self.assertTrue(self.authority.record_endpoint_ack(receipt))
-        final = self.authority.reconcile_forget(closure.operation_id)
+            self.assertTrue(restored.record_endpoint_ack(receipt))
+        final = restored.reconcile_forget(closure.operation_id)
         self.assertEqual(final.status, ForgetClosureStatus.SUPPRESSED)
 
 
