@@ -7,6 +7,7 @@ import unittest
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 
+from atlas.core.errors import ContractError
 from atlas.memory.consistency import (
     AuthorityKind,
     AuthorityRevision,
@@ -266,6 +267,30 @@ class ReadForgetGateFake:
         return True
 
 
+class OneShotOwnerProofVerifierFake:
+    """Emite éxito una sola vez; no implementa criptografía ni issuer real."""
+
+    def __init__(self, available=True):
+        self.available = available
+        self.consumed = set()
+
+    def verify_and_consume(self, proof_id):
+        if not self.available or proof_id in self.consumed:
+            return False
+        self.consumed.add(proof_id)
+        return True
+
+
+def begin_forget_with_proof(journal, verifier, proof_id):
+    if not verifier.verify_and_consume(proof_id):
+        return False
+    transition = forget_closed(
+        record_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074005",
+        key=f"forget:{proof_id}",
+    )
+    return journal.append_transition(journal.position(), transition) is not None
+
+
 class MemoryJournalFailureScenarios(unittest.TestCase):
     def test_c45_failed_durable_admission_never_reads_content(self):
         journal = FaultInjectingJournalFake()
@@ -371,7 +396,7 @@ class MemoryJournalFailureScenarios(unittest.TestCase):
         conflicting = JournalEntry(pos(1), admitted(record_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074005"))
         journal.entries.append(conflicting)
         journal.sequence = 1
-        with self.assertRaises(Exception):
+        with self.assertRaises(ContractError):
             ConsistencyRecoveryState(
                 domain_id=DOMAIN,
                 authority_epoch=1,
@@ -412,23 +437,16 @@ class MemoryJournalFailureScenarios(unittest.TestCase):
 
     def test_c58_consumed_owner_proof_is_not_reused_after_close_append_failure(self):
         journal = FaultInjectingJournalFake()
-        consumed_proofs = {"proof-once"}
+        verifier = OneShotOwnerProofVerifierFake()
         journal.fail_before_append = True
-        proof_reference = "proof-once"
-        self.assertIn(proof_reference, consumed_proofs)
-        self.assertFalse(
-            ReadForgetGateFake(journal).close_forget(
-                forget_closed(key="forget:proof-once")
-            )
-        )
-        self.assertIn(proof_reference, consumed_proofs)
+        self.assertFalse(begin_forget_with_proof(journal, verifier, "proof-once"))
+        self.assertTrue(verifier.verify_and_consume("proof-once") is False)
         self.assertEqual(journal.sequence, 0)
 
     def test_c59_unavailable_proof_verifier_prevents_forget_close(self):
         journal = FaultInjectingJournalFake()
-        verifier_available = False
-        if verifier_available:
-            journal.append_transition(journal.position(), forget_closed())
+        verifier = OneShotOwnerProofVerifierFake(available=False)
+        self.assertFalse(begin_forget_with_proof(journal, verifier, "proof-unavailable"))
         self.assertEqual(journal.sequence, 0)
         self.assertIsNone(journal.load_recovery_state("unknown-domain"))
 
