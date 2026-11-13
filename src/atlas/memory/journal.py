@@ -41,6 +41,53 @@ def _utc(value: object, field: str) -> None:
 
 SUPPORTED_CONSISTENCY_SCHEMA_VERSIONS = frozenset({1})
 
+_COMMON_TRANSITION_FIELDS = frozenset({
+    "record_id", "schema_version", "record_kind", "operation_id", "occurred_at",
+})
+_TRANSITION_FIELDS_BY_KIND = {
+    ConsistencyRecordKind.READ_ADMITTED: _COMMON_TRANSITION_FIELDS | frozenset({
+        "idempotency_key", "request_id", "correlation_id", "actor_identity_id",
+        "subject_user_id", "owner_id", "memory_id", "version_id", "snapshot_id",
+        "revisions", "admission_id", "generation", "route_ids",
+    }),
+    ConsistencyRecordKind.READ_ACTIVATED: _COMMON_TRANSITION_FIELDS | frozenset({
+        "admission_id", "generation",
+    }),
+    ConsistencyRecordKind.EGRESS_COMMITTED: _COMMON_TRANSITION_FIELDS | frozenset({
+        "admission_id", "endpoint_id", "generation", "emission_id",
+        "emission_sequence", "receipt_id",
+    }),
+    ConsistencyRecordKind.ENDPOINT_COMPLETED: _COMMON_TRANSITION_FIELDS | frozenset({
+        "admission_id", "endpoint_id", "generation", "receipt_id", "final_sequence",
+    }),
+    ConsistencyRecordKind.ENDPOINT_FENCED: _COMMON_TRANSITION_FIELDS | frozenset({
+        "admission_id", "endpoint_id", "generation", "receipt_id",
+    }),
+    ConsistencyRecordKind.FORGET_CLOSED: _COMMON_TRANSITION_FIELDS | frozenset({
+        "idempotency_key", "request_id", "correlation_id", "actor_identity_id",
+        "subject_user_id", "owner_id", "memory_id", "generation", "proof_reference",
+        "route_ids", "affected_admission_ids",
+    }),
+    ConsistencyRecordKind.INVALIDATION_CLOSED: _COMMON_TRANSITION_FIELDS | frozenset({
+        "authority_kind", "authority_id", "generation", "previous_revision",
+        "new_revision", "route_ids", "affected_admission_ids",
+    }),
+    ConsistencyRecordKind.ADMISSION_RECONCILED: _COMMON_TRANSITION_FIELDS | frozenset({
+        "admission_id", "generation", "receipt_id", "admission_terminal_status",
+    }),
+    ConsistencyRecordKind.FORGET_SUPPRESSED: _COMMON_TRANSITION_FIELDS | frozenset({
+        "memory_id", "generation", "route_ids", "affected_admission_ids",
+    }),
+    ConsistencyRecordKind.INVALIDATION_RECONCILED: _COMMON_TRANSITION_FIELDS | frozenset({
+        "authority_kind", "authority_id", "generation", "route_ids",
+        "affected_admission_ids",
+    }),
+    ConsistencyRecordKind.CHECKPOINT_COMMITTED: _COMMON_TRANSITION_FIELDS | frozenset({
+        "checkpoint_reference",
+    }),
+}
+
+
 
 class ConsistencyRecordKind(str, Enum):
     READ_ADMITTED = "read_admitted"
@@ -157,6 +204,19 @@ class ConsistencyTransition:
             for value in values:
                 _required(value, field)
 
+        allowed_fields = _TRANSITION_FIELDS_BY_KIND[self.record_kind]
+        for field in self.__dataclass_fields__:
+            if field in allowed_fields:
+                continue
+            value = getattr(self, field)
+            if value is not None and not (
+                field in ("route_ids", "affected_admission_ids")
+                and value == frozenset()
+            ):
+                raise ContractError(
+                    f"{field} no está permitido para {self.record_kind.value}"
+                )
+
         required_by_kind = {
             ConsistencyRecordKind.READ_ADMITTED: (
                 "memory_id", "version_id", "snapshot_id", "revisions",
@@ -198,6 +258,17 @@ class ConsistencyTransition:
             value = getattr(self, field)
             if value is None:
                 raise ContractError(f"{field} es obligatorio para {self.record_kind.value}")
+
+        if self.record_kind in (
+            ConsistencyRecordKind.READ_ADMITTED,
+            ConsistencyRecordKind.READ_ACTIVATED,
+            ConsistencyRecordKind.EGRESS_COMMITTED,
+            ConsistencyRecordKind.ENDPOINT_COMPLETED,
+            ConsistencyRecordKind.ENDPOINT_FENCED,
+            ConsistencyRecordKind.ADMISSION_RECONCILED,
+        ):
+            if self.operation_id != f"read:{self.admission_id}":
+                raise ContractError("operation_id debe corresponder a la admisión exacta")
 
         if self.record_kind is ConsistencyRecordKind.READ_ADMITTED:
             if not self.route_ids:
