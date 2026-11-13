@@ -207,6 +207,16 @@ class ConsistencyJournalModelTests(unittest.TestCase):
         journal = InMemoryConsistencyJournalFake()
         first_transition = read_admitted(idempotency_key="read-key-1")
         first = journal.append_transition(position(0), first_transition)
+        later = ConsistencyTransition(
+            record_id=RECORD_2,
+            schema_version=1,
+            record_kind=ConsistencyRecordKind.READ_ACTIVATED,
+            operation_id="read:admission-1",
+            occurred_at=NOW,
+            admission_id="admission-1",
+            generation=1,
+        )
+        journal.append_transition(first.position, later)
         retry = read_admitted(
             record_id=RECORD_2,
             idempotency_key="read-key-1",
@@ -271,6 +281,43 @@ class ConsistencyJournalModelTests(unittest.TestCase):
             created_at=NOW,
         )
         self.assertIsNone(journal.commit_checkpoint(stale_checkpoint, first.position))
+
+    def test_fake_journal_loads_endpoint_receipts_by_exact_admission(self):
+        journal = InMemoryConsistencyJournalFake()
+        admitted = journal.append_transition(position(0), read_admitted())
+        egress = ConsistencyTransition(
+            record_id=RECORD_2,
+            schema_version=1,
+            record_kind=ConsistencyRecordKind.EGRESS_COMMITTED,
+            operation_id="read:admission-1",
+            occurred_at=NOW,
+            admission_id="admission-1",
+            endpoint_id="assistant-response",
+            generation=1,
+            emission_id="emission-1",
+            emission_sequence=1,
+            receipt_id="durable-egress-receipt-1",
+        )
+        journal.append_transition(admitted.position, egress)
+        receipts = journal.load_endpoint_receipts("admission-1")
+        self.assertEqual(len(receipts), 1)
+        self.assertEqual(receipts[0].transition.receipt_id, "durable-egress-receipt-1")
+
+    def test_fake_journal_checkpoint_commit_is_idempotent(self):
+        journal = InMemoryConsistencyJournalFake()
+        first = journal.append_transition(position(0), read_admitted())
+        checkpoint = ConsistencyCheckpoint(
+            checkpoint_id=CHECKPOINT_ID,
+            position=first.position,
+            state_reference="opaque-state-reference",
+            integrity_reference="fake-integrity-reference",
+            created_at=NOW,
+        )
+        committed = journal.commit_checkpoint(checkpoint, first.position)
+        repeated = journal.commit_checkpoint(checkpoint, first.position)
+        self.assertEqual(repeated.position, committed.position)
+        self.assertTrue(repeated.replayed)
+        self.assertEqual(len(journal.entries), 2)
 
     def test_fake_journal_load_rejects_unknown_domain(self):
         journal = InMemoryConsistencyJournalFake()
