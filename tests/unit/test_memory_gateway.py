@@ -50,7 +50,7 @@ def make_context():
     )
 
 
-def make_snapshot(grant_expires_at=None):
+def make_snapshot(grant_expires_at=None, memory_id=MEMORY_ID):
     project = grant_expires_at is not None
     scope = (
         MemoryScope(MemoryScopeKind.PROJECT, "project-1")
@@ -58,7 +58,7 @@ def make_snapshot(grant_expires_at=None):
         else MemoryScope(MemoryScopeKind.PRIVATE)
     )
     revisions = AuthorizationRevisionSet(
-        memory_revision=AuthorityRevision(AuthorityKind.MEMORY, MEMORY_ID, 1),
+        memory_revision=AuthorityRevision(AuthorityKind.MEMORY, memory_id, 1),
         version_revision=AuthorityRevision(AuthorityKind.MEMORY_VERSION, VERSION_ID, 1),
         identity_revision=AuthorityRevision(AuthorityKind.IDENTITY, "identity-1", 1),
         project_revision=(
@@ -81,7 +81,7 @@ def make_snapshot(grant_expires_at=None):
         action="memory.read",
         actor_identity_id="identity-1",
         subject_user_id=None if project else "owner-1",
-        memory_id=MEMORY_ID,
+        memory_id=memory_id,
         version_id=VERSION_ID,
         owner_id="owner-1",
         scope=scope,
@@ -273,8 +273,9 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         )
 
     def test_snapshot_for_another_resource_is_rejected_before_admission(self):
-        other = make_snapshot()
-        object.__setattr__(other, "memory_id", "018bcfe5-7b3a-7cc2-98c4-dc0c0c073a13")
+        other = make_snapshot(
+            memory_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c073a13"
+        )
         self.authorization.result = AuthorizationResult(
             AuthorizationDecision.ALLOW, other
         )
