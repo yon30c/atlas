@@ -13,6 +13,7 @@ from atlas.memory.consistency import (
     ReadAdmissionStatus,
 )
 from atlas.memory.identifiers import validate_atlas_id
+from atlas.memory.models import MemoryScopeKind
 
 
 def _required(value: object, field: str) -> None:
@@ -39,7 +40,7 @@ def _utc(value: object, field: str) -> None:
         raise ContractError(f"{field} debe ser un datetime UTC")
 
 
-SUPPORTED_CONSISTENCY_SCHEMA_VERSIONS = frozenset({1})
+SUPPORTED_CONSISTENCY_SCHEMA_VERSIONS = frozenset({1, 2})
 
 class ConsistencyRecordKind(str, Enum):
     READ_ADMITTED = "read_admitted"
@@ -63,7 +64,7 @@ _TRANSITION_FIELDS_BY_KIND = {
         "idempotency_key", "request_id", "correlation_id", "actor_identity_id",
         "subject_user_id", "owner_id", "memory_id", "version_id", "snapshot_id",
         "revisions", "admission_id", "generation", "route_ids",
-    }),
+    }) | frozenset({"scope_kind", "scope_project_id"}),
     ConsistencyRecordKind.READ_ACTIVATED: _COMMON_TRANSITION_FIELDS | frozenset({
         "admission_id", "generation",
     }),
@@ -133,6 +134,8 @@ class ConsistencyTransition:
     version_id: str | None = None
     snapshot_id: str | None = None
     revisions: AuthorizationRevisionSet | None = None
+    scope_kind: MemoryScopeKind | None = None
+    scope_project_id: str | None = None
     authority_kind: AuthorityKind | None = None
     authority_id: str | None = None
     admission_id: str | None = None
@@ -157,6 +160,12 @@ class ConsistencyTransition:
             raise ContractError("schema_version de transición no soportada")
         if not isinstance(self.record_kind, ConsistencyRecordKind):
             raise ContractError("record_kind debe ser ConsistencyRecordKind")
+        if self.schema_version == 2 and self.record_kind is not ConsistencyRecordKind.READ_ADMITTED:
+            raise ContractError("schema_version 2 solo aplica a READ_ADMITTED")
+        if self.schema_version == 1 and (
+            self.scope_kind is not None or self.scope_project_id is not None
+        ):
+            raise ContractError("scope_kind/scope_project_id requieren schema_version 2")
         _required(self.operation_id, "operation_id")
         _utc(self.occurred_at, "occurred_at")
 
@@ -178,6 +187,10 @@ class ConsistencyTransition:
             self.revisions, AuthorizationRevisionSet
         ):
             raise ContractError("revisions debe ser AuthorizationRevisionSet")
+        if self.scope_kind is not None and not isinstance(self.scope_kind, MemoryScopeKind):
+            raise ContractError("scope_kind debe ser MemoryScopeKind")
+        if self.scope_project_id is not None:
+            _required(self.scope_project_id, "scope_project_id")
         if self.authority_kind is not None and not isinstance(
             self.authority_kind, AuthorityKind
         ):
@@ -204,6 +217,8 @@ class ConsistencyTransition:
                 _required(value, field)
 
         allowed_fields = _TRANSITION_FIELDS_BY_KIND[self.record_kind]
+        if self.record_kind is ConsistencyRecordKind.READ_ADMITTED and self.schema_version == 1:
+            allowed_fields = allowed_fields - frozenset({"scope_kind", "scope_project_id"})
         for field in self.__dataclass_fields__:
             if field in allowed_fields:
                 continue
@@ -267,6 +282,32 @@ class ConsistencyTransition:
                 raise ContractError("operation_id debe corresponder a la admisión exacta")
 
         if self.record_kind is ConsistencyRecordKind.READ_ADMITTED:
+            if self.schema_version == 2:
+                for field in ("owner_id", "actor_identity_id", "request_id", "scope_kind"):
+                    if getattr(self, field) is None:
+                        raise ContractError(f"{field} es obligatorio para READ_ADMITTED v2")
+                if self.scope_kind is MemoryScopeKind.PRIVATE:
+                    if self.scope_project_id is not None:
+                        raise ContractError("PRIVATE no admite scope_project_id")
+                    if self.subject_user_id != self.owner_id:
+                        raise ContractError("PRIVATE requiere subject_user_id igual a owner_id")
+                    if any(value is not None for value in (
+                        self.revisions.project_revision,
+                        self.revisions.environment_revision,
+                        self.revisions.grant_revision,
+                    )):
+                        raise ContractError("PRIVATE no admite revisiones PROJECT o Grant")
+                elif self.scope_kind is MemoryScopeKind.PROJECT:
+                    if self.scope_project_id is None:
+                        raise ContractError("PROJECT requiere scope_project_id")
+                    project_revision = self.revisions.project_revision
+                    if project_revision is None or project_revision.authority_id != self.scope_project_id:
+                        raise ContractError("scope_project_id debe coincidir con project_revision")
+                    if any(value is None for value in (
+                        self.revisions.environment_revision,
+                        self.revisions.grant_revision,
+                    )):
+                        raise ContractError("PROJECT requiere revisiones de entorno y Grant")
             if not self.route_ids:
                 raise ContractError("READ_ADMITTED requiere al menos una ruta registrada")
             if self.revisions.memory_revision.authority_id != self.memory_id:
