@@ -94,7 +94,9 @@ class ProtectedMemoryRead:
             raise ContractError("operation_id no corresponde a la admisión")
         target = self.admission.target
         if (
-            getattr(self.handle, "admission_id", None) != self.admission.admission_id
+            target.memory_id != self.snapshot.memory_id
+            or target.version_id != self.snapshot.version_id
+            or getattr(self.handle, "admission_id", None) != self.admission.admission_id
             or getattr(self.handle, "memory_id", None) != target.memory_id
             or getattr(self.handle, "version_id", None) != target.version_id
             or target.owner_id != self.snapshot.owner_id
