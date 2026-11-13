@@ -87,6 +87,7 @@ class ForgetDestination:
 @dataclass(frozen=True, slots=True)
 class ForgetDestinationInventory:
     inventory_id: str
+    operation_id: str
     target: ForgetTarget
     revision: int
     destinations: tuple[ForgetDestination, ...]
@@ -96,6 +97,7 @@ class ForgetDestinationInventory:
 
     def __post_init__(self) -> None:
         _required(self.inventory_id, "inventory_id")
+        _required(self.operation_id, "operation_id")
         _required(self.coverage_reference, "coverage_reference")
         if not isinstance(self.target, ForgetTarget):
             raise ContractError("target debe ser ForgetTarget")
@@ -165,6 +167,26 @@ class ForgetVerificationReceipt:
 
 
 @dataclass(frozen=True, slots=True)
+class ForgetCanonicalStateReceipt:
+    operation_id: str
+    memory_id: str
+    expected_revision: int
+    new_revision: int
+    tombstone_reference: str
+    receipt_id: str
+
+    def __post_init__(self) -> None:
+        _required(self.operation_id, "operation_id")
+        _required(self.memory_id, "memory_id")
+        _required(self.tombstone_reference, "tombstone_reference")
+        _required(self.receipt_id, "receipt_id")
+        _positive(self.expected_revision, "expected_revision")
+        _positive(self.new_revision, "new_revision")
+        if self.new_revision <= self.expected_revision:
+            raise ContractError("new_revision debe superar expected_revision")
+
+
+@dataclass(frozen=True, slots=True)
 class ForgetOperation:
     closure: ForgetClosure
     state: ForgetOperationState
@@ -175,6 +197,7 @@ class ForgetOperation:
     resume_state: ForgetOperationState | None = None
     canonical_state_revision: int | None = None
     tombstone_reference: str | None = None
+    canonical_receipt: ForgetCanonicalStateReceipt | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.closure, ForgetClosure):
@@ -192,6 +215,8 @@ class ForgetOperation:
                 raise ContractError("inventory debe ser ForgetDestinationInventory")
             if self.inventory.target != self.closure.target:
                 raise ContractError("inventario no coincide con ForgetTarget")
+            if self.inventory.operation_id != self.closure.operation_id:
+                raise ContractError("inventario pertenece a otra operación Forget")
         if not isinstance(self.deletion_attempts, tuple) or any(
             not isinstance(item, ForgetDeletionAttempt) for item in self.deletion_attempts
         ):
@@ -252,8 +277,23 @@ class ForgetOperation:
             _positive(self.canonical_state_revision, "canonical_state_revision")
         if self.tombstone_reference is not None:
             _required(self.tombstone_reference, "tombstone_reference")
-        if (self.canonical_state_revision is None) != (self.tombstone_reference is None):
-            raise ContractError("canonical_state_revision y tombstone_reference deben coexistir")
+        canonical_fields = (
+            self.canonical_state_revision is not None,
+            self.tombstone_reference is not None,
+            self.canonical_receipt is not None,
+        )
+        if len(set(canonical_fields)) != 1:
+            raise ContractError("revisión canónica, tombstone y recibo deben coexistir")
+        if self.canonical_receipt is not None:
+            if not isinstance(self.canonical_receipt, ForgetCanonicalStateReceipt):
+                raise ContractError("canonical_receipt debe ser ForgetCanonicalStateReceipt")
+            if (
+                self.canonical_receipt.operation_id != self.closure.operation_id
+                or self.canonical_receipt.memory_id != self.closure.target.memory_id
+                or self.canonical_receipt.new_revision != self.canonical_state_revision
+                or self.canonical_receipt.tombstone_reference != self.tombstone_reference
+            ):
+                raise ContractError("recibo canónico no coincide con operación/objetivo/estado")
         if self.state is ForgetOperationState.COMPLETED:
             if self.inventory is None or not self.inventory.complete:
                 raise ContractError("COMPLETED requiere inventario completo")
@@ -599,12 +639,18 @@ class ForgetCoordinatorReducer:
         self,
         operation: ForgetOperation,
         expected_inventory_revision: int,
-        canonical_state_revision: int,
-        tombstone_reference: str,
+        receipt: ForgetCanonicalStateReceipt,
     ) -> ForgetOperation:
         _positive(expected_inventory_revision, "expected_inventory_revision")
-        _positive(canonical_state_revision, "canonical_state_revision")
-        _required(tombstone_reference, "tombstone_reference")
+        self._require(
+            isinstance(receipt, ForgetCanonicalStateReceipt),
+            "receipt debe ser ForgetCanonicalStateReceipt",
+        )
+        self._require(
+            receipt.operation_id == operation.closure.operation_id
+            and receipt.memory_id == operation.closure.target.memory_id,
+            "recibo canónico no corresponde a operación/objetivo exactos",
+        )
         self._require(operation.state is ForgetOperationState.VERIFYING, "operación no está VERIFYING")
         if (
             operation.inventory is None
@@ -616,10 +662,9 @@ class ForgetCoordinatorReducer:
                 ForgetBlockReason.INVENTORY_CHANGED,
                 ForgetOperationState.VERIFYING,
             )
-        if operation.canonical_state_revision is not None:
+        if operation.canonical_receipt is not None:
             self._require(
-                operation.canonical_state_revision == canonical_state_revision
-                and operation.tombstone_reference == tombstone_reference,
+                operation.canonical_receipt == receipt,
                 "actualización canónica repetida con resultado contradictorio",
             )
             return operation
@@ -629,23 +674,27 @@ class ForgetCoordinatorReducer:
         )
         return replace(
             operation,
-            canonical_state_revision=canonical_state_revision,
-            tombstone_reference=tombstone_reference,
+            canonical_state_revision=receipt.new_revision,
+            tombstone_reference=receipt.tombstone_reference,
+            canonical_receipt=receipt,
         )
 
     def complete(
         self,
         operation: ForgetOperation,
         current_inventory_revision: int,
-        tombstone_reference: str,
+        canonical_receipt: ForgetCanonicalStateReceipt,
     ) -> ForgetOperation:
         _positive(current_inventory_revision, "current_inventory_revision")
-        _required(tombstone_reference, "tombstone_reference")
+        self._require(
+            isinstance(canonical_receipt, ForgetCanonicalStateReceipt),
+            "canonical_receipt debe ser ForgetCanonicalStateReceipt",
+        )
         if operation.state is ForgetOperationState.COMPLETED:
             self._require(
                 operation.inventory is not None
                 and operation.inventory.revision == current_inventory_revision
-                and operation.tombstone_reference == tombstone_reference,
+                and operation.canonical_receipt == canonical_receipt,
                 "reintento COMPLETED contradice el resultado registrado",
             )
             return operation
@@ -667,8 +716,9 @@ class ForgetCoordinatorReducer:
                 ForgetOperationState.VERIFYING,
             )
         self._require(
-            operation.canonical_state_revision is not None
-            and operation.tombstone_reference == tombstone_reference,
-            "faltan actualización canónica o tombstone",
+            operation.canonical_receipt == canonical_receipt
+            and canonical_receipt.operation_id == operation.closure.operation_id
+            and canonical_receipt.memory_id == operation.closure.target.memory_id,
+            "faltan actualización canónica verificable o recibo exacto",
         )
         return replace(operation, state=ForgetOperationState.COMPLETED)
