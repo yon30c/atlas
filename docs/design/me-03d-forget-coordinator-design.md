@@ -255,3 +255,24 @@ ME-03D solo puede declararse completo como diseño/modelos cuando:
 - el diseño mantiene explícitos los límites de backups/retención.
 
 La implementación real de Forget seguirá pendiente hasta disponer de inventario aprobado, política de backups/retención, adaptadores verificables y pruebas de recuperación.
+
+
+## 16. Implementación parcial y validación
+
+Se implementó una primera capa pura en `src/atlas/memory/forget_coordinator.py`:
+
+- estados monotónicos CLOSING, SUPPRESSED, INVENTORY_PENDING, PURGING, VERIFYING, BLOCKED y COMPLETED;
+- inventario de destinos versionado y con atestación de cobertura;
+- clases cerradas de destinos, resultados de eliminación y resultados de verificación;
+- intentos idempotentes y reconciliación explícita de resultados UNKNOWN;
+- verificación ABSENT separada del ACK de eliminación;
+- gate de política de retención cuando el inventario incluye BACKUP/RESTORE_SOURCE;
+- actualización canónica y tombstone obligatorios antes de COMPLETED;
+- inventario nuevo no puede retroceder ni omitir destinos anteriores sin evidencia de retiro;
+- reintentos de COMPLETED son idempotentes y no reabren la memoria.
+
+Se exportaron los modelos desde `atlas.memory` y se añadieron 30 métodos de prueba D01–D30 en `tests/unit/test_memory_forget_coordinator.py`.
+
+En el commit de código `f0415a1eaea8c8eb61e7fa7e8dee408041e243b8`, GitHub Actions ejecutó la suite completa: Python 3.10, 3.11, 3.12 y 3.13 finalizaron correctamente. Python 3.11 reportó `Ran 353 tests`, `OK`. Workflow: [Atlas CI #43525919366](https://github.com/yon30c/atlas/actions/runs/43525919366).
+
+**Alcance de esa validación:** modelos, reducer puro y fakes. No demuestra inventario real, retención/backups aprobados, eliminación física, verificación contra almacenes reales, transacciones durables, recuperación distribuida ni Forget completado. No se han añadido adaptadores ni se ha marcado ninguna memoria/version como forgotten.
