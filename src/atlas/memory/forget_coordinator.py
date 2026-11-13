@@ -241,6 +241,11 @@ class ForgetOperation:
                 raise ContractError("BLOCKED requiere block_reason")
             if not isinstance(self.resume_state, ForgetOperationState):
                 raise ContractError("BLOCKED requiere resume_state")
+            if self.resume_state in (
+                ForgetOperationState.BLOCKED,
+                ForgetOperationState.COMPLETED,
+            ):
+                raise ContractError("resume_state debe ser una fase reanudable no terminal")
         elif self.block_reason is not None or self.resume_state is not None:
             raise ContractError("block_reason/resume_state solo aplican a BLOCKED")
         if self.canonical_state_revision is not None:
@@ -325,6 +330,7 @@ class ForgetCoordinatorReducer:
                 operation.state is ForgetOperationState.BLOCKED
                 and operation.resume_state in (
                     ForgetOperationState.INVENTORY_PENDING,
+                    ForgetOperationState.PURGING,
                     ForgetOperationState.VERIFYING,
                 )
             ),
@@ -334,6 +340,10 @@ class ForgetCoordinatorReducer:
             inventory.target == operation.closure.target,
             "inventario no corresponde al objetivo Forget",
         )
+        self._require(
+            not any(item.outcome is ForgetDeletionOutcome.UNKNOWN for item in operation.deletion_attempts),
+            "debe reconciliar intentos UNKNOWN antes de refrescar inventario",
+        )
         previous = operation.inventory
         if previous is not None:
             self._require(inventory.revision >= previous.revision, "inventario retrocedió de revisión")
@@ -342,7 +352,8 @@ class ForgetCoordinatorReducer:
                     inventory.inventory_id == previous.inventory_id
                     and inventory.destinations == previous.destinations
                     and inventory.coverage_reference == previous.coverage_reference
-                    and inventory.complete == previous.complete,
+                    and inventory.complete == previous.complete
+                    and inventory.retention_policy_reference == previous.retention_policy_reference,
                     "misma revisión de inventario con contenido contradictorio",
                 )
             else:
@@ -423,7 +434,6 @@ class ForgetCoordinatorReducer:
             return operation
         previous_unknown = any(
             item.destination_id == attempt.destination_id
-            and item.inventory_revision == attempt.inventory_revision
             and item.outcome is ForgetDeletionOutcome.UNKNOWN
             for item in operation.deletion_attempts
         )
@@ -571,6 +581,13 @@ class ForgetCoordinatorReducer:
             original_resume = operation.resume_state
         else:
             original_resume = resume_state or operation.state
+        self._require(
+            original_resume not in (
+                ForgetOperationState.BLOCKED,
+                ForgetOperationState.COMPLETED,
+            ),
+            "resume_state debe ser una fase reanudable no terminal",
+        )
         return replace(
             operation,
             state=ForgetOperationState.BLOCKED,
