@@ -128,6 +128,7 @@ class FakeReadConsistencyAndEgress:
         self.identity_subjects = {"identity-1": "owner-1"}
         self.suppressed_memories = set()
         self.forget_idempotency = {}
+        self.idempotency_tombstones = set()
         self.forget_closures = {}
 
     def export_forget_recovery(self, operation_id):
@@ -152,6 +153,19 @@ class FakeReadConsistencyAndEgress:
 
         if not isinstance(projection, ConsistencyProjection):
             return None
+        terminal = (ReadAdmissionStatus.COMPLETED, ReadAdmissionStatus.CANCELLED)
+        # The current journal projection does not yet carry every ReadTarget
+        # field needed to rebuild a live admission. Never silently drop one.
+        if any(admission.status not in terminal for admission in projection.admissions):
+            return None
+        if any(not invalidation.reconciled for invalidation in projection.invalidations):
+            return None
+        admission_ids = {admission.admission_id for admission in projection.admissions}
+        if any(
+            not closure.affected_admission_ids.issubset(admission_ids)
+            for closure in projection.forget_closures
+        ):
+            return None
         restored = cls()
         with restored._lock:
             for closure in projection.forget_closures:
@@ -164,6 +178,9 @@ class FakeReadConsistencyAndEgress:
                     (invalidation.authority_kind, invalidation.authority_id)
                 ] = invalidation.new_revision
                 restored.generation = max(restored.generation, invalidation.generation)
+            restored.idempotency_tombstones.update(
+                record.idempotency_key for record in projection.idempotency_records
+            )
         return restored
 
     @classmethod
@@ -346,6 +363,8 @@ class FakeReadConsistencyAndEgress:
                 if prior_binding != binding:
                     return None
                 return self.forget_closures.get(prior_closure.operation_id, prior_closure)
+            if idempotency_key in self.idempotency_tombstones:
+                return None
             if target.memory_id in self.suppressed_memories:
                 return None
 
@@ -1068,8 +1087,54 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
         )
         self.assertIsNotNone(restored)
         self.assertIn(memory_id, restored.suppressed_memories)
+        self.assertIn("recovered-forget-key", restored.idempotency_tombstones)
         self.assertIsNone(
             restored.admit_read(snapshot, DeliveryRouteSet(route_ids))
+        )
+
+    def test_journal_projection_refuses_to_drop_nonterminal_admissions(self):
+        admission_id = "recovered-unresolved-admission"
+        transition = ConsistencyTransition(
+            record_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074111",
+            schema_version=1,
+            record_kind=ConsistencyRecordKind.READ_ADMITTED,
+            operation_id=f"read:{admission_id}",
+            occurred_at=NOW,
+            request_id="unresolved-request",
+            actor_identity_id="identity-1",
+            subject_user_id="owner-1",
+            owner_id="owner-1",
+            memory_id=MEMORY_ID,
+            version_id=VERSION_ID,
+            snapshot_id="unresolved-snapshot",
+            revisions=AuthorizationRevisionSet(
+                memory_revision=AuthorityRevision(AuthorityKind.MEMORY, MEMORY_ID, 1),
+                version_revision=AuthorityRevision(AuthorityKind.MEMORY_VERSION, VERSION_ID, 1),
+                identity_revision=AuthorityRevision(AuthorityKind.IDENTITY, "identity-1", 1),
+            ),
+            admission_id=admission_id,
+            generation=1,
+            route_ids=frozenset({"assistant-response"}),
+        )
+        recovery = ConsistencyRecoveryState(
+            domain_id="memory-domain-unresolved-test",
+            authority_epoch=1,
+            checkpoint=None,
+            entries=(
+                JournalEntry(
+                    ConsistencyPosition("memory-domain-unresolved-test", 1, 1),
+                    transition,
+                ),
+            ),
+            head_sequence=1,
+            continuity_reference="opaque-unresolved-continuity",
+        )
+        projection = ConsistencyJournalReducer().reduce(recovery)
+
+        # A partial restore would forget the outstanding admission and could
+        # reopen a path without proving that its old emitter has been fenced.
+        self.assertIsNone(
+            FakeReadConsistencyAndEgress.restore_from_journal_projection(projection)
         )
 
     def test_content_port_rechecks_current_revisions_after_admission(self):
