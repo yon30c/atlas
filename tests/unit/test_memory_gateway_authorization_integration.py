@@ -126,6 +126,18 @@ class FakeReadAuthority:
         self.admissions = []
         self.acks = []
 
+    def begin_forget(self, *args, **kwargs):
+        raise AssertionError("Forget no se invoca en estas pruebas")
+
+    def reconcile_forget(self, operation_id):
+        return None
+
+    def begin_invalidation(self, invalidation):
+        raise AssertionError("invalidación no se invoca en estas pruebas")
+
+    def get_nonterminal_admissions(self, operation_id):
+        return None
+
     def admit_read(self, snapshot, routes, now):
         admission = ReadAdmission(
             admission_id=f"admission-{len(self.admissions) + 1}",
@@ -166,26 +178,6 @@ class FakeReadAuthority:
 
     def reconcile(self, operation_id):
         return ReconciliationResult(operation_id, frozenset(), frozenset())
-
-
-class FakeProtectedEgress:
-    def commit_and_emit(self, admission, handle, endpoint_id, emission_id, sequence, now):
-        return EgressReceipt(
-            admission.admission_id, endpoint_id, emission_id, sequence,
-            admission.generation, now
-        )
-
-    def finish(self, admission, operation_id, endpoint_id, final_sequence, now):
-        return EndpointCompletionReceipt(
-            operation_id, admission.admission_id, endpoint_id,
-            admission.generation, final_sequence, now
-        )
-
-    def fence(self, admission, operation_id, endpoint_id, new_generation, now):
-        return None
-
-    def reconcile(self, admission, endpoint_id):
-        return None
 
 
 class FixedClock:
