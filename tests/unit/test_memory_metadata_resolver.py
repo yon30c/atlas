@@ -9,6 +9,7 @@ from atlas.memory.metadata import (
 )
 from atlas.memory.models import (
     Memory,
+    MemoryClassification,
     MemoryScope,
     MemoryScopeKind,
     MemoryVersionStatus,
@@ -87,6 +88,7 @@ class MemoryMetadataResolverTests(unittest.TestCase):
             version_id=VERSION_ID,
             memory_id=MEMORY_ID,
             status=MemoryVersionStatus.APPROVED,
+            classification=MemoryClassification.CONFIDENTIAL,
             parent_version_id=None,
         )
         self.memory_port = StubMemoryPort(self.memory, self.version)
@@ -119,6 +121,7 @@ class MemoryMetadataResolverTests(unittest.TestCase):
             version_id=VERSION_ID,
             memory_id=OTHER_MEMORY_ID,
             status=MemoryVersionStatus.APPROVED,
+            classification=MemoryClassification.CONFIDENTIAL,
             parent_version_id=None,
         )
         self.assertIsNone(self.resolver.resolve_version(MEMORY_ID, VERSION_ID))
@@ -127,6 +130,7 @@ class MemoryMetadataResolverTests(unittest.TestCase):
             version_id=OTHER_VERSION_ID,
             memory_id=MEMORY_ID,
             status=MemoryVersionStatus.APPROVED,
+            classification=MemoryClassification.CONFIDENTIAL,
             parent_version_id=None,
         )
         self.assertIsNone(self.resolver.resolve_version(MEMORY_ID, VERSION_ID))
