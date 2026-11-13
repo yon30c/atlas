@@ -45,7 +45,7 @@ def make_context(kind=IdentityKind.USER, status=IdentityStatus.ACTIVE):
 class IdentitySubjectBindingTests(unittest.TestCase):
     def test_returns_subject_from_trusted_binding_not_context_user_id(self):
         port = StubBindingPort(
-            AuthenticatedUserSubject("identity-user-1", "canonical-user-7", True)
+            AuthenticatedUserSubject("identity-user-1", "canonical-user-7", True, 1)
         )
 
         result = resolve_authenticated_user_subject(make_context(), port)
@@ -64,7 +64,7 @@ class IdentitySubjectBindingTests(unittest.TestCase):
 
     def test_inactive_actor_or_binding_is_denied(self):
         active_binding = AuthenticatedUserSubject(
-            "identity-user-1", "user-7", True
+            "identity-user-1", "user-7", True, 1
         )
         port = StubBindingPort(active_binding)
         self.assertIsNone(resolve_authenticated_user_subject(
@@ -72,13 +72,13 @@ class IdentitySubjectBindingTests(unittest.TestCase):
         ))
 
         port = StubBindingPort(AuthenticatedUserSubject(
-            "identity-user-1", "user-7", False
+            "identity-user-1", "user-7", False, 1
         ))
         self.assertIsNone(resolve_authenticated_user_subject(make_context(), port))
 
     def test_mismatched_actor_binding_is_denied(self):
         port = StubBindingPort(
-            AuthenticatedUserSubject("another-identity", "user-7", True)
+            AuthenticatedUserSubject("another-identity", "user-7", True, 1)
         )
         self.assertIsNone(resolve_authenticated_user_subject(make_context(), port))
 
@@ -89,9 +89,9 @@ class IdentitySubjectBindingTests(unittest.TestCase):
 
     def test_invalid_binding_values_are_rejected(self):
         with self.assertRaises(ContractError):
-            AuthenticatedUserSubject("", "user-7", True)
+            AuthenticatedUserSubject("", "user-7", True, 1)
         with self.assertRaises(ContractError):
-            AuthenticatedUserSubject("identity-user-1", "user-7", 1)
+            AuthenticatedUserSubject("identity-user-1", "user-7", 1, 1)
 
 
 if __name__ == "__main__":
