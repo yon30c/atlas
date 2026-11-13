@@ -139,7 +139,19 @@ El fencing debe cubrir la salida completa, no solo la lectura del almacén: stre
 
 **Condición de seguridad:** si no existe un punto de entrega que pueda hacer cumplir fencing de forma verificable, el sistema no puede declarar cancelada una admisión abandonada ni confirmar la supresión lógica. Debe permanecer bloqueado/fail-closed.
 
-Esta propuesta no afirma que un contador, token, lease o registro local sea suficiente por sí solo. La propiedad decisiva es que un emisor antiguo no pueda reanudar la entrega después de que Forget haya confirmado la supresión. La semántica concreta de persistencia, fencing y recuperación queda pendiente de revisión.
+Esta propuesta no afirma que un contador, token, lease o registro local sea suficiente por sí solo. La propiedad decisiva es que un emisor antiguo no pueda reanudar la entrega después de que Forget haya confirmado la supresión.
+
+**Garantía de fencing aceptada por el propietario del proyecto:** todo punto capaz de emitir contenido protegido DEBE validar y hacer cumplir el fencing vigente para la admisión concreta antes de cada emisión efectiva. La validación debe estar acoplada al límite que autoriza la emisión, de modo que no exista una ventana entre comprobar el token y entregar bytes en la que una generación antigua pueda continuar. Una comprobación única al iniciar el stream no es suficiente si después pueden producirse nuevas emisiones.
+
+La cobertura incluye, cuando existan, respuestas completas, streaming, fragmentos, buffers de aplicación, colas de salida, exportaciones, descargas, cachés con contenido y cualquier intermediario que conserve capacidad de entregar contenido al consumidor. Los componentes que solo transporten datos deben preservar la identidad de la admisión y no pueden convertir una autorización antigua en una entrega independiente. Si un canal no puede validar el fencing de forma verificable, no puede transportar contenido protegido dentro de una operación cuya supresión vaya a declararse completada.
+
+La generación/fencing se vincula al conjunto exacto de recursos afectados por la operación de Forget. Un Forget de memoria debe cubrir todas las versiones, propuestas, referencias y destinos que formen parte de su alcance; un Forget de versión no debe ampliar silenciosamente su alcance a otras memorias o versiones. La resolución del conjunto afectado debe proceder de metadatos canónicos y del inventario de destinos, no de una lista aportada por el solicitante.
+
+La autoridad debe mantener durablemente el cierre y la generación vigente. Una caída o reinicio no reinicia generaciones ni reabre admisiones por defecto. La recuperación conserva el cierre, reconcilia admisiones y puntos de entrega, y solo permite avanzar cuando cada emisor previo esté completado o efectivamente cercado. Los acknowledgements de fencing deben estar vinculados a la admisión/generación y al punto de entrega que los emite; una confirmación genérica de proceso detenido no basta si buffers o intermediarios todavía pueden entregar datos.
+
+La garantía se refiere a emisiones futuras controladas por Atlas. No puede retirar bytes o copias que un consumidor ya recibió legítimamente antes de que comenzara Forget. Los buffers o datos aún bajo control de Atlas sí deben drenarse, descartarse o quedar cercados antes de confirmar la supresión.
+
+Esta garantía es un requisito de arquitectura aceptado, no una afirmación de que el código actual disponga de fencing ni una selección de su mecanismo físico.
 
 ## 5. Reglas de fallo cerrado
 
@@ -199,6 +211,14 @@ Las pruebas de concurrencia deben usar eventos/barreras explícitas, no sleeps n
 
 **Decisión 2 — aceptada:** la dirección de diseño será una autoridad lógica única que coordine admisión de lecturas y supresión. Su mecanismo físico, disponibilidad y recuperación ante fallos siguen pendientes de diseño.
 
+**Decisión 3 — aceptada:** toda ruta de entrega de contenido debe aplicar fencing verificable de la admisión/generación vigente en cada punto efectivo de emisión. Las admisiones antiguas solo pueden declararse canceladas cuando todos los puntos de entrega relevantes confirmen que no pueden continuar emitiendo; el timeout o la caída aparente del emisor no bastan.
+
+**Decisión 4 — recomendación adoptada para continuar el diseño:** el cierre de Forget, el avance de generación y el registro de admisiones deben ser recuperables de forma durable y conservarse cerrados tras reinicios hasta reconciliación. La recuperación no puede inferir finalización a partir de expiración de lease, pérdida de heartbeat o desaparición temporal de un proceso.
+
+**Decisión 5 — recomendación adoptada para continuar el diseño:** cada admisión debe estar correlacionada con un identificador único, el conjunto exacto de recursos afectados, la generación/fencing vigente y los puntos de entrega que puedan emitir contenido. La terminación debe registrar un resultado verificable por admisión y por punto de entrega aplicable.
+
+**Decisión 6 — recomendación adoptada para continuar el diseño:** la cobertura de Forget se determina por su alcance autorizado y por un inventario verificable de destinos y canales de entrega. Un canal que no pueda aplicar o demostrar fencing se excluye de la exposición de contenido protegido; no puede tratarse como una excepción silenciosa.
+
 Ninguno de estos puntos autoriza a seleccionar una base de datos, caché, índice, proveedor, scheduler o plataforma.
 
 ## 9. Criterio de salida
@@ -209,7 +229,9 @@ ME-03 de diseño estará listo para implementación cuando se hayan aceptado las
 - vincular el resultado CAM con el snapshot exacto;
 - comprobar la supresión en el mismo límite de admisión/lectura;
 - coordinar lecturas en curso con Forget;
-- añadir pruebas deterministas de carreras;
+- aplicar fencing en cada punto efectivo de emisión y cubrir buffers/intermediarios;
+- recuperar durablemente cierres, generaciones y admisiones sin reabrir antes de reconciliar;
+- añadir pruebas deterministas de carreras, reanudación de emisores antiguos, caída/reinicio y fencing de cada canal;
 - mantener los adaptadores de prueba separados de cualquier afirmación de integración real.
 
 **Estado actual:** este documento registra una propuesta de diseño. No implementa snapshots, leases, supresión, Forget, persistencia ni garantías de runtime.
