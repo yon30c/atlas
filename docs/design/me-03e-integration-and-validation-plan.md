@@ -224,3 +224,18 @@ Workflow de pruebas: [Atlas CI #43529302568](https://github.com/yon30c/atlas/act
 El commit documental actual `e2e2d31cb407b9deb33c401ff74bb32457e6b40c` también pasó la misma matriz: [Atlas CI #43529334129](https://github.com/yon30c/atlas/actions/runs/43529334129).
 
 Esto valida los tests puros y el fake de proceso único. No valida recuperación durable ni reconstrucción de admisiones activas.
+
+## 16. ME-03F — Diseño de schema v2 para recuperación exacta de admisiones
+
+La inspección de `ConsistencyTransition`, `ConsistencyProjection` y `ReadTarget` confirmó que `READ_ADMITTED` v1 no conserva el scope canónico. El reducer no puede reconstruir `ReadTarget(memory_id, version_id, owner_id, scope)` sin inferir PRIVATE/PROJECT. Además, la proyección no conservaba el recibo terminal de la admisión como campo específico.
+
+Se añadió `docs/design/me-03f-journal-admission-recovery-schema-design.md` con una propuesta aditiva:
+
+- schema v2 añade `scope_kind` y `scope_project_id`, exige `owner_id`, `actor_identity_id` y `request_id`, y valida PRIVATE/PROJECT contra las revisiones canónicas;
+- schema v1 sigue siendo legible para replay histórico, pero sus admisiones sin scope explícito se marcan no recuperables y no pueden restaurarse como lecturas vivas;
+- la proyección conserva owner, scope, admitted_at, clasificación de recuperabilidad y recibo terminal de admisión;
+- las admisiones no terminales recuperadas se mantienen unresolved/fenced; no reviven como emisores activos;
+- los IDs de recibos no se consideran prueba: un verificador independiente debe validar emisor, endpoint, generación, secuencia y vínculo con la admisión;
+- cualquier nueva entrega de contenido exige una autorización CAM y admisión nuevas.
+
+La propuesta incluye 21 escenarios F01–F21 y una secuencia de implementación por etapas. No modifica contratos normativos ni código; no selecciona almacenamiento, transporte o mecanismo criptográfico. La recuperación durable y el runtime siguen bloqueados.
