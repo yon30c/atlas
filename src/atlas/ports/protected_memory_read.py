@@ -96,20 +96,22 @@ class ProtectedEgressPort(Protocol):
     def finish(
         self,
         admission: ReadAdmission,
+        operation_id: str,
         endpoint_id: str,
         final_sequence: int,
         now: datetime,
     ) -> EndpointCompletionReceipt | None:
-        """Confirma que no quedan buffers, fragmentos ni trabajo pendiente."""
+        """Confirma finalización para la operación/admisión exacta."""
 
     def fence(
         self,
         admission: ReadAdmission,
+        operation_id: str,
         endpoint_id: str,
         new_generation: int,
         now: datetime,
     ) -> EndpointFenceReceipt | None:
-        """Confirma que el endpoint no puede emitir con generaciones anteriores."""
+        """Confirma fencing para la operación y generación exactas."""
 
     def reconcile(
         self,
