@@ -403,7 +403,7 @@ En el commit de referencia de esta propuesta:
 - el fake de recuperación no prueba reinicios reales, concurrencia entre procesos ni almacenamiento durable;
 - no existe emisor/verificador confiable de OwnerDecisionProof;
 - no se han completado inventarios reales de entrega y persistencia;
-- se escribieron 32 pruebas unitarias de modelos/fake de journal en `tests/unit/test_memory_journal.py` y 20 pruebas de fallos C45–C64 en `tests/unit/test_memory_journal_failures.py`; 51 en total, ninguna ejecutada;
+- se escribieron 32 pruebas unitarias de modelos/fake de journal en `tests/unit/test_memory_journal.py` y 20 pruebas de fallos C45–C64 en `tests/unit/test_memory_journal_failures.py`; 52 en total, ninguna ejecutada;
 - no se ha ejecutado la suite completa ni las pruebas C01–C64 en esta etapa.
 
 **Conclusión:** los modelos puros, el puerto tipado, el fake de proceso único y los 20 casos de fallo C45–C64 ya están escritos. La cobertura actual valida el comportamiento esperado de los fakes, no de un journal durable ni de los componentes reales de Atlas. El siguiente paso es revisar estáticamente los casos, ejecutar la suite en un entorno disponible y cerrar las brechas del modelo antes de diseñar adaptadores.
