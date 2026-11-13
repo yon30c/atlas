@@ -35,6 +35,9 @@ class EndpointProjection:
     status: EndpointProjectionStatus
     receipt_ids: frozenset[str]
     terminal_receipt_id: str | None = None
+    terminal_operation_id: str | None = None
+    terminal_generation: int | None = None
+    final_sequence: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +57,8 @@ class AdmissionProjection:
     route_ids: frozenset[str]
     status: ReadAdmissionStatus
     terminal_receipt_id: str | None
+    terminal_operation_id: str | None
+    terminal_generation: int | None
     endpoints: tuple[EndpointProjection, ...]
 
 
@@ -239,6 +244,9 @@ class ConsistencyJournalReducer:
                         "status": EndpointProjectionStatus.OPEN,
                         "receipt_ids": set(),
                         "terminal_receipt_id": None,
+                        "terminal_operation_id": None,
+                        "terminal_generation": None,
+                        "final_sequence": None,
                     }
                     for endpoint_id in transition.route_ids
                 }
@@ -257,6 +265,8 @@ class ConsistencyJournalReducer:
                     "route_ids": transition.route_ids,
                     "status": ReadAdmissionStatus.ADMITTED,
                     "terminal_receipt_id": None,
+                    "terminal_operation_id": None,
+                    "terminal_generation": None,
                     "endpoints": endpoints,
                 }
                 continue
@@ -365,6 +375,13 @@ class ConsistencyJournalReducer:
                 add_receipt(transition.receipt_id)
                 endpoint["receipt_ids"].add(transition.receipt_id)
                 endpoint["terminal_receipt_id"] = transition.receipt_id
+                endpoint["terminal_operation_id"] = transition.operation_id
+                endpoint["terminal_generation"] = transition.generation
+                endpoint["final_sequence"] = (
+                    transition.final_sequence
+                    if kind is ConsistencyRecordKind.ENDPOINT_COMPLETED
+                    else None
+                )
                 continue
 
             if kind is ConsistencyRecordKind.ADMISSION_RECONCILED:
@@ -414,6 +431,8 @@ class ConsistencyJournalReducer:
                 add_receipt(transition.receipt_id)
                 item["status"] = terminal
                 item["terminal_receipt_id"] = transition.receipt_id
+                item["terminal_operation_id"] = transition.operation_id
+                item["terminal_generation"] = transition.generation
                 continue
 
             if kind is ConsistencyRecordKind.FORGET_CLOSED:
@@ -626,6 +645,8 @@ class ConsistencyJournalReducer:
                 route_ids=item["route_ids"],
                 status=item["status"],
                 terminal_receipt_id=item["terminal_receipt_id"],
+                terminal_operation_id=item["terminal_operation_id"],
+                terminal_generation=item["terminal_generation"],
                 endpoints=tuple(
                     EndpointProjection(
                         endpoint_id=endpoint_id,
