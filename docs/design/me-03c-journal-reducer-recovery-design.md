@@ -115,11 +115,12 @@ Colecciones vacías solo se aceptan cuando el tipo permite inventario vacío y a
 
 ## 5. Modelos de proyección
 
-La implementación añadirá modelos inmutables y sin payload para la proyección reducida:
+La implementación añade modelos inmutables y sin payload para la proyección reducida:
 - estado de endpoint (última secuencia, recibos, COMPLETED/FENCED/UNRESOLVED);
 - estado de admisión (target, generación, rutas, estado);
 - estado de cierre Forget e invalidación;
-- proyección del dominio (dominio, época, posición, admisiones, cierres, invalidaciones).
+- tombstones de idempotencia (clave, operación y registro);
+- proyección del dominio (dominio, época, posición, admisiones, cierres, invalidaciones y tombstones).
 
 Las colecciones se exponen como tuplas ordenadas o frozensets, nunca como diccionarios mutables. El reducer no conservará el contenido ni hashes.
 
@@ -152,13 +153,13 @@ Se amplía C45–C64 con escenarios ME-03C:
 | C75 | FORGET_SUPPRESSED con admisión no terminal | Rechazo. |
 | C76 | INVALIDATION_CLOSED con inventario que no coincide con revisiones | Rechazo. |
 | C77 | INVALIDATION_RECONCILED con endpoint pendiente | Rechazo. |
-| C78 | Recibo repetido idéntico | Replay idempotente solo si la clave/identidad canónica coincide. |
+| C78 | receipt_id repetido en dos registros distintos | Rechazo; el replay idempotente se resuelve en append mediante idempotency_key, antes de duplicar el evento en el journal. |
 | C79 | Mismo receipt_id correlacionado a otro hecho | Rechazo. |
 | C80 | Checkpoint con dominio/época/posición inconsistente | Rechazo estructural. |
 | C81 | continuity_reference presente pero sin verificador confiable | No elevar a continuidad verificada. |
 | C82 | Registro desconocido o futuro | Cuarentena completa del dominio. |
 | C83 | Transición terminal repetida con resultado distinto | Rechazo. |
-| C84 | Orden de cierre egress ambiguo | Estado UNRESOLVED; no generar proyección operativa reabierta. |
+| C84 | ENDPOINT_FENCED usa generación distinta a la del cierre exacto | Rechazo; no inferir ni corregir la generación del recibo. |
 | C85 | Checkpoint con referencia pero sin proyección base reconstruida | Reducer falla cerrado; no asume que el estado previo está vacío. |
 | C86 | Reutilización de idempotency_key en otra operación | Rechazo por conflicto. |
 | C87 | Recuperación con clave de idempotencia vigente | La proyección conserva el tombstone opaco para impedir replay.
@@ -170,7 +171,7 @@ Los escenarios C65–C87 se implementarán inicialmente como pruebas puras del v
 1. Cerrar el esquema de campos por tipo en `ConsistencyTransition`.
 2. Reforzar invariantes estructurales de `JournalEntry`, `ConsistencyCheckpoint` y `ConsistencyRecoveryState`.
 3. Añadir proyección inmutable y reducer determinista.
-4. Añadir C65–C84 sin borrar ni rebajar C45–C64.
+4. Añadir C65–C87 sin borrar ni rebajar C45–C64.
 5. Revisar compatibilidad de los fakes existentes y actualizar el contrato del journal.
 6. Revisar diff/refs y estado CI. Sin DB, adaptadores, despliegue, PR ni merge.
 
@@ -182,7 +183,7 @@ ME-03C no se declara cerrado hasta que:
 - un checkpoint no se utiliza hasta que su proyección base esté decodificada y verificada;
 - los registros desconocidos o ambiguos fallan cerrados;
 - se diferencia estructuralidad de continuidad confiable;
-- C45–C84 están representados y ejecutados en entorno de pruebas;
+- C45–C87 están representados y ejecutados en entorno de pruebas;
 - no se afirma persistencia, recuperación real o Forget completado sin adaptadores/evidencia reales.
 
 
