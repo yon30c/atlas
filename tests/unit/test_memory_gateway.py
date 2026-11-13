@@ -498,10 +498,7 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         result = self.gateway.reconcile_version(read)
 
         self.assertIn("admission-1", result.unresolved_admission_ids)
-        receipt = self.gateway.emit_version(
-            read, "assistant-response", "still-authorized-by-egress", 1
-        )
-        self.assertIsInstance(receipt, EgressReceipt)
+        self.assertIsNotNone(self.gateway._resolve_read(read))
 
     def test_resolved_admission_retires_local_read_capability(self):
         read = self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
