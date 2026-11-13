@@ -1,6 +1,6 @@
 # DM-01 — Especificación del modelo de dominio de Atlas Core
 
-**Estado:** recomendaciones técnicas aprobadas por el propietario; decisiones de detalle pendientes.  
+**Estado:** recomendaciones técnicas y decisiones de detalle cerradas para la especificación de dominio; parámetros de infraestructura fuera de alcance.  
 **Rama base:** `main`  
 **Commit base:** `8832e59c8d6895750bfc7053a26bf4f4f3932437`  
 **Alcance:** modelo de dominio, identidad de recursos y contrato lógico de autorización requerido para Memory Engine / Memory Gateway.  
@@ -155,7 +155,8 @@ Invariantes:
 4. `parent_version_id`, cuando exista, debe referir a una versión de la misma memoria.
 5. `content`, `classification` y `provenance` no se modifican en sitio.
 6. Una corrección crea otra versión.
-7. La clasificación es obligatoria, pero su catálogo y reglas de propagación siguen pendientes.
+7. La clasificación es obligatoria y utiliza el catálogo ordenado INTERNAL < CONFIDENTIAL < RESTRICTED, definido en §9.3.5. La clasificación no concede permisos ni sustituye CAM.
+8. Una nueva versión hereda por defecto la clasificación de la versión aprobada vigente. Cualquier cambio solicitado requiere revisión y decisión directa del propietario; una reducción nunca se aplica automáticamente.
 8. Los campos de revisión son nulos mientras la versión no haya sido decidida y deben ser coherentes con el resultado de revisión.
 
 ### 4.4 Estados de MemoryVersion
@@ -210,7 +211,7 @@ Semántica propuesta:
 - `NEW_VERSION`: identifica una memoria existente y una nueva versión pendiente; hereda propietario y scope de la memoria objetivo. La propuesta no puede cambiar propietario ni scope.
 - El contenido y la clasificación propuestos pertenecen a la versión, no a una copia mutable dentro de la propuesta.
 - La propuesta no es por sí misma una memoria aprobada ni un permiso de lectura.
-- La relación exacta entre persistencia de la propuesta y creación de la memoria lógica queda sujeta a la estrategia transaccional que se defina; no se selecciona almacenamiento aquí.
+- La creación de Memory, MemoryVersion y MemoryProposal para CREATE_MEMORY constituye una única unidad lógica atómica. Para NEW_VERSION, la creación de MemoryVersion y MemoryProposal también es atómica. La semántica se detalla en §9.3.9; no selecciona almacenamiento físico.
 
 ### 4.6 MemoryProvenance
 
@@ -237,7 +238,8 @@ Reglas:
 - No se copian secretos ni payloads innecesarios.
 - Una referencia de evidencia se resuelve bajo sus propios controles de acceso.
 - La procedencia no sustituye identidad, autenticación, scope ni CAM.
-- Los catálogos de `SourceKind`, la retención de referencias y la estructura exacta de `ProvenanceContext` siguen pendientes.
+- El catálogo de SourceKind y la estructura de ProvenanceContext se fijan en §9.3.10.
+- Las referencias se conservan como identificadores opacos y metadatos mínimos; no se copia el contenido de la fuente salvo que sea el propio contenido de memoria autorizado.
 
 ## 5. Identidad de recursos protegidos
 
@@ -281,14 +283,9 @@ Toda operación dirigida a una `MemoryVersion` debe incluir o resolver también 
 
 No se acepta como autoridad un `owner_id`, `project_id` o scope declarado libremente por el solicitante. Esos datos deben proceder de una fuente de metadatos confiable.
 
-**PENDIENTE**
+**DECISIÓN CERRADA — §9.3.1**
 
-Debe decidirse si el permiso sobre una versión se representa mediante:
-
-1. el ID de la versión concreta, junto con su memoria padre; o
-2. el ID de la memoria lógica, con la versión como subrecurso validado.
-
-La implementación no debe elegir una de estas semánticas por accidente. La decisión debe considerar cómo se espera que los Grants vigentes se comporten cuando se crea una versión nueva.
+El Grant de lectura/propuesta se limita al ID exacto de la memoria lógica (memory_id). La versión solicitada se expresa como subrecurso exacto (version_id) junto con parent_resource_id=memory_id. CAM debe resolver ambos IDs desde metadatos confiables y comprobar que la versión pertenece a esa memoria. Un Grant sobre una memoria no autoriza otra memoria; sí cubre las versiones que pertenecen a esa memoria, sin necesidad de emitir un Grant nuevo por cada versión. Una operación que no especifique versión solo puede utilizar la versión aprobada vigente resuelta por Gateway.
 
 ## 6. Alcance de Grants y corrección de CAM
 
@@ -362,7 +359,7 @@ Esta regla no autoriza memoria PROJECT, memoria de otro propietario, ni operacio
 
 Para `memory.approve`, `memory.reject` y `memory.forget`, la coincidencia de propietario no es suficiente: también se exige evidencia verificable de una decisión iniciada directamente por el propietario. Un Grant no sustituye esa evidencia.
 
-El conjunto exacto de acciones que puede ejecutar el propietario sobre su memoria privada debe alinearse con el catálogo de permisos y con las restricciones de no delegabilidad antes de implementar.
+La ruta PRIVATE del propietario se limita a memory.read y memory.propose, más memory.export si se habilita expresamente. memory.approve, memory.reject y memory.forget requieren además prueba directa de propietario según §9.3.4. Ninguna otra acción queda autorizada por el mero hecho de ser propietario; cada acción sigue sujeta a CAM.
 
 ### 6.5 Solicitud de autorización tipada
 
@@ -411,7 +408,11 @@ Debe identificarse qué componente proporciona a CAM o a Gateway la relación au
 
 El solicitante no puede ser esa fuente. Tampoco se debe asumir que el Registry del Broker es la fuente de metadatos de memoria: su alcance es independiente y está protegido.
 
-La solución puede ser un puerto de resolución de metadatos o una fuente autoritativa equivalente, pero su interfaz, confianza, orden de consulta y garantías deben aprobarse antes de implementar Gateway/CAM. No se define aquí una base de datos ni un adaptador.
+**DECISIÓN CERRADA — §9.3.2**
+
+La autoridad de metadatos se implementa mediante puertos de lectura tipados, separados de CAM y del solicitante: MemoryMetadataPort resuelve memoria, versiones, propietario, scope, proyecto, estado, versión vigente y relación padre/hijo; ProjectMetadataPort verifica existencia/estado del proyecto; EnvironmentMetadataPort verifica el entorno cuando aplique; ResourceMetadataResolver enruta por tipo de recurso al resolver registrado.
+
+Los adaptadores consultan la fuente canónica del dominio correspondiente. Para memoria, la fuente canónica es el agregado de memoria; para proyectos, la autoridad de proyectos definida por Atlas. El Registry del Broker no es fuente de metadatos de memoria ni se reutiliza como sustituto. El solicitante nunca aporta metadatos autoritativos. Los puertos devuelven metadatos mínimos, no contenido. Si falta un resolver, hay duplicidad, inconsistencia, timeout o no se puede verificar el vínculo padre/hijo, CAM deniega. La enumeración puede obtener IDs candidatos, pero Gateway debe resolver y autorizar cada uno antes de exponer incluso metadatos protegidos. No se selecciona base de datos ni adaptador.
 
 ## 7. Flujos de dominio
 
@@ -500,9 +501,9 @@ Estas invariantes deben traducirse en QA-01:
 | DM-01-19 | CAM no disponible, error, scope incompleto o metadatos no verificables producen denegación. |
 | DM-01-20 | No existe fallback a autorización por tipo ni a consulta sin filtro de scope. |
 
-## 9. Registro de aprobación y decisiones pendientes
+## 9. Registro de decisiones técnicas
 
-El propietario aprobó las recomendaciones técnicas de DM-01. La aprobación fija las direcciones de diseño que se enumeran a continuación; no sustituye las reglas normativas de CT-01 a CT-08 ni resuelve detalles que el documento no especificaba.
+Las recomendaciones y decisiones de detalle de DM-01 quedan cerradas conforme a las decisiones siguientes. Estas precisan cómo implementar los contratos; no modifican las reglas normativas de CT-01 a CT-08 ni seleccionan infraestructura.
 
 ### 9.1 Recomendaciones aprobadas
 
@@ -515,24 +516,118 @@ El propietario aprobó las recomendaciones técnicas de DM-01. La aprobación fi
 | §6.4 | La memoria PRIVATE del propietario usa una ruta explícita y limitada de CAM, sin Grant de proyecto y sin omitir Gateway/CAM. |
 | §6.5 | AuthorizationRequest adopta una referencia tipada al recurso, con scope y relación padre cuando corresponda. |
 
-### 9.2 Decisiones que continúan pendientes
+### 9.2 Estado de las decisiones originales
 
 | ID | Decisión | Recomendación inicial | Estado |
 |---|---|---|---|
 | DM-P01 | Representación del alcance de recursos en Grant | Conjunto explícito e inmutable de IDs; sin wildcard | **Aprobado** |
-| DM-P02 | Semántica de acceso a versiones | Decidir si Grant apunta a memory_id o version_id, conservando vínculo padre | Requiere aprobación |
+| DM-P02 | Semántica de acceso a versiones | Grant sobre memory_id exacto; version_id como subrecurso exacto validado contra su padre | Cerrado — §9.3.1 |
 | DM-P03 | Autorización de creación PROJECT | Autorizar la acción sobre el ID exacto del proyecto contenedor | **Aprobado** |
-| DM-P04 | Fuente autoritativa de metadatos | Definir un puerto/fuente confiable para owner, scope y relación padre | Bloqueante |
-| DM-P05 | Catálogo de clasificación | Definir valores y propagación | Pendiente |
-| DM-P06 | Evidencia directa del propietario | Definir mecanismo verificable y no delegable | Bloqueante para review/forget |
-| DM-P07 | Formato y generación de IDs | Mantener IDs opacos hasta decisión | Pendiente |
-| DM-P08 | Transferencia/reclasificación de scope | Mantener prohibición de cambios implícitos; definir flujo explícito | Pendiente |
-| DM-P09 | Semántica de propuestas | Definir creación transaccional de Memory/Version/Proposal | Pendiente antes de ME-01 |
-| DM-P10 | Retención histórica y referencias de procedencia | Definir política sin debilitar olvido | Pendiente |
-| DM-P11 | Catálogo SourceKind y estructura ProvenanceContext | Definir tipos permitidos y minimización de datos | Pendiente |
+| DM-P04 | Fuente autoritativa de metadatos | Puertos tipados por dominio y resolver de recursos; fuente canónica de cada dominio | Cerrado — §9.3.2 |
+| DM-P05 | Catálogo de clasificación | INTERNAL < CONFIDENTIAL < RESTRICTED; herencia por defecto y cambio sujeto a decisión directa | Cerrado — §9.3.5 |
+| DM-P06 | Evidencia directa del propietario | Prueba de emisor confiable, ligada a acción y recursos exactos, de un solo uso | Cerrado como contrato de puerto — §9.3.4 |
+| DM-P07 | Formato y generación de IDs | UUIDv7 canónico para IDs generados por Atlas; IDs externos preservados como opacos | Cerrado — §9.3.6 |
+| DM-P08 | Transferencia/reclasificación de scope | No soportado en v1; cualquier migración futura será flujo explícito separado | Cerrado — §9.3.7 |
+| DM-P09 | Semántica de propuestas | Creación atómica del agregado/propuesta; idempotencia por clave de envío | Cerrado — §9.3.9 |
+| DM-P10 | Retención histórica y referencias de procedencia | Historial ligado a vida de memoria; sin TTL automático; olvido elimina todo destino verificable | Cerrado para política de dominio — §9.3.8 |
+| DM-P11 | Catálogo SourceKind y estructura ProvenanceContext | Catálogo cerrado y contexto mínimo tipado | Cerrado — §9.3.10 |
 | DM-P12 | Operaciones colectivas | Deshabilitadas salvo autorización explícita de un contenedor concreto | **Aprobado** |
 
-No se debe implementar una decisión pendiente por inferencia ni introducirla accidentalmente en un constructor de dataclass. La aprobación de §9.1 no resuelve DM-P02, DM-P04, DM-P05, DM-P06 ni las demás decisiones que conservan estado pendiente.
+No se deben introducir nuevas rutas de autorización por inferencia. Los detalles de autenticación, persistencia, adaptadores, retención física de backups e inventario de destinos se mantienen como decisiones de infraestructura/operación, sin reabrir las decisiones de dominio aquí cerradas.
+
+### 9.3 Resoluciones técnicas adoptadas
+
+#### 9.3.1 DM-P02 — Autorización de versiones
+
+El recurso de autorización estable es la memoria lógica. El Grant se limita al ID exacto de Memory. Una operación sobre una versión incluye además el version_id exacto y parent_resource_id igual al memory_id. CAM comprueba el Grant contra el memory_id y resuelve version_id desde MemoryMetadataPort, verificando pertenencia, estado y parent. Un Grant para una memoria cubre sus versiones presentes y futuras únicamente dentro de esa memoria; nunca cubre otra memoria por tipo o similitud. Si se pide una versión concreta, no se sustituye silenciosamente por la vigente. Si no se especifica versión en una lectura ordinaria, Gateway resuelve la versión aprobada vigente y autoriza la memoria antes de recuperar contenido.
+
+#### 9.3.2 DM-P04 — Autoridad de metadatos
+
+Se adoptan puertos lógicos de lectura, sin fijar adaptadores ni almacenamiento:
+
+- MemoryMetadataPort: resuelve memoria/versiones, propietario, scope, proyecto, estado, versión vigente y relación padre/hijo.
+- ProjectMetadataPort: verifica existencia y estado del proyecto.
+- EnvironmentMetadataPort: verifica el entorno cuando la política lo requiera.
+- ResourceMetadataResolver: enruta por resource_type al resolver registrado.
+
+Los adaptadores consultan la fuente canónica del dominio correspondiente. MemoryMetadataPort es autoridad para los metadatos de memoria; ProjectMetadataPort es autoridad para proyecto. El Registry del Broker no es fuente de metadatos de memoria ni se reutiliza como sustituto. El solicitante nunca aporta metadatos autoritativos. Los puertos devuelven metadatos mínimos, nunca contenido, fragmentos o embeddings. Si falta un resolver, hay duplicidad, inconsistencia, timeout o no se puede verificar el vínculo padre/hijo, CAM deniega. La enumeración puede obtener IDs candidatos, pero Gateway debe resolver y autorizar cada uno antes de exponer metadatos protegidos.
+
+#### 9.3.3 Orden obligatorio de autorización
+
+1. Validar identidad autenticada y estado.
+2. Validar contexto y acción.
+3. Resolver metadatos autoritativos del recurso y, cuando aplique, del padre y proyecto.
+4. Comparar exactamente IDs, owner, scope, project y environment con contexto y Grant.
+5. Aplicar la regla PRIVATE del propietario o el Grant explícito.
+6. Aplicar no delegabilidad y verificar prueba directa cuando la acción sea approve/reject/forget.
+7. Emitir ALLOW solo si todas las condiciones son verificables; en cualquier otro caso DENY.
+
+La autorización precede a la lectura de contenido. No se usa el contenido para decidir si se autoriza su propia lectura.
+
+#### 9.3.4 DM-P06 — Evidencia directa del propietario
+
+Se define el puerto OwnerDecisionVerifier; no se selecciona proveedor de autenticación ni mecanismo criptográfico:
+
+OwnerDecisionProof:
+- proof_id opaco e issuer confiable.
+- subject_user_id y actor_identity_id.
+- action exacta: memory.approve, memory.reject o memory.forget.
+- memory_id y, según la operación, proposal_id/version_id exactos.
+- request_id, issued_at, expires_at, nonce y delegation=NONE.
+
+OwnerDecisionVerifier.verify_and_consume valida y consume la prueba contra la acción, recursos, sujeto autenticado y request_id esperados.
+
+Invariantes:
+- La prueba procede de un emisor de autenticación confiable, independiente de Assistant, Memory Engine, Skills y servicios de dominio.
+- El sujeto autenticado, actor USER y propietario canónico deben coincidir.
+- La prueba vincula acción y recursos exactos; es de corta duración y de un solo uso.
+- Repetición, expiración, discrepancia, emisor desconocido o verificador no disponible producen DENY.
+- Gateway nunca crea ni firma la prueba. Un booleano, texto de chat, afirmación del Assistant, ausencia de delegación en OperationContext o Grant no son prueba válida.
+- Si el flujo de autenticación futuro no puede producirla, approve/reject/forget permanecen deshabilitados; no se implementa bypass provisional.
+
+#### 9.3.5 DM-P05 — Catálogo de clasificación
+
+Catálogo cerrado y ordenado:
+
+| Valor | Orden | Uso |
+|---|---:|---|
+| INTERNAL | 1 | Contexto no especialmente sensible. |
+| CONFIDENTIAL | 2 | Información personal, privada o de negocio que no debe exponerse por defecto. |
+| RESTRICTED | 3 | Información de impacto elevado que requiere controles adicionales definidos por política. |
+
+La clasificación es metadato de sensibilidad, no permiso ni sustituto de scope/CAM. Una nueva memoria comienza en CONFIDENTIAL salvo elección explícita más restrictiva del propietario. Una nueva versión hereda la clasificación aprobada vigente. Elevar o reducir clasificación exige decisión directa del propietario vinculada a la propuesta/versión exacta. No hay downgrade automático por inferencia, resumen, importación o cambio de origen. RESTRICTED nunca amplía permisos; si exige controles no implementados, la operación correspondiente deniega. El catálogo no autoriza almacenar credenciales, secretos de autenticación ni datos prohibidos por otros contratos.
+
+#### 9.3.6 DM-P07 — Identificadores
+
+Los identificadores generados por Atlas para Memory, MemoryVersion, MemoryProposal y operaciones de supresión utilizan UUIDv7 en representación canónica lowercase con guiones. El tipo se conserva en el tipo/campo de dominio, no mediante prefijos usados para autorización. Los IDs externos (usuario, proyecto, entorno y fuentes) se conservan opacos según su autoridad; no se reescriben ni normalizan. Los IDs no incluyen nombre, correo, contenido, scope ni datos derivados del usuario. Nunca se reutilizan; colisión o formato inválido produce error, sin corrección silenciosa.
+
+#### 9.3.7 DM-P08 — Transferencia y reclasificación de scope
+
+Transferencia de propietario, conversión PRIVATE/PROJECT y movimiento entre proyectos no están soportados en v1. owner_id y scope son inmutables durante la vida de una memoria. Una petición de cambio se rechaza con error de dominio explícito. Una futura migración deberá ser un flujo separado: lectura autorizada del origen, propuesta de una memoria destino independiente, revisión directa del propietario, procedencia que enlace ambos IDs opacos y decisión explícita sobre el olvido del origen. La migración no copia Grants, aprobaciones ni historial de autorización; no puede ser automática, implícita ni delegada.
+
+#### 9.3.8 DM-P10 — Retención de historial y procedencia
+
+No hay TTL automático para versiones aprobadas ni superseded mientras la memoria lógica siga existiendo. Las versiones rechazadas se conservan como historial, pero no se incluyen en recuperación aprobada. Las referencias de procedencia conservan solo tipo, ID opaco, instante de captura, actor y disponibilidad; no se copia la fuente original por defecto. El olvido abarca todas las versiones, propuestas, referencias y destinos derivados del inventario. No se declara forgotten mientras exista un destino aplicable sin verificar. El plazo físico de retención de backups sigue siendo parámetro operativo obligatorio antes de implementar Forget; mientras un backup retenido contenga el contenido, el proceso no está completado y la supresión lógica bloquea su reintroducción. La evidencia mínima de supresión no conserva contenido, fragmentos ni hashes de contenido.
+
+#### 9.3.9 DM-P09 — Atomicidad e idempotencia de propuestas
+
+CREATE_MEMORY crea Memory con puntero vigente nulo, primera MemoryVersion pending_review (version_number=1) y MemoryProposal en una única transacción lógica. NEW_VERSION valida Memory y revisión esperada, asigna el siguiente version_number no reutilizado, crea MemoryVersion pending_review con parent_version_id de la versión aprobada vigente y crea MemoryProposal en una única transacción lógica. Se confirma todo o nada. La asignación de versión y parent usa revisión optimista/CAS o equivalente; ante conflicto se aborta y reintenta como nueva operación. Cada envío requiere idempotency_key opaca, única por actor y operación: misma clave y mismo payload canónico devuelve el mismo resultado; misma clave con payload distinto produce conflicto. No se deriva idempotencia de request_id sin contrato explícito. La tecnología transaccional queda fuera de alcance.
+
+#### 9.3.10 DM-P11 — Procedencia tipada
+
+SourceKind es un catálogo cerrado: USER_INPUT, CONVERSATION, FILE, CONNECTOR, TOOL_RESULT, SYSTEM_EVENT, DERIVED e IMPORT.
+
+ProvenanceContext mínimo:
+- origin declarado;
+- actor_identity_id;
+- request_id y correlation_id;
+- project_id y environment_id cuando correspondan y hayan sido resueltos por autoridad confiable.
+
+origin no autentica al actor. source_ref y evidence_refs son referencias opacas tipadas; nunca incluyen secretos, URLs con credenciales ni payloads completos. transformation conserva un resumen breve de transformaciones materiales, no razonamiento interno ni datos innecesarios. Una fuente desaparecida conserva su referencia con estado UNAVAILABLE. Toda lectura de evidencia vuelve a pasar por autorización del recurso referenciado.
+
+#### 9.3.11 DM-P12 — Operaciones colectivas
+
+Las operaciones colectivas por tipo permanecen deshabilitadas en v1. list_visible obtiene IDs candidatos bajo filtros de scope y autoriza cada memoria individualmente antes de devolver metadatos protegidos. No existe Grant wildcard, autorización masiva por tipo ni conteo de recursos no autorizados. La creación PROJECT se evalúa contra el ID exacto del proyecto contenedor conforme a §6.3.
 
 ## 10. Exclusiones
 
@@ -549,12 +644,11 @@ DM-01 no define:
 
 ## 11. Secuencia posterior
 
-1. Revisar y aprobar/rechazar las propuestas DM-P01 a DM-P12.
-2. Cerrar la fuente confiable de metadatos y la semántica de IDs/recurso.
-3. Preparar QA-01 con pruebas positivas, negativas, aislamiento y concurrencia.
-4. Implementar ME-01: modelos y validaciones puras, sin adaptadores de infraestructura.
-5. Implementar ME-02: MemoryGateway y CAM, únicamente después de que la autorización exacta por recurso esté probada.
-6. Abordar Review y Forget en fases separadas, según evidencia de propietario y estrategia de supresión.
+1. Preparar QA-01 con pruebas positivas, negativas, aislamiento, idempotencia y concurrencia a partir de las decisiones cerradas.
+2. Implementar ME-01: modelos y validaciones puras, sin adaptadores de infraestructura.
+3. Implementar ME-02: MemoryGateway y CAM, únicamente después de que la autorización exacta por recurso esté probada.
+4. Implementar Review usando el puerto de verificación de decisión directa del propietario; si no existe emisor confiable, denegar.
+5. Implementar Forget solo después de definir el inventario real de destinos, la retención de backups y criterios verificables de purga.
 
 ## 12. Fuentes normativas
 
