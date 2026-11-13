@@ -125,6 +125,7 @@ def make_version(
         status=status,
         classification=classification,
         parent_version_id=None,
+        revision=1,
     )
 
 
