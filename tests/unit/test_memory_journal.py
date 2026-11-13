@@ -201,6 +201,44 @@ class ConsistencyJournalModelTests(unittest.TestCase):
         )
         self.assertEqual(item.final_sequence, 0)
 
+    def test_forget_closed_rejects_route_and_admission_inventory_mismatch(self):
+        with self.assertRaises(ContractError):
+            ConsistencyTransition(
+                record_id=RECORD_2,
+                schema_version=1,
+                record_kind=ConsistencyRecordKind.FORGET_CLOSED,
+                operation_id="forget:op-inventory",
+                occurred_at=NOW,
+                idempotency_key="forget-key-inventory",
+                request_id="forget-request-inventory",
+                actor_identity_id="owner-identity-1",
+                subject_user_id="owner-user-1",
+                owner_id="owner-user-1",
+                memory_id=MEMORY_ID,
+                generation=2,
+                proof_reference="owner-proof-receipt-inventory",
+                affected_admission_ids=frozenset({"admission-1"}),
+            )
+
+    def test_checkpoint_transition_requires_opaque_checkpoint_reference(self):
+        with self.assertRaises(ContractError):
+            ConsistencyTransition(
+                record_id=RECORD_2,
+                schema_version=1,
+                record_kind=ConsistencyRecordKind.CHECKPOINT_COMMITTED,
+                operation_id="checkpoint:1",
+                occurred_at=NOW,
+            )
+        item = ConsistencyTransition(
+            record_id=RECORD_2,
+            schema_version=1,
+            record_kind=ConsistencyRecordKind.CHECKPOINT_COMMITTED,
+            operation_id="checkpoint:1",
+            occurred_at=NOW,
+            checkpoint_reference="opaque-checkpoint-reference",
+        )
+        self.assertEqual(item.checkpoint_reference, "opaque-checkpoint-reference")
+
     def test_transition_requires_utc_timestamp(self):
         with self.assertRaises(ContractError):
             ConsistencyTransition(
