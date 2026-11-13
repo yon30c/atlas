@@ -128,3 +128,9 @@ Estas decisiones técnicas no reabren ni modifican las políticas ya aprobadas:
 - `REVOKED` es definitivo para la identidad afectada y no permite reactivar esa misma identidad como si la revocación no hubiera ocurrido.
 
 La implementación deberá respetar estas reglas y no podrá introducir transiciones o capacidades incompatibles con ellas sin una revisión explícita del contrato arquitectónico.
+
+## 8. Referencias a CT-08
+
+CT-08 complementa este contrato como matriz transversal; las resoluciones siguientes precisan su aplicación sin duplicar sus reglas:
+
+- [CT-08 R08-02](consistency-matrix-ct-08.md#r08-02-aplicacion-del-ciclo-de-vida-de-identity-a-watchers-y-proactivity): Ciclo de vida de identidades observadoras (ACTIVE, SUSPENDED y REVOKED) y reevaluación sujeta a identidad y CAM.
