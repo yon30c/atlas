@@ -251,12 +251,12 @@ class MemoryConsistencyModelTests(unittest.TestCase):
         original = admission()
         active = original.transition(ReadAdmissionStatus.ACTIVE)
         unresolved = active.transition(ReadAdmissionStatus.UNRESOLVED)
-        completed = active.transition(ReadAdmissionStatus.COMPLETED)
         self.assertEqual(original.status, ReadAdmissionStatus.ADMITTED)
         self.assertEqual(active.status, ReadAdmissionStatus.ACTIVE)
-        self.assertEqual(completed.status, ReadAdmissionStatus.COMPLETED)
         with self.assertRaises(ContractError):
             unresolved.transition(ReadAdmissionStatus.COMPLETED)
+        with self.assertRaises(ContractError):
+            active.transition(ReadAdmissionStatus.COMPLETED)
         with self.assertRaises(FrozenInstanceError):
             original.generation = 2
         with self.assertRaises(ContractError):
@@ -266,9 +266,7 @@ class MemoryConsistencyModelTests(unittest.TestCase):
 
     def test_cancelled_and_completed_are_terminal_and_incompatible(self):
         cancelled = admission().transition(ReadAdmissionStatus.CANCELLED)
-        completed = admission().transition(ReadAdmissionStatus.ACTIVE).transition(
-            ReadAdmissionStatus.COMPLETED
-        )
+        completed = admission(ReadAdmissionStatus.COMPLETED)
         with self.assertRaises(ContractError):
             cancelled.transition(ReadAdmissionStatus.ACTIVE)
         with self.assertRaises(ContractError):
