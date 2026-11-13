@@ -387,5 +387,36 @@ class MemoryConsistencyModelTests(unittest.TestCase):
             )
 
 
+    def test_project_snapshot_rejects_expired_grant_at_decision_time(self):
+        revisions = AuthorizationRevisionSet(
+            memory_revision=revision(AuthorityKind.MEMORY, MEMORY_ID),
+            version_revision=revision(AuthorityKind.MEMORY_VERSION, VERSION_ID),
+            identity_revision=revision(AuthorityKind.IDENTITY, "identity-1"),
+            project_revision=revision(AuthorityKind.PROJECT, "project-1"),
+            environment_revision=revision(AuthorityKind.ENVIRONMENT, "environment-1"),
+            grant_revision=revision(AuthorityKind.GRANT, "grant-1"),
+        )
+        with self.assertRaises(ContractError):
+            AuthorizationSnapshot(
+                snapshot_id="s",
+                decision_id="d",
+                request_id="r",
+                action="memory.read",
+                actor_identity_id="identity-1",
+                subject_user_id="user-1",
+                memory_id=MEMORY_ID,
+                version_id=VERSION_ID,
+                owner_id="owner-1",
+                scope=MemoryScope(MemoryScopeKind.PROJECT, "project-1"),
+                revisions=revisions,
+                version_status=MemoryVersionStatus.APPROVED,
+                classification=MemoryClassification.INTERNAL,
+                issued_at=NOW,
+                project_id="project-1",
+                environment_id="environment-1",
+                grant_expires_at=datetime(2026, 11, 13, 15, 59, tzinfo=timezone.utc),
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
