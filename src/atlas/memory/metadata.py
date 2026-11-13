@@ -3,7 +3,13 @@ from dataclasses import dataclass
 
 from atlas.core.errors import ContractError
 from atlas.memory.identifiers import validate_atlas_id
-from atlas.memory.models import MemoryId, MemoryVersionId, MemoryVersionStatus, ProjectId
+from atlas.memory.models import (
+    MemoryClassification,
+    MemoryId,
+    MemoryVersionId,
+    MemoryVersionStatus,
+    ProjectId,
+)
 
 
 def _opaque_id(value: object, field: str) -> None:
@@ -18,6 +24,7 @@ class MemoryVersionMetadata:
     version_id: MemoryVersionId
     memory_id: MemoryId
     status: MemoryVersionStatus
+    classification: MemoryClassification
     parent_version_id: MemoryVersionId | None
 
     def __post_init__(self) -> None:
@@ -25,6 +32,8 @@ class MemoryVersionMetadata:
         validate_atlas_id(self.memory_id, "memory_id")
         if not isinstance(self.status, MemoryVersionStatus):
             raise ContractError("status debe ser MemoryVersionStatus")
+        if not isinstance(self.classification, MemoryClassification):
+            raise ContractError("classification debe ser MemoryClassification")
         if self.parent_version_id is not None:
             validate_atlas_id(self.parent_version_id, "parent_version_id")
 
