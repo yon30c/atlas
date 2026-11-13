@@ -744,7 +744,7 @@ class FakeProtectedEgress:
             admission, operation_id, endpoint_id, new_generation, now
         )
 
-    def reconcile(self, admission, endpoint_id):
+    def reconcile_endpoint(self, admission, endpoint_id):
         if endpoint_id not in admission.route_ids:
             return EndpointDeliveryStatus.UNRESOLVED
         return self.authority.reconcile_endpoint(admission, endpoint_id)
