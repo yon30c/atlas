@@ -122,6 +122,7 @@ class MemoryGatewayService:
                 snapshot.memory_id != memory_id
                 or snapshot.version_id != version_id
                 or snapshot.actor_identity_id != context.actor.identity_id
+                or snapshot.revisions.identity_revision.revision != context.actor.revision
                 or snapshot.request_id != context.request_id
                 or snapshot.action != "memory.read"
             ):
