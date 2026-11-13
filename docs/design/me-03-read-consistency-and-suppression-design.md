@@ -358,15 +358,15 @@ Antes de integrar un proveedor real, construir pruebas deterministas con puertos
 | C21 | Se revoca el Grant después de admitir una lectura y antes del siguiente fragmento | El punto de entrega rechaza nuevas emisiones y la admisión no se considera cancelada hasta confirmación de fencing |
 | C22 | La identidad del actor pasa a SUSPENDED o REVOKED durante una lectura | Se detienen nuevas emisiones; no se conserva el permiso por el snapshot inicial |
 | C23 | No se puede consultar/verificar la vigencia de autorización para una emisión | No se entrega contenido adicional; no se renueva el snapshot por fallback |
-| C24 | Un compromiso de emisión y un cierre por Forget compiten simultáneamente | Ambos quedan ordenados: si el cierre gana, la unidad se rechaza; si el compromiso gana, esa unidad cuenta como emitida antes del cierre |
-| C25 | Se pierde el acknowledgement después de solicitar liberar una unidad | La admisión queda UNRESOLVED; no se presume que la unidad no fue emitida |
-| C26 | Una cola contiene fragmentos no comprometidos cuando se activa el fencing | Los fragmentos pendientes se descartan y no cruzan el último punto de entrega |
-| C27 | Un stream termina y después llega un acknowledgement duplicado o tardío | El estado terminal COMPLETED/CANCELLED no cambia |
-| C28 | Forget se reintenta con la misma clave y el mismo objetivo | Se devuelve la misma operación y no se crea un segundo cierre incompatible |
-| C29 | Se reutiliza la clave de idempotencia para otro objetivo | La solicitud se rechaza; no se modifica el alcance original |
-| C30 | Tras reinicio existe una admisión sin evidencia completa de terminalidad | Se restaura como UNRESOLVED; no se reabre tráfico ni se confirma supresión |
-| C31 | La expiración del Grant ocurre entre dos fragmentos de un stream | El siguiente compromiso de emisión se rechaza según el límite temporal contractual |
-| C32 | Una revocación/suspensión es aceptada mientras un compromiso de emisión compite | El orden autoritativo determina el ganador; ninguna emisión puede comprometerse después del punto efectivo de invalidación |
+| C36 | Un compromiso de emisión y un cierre por Forget compiten simultáneamente | Ambos quedan ordenados: si el cierre gana, la unidad se rechaza; si el compromiso gana, esa unidad cuenta como emitida antes del cierre |
+| C37 | Se pierde el acknowledgement después de solicitar liberar una unidad | La admisión queda UNRESOLVED; no se presume que la unidad no fue emitida |
+| C38 | Una cola contiene fragmentos no comprometidos cuando se activa el fencing | Los fragmentos pendientes se descartan y no cruzan el último punto de entrega |
+| C39 | Un stream termina y después llega un acknowledgement duplicado o tardío | El estado terminal COMPLETED/CANCELLED no cambia |
+| C40 | Forget se reintenta con la misma clave y el mismo objetivo | Se devuelve la misma operación y no se crea un segundo cierre incompatible |
+| C41 | Se reutiliza la clave de idempotencia para otro objetivo | La solicitud se rechaza; no se modifica el alcance original |
+| C42 | Tras reinicio existe una admisión sin evidencia completa de terminalidad | Se restaura como UNRESOLVED; no se reabre tráfico ni se confirma supresión |
+| C43 | La expiración del Grant ocurre entre dos fragmentos de un stream | El siguiente compromiso de emisión se rechaza según el límite temporal contractual |
+| C44 | Una revocación/suspensión es aceptada mientras un compromiso de emisión compite | El orden autoritativo determina el ganador; ninguna emisión puede comprometerse después del punto efectivo de invalidación |
 | C24 | Cambia la revisión de Memory o MemoryVersion después de emitir el snapshot CAM | La admisión basada en la revisión anterior se rechaza; se requiere nueva autorización y admisión |
 | C25 | Cambia el estado del Project o Environment que participó en CAM | La revisión de autoridad no coincide y no se emite contenido |
 | C26 | Se revoca o reduce un Grant durante un stream | La revocación y el fencing se ordenan antes de cualquier emisión posterior; si no puede probarse, la ruta se bloquea |
@@ -391,7 +391,7 @@ Los bloqueos conceptuales de revisiones, revocación, inventarios y protocolo de
 3. Completar por inspección el inventario real de persistencia/derivados y el inventario real de rutas de entrega.
 4. Definir evidencia verificable por tipo de destino para eliminación física, reconciliación y restauración, incluidos backups.
 5. Traducir el registro lógico de admisiones, compromisos, cierres y acknowledgements a un contrato durable e idempotente.
-6. Derivar y ejecutar pruebas deterministas para los casos C01–C32 antes de integrar adaptadores reales.
+6. Derivar y ejecutar pruebas deterministas para los casos C01–C44 antes de integrar adaptadores reales.
 
 **Decisión 1 — aceptada y precisada:** al iniciar Forget se cierran nuevas admisiones y se aplica fencing inmediato. Una lectura previa solo se considera completada si terminó toda su entrega antes de ese cierre; de lo contrario debe cancelarse con confirmación verificable de que no puede emitir más contenido. No se confirma la supresión lógica mientras alguna admisión previa pueda entregar contenido o su estado no pueda determinarse.
 
@@ -439,7 +439,7 @@ ME-03 de diseño estará listo para implementación cuando se hayan aceptado las
 - coordinar lecturas en curso con Forget y con revocaciones/suspensiones;
 - aplicar fencing en cada compromiso de emisión y cubrir buffers/intermediarios;
 - recuperar durablemente cierres, generaciones, admisiones y acknowledgements sin reabrir antes de reconciliar;
-- añadir y ejecutar pruebas deterministas C01–C32;
+- añadir y ejecutar pruebas deterministas C01–C44;
 - mantener los adaptadores de prueba separados de cualquier afirmación de integración real.
 
 **Estado actual:** este documento registra una propuesta de diseño. No implementa snapshots, leases, supresión, Forget, persistencia ni garantías de runtime.
