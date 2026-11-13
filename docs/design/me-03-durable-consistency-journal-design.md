@@ -420,10 +420,10 @@ Implementación parcial añadida:
 - `src/atlas/memory/__init__.py`: exporta el reducer y los modelos inmutables de proyección.
 - `tests/unit/test_memory_journal.py`: 33 métodos escritos.
 - `tests/unit/test_memory_journal_failures.py`: 20 métodos escritos para C45–C64.
-- `tests/unit/test_memory_journal_reducer.py`: 22 métodos escritos, incluyendo C66–C84 y tres recorridos positivos del reducer. C65 se cubre en el archivo de modelos.
+- `tests/unit/test_memory_journal_reducer.py`: 25 métodos escritos, incluyendo C66–C87 y tres recorridos positivos del reducer. C65 se cubre en el archivo de modelos.
 
 La revisión del reducer corrigió una distinción importante del contrato de egress: `ENDPOINT_FENCED.generation` identifica la nueva generación del cierre, no la generación original de la admisión. Los recibos de finalización asociados a un cierre también se correlacionan con la generación de esa operación; `ADMISSION_RECONCILED` mantiene la generación original de la admisión.
 
 **Límite:** el reducer valida estructura y semántica de los registros entregados. No autentica su origen, no demuestra continuidad/anti-rollback, no consulta endpoints y no habilita rutas. Una referencia opaca de continuidad no se trata como prueba verificada.
 
-**Validación:** 75 métodos de prueba están escritos en los tres archivos de journal/reducer; ninguno se ha ejecutado en esta etapa. No existe journal durable ni adaptador real y no se declara CI exitoso.
+**Validación:** 78 métodos de prueba están escritos en los tres archivos de journal/reducer; ninguno se ha ejecutado en esta etapa. No existe journal durable ni adaptador real y no se declara CI exitoso.
