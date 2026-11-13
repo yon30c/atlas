@@ -1597,7 +1597,7 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
             EndpointDeliveryStatus.ACTIVE,
         )
         self.assertIs(
-            self.egress.reconcile(admission, "unregistered-endpoint"),
+            self.egress.reconcile_endpoint(admission, "unregistered-endpoint"),
             EndpointDeliveryStatus.UNRESOLVED,
         )
 
