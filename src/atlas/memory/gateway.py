@@ -45,19 +45,19 @@ class MemoryGatewayService:
 
     @staticmethod
     def _valid_handle(handle: object, admission: object, snapshot: object) -> bool:
+        if handle is None:
+            return False
+        classification = getattr(handle, "classification", None)
+        handle_id = getattr(handle, "handle_id", None)
         return (
-            handle is not None
-            and getattr(handle, "admission_id", None)
-            == getattr(admission, "admission_id", None)
-            and getattr(handle, "memory_id", None)
-            == getattr(admission.target, "memory_id", None)
-            and getattr(handle, "version_id", None)
-            == getattr(admission.target, "version_id", None)
-            and getattr(handle, "classification", None)
-            is getattr(snapshot, "classification", None)
-            and getattr(handle, "classification", None).value != "restricted"
-            and isinstance(getattr(handle, "handle_id", None), str)
-            and bool(handle.handle_id.strip())
+            getattr(handle, "admission_id", None) == admission.admission_id
+            and getattr(handle, "memory_id", None) == admission.target.memory_id
+            and getattr(handle, "version_id", None) == admission.target.version_id
+            and isinstance(classification, MemoryClassification)
+            and classification is snapshot.classification
+            and classification is not MemoryClassification.RESTRICTED
+            and isinstance(handle_id, str)
+            and bool(handle_id.strip())
         )
 
     def _finish_empty_admission(self, admission, operation_id: str) -> None:
