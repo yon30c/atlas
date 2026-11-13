@@ -467,7 +467,7 @@ class MemoryJournalFailureScenarios(unittest.TestCase):
         journal.entries.pop(0)
         self.assertIsNone(journal.load_recovery_state(DOMAIN))
 
-    def test_c56_checkpoint_behind_trusted_watermark_is_rejected(self):
+    def test_c56_journal_head_behind_trusted_watermark_is_rejected(self):
         journal = FaultInjectingJournalFake()
         journal.trusted_watermark = 4
         journal.sequence = 3
