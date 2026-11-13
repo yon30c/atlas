@@ -269,6 +269,15 @@ Antes de integrar un proveedor real, construir pruebas deterministas con puertos
 | C21 | Se revoca el Grant después de admitir una lectura y antes del siguiente fragmento | El punto de entrega rechaza nuevas emisiones y la admisión no se considera cancelada hasta confirmación de fencing |
 | C22 | La identidad del actor pasa a SUSPENDED o REVOKED durante una lectura | Se detienen nuevas emisiones; no se conserva el permiso por el snapshot inicial |
 | C23 | No se puede consultar/verificar la vigencia de autorización para una emisión | No se entrega contenido adicional; no se renueva el snapshot por fallback |
+| C24 | Cambia la revisión de Memory o MemoryVersion después de emitir el snapshot CAM | La admisión basada en la revisión anterior se rechaza; se requiere nueva autorización y admisión |
+| C25 | Cambia el estado del Project o Environment que participó en CAM | La revisión de autoridad no coincide y no se emite contenido |
+| C26 | Se revoca o reduce un Grant durante un stream | La revocación y el fencing se ordenan antes de cualquier emisión posterior; si no puede probarse, la ruta se bloquea |
+| C27 | Una Identity pasa a SUSPENDED durante una operación dependiente | Se detiene la ampliación y se alcanza el punto seguro definido por CT-01; no se permiten emisiones fuera de ese límite |
+| C28 | Una Identity pasa a REVOKED durante una operación dependiente | No puede continuar participando; toda emisión posterior queda cercada |
+| C29 | Un Grant expira entre dos fragmentos o el reloj confiable no está disponible | No se emite el siguiente fragmento; no se concede periodo de gracia implícito |
+| C30 | El inventario de rutas de entrega omite un intermediario o canal capaz de emitir | La cobertura no se considera completa y el componente no sirve contenido protegido |
+| C31 | Un destino de persistencia/backup no está inventariado o no puede verificarse | Forget permanece incompleto y la supresión lógica se conserva |
+| C32 | Un componente se declara no aplicable en un inventario | Se exige evidencia de que no persiste ni puede entregar contenido dentro del alcance declarado |
 
 Las pruebas de concurrencia deben usar eventos/barreras explícitas, no sleeps ni temporizadores, para que los intercalados sean reproducibles.
 
