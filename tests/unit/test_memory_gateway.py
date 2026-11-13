@@ -2,6 +2,7 @@ import unittest
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
+from atlas.core.errors import ContractError
 from atlas.authorization.models import AuthorizationDecision, AuthorizationResult
 from atlas.core.context import OperationContext
 from atlas.core.identity import Identity, IdentityKind, IdentityStatus
@@ -210,6 +211,20 @@ def make_admission(snapshot, routes=ROUTES, snapshot_id=None):
 
 
 class MemoryGatewayServiceTests(unittest.TestCase):
+
+    def test_protected_read_rejects_admission_target_different_from_snapshot(self):
+        other_target = ReadTarget(
+            "018bcfe5-7b3a-7cc2-98c4-dc0c0c073a13",
+            VERSION_ID, self.snapshot.owner_id, self.snapshot.scope
+        )
+        mismatched_admission = replace(self.admission, target=other_target)
+        mismatched_handle = FakeHandle(mismatched_admission)
+        with self.assertRaises(ContractError):
+            ProtectedMemoryRead(
+                self.snapshot, mismatched_admission, mismatched_handle,
+                f"read:{mismatched_admission.admission_id}"
+            )
+
 
     def test_snapshot_for_another_actor_is_rejected_before_admission(self):
         revisions = replace(
