@@ -302,6 +302,22 @@ class MemoryGatewayAuthorizationIntegrationTests(unittest.TestCase):
         self.assertIsNone(result)
         self.assertEqual(self.content.calls, [])
 
+
+    def test_mismatched_canonical_memory_metadata_fails_closed(self):
+        self.memory_port.memory = Memory(
+            memory_id=OTHER_MEMORY_ID,
+            owner_id="owner-1",
+            scope=MemoryScope(MemoryScopeKind.PRIVATE),
+            current_approved_version_id=VERSION_ID,
+            created_at=NOW - timedelta(days=1),
+            updated_at=NOW,
+        )
+
+        result = self.gateway.get_version(make_context(), MEMORY_ID, VERSION_ID)
+
+        self.assertIsNone(result)
+        self.assertEqual(self.content.calls, [])
+
     def test_missing_canonical_memory_metadata_fails_closed(self):
         self.memory_port.memory = None
 
