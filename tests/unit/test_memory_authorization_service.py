@@ -73,6 +73,19 @@ class StubIdentityBindingPort:
         return AuthenticatedUserSubject(actor_identity_id, self.subject, True)
 
 
+class StubGrantRepository:
+    def __init__(self, grants=(), error=None):
+        self.grants = grants
+        self.error = error
+        self.owner_requests = []
+
+    def list_by_owner(self, owner_user_id):
+        self.owner_requests.append(owner_user_id)
+        if self.error:
+            raise self.error
+        return self.grants
+
+
 def make_context(kind=IdentityKind.USER, project_id=None, environment=None):
     return OperationContext(
         request_id="request-1",
@@ -100,8 +113,10 @@ def make_memory(scope=MemoryScopeKind.PRIVATE, project_id=None):
     )
 
 
-def make_version(status=MemoryVersionStatus.APPROVED,
-                 classification=MemoryClassification.CONFIDENTIAL):
+def make_version(
+    status=MemoryVersionStatus.APPROVED,
+    classification=MemoryClassification.CONFIDENTIAL,
+):
     return MemoryVersionMetadata(
         version_id=VERSION_ID,
         memory_id=MEMORY_ID,
@@ -136,7 +151,12 @@ class MemoryAuthorizationServiceTests(unittest.TestCase):
             self.memory_port, self.project_port, self.environment_port
         )
         self.binding = StubIdentityBindingPort()
-        self.service = MemoryAuthorizationService(self.resolver, self.binding)
+        self.grant_repository = StubGrantRepository()
+        self.service = MemoryAuthorizationService(
+            self.resolver,
+            self.binding,
+            grant_repository=self.grant_repository,
+        )
 
     def decision(self, result):
         return result.decision
@@ -145,6 +165,7 @@ class MemoryAuthorizationServiceTests(unittest.TestCase):
         result = self.service.authorize_read(make_context(), MEMORY_ID, NOW)
         self.assertIs(self.decision(result), AuthorizationDecision.ALLOW)
         self.assertEqual(self.binding.calls, ["identity-1"])
+        self.assertEqual(self.grant_repository.owner_requests, [])
 
     def test_private_owner_does_not_use_context_user_id(self):
         self.binding.subject = "another-user"
@@ -156,56 +177,80 @@ class MemoryAuthorizationServiceTests(unittest.TestCase):
         result = self.service.authorize_read(agent_context, MEMORY_ID, NOW)
         self.assertIs(self.decision(result), AuthorizationDecision.DENY)
 
-        self.service = MemoryAuthorizationService(self.resolver, None)
+        self.service = MemoryAuthorizationService(
+            self.resolver, None, grant_repository=self.grant_repository
+        )
         result = self.service.authorize_read(make_context(), MEMORY_ID, NOW)
         self.assertIs(self.decision(result), AuthorizationDecision.DENY)
 
-    def test_project_memory_requires_matching_scope_and_grant(self):
+    def test_project_memory_requires_matching_scope_and_trusted_grant(self):
         self.memory_port.memory = make_memory(MemoryScopeKind.PROJECT, "project-1")
+        self.grant_repository.grants = (make_grant(),)
         context = make_context(project_id="project-1", environment="development")
-        result = self.service.authorize_read(
-            context, MEMORY_ID, NOW, grants=[make_grant()]
-        )
+        result = self.service.authorize_read(context, MEMORY_ID, NOW)
         self.assertIs(self.decision(result), AuthorizationDecision.ALLOW)
+        self.assertEqual(self.grant_repository.owner_requests, ["owner-1"])
 
     def test_project_memory_denies_cross_project_or_missing_grant(self):
         self.memory_port.memory = make_memory(MemoryScopeKind.PROJECT, "project-1")
+        self.grant_repository.grants = (make_grant(),)
         context = make_context(project_id="another-project", environment="development")
-        result = self.service.authorize_read(
-            context, MEMORY_ID, NOW, grants=[make_grant()]
-        )
+        result = self.service.authorize_read(context, MEMORY_ID, NOW)
         self.assertIs(self.decision(result), AuthorizationDecision.DENY)
+        self.assertEqual(self.grant_repository.owner_requests, [])
 
         context = make_context(project_id="project-1", environment="development")
-        result = self.service.authorize_read(context, MEMORY_ID, NOW, grants=[])
+        self.grant_repository.grants = ()
+        result = self.service.authorize_read(context, MEMORY_ID, NOW)
         self.assertIs(self.decision(result), AuthorizationDecision.DENY)
+        self.assertEqual(self.grant_repository.owner_requests, ["owner-1"])
+
+    def test_project_memory_denies_if_grant_repository_fails_or_is_untyped(self):
+        self.memory_port.memory = make_memory(MemoryScopeKind.PROJECT, "project-1")
+        context = make_context(project_id="project-1", environment="development")
+        self.grant_repository.error = TimeoutError("grant store unavailable")
+        self.assertIs(
+            self.decision(self.service.authorize_read(context, MEMORY_ID, NOW)),
+            AuthorizationDecision.DENY,
+        )
+        self.grant_repository.error = None
+        self.grant_repository.grants = [make_grant()]
+        self.assertIs(
+            self.decision(self.service.authorize_read(context, MEMORY_ID, NOW)),
+            AuthorizationDecision.DENY,
+        )
 
     def test_project_memory_requires_active_project_and_environment(self):
         self.memory_port.memory = make_memory(MemoryScopeKind.PROJECT, "project-1")
+        self.grant_repository.grants = (make_grant(),)
         context = make_context(project_id="project-1", environment="development")
         self.project_port.status = "suspended"
         self.assertIs(
-            self.decision(self.service.authorize_read(
-                context, MEMORY_ID, NOW, grants=[make_grant()]
-            )),
+            self.decision(self.service.authorize_read(context, MEMORY_ID, NOW)),
             AuthorizationDecision.DENY,
         )
         self.project_port.status = "active"
         self.environment_port.status = "suspended"
         self.assertIs(
-            self.decision(self.service.authorize_read(
-                context, MEMORY_ID, NOW, grants=[make_grant()]
-            )),
+            self.decision(self.service.authorize_read(context, MEMORY_ID, NOW)),
             AuthorizationDecision.DENY,
         )
 
-    def test_project_memory_requires_explicit_environment(self):
+    def test_project_memory_requires_explicit_environment_and_repository(self):
         self.memory_port.memory = make_memory(MemoryScopeKind.PROJECT, "project-1")
         context = make_context(project_id="project-1")
         self.assertIs(
-            self.decision(self.service.authorize_read(
-                context, MEMORY_ID, NOW, grants=[make_grant()]
-            )),
+            self.decision(self.service.authorize_read(context, MEMORY_ID, NOW)),
+            AuthorizationDecision.DENY,
+        )
+        context = make_context(project_id="project-1", environment="development")
+        service_without_repository = MemoryAuthorizationService(
+            self.resolver, self.binding
+        )
+        self.assertIs(
+            self.decision(
+                service_without_repository.authorize_read(context, MEMORY_ID, NOW)
+            ),
             AuthorizationDecision.DENY,
         )
 
@@ -240,9 +285,11 @@ class MemoryAuthorizationServiceTests(unittest.TestCase):
         )
         self.memory_port.memory = self.memory
         self.assertIs(
-            self.decision(self.service.authorize_read(
-                make_context(), MEMORY_ID, datetime(2026, 11, 13, 12, 0)
-            )),
+            self.decision(
+                self.service.authorize_read(
+                    make_context(), MEMORY_ID, datetime(2026, 11, 13, 12, 0)
+                )
+            ),
             AuthorizationDecision.DENY,
         )
 
