@@ -379,30 +379,25 @@ class FakeReadConsistencyAndEgress:
                 now,
             )
 
-    def finish(self, admission, endpoint_id, final_sequence, now):
+    def finish(self, admission, operation_id, endpoint_id, final_sequence, now):
         with self._lock:
             current = self.admissions.get(admission.admission_id)
-            if not self._same_admission(current, admission) or endpoint_id not in admission.route_ids:
+            operation = self.operations.get(operation_id)
+            if (
+                not self._same_admission(current, admission)
+                or operation is None
+                or not operation["pending"]
+                or admission.admission_id not in operation["affected"]
+                or endpoint_id not in admission.route_ids
+            ):
                 return None
             key = (admission.admission_id, endpoint_id)
             if key in self.fenced_endpoints:
                 return None
             if final_sequence != self.emissions.get(key, 0):
                 return None
-            pending = next(
-                (
-                    operation_id
-                    for operation_id, operation in self.operations.items()
-                    if (
-                        operation["pending"]
-                        and operation.get("kind") == "invalidation"
-                        and admission.admission_id in operation["affected"]
-                    )
-                ),
-                None,
-            )
             return EndpointCompletionReceipt(
-                operation_id=pending or f"read:{admission.admission_id}",
+                operation_id=operation_id,
                 admission_id=admission.admission_id,
                 endpoint_id=endpoint_id,
                 generation=self.generation,
@@ -422,27 +417,19 @@ class FakeReadConsistencyAndEgress:
                 return EndpointDeliveryStatus.ACTIVE
             return EndpointDeliveryStatus.UNRESOLVED
 
-    def fence(self, admission, endpoint_id, new_generation, now):
+    def fence(self, admission, operation_id, endpoint_id, new_generation, now):
         with self._lock:
-            if admission.admission_id not in self.admissions:
-                return None
+            operation = self.operations.get(operation_id)
             if (
-                endpoint_id not in admission.route_ids
+                admission.admission_id not in self.admissions
+                or operation is None
+                or not operation["pending"]
+                or operation.get("kind") != "invalidation"
+                or admission.admission_id not in operation["affected"]
+                or endpoint_id not in admission.route_ids
                 or new_generation <= admission.generation
                 or new_generation != self.generation
             ):
-                return None
-            operation_id = next(
-                (
-                    identifier
-                    for identifier, operation in self.operations.items()
-                    if operation["pending"]
-                    and operation.get("kind") == "invalidation"
-                    and admission.admission_id in operation["affected"]
-                ),
-                None,
-            )
-            if operation_id is None:
                 return None
             self.fenced_endpoints.add((admission.admission_id, endpoint_id))
             return EndpointFenceReceipt(
@@ -466,11 +453,15 @@ class FakeProtectedEgress:
             admission, handle, endpoint_id, emission_id, sequence, now
         )
 
-    def finish(self, admission, endpoint_id, final_sequence, now):
-        return self.authority.finish(admission, endpoint_id, final_sequence, now)
+    def finish(self, admission, operation_id, endpoint_id, final_sequence, now):
+        return self.authority.finish(
+            admission, operation_id, endpoint_id, final_sequence, now
+        )
 
-    def fence(self, admission, endpoint_id, new_generation, now):
-        return self.authority.fence(admission, endpoint_id, new_generation, now)
+    def fence(self, admission, operation_id, endpoint_id, new_generation, now):
+        return self.authority.fence(
+            admission, operation_id, endpoint_id, new_generation, now
+        )
 
     def reconcile(self, admission, endpoint_id):
         if endpoint_id not in admission.route_ids:
@@ -699,7 +690,7 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
             )
         )
         completion = self.egress.finish(
-            admission, "assistant-response", 1, NOW
+            admission, "invalidate-after-emit", "assistant-response", 1, NOW
         )
         self.assertEqual(completion.operation_id, "invalidate-after-emit")
         self.assertEqual(completion.generation, closure.new_generation)
@@ -721,7 +712,7 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
             private_snapshot(), DeliveryRouteSet(ROUTES)
         )
         for endpoint in admission.route_ids:
-            receipt = self.egress.finish(admission, endpoint, 0, NOW)
+            receipt = self.egress.finish(admission, f"read:{admission.admission_id}", endpoint, 0, NOW)
             self.assertEqual(receipt.operation_id, f"read:{admission.admission_id}")
             self.assertTrue(self.authority.record_endpoint_ack(receipt))
         result = self.authority.reconcile(f"read:{admission.admission_id}")
@@ -864,7 +855,7 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
             )
         )
         fence_receipt = self.egress.fence(
-            admission, "assistant-response", closure.new_generation, NOW
+            admission, "fence-emission-test", "assistant-response", closure.new_generation, NOW
         )
         self.assertIsNotNone(fence_receipt)
         self.assertEqual(fence_receipt.operation_id, "fence-emission-test")
