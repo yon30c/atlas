@@ -398,11 +398,19 @@ class ForgetCoordinatorReducer:
                 )
                 return operation
             else:
-                previous_ids = {item.destination_id for item in previous.destinations}
-                new_ids = {item.destination_id for item in inventory.destinations}
+                previous_kinds = {
+                    item.destination_id: item.kind for item in previous.destinations
+                }
+                new_kinds = {
+                    item.destination_id: item.kind for item in inventory.destinations
+                }
                 self._require(
-                    previous_ids.issubset(new_ids),
+                    set(previous_kinds).issubset(set(new_kinds)),
                     "inventario nuevo omite destinos anteriores sin evidencia de retiro",
+                )
+                self._require(
+                    all(new_kinds[key] is kind for key, kind in previous_kinds.items()),
+                    "un destination_id estable no puede cambiar de clase",
                 )
         if not inventory.complete:
             return replace(
