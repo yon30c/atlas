@@ -63,17 +63,15 @@ MemoryScope
 
 Invariantes:
 
-- `PRIVATE`: `project_id` debe ser `null`; el contenido pertenece al usuario propietario.
+- `PRIVATE`: `project_id` debe ser `null`; el titular se identifica mediante `Memory.owner_id`.
 - `PROJECT`: `project_id` es obligatorio y debe identificar un proyecto válido.
-- No se infiere el scope a partir de `OperationContext.project_id`. El scope forma parte explícita de la memoria o propuesta.
-- Un scope ausente, mal formado o ambiguo produce denegación; nunca se interpreta como acceso global.
-- Una memoria de proyecto no se convierte en privada ni viceversa mediante una actualización ordinaria. Un cambio de scope requiere una operación explícita, revisada y autorizada; el mecanismo concreto queda pendiente.
 - `Memory.owner_id` es la representación canónica del propietario; no se duplica en `MemoryScope`.
-- Para `PRIVATE`, `project_id` debe ser `null` y el propietario canónico de `Memory` identifica al titular.
-- Para `PROJECT`, `project_id` es obligatorio y debe identificar un proyecto válido.
+- No se infiere el scope a partir de `OperationContext.project_id`. El scope forma parte explícita de la memoria o propuesta.
 - En memoria privada, la ausencia de `project_id` en el contexto de operación es válida solo cuando el scope `PRIVATE` está explícito. No implica acceso global.
 - En memoria de proyecto, un `project_id` ausente, ambiguo o diferente del scope produce denegación.
-- El owner identifica al propietario de la memoria. No sustituye la autorización de acceso al proyecto.
+- Un scope ausente, mal formado o ambiguo produce denegación; nunca se interpreta como acceso global.
+- Una memoria de proyecto no se convierte en privada ni viceversa mediante una actualización ordinaria. Un cambio de scope requiere una operación explícita, revisada y autorizada; el mecanismo concreto queda pendiente.
+- La autorización de acceso no se deriva de `owner_id` por sí solo; toda operación protegida debe pasar por Memory Gateway y CAM.
 
 **PENDIENTE:** formato definitivo de los identificadores y política para transferir o reclasificar una memoria entre scopes.
 
