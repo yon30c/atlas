@@ -150,7 +150,7 @@ E01–E10 tienen cobertura parcial o completa a nivel fake-in-process con tests 
 1. Ejecutar CI completa después de los tests concurrentes y Gateway añadidos.
 2. [x] Añadir prueba Gateway-session vs Forget race usando la frontera única.
 3. [~] Se añadió replay journal → reducer → restauración del gate Forget en el fake. Falta reconstruir admisiones no terminales y conectar un journal durable.
-4. Añadir seguridad: rutas de contenido, capacidades, recibos, ids y payload ausentes.
+4. [x parcial] Añadir seguridad estática: frontera única en Gateway y modelos de evidencia sin payload/hash. La auditoría de rutas reales, capacidades entre procesos y recibos de adaptadores queda pendiente.
 5. Ejecutar suite y revisar los resultados por versión Python.
 6. Mantener bloqueados adaptadores reales hasta resolver prerrequisitos de §7.
 
@@ -182,3 +182,14 @@ Se añadió una prueba que construye una secuencia journal válida (`READ_ADMITT
 La prueba demuestra que la proyección reducida conserva suficiente información para reestablecer el cierre lógico de Forget en el fake. No reconstruye todos los detalles de admisiones activas, recibos externos ni operaciones de purga; tampoco prueba persistencia o recuperación tras reinicio real.
 
 El commit de código `9ff06d402e182bb3f488ade3248ea11a087e7ad3` pasó la suite completa en Python 3.10, 3.11, 3.12 y 3.13. Python 3.11 reportó `Ran 367 tests`, `OK`. Workflow: [Atlas CI #43527488512](https://github.com/yon30c/atlas/actions/runs/43527488512).
+
+
+## 13. Seguridad estática y CI actualizados
+
+Se añadieron dos pruebas de seguridad:
+- el constructor de Gateway recibe una sola frontera de consistencia y no permite inyectar autoridad/egress por separado;
+- los modelos de Forget y journal no contienen campos para payload, contenido, fragmentos, embeddings ni hashes del contenido.
+
+El commit de código `3cf9febb22fb7214f7ada30c56883606d33882e2` pasó la suite completa en Python 3.10–3.13. Python 3.11 reportó `Ran 369 tests`, `OK`. Workflow: [Atlas CI #43527681299](https://github.com/yon30c/atlas/actions/runs/43527681299).
+
+Esta comprobación es estructural y de proceso. No sustituye una auditoría de rutas de transporte, aislamiento entre procesos, autenticidad de recibos, almacenamiento real ni seguridad distribuida.
