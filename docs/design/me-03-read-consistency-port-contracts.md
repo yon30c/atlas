@@ -143,6 +143,7 @@ class ReadConsistencyAuthorityPort(Protocol):
         self,
         snapshot: AuthorizationSnapshot,
         routes: DeliveryRouteSet,
+        now: datetime,
     ) -> ReadAdmission | None: ...
 
     def begin_forget(
@@ -445,7 +446,7 @@ El conjunto de pruebas de autoridad/egress contiene actualmente 15 métodos de p
 Se sustituyó la ruta anterior de lectura cruda por el siguiente flujo de frontera:
 
 1. `MemoryGatewayService.get_version()` obtiene un resultado CAM. Solo continúa si es `AuthorizationResult(ALLOW, snapshot)` y el snapshot identifica exactamente la memoria, versión y acción solicitadas.
-2. El Gateway solicita `admit_read(snapshot, routes)` a la autoridad de consistencia. La autoridad debe validar revisiones actuales, supresión, generación y el conjunto completo de rutas registradas.
+2. El Gateway obtiene tiempo UTC confiable inmediatamente antes de admitir y solicita `admit_read(snapshot, routes, now)`. La autoridad debe validar revisiones actuales, supresión, generación, expiración de Grant y el conjunto completo de rutas registradas.
 3. El Gateway valida que la admisión devuelta coincida exactamente con snapshot, objetivo, propietario, scope y rutas configuradas.
 4. Solo entonces llama a `ProtectedMemoryContentPort.read_version_if_admitted(snapshot, admission)`.
 5. El puerto de contenido devuelve un `ProtectedContentHandle` opaco. El Gateway valida IDs, admisión y clasificación y construye `ProtectedMemoryRead`; nunca devuelve `MemoryVersion` ni su contenido.
