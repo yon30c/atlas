@@ -272,7 +272,7 @@ class MemoryGatewayService:
             now = self._clock.now()
             if not self._valid_utc(now):
                 return False
-            receipt = self._egress.finish(
+            receipt = self._consistency.finish(
                 session.admission,
                 session.operation_id,
                 endpoint_id,
@@ -281,7 +281,7 @@ class MemoryGatewayService:
             )
             if receipt is None:
                 return False
-            return self._authority.record_endpoint_ack(receipt)
+            return self._consistency.record_endpoint_ack(receipt)
         except Exception:
             return False
 
@@ -293,7 +293,7 @@ class MemoryGatewayService:
         if session is None:
             return None
         try:
-            result = self._authority.reconcile(session.operation_id)
+            result = self._consistency.reconcile(session.operation_id)
             if (
                 result is not None
                 and session.admission.admission_id in result.resolved_admission_ids
