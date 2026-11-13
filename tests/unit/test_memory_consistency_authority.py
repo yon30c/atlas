@@ -267,13 +267,29 @@ class FakeReadConsistencyAndEgress:
             current = self.admissions.get(admission.admission_id)
             if current != admission or admission.generation != self.generation:
                 return None
+            if admission.status not in (ReadAdmissionStatus.ADMITTED, ReadAdmissionStatus.ACTIVE):
+                return None
             if endpoint_id not in admission.route_ids:
                 return None
             if (admission.admission_id, endpoint_id) in self.fenced_endpoints:
                 return None
-            if getattr(handle, "admission_id", None) != admission.admission_id:
+            if (
+                getattr(handle, "admission_id", None) != admission.admission_id
+                or getattr(handle, "memory_id", None) != admission.target.memory_id
+                or getattr(handle, "version_id", None) != admission.target.version_id
+                or getattr(handle, "classification", None) is MemoryClassification.RESTRICTED
+                or not getattr(handle, "handle_id", None)
+            ):
                 return None
-            if not isinstance(now, datetime) or now.tzinfo is None:
+            if (
+                not isinstance(now, datetime)
+                or now.tzinfo is None
+                or now.utcoffset().total_seconds() != 0
+            ):
+                return None
+            if not isinstance(emission_id, str) or not emission_id.strip():
+                return None
+            if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 1:
                 return None
             key = (admission.admission_id, endpoint_id)
             expected = self.emissions.get(key, 0) + 1
@@ -337,8 +353,12 @@ class FakeReadConsistencyAndEgress:
 
 
 class FakeHandle:
-    def __init__(self, admission_id):
-        self.admission_id = admission_id
+    def __init__(self, admission):
+        self.handle_id = f"handle:{admission.admission_id}"
+        self.admission_id = admission.admission_id
+        self.memory_id = admission.target.memory_id
+        self.version_id = admission.target.version_id
+        self.classification = MemoryClassification.CONFIDENTIAL
 
 
 class MemoryConsistencyAuthorityTests(unittest.TestCase):
@@ -386,7 +406,7 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
         self.assertIsNone(
             self.authority.commit_and_emit(
                 admission,
-                FakeHandle(admission.admission_id),
+                FakeHandle(admission),
                 "assistant-response",
                 "emission-1",
                 1,
