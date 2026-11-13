@@ -536,6 +536,8 @@ class MemoryJournalFailureScenarios(unittest.TestCase):
             endpoint_id="assistant-response",
             generation=2,
             receipt_id="external-fence-receipt",
+            emission_id="fence-control",
+            emission_sequence=0,
         )
         journaled = journal.load_endpoint_receipts(external_fence_receipt.admission_id)
         suppression_confirmed = bool(journaled)
