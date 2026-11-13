@@ -257,6 +257,23 @@ class AuthorizationInvalidation:
 
 
 @dataclass(frozen=True, slots=True)
+class InvalidationReceipt:
+    invalidation_id: str
+    new_generation: int
+    affected_admission_ids: frozenset[str]
+    accepted_at: datetime
+
+    def __post_init__(self) -> None:
+        _required(self.invalidation_id, "invalidation_id")
+        _positive_int(self.new_generation, "new_generation")
+        if not isinstance(self.affected_admission_ids, frozenset):
+            raise ContractError("affected_admission_ids debe ser frozenset")
+        for admission_id in self.affected_admission_ids:
+            _required(admission_id, "admission_id")
+        _utc(self.accepted_at, "accepted_at")
+
+
+@dataclass(frozen=True, slots=True)
 class EndpointFenceReceipt:
     operation_id: str
     admission_id: str
