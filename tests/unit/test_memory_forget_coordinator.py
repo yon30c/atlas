@@ -129,6 +129,7 @@ def canonical_and_complete(reducer, operation):
     operation = reducer.mark_canonical_forgotten(
         operation,
         expected_inventory_revision=operation.inventory.revision,
+        expected_canonical_revision=6,
         receipt=receipt,
     )
     return reducer.complete(
@@ -366,14 +367,14 @@ class ForgetCoordinatorReducerTests(unittest.TestCase):
         operation = delete_all(reducer, operation)
         operation = verify_all(reducer, operation)
         receipt = canonical_receipt(operation, tombstone="tombstone-1")
-        operation = reducer.mark_canonical_forgotten(operation, 1, receipt)
+        operation = reducer.mark_canonical_forgotten(operation, 1, 6, receipt)
         self.assertIs(
             reducer.mark_canonical_forgotten(operation, 1, receipt),
             operation,
         )
         with self.assertRaises(ContractError):
             reducer.mark_canonical_forgotten(
-                operation, 1,
+                operation, 1, 6,
                 canonical_receipt(operation, new_revision=8, tombstone="tombstone-2"),
             )
 
@@ -465,10 +466,20 @@ class ForgetCoordinatorReducerTests(unittest.TestCase):
         operation = delete_all(reducer, operation)
         operation = verify_all(reducer, operation)
         receipt = canonical_receipt(operation, tombstone="tombstone")
-        operation = reducer.mark_canonical_forgotten(operation, 1, receipt)
+        operation = reducer.mark_canonical_forgotten(operation, 1, 6, receipt)
         blocked = reducer.complete(operation, 2, receipt)
         self.assertIs(blocked.state, ForgetOperationState.BLOCKED)
         self.assertIs(blocked.block_reason, ForgetBlockReason.INVENTORY_CHANGED)
+
+
+    def test_d31_canonical_receipt_must_match_expected_compare_and_swap_revision(self):
+        reducer, operation = begin_purging()
+        operation = delete_all(reducer, operation)
+        operation = verify_all(reducer, operation)
+        with self.assertRaises(ContractError):
+            reducer.mark_canonical_forgotten(
+                operation, 1, 5, canonical_receipt(operation)
+            )
 
     def test_d30_evidence_models_do_not_store_content_or_hashes(self):
         reducer, operation = begin_purging()
