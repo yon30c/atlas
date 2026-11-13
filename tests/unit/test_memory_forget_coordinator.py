@@ -6,6 +6,7 @@ from atlas.core.errors import ContractError
 from atlas.memory.forget import ForgetClosure, ForgetClosureStatus, ForgetTarget
 from atlas.memory.forget_coordinator import (
     ForgetBlockReason,
+    ForgetCanonicalStateReceipt,
     ForgetCoordinatorReducer,
     ForgetDeletionAttempt,
     ForgetDeletionOutcome,
@@ -62,6 +63,7 @@ def inventory(
         )
     return ForgetDestinationInventory(
         inventory_id=f"inventory-{revision}",
+        operation_id="forget-op-1",
         target=ForgetTarget(memory_id),
         revision=revision,
         destinations=destinations,
@@ -111,17 +113,28 @@ def verify_all(reducer, operation):
     return operation
 
 
+def canonical_receipt(operation, new_revision=7, tombstone="opaque-tombstone-reference", receipt_id="canonical-receipt"):
+    return ForgetCanonicalStateReceipt(
+        operation_id=operation.closure.operation_id,
+        memory_id=operation.closure.target.memory_id,
+        expected_revision=6,
+        new_revision=new_revision,
+        tombstone_reference=tombstone,
+        receipt_id=receipt_id,
+    )
+
+
 def canonical_and_complete(reducer, operation):
+    receipt = canonical_receipt(operation)
     operation = reducer.mark_canonical_forgotten(
         operation,
         expected_inventory_revision=operation.inventory.revision,
-        canonical_state_revision=7,
-        tombstone_reference="opaque-tombstone-reference",
+        receipt=receipt,
     )
     return reducer.complete(
         operation,
         current_inventory_revision=operation.inventory.revision,
-        tombstone_reference="opaque-tombstone-reference",
+        canonical_receipt=receipt,
     )
 
 
@@ -352,15 +365,17 @@ class ForgetCoordinatorReducerTests(unittest.TestCase):
         reducer, operation = begin_purging()
         operation = delete_all(reducer, operation)
         operation = verify_all(reducer, operation)
-        operation = reducer.mark_canonical_forgotten(
-            operation, 1, 7, "tombstone-1"
-        )
+        receipt = canonical_receipt(operation, tombstone="tombstone-1")
+        operation = reducer.mark_canonical_forgotten(operation, 1, receipt)
         self.assertIs(
-            reducer.mark_canonical_forgotten(operation, 1, 7, "tombstone-1"),
+            reducer.mark_canonical_forgotten(operation, 1, receipt),
             operation,
         )
         with self.assertRaises(ContractError):
-            reducer.mark_canonical_forgotten(operation, 1, 8, "tombstone-2")
+            reducer.mark_canonical_forgotten(
+                operation, 1,
+                canonical_receipt(operation, new_revision=8, tombstone="tombstone-2"),
+            )
 
     def test_d21_completed_operation_is_idempotent(self):
         reducer, operation = begin_purging()
@@ -368,7 +383,9 @@ class ForgetCoordinatorReducerTests(unittest.TestCase):
         operation = verify_all(reducer, operation)
         operation = canonical_and_complete(reducer, operation)
         self.assertIs(
-            reducer.complete(operation, 1, "opaque-tombstone-reference"),
+            reducer.complete(
+                operation, 1, canonical_receipt(operation)
+            ),
             operation,
         )
 
@@ -447,10 +464,9 @@ class ForgetCoordinatorReducerTests(unittest.TestCase):
         reducer, operation = begin_purging()
         operation = delete_all(reducer, operation)
         operation = verify_all(reducer, operation)
-        operation = reducer.mark_canonical_forgotten(
-            operation, 1, 7, "tombstone",
-        )
-        blocked = reducer.complete(operation, 2, "tombstone")
+        receipt = canonical_receipt(operation, tombstone="tombstone")
+        operation = reducer.mark_canonical_forgotten(operation, 1, receipt)
+        blocked = reducer.complete(operation, 2, receipt)
         self.assertIs(blocked.state, ForgetOperationState.BLOCKED)
         self.assertIs(blocked.block_reason, ForgetBlockReason.INVENTORY_CHANGED)
 
