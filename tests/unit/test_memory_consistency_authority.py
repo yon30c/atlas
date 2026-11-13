@@ -566,11 +566,23 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
             ReadAdmissionStatus.COMPLETED,
         )
 
+    def test_egress_rejects_handle_for_another_admission_target(self):
+        admission = self.authority.admit_read(
+            private_snapshot(), DeliveryRouteSet(ROUTES)
+        )
+        handle = FakeHandle(admission)
+        handle.version_id = "018bcfe5-7b3a-7cc2-98c4-dc0c0c073a13"
+        self.assertIsNone(
+            self.authority.commit_and_emit(
+                admission, handle, "assistant-response", "wrong-target", 1, NOW
+            )
+        )
+
     def test_egress_is_sequence_checked_and_fenced_by_generation(self):
         admission = self.authority.admit_read(
             private_snapshot(), DeliveryRouteSet(ROUTES)
         )
-        handle = FakeHandle(admission.admission_id)
+        handle = FakeHandle(admission)
         first = self.authority.commit_and_emit(
             admission, handle, "assistant-response", "emission-1", 1, NOW
         )
