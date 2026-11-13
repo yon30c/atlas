@@ -6,6 +6,7 @@ from atlas.authorization.memory_metadata_resolver import MemoryMetadataResolver
 from atlas.authorization.memory_service import MemoryAuthorizationService
 from atlas.authorization.models import (
     AuthorizationDecision,
+    AuthorizationResult,
     Grant,
     GrantResourceScope,
 )
@@ -170,6 +171,16 @@ class MemoryAuthorizationServiceTests(unittest.TestCase):
         self.assertEqual(result.snapshot.revisions.identity_revision.revision, 1)
         self.assertEqual(self.binding.calls, ["identity-1"])
         self.assertEqual(self.grant_repository.owner_requests, [])
+
+    def test_public_cam_allow_requires_snapshot_and_denials_forbid_one(self):
+        with self.assertRaises(Exception):
+            AuthorizationResult(AuthorizationDecision.ALLOW)
+        allowed = self.service.authorize_read(make_context(), MEMORY_ID, NOW)
+        denied = AuthorizationResult(AuthorizationDecision.DENY)
+        self.assertIsNotNone(allowed.snapshot)
+        self.assertIsNone(denied.snapshot)
+        with self.assertRaises(Exception):
+            AuthorizationResult(AuthorizationDecision.DENY, allowed.snapshot)
 
     def test_private_owner_does_not_use_context_user_id(self):
         self.binding.subject = "another-user"
