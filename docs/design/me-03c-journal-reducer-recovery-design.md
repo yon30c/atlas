@@ -184,3 +184,17 @@ ME-03C no se declara cerrado hasta que:
 - se diferencia estructuralidad de continuidad confiable;
 - C45–C84 están representados y ejecutados en entorno de pruebas;
 - no se afirma persistencia, recuperación real o Forget completado sin adaptadores/evidencia reales.
+
+
+## 10. Validación automatizada posterior
+
+En el commit de código `0a6d120337e07e4b1365a7592f85e46ffe89718f`, GitHub Actions ejecutó la suite completa configurada por el repositorio:
+
+- Python 3.10: éxito.
+- Python 3.11: éxito.
+- Python 3.12: éxito.
+- Python 3.13: éxito.
+- Resultado de Python 3.11: `Ran 323 tests`, `OK`.
+- Workflow: [Atlas CI #43525199210](https://github.com/yon30c/atlas/actions/runs/43525199210).
+
+Los 78 métodos de prueba de journal/reducer quedaron incluidos en esa suite. La ejecución valida los modelos, reducer, fakes y pruebas existentes en el repositorio. **No** demuestra persistencia durable, continuidad criptográfica, anti-rollback, atomicidad distribuida, fencing de endpoints reales ni Forget físico. La cobertura sigue siendo de contratos/modelos y fakes.
