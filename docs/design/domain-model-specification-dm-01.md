@@ -326,7 +326,7 @@ Reglas propuestas:
 
 ### 6.3 Operaciones colectivas
 
-**APROBADO POR EL PROPIETARIO — dirección técnica para la primera implementación**
+**DIRECCIÓN TÉCNICA ADOPTADA PARA V1**
 
 No habilitar Grants genéricos por tipo ni comodines.
 
@@ -343,13 +343,13 @@ La enumeración de candidatos utiliza los puertos de metadatos definidos en §9.
 
 El propietario puede acceder a su propia memoria PRIVATE mediante una regla explícita evaluada por CAM. No necesita un Grant de proyecto. MemoryGateway y CAM siguen siendo obligatorios. Ningún otro actor obtiene acceso por defecto.
 
-**APROBADO POR EL PROPIETARIO — dirección técnica**
+**DIRECCIÓN TÉCNICA ADOPTADA**
 
 La regla de propietario privado se evalúa como una ruta explícita y limitada, separada de la coincidencia de Grants:
 
 - actor de tipo `USER`;
 - identidad activa;
-- `actor.identity_id == context.user_id == Memory.owner_id`;
+- el sujeto autenticado por la frontera de identidad coincide con `Memory.owner_id`, y la identidad `USER` del actor está vinculada a ese sujeto por evidencia confiable; `context.user_id` por sí solo no demuestra autenticación ni propiedad;
 - scope de la memoria explícitamente `PRIVATE`;
 - acción dentro del conjunto permitido para la operación;
 - recurso exacto y metadatos confiables.
@@ -362,7 +362,7 @@ La ruta PRIVATE del propietario se limita a memory.read y memory.propose, más m
 
 ### 6.5 Solicitud de autorización tipada
 
-**APROBADO POR EL PROPIETARIO — dirección técnica**
+**DIRECCIÓN TÉCNICA ADOPTADA**
 
 La solicitud de CAM transportará una referencia tipada al recurso, en lugar de confiar en campos sueltos que no expresen el scope:
 
@@ -399,22 +399,7 @@ Invariantes:
 
 **DECISIÓN CERRADA — ver §9.3.2**
 
-La autoridad de metadatos y sus puertos se definen en §9.3.2. La implementación debe respetar esa frontera y no usar los datos del solicitante como autoridad.
-
-- recurso e ID;
-- propietario;
-- scope;
-- proyecto;
-- entorno;
-- recurso padre, cuando corresponda.
-
-El solicitante no puede ser esa fuente. Tampoco se debe asumir que el Registry del Broker es la fuente de metadatos de memoria: su alcance es independiente y está protegido.
-
-**DECISIÓN CERRADA — §9.3.2**
-
-La autoridad de metadatos se implementa mediante puertos de lectura tipados, separados de CAM y del solicitante: MemoryMetadataPort resuelve memoria, versiones, propietario, scope, proyecto, estado, versión vigente y relación padre/hijo; ProjectMetadataPort verifica existencia/estado del proyecto; EnvironmentMetadataPort verifica el entorno cuando aplique; ResourceMetadataResolver enruta por tipo de recurso al resolver registrado.
-
-Los adaptadores consultan la fuente canónica del dominio correspondiente. Para memoria, la fuente canónica es el agregado de memoria; para proyectos, la autoridad de proyectos definida por Atlas. El Registry del Broker no es fuente de metadatos de memoria ni se reutiliza como sustituto. El solicitante nunca aporta metadatos autoritativos. Los puertos devuelven metadatos mínimos, no contenido. Si falta un resolver, hay duplicidad, inconsistencia, timeout o no se puede verificar el vínculo padre/hijo, CAM deniega. La enumeración puede obtener IDs candidatos, pero Gateway debe resolver y autorizar cada uno antes de exponer incluso metadatos protegidos. No se selecciona base de datos ni adaptador.
+CAM y Gateway utilizan los puertos de resolución tipados definidos en §9.3.2. El solicitante, OperationContext y el Registry del Broker no son fuentes autoritativas de owner, scope, proyecto ni relación padre/hijo. Los metadatos se resuelven antes de evaluar autorización; errores o ausencia de datos verificables producen DENY.
 
 ## 7. Flujos de dominio
 
