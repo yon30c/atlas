@@ -194,7 +194,9 @@ class ReadAdmissionStatus(str, Enum):
 _ALLOWED_ADMISSION_TRANSITIONS = {
     ReadAdmissionStatus.ADMITTED: {ReadAdmissionStatus.ACTIVE, ReadAdmissionStatus.CANCELLED, ReadAdmissionStatus.UNRESOLVED},
     ReadAdmissionStatus.ACTIVE: {ReadAdmissionStatus.COMPLETED, ReadAdmissionStatus.CANCELLED, ReadAdmissionStatus.UNRESOLVED},
-    ReadAdmissionStatus.UNRESOLVED: {ReadAdmissionStatus.COMPLETED, ReadAdmissionStatus.CANCELLED},
+    # UNRESOLVED solo puede resolverse con evidencia reconciliada por la autoridad;
+    # no se permite una transición local sin ese recibo.
+    ReadAdmissionStatus.UNRESOLVED: set(),
     ReadAdmissionStatus.COMPLETED: set(),
     ReadAdmissionStatus.CANCELLED: set(),
 }
