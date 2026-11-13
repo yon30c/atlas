@@ -214,6 +214,95 @@ Todo componente que pueda entregar contenido protegido y no esté registrado o n
 
 La evidencia de cobertura puede demostrar qué se inspeccionó y qué se encontró; no debe incluir contenido olvidado, payloads, hashes de contenido ni datos privados innecesarios.
 
+### 4.11 Protocolo lógico de orden, emisión y recuperación — recomendación adoptada
+
+Esta sección fija la semántica observable que deberán respetar los futuros puertos y adaptadores. No prescribe transacciones, base de datos, transporte, protocolo de red ni topología.
+
+#### 4.11.1 Punto de compromiso de emisión
+
+Se define **compromiso de emisión** (*egress commit*) como el instante en que el último punto de control de Atlas acepta irrevocablemente una unidad de contenido para entregarla al transporte o consumidor siguiente. En una respuesta completa puede ser el cuerpo completo; en streaming puede ser cada fragmento; en una exportación puede ser cada bloque o unidad publicada.
+
+Toda unidad debe pasar por una operación lógica indivisible que:
+
+1. Identifique la admisión, recurso, generación y punto de entrega exactos.
+2. Compruebe que la admisión no fue cerrada ni invalidada por Forget, revocación, cambio de revisión o expiración.
+3. Compruebe el tiempo confiable y las revisiones vigentes que correspondan.
+4. Ordene el compromiso de emisión respecto de los cierres e invalidaciones.
+5. Registre un resultado correlacionado antes de permitir que el punto de entrega libere esa unidad.
+
+No es suficiente comprobar el token al abrir una respuesta, stream o exportación. Tampoco es válido comprobarlo y después liberar datos mediante una cola o buffer que pueda emitirlos sin volver a pasar por el punto de compromiso.
+
+**Regla de orden:** para cada recurso y ámbito de invalidación debe existir un orden total observable entre los compromisos de emisión y el cierre/fencing. Si el compromiso precede al cierre, esa unidad cuenta como emitida antes del cierre. Si el cierre precede al compromiso, la unidad se rechaza. No existe un tercer resultado que permita liberar contenido mientras se resuelve la carrera.
+
+El límite de Atlas es el último punto de entrega controlado. Los bytes cuyo compromiso de emisión se completó antes del cierre pueden llegar físicamente al consumidor después por latencia del transporte; Atlas no puede retirar datos que ya cruzaron ese límite. En cambio, ningún buffer, cola o intermediario que siga bajo control de Atlas puede liberar unidades no comprometidas después del cierre.
+
+Si el resultado de un compromiso es ambiguo —por ejemplo, se pierde la confirmación y no puede saberse si el transporte aceptó la unidad—, la admisión queda **no resuelta**. No puede declararse completada ni cancelada hasta reconciliar evidencia del punto de entrega. Forget y las transiciones afectadas permanecen pendientes/fail-closed mientras esa incertidumbre pueda permitir una emisión.
+
+#### 4.11.2 Ciclo de vida lógico de una admisión
+
+Cada admisión se vincula a un identificador único, recurso(s) exactos, actor, snapshot CAM, revisiones de autoridades, generación de fencing y conjunto de puntos de entrega autorizados.
+
+Estados lógicos monotónicos:
+
+- **ADMITTED:** la autoridad aceptó la lectura después de CAM y registró la admisión.
+- **ACTIVE:** al menos un punto de entrega puede solicitar compromisos de emisión para esa admisión.
+- **COMPLETED:** se comprometió el final de la entrega y no queda ninguna unidad, buffer o trabajo pendiente que pueda emitir contenido.
+- **CANCELLED:** un cierre o invalidación precedió al final de la entrega y todos los puntos de entrega confirmaron que la admisión quedó cercada y no puede emitir más.
+- **UNRESOLVED:** el estado de uno o más puntos no puede determinarse. Es no terminal y bloquea cualquier operación que requiera demostrar la ausencia de emisiones futuras.
+
+Reglas:
+- ADMITTED -> ACTIVE -> COMPLETED es la ruta normal.
+- ADMITTED o ACTIVE -> CANCELLED solo después de fencing verificable de todos los puntos aplicables.
+- Cualquier transición incierta puede quedar UNRESOLVED; solo puede salir mediante reconciliación con evidencia correlacionada.
+- COMPLETED y CANCELLED son terminales e incompatibles. No se reabren ni se sustituyen.
+- Un acknowledgement tardío, duplicado o de otra generación no puede alterar una admisión terminal.
+- La expiración de lease, timeout, heartbeat perdido o caída aparente no constituyen por sí mismos evidencia de CANCELLED.
+
+#### 4.11.3 Cierre por Forget
+
+El inicio autorizado de Forget produce, en este orden lógico:
+
+1. Validar CAM y la prueba directa y no delegable del propietario para el objetivo exacto, conforme a DM-01.
+2. Registrar durablemente la intención de cierre y el conjunto exacto de recursos afectados.
+3. Cerrar nuevas admisiones y avanzar el fencing del alcance. Desde ese punto, todo nuevo compromiso de emisión queda rechazado.
+4. Cercar las admisiones previas que no hayan completado su entrega y obtener confirmación correlacionada de todos sus puntos de entrega.
+5. Confirmar **supresión lógica aplicada** únicamente cuando el cierre es efectivo, ninguna admisión previa puede emitir y todos los puntos de entrega aplicables están cercados o han confirmado su finalización.
+6. Ejecutar eliminación física y verificación por el inventario de persistencia, según CT-05. Solo después de verificar todos los destinos aplicables se puede completar Forget y reflejar forgotten.
+
+El paso 3 aplica el bloqueo lógico inmediatamente: mientras no exista confirmación completa del paso 5, el estado público/operativo es pendiente y no se comunica éxito. La indisponibilidad de un punto de entrega no permite saltar pasos; ese punto debe permanecer bloqueado para contenido protegido.
+
+#### 4.11.4 Revocación, suspensión, reducción de alcance y cambios canónicos
+
+Toda mutación que pueda invalidar una admisión debe participar en el mismo orden lógico de emisiones:
+
+- La solicitud aceptada de suspensión, revocación o reducción de alcance bloquea nuevas admisiones afectadas y compromisos de emisión posteriores.
+- La actualización canónica de Identity/Grant y su nueva revisión deben quedar vinculadas a la época de invalidación. No puede existir una ventana en la que la fuente autoritativa ya haya aplicado el cambio, pero un punto de entrega todavía acepte una revisión antigua.
+- Si no se puede ordenar la mutación y el fencing respecto de las emisiones, la ruta afectada se bloquea y falla cerrado; no se acepta propagación eventual como sustituto.
+- La expiración de Grant se evalúa en cada compromiso de emisión mediante tiempo confiable y las reglas exactas del contrato de Grant. Una admisión previa no prolonga la vigencia.
+- Si no hay tiempo confiable, revisión vigente o evidencia de fencing, no se comprometen nuevas unidades.
+
+La autoridad de admisión coordina el orden y el fencing; CAM conserva la decisión de autorización. Ninguno sustituye al otro.
+
+#### 4.11.5 Recuperación y evidencia mínima
+
+El registro lógico recuperable debe permitir reconstruir, sin contenido protegido:
+
+- ID de operación y clave de idempotencia;
+- objetivo exacto y alcance de recursos;
+- estado de la operación y su secuencia de transición;
+- ID de admisión, actor y correlación con el snapshot CAM;
+- revisiones/épocas y generación de fencing;
+- puntos de entrega participantes;
+- secuencia/ID de cada compromiso de emisión cuando aplique;
+- acknowledgements de finalización o fencing, vinculados a admisión, generación y punto de entrega;
+- resultado de reconciliación y evidencia mínima de cobertura.
+
+Las escrituras repetidas con la misma clave y el mismo objetivo devuelven el resultado de la operación existente; la misma clave con un objetivo diferente se rechaza. Los eventos duplicados o fuera de orden no pueden hacer retroceder estados ni cerrar una operación sin evidencia completa.
+
+Después de reiniciar, la autoridad restaura cierres y generaciones antes de admitir tráfico. Las admisiones no terminales se recuperan como pendientes/no resueltas hasta reconciliarlas con todos sus puntos. Si un punto no puede demostrar su estado, permanece deshabilitado para contenido protegido. No se recrean admisiones antiguas ni se reutilizan generaciones.
+
+La evidencia no debe contener payloads, fragmentos, contenido olvidado ni hashes de contenido. La evidencia de entrega y la evidencia de eliminación física son conjuntos distintos y no se sustituyen mutuamente.
+
 ## 5. Reglas de fallo cerrado
 
 - Snapshot ausente, inválido, caducado o con IDs distintos: no leer.
@@ -269,6 +358,15 @@ Antes de integrar un proveedor real, construir pruebas deterministas con puertos
 | C21 | Se revoca el Grant después de admitir una lectura y antes del siguiente fragmento | El punto de entrega rechaza nuevas emisiones y la admisión no se considera cancelada hasta confirmación de fencing |
 | C22 | La identidad del actor pasa a SUSPENDED o REVOKED durante una lectura | Se detienen nuevas emisiones; no se conserva el permiso por el snapshot inicial |
 | C23 | No se puede consultar/verificar la vigencia de autorización para una emisión | No se entrega contenido adicional; no se renueva el snapshot por fallback |
+| C24 | Un compromiso de emisión y un cierre por Forget compiten simultáneamente | Ambos quedan ordenados: si el cierre gana, la unidad se rechaza; si el compromiso gana, esa unidad cuenta como emitida antes del cierre |
+| C25 | Se pierde el acknowledgement después de solicitar liberar una unidad | La admisión queda UNRESOLVED; no se presume que la unidad no fue emitida |
+| C26 | Una cola contiene fragmentos no comprometidos cuando se activa el fencing | Los fragmentos pendientes se descartan y no cruzan el último punto de entrega |
+| C27 | Un stream termina y después llega un acknowledgement duplicado o tardío | El estado terminal COMPLETED/CANCELLED no cambia |
+| C28 | Forget se reintenta con la misma clave y el mismo objetivo | Se devuelve la misma operación y no se crea un segundo cierre incompatible |
+| C29 | Se reutiliza la clave de idempotencia para otro objetivo | La solicitud se rechaza; no se modifica el alcance original |
+| C30 | Tras reinicio existe una admisión sin evidencia completa de terminalidad | Se restaura como UNRESOLVED; no se reabre tráfico ni se confirma supresión |
+| C31 | La expiración del Grant ocurre entre dos fragmentos de un stream | El siguiente compromiso de emisión se rechaza según el límite temporal contractual |
+| C32 | Una revocación/suspensión es aceptada mientras un compromiso de emisión compite | El orden autoritativo determina el ganador; ninguna emisión puede comprometerse después del punto efectivo de invalidación |
 | C24 | Cambia la revisión de Memory o MemoryVersion después de emitir el snapshot CAM | La admisión basada en la revisión anterior se rechaza; se requiere nueva autorización y admisión |
 | C25 | Cambia el estado del Project o Environment que participó en CAM | La revisión de autoridad no coincide y no se emite contenido |
 | C26 | Se revoca o reduce un Grant durante un stream | La revocación y el fencing se ordenan antes de cualquier emisión posterior; si no puede probarse, la ruta se bloquea |
@@ -286,14 +384,14 @@ Las pruebas de concurrencia deben usar eventos/barreras explícitas, no sleeps n
 
 ## 8. Decisiones pendientes antes de implementar
 
-Los bloqueos conceptuales de esta etapa quedan resueltos mediante las direcciones técnicas adoptadas en §§4.8–4.10. Antes de implementar siguen siendo necesarios trabajos de especificación y evidencia:
+Los bloqueos conceptuales de revisiones, revocación, inventarios y protocolo de emisión quedan especificados en §§4.8–4.11. Antes de implementar siguen siendo necesarios trabajos de contrato, inventario y evidencia:
 
-1. Traducir las revisiones canónicas a contratos de puertos y snapshots, sin escoger todavía almacenamiento físico.
-2. Definir el protocolo de orden entre mutaciones de Identity/Grant, fencing y emisiones; cualquier transición no verificable debe fallar cerrado.
+1. Traducir las revisiones canónicas y el snapshot a contratos de puertos tipados, manteniendo separados los hechos y autoridades que representa cada revisión.
+2. Traducir el protocolo de compromiso de emisión, cierre e invalidación a contratos de puertos; el orden lógico está definido, pero no se ha seleccionado su mecanismo físico.
 3. Completar por inspección el inventario real de persistencia/derivados y el inventario real de rutas de entrega.
-4. Definir la evidencia verificable por tipo de destino para eliminación física, reconciliación y restauración, incluidos backups.
-5. Especificar el registro durable de admisiones, cierres, generaciones y acknowledgements, manteniendo los resultados idempotentes y correlacionados.
-6. Derivar pruebas deterministas para cambios de revisión, revocación, expiración, inventario incompleto y recuperación.
+4. Definir evidencia verificable por tipo de destino para eliminación física, reconciliación y restauración, incluidos backups.
+5. Traducir el registro lógico de admisiones, compromisos, cierres y acknowledgements a un contrato durable e idempotente.
+6. Derivar y ejecutar pruebas deterministas para los casos C01–C32 antes de integrar adaptadores reales.
 
 **Decisión 1 — aceptada y precisada:** al iniciar Forget se cierran nuevas admisiones y se aplica fencing inmediato. Una lectura previa solo se considera completada si terminó toda su entrega antes de ese cierre; de lo contrario debe cancelarse con confirmación verificable de que no puede emitir más contenido. No se confirma la supresión lógica mientras alguna admisión previa pueda entregar contenido o su estado no pueda determinarse.
 
@@ -319,21 +417,29 @@ Los bloqueos conceptuales de esta etapa quedan resueltos mediante las direccione
 
 **Decisión 12 — recomendación adoptada para continuar el diseño:** componentes de entrega no inventariados o incapaces de demostrar fencing no pueden servir contenido protegido. Destinos de persistencia desconocidos/no verificables impiden declarar Forget completado. La cobertura exige trazabilidad de rutas y evidencia de inspección, incluidos componentes declarados no aplicables.
 
+**Decisión 13 — recomendación adoptada para continuar el diseño:** cada unidad de contenido cruza un punto de compromiso de emisión ordenado respecto de cierres e invalidaciones. La comprobación separada de un token seguida de una liberación posterior no satisface la garantía. Una unidad comprometida antes del cierre cuenta como emitida; una unidad cuyo compromiso ocurre después se rechaza.
+
+**Decisión 14 — recomendación adoptada para continuar el diseño:** las admisiones usan estados monotónicos ADMITTED, ACTIVE, COMPLETED, CANCELLED y UNRESOLVED. COMPLETED y CANCELLED son terminales incompatibles; UNRESOLVED bloquea la confirmación de operaciones que requieren demostrar ausencia de emisiones futuras.
+
+**Decisión 15 — recomendación adoptada para continuar el diseño:** Forget y las invalidaciones de autorización se ordenan respecto de cada compromiso de emisión. Los resultados ambiguos no se interpretan como ausencia de entrega; requieren reconciliación y mantienen el sistema fail-closed.
+
+**Decisión 16 — recomendación adoptada para continuar el diseño:** el registro lógico de admisiones, compromisos, cierres y acknowledgements debe ser durable, monotónico, correlacionado e idempotente. La recuperación restaura cierres antes de admitir tráfico y nunca resuelve una admisión por timeout solamente.
+
 Ninguno de estos puntos autoriza a seleccionar una base de datos, caché, índice, proveedor, scheduler o plataforma.
 
 ## 9. Criterio de salida
 
 ME-03 de diseño estará listo para implementación cuando se hayan aceptado las garantías de §3–4 y cerrado los bloqueos de §8 que afecten al límite de lectura. La implementación posterior deberá:
 
-- cambiar el contrato del puerto para exigir lectura condicional;
+- cambiar el contrato del puerto para exigir lectura condicional y admisión vinculada al snapshot;
 - vincular el resultado CAM con el snapshot exacto y las revisiones monotónicas de todas las autoridades aplicables;
-- ordenar mutaciones de Identity/Grant, fencing y emisiones sin depender de propagación eventual;
+- implementar el compromiso de emisión como operación ordenada respecto de cierres e invalidaciones;
 - mantener inventarios separados y verificables de persistencia/derivados y rutas de entrega;
 - comprobar la supresión en el mismo límite de admisión/lectura;
-- coordinar lecturas en curso con Forget;
-- aplicar fencing en cada punto efectivo de emisión y cubrir buffers/intermediarios;
-- recuperar durablemente cierres, generaciones y admisiones sin reabrir antes de reconciliar;
-- añadir pruebas deterministas de carreras, reanudación de emisores antiguos, caída/reinicio y fencing de cada canal;
+- coordinar lecturas en curso con Forget y con revocaciones/suspensiones;
+- aplicar fencing en cada compromiso de emisión y cubrir buffers/intermediarios;
+- recuperar durablemente cierres, generaciones, admisiones y acknowledgements sin reabrir antes de reconciliar;
+- añadir y ejecutar pruebas deterministas C01–C32;
 - mantener los adaptadores de prueba separados de cualquier afirmación de integración real.
 
 **Estado actual:** este documento registra una propuesta de diseño. No implementa snapshots, leases, supresión, Forget, persistencia ni garantías de runtime.
