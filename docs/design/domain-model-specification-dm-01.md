@@ -30,7 +30,7 @@ Objetivos concretos:
 Se utilizan estas etiquetas:
 
 - **APROBADO:** regla que ya está establecida en el contrato principal o en los contratos CT.
-- **PROPUESTA TÉCNICA:** representación o mecanismo recomendado en DM-01. No se considera aprobado hasta que el propietario lo confirme.
+- **DIRECCIÓN TÉCNICA ADOPTADA:** representación o mecanismo recomendado y confirmado por el propietario; su alcance y las excepciones se registran en §9.
 - **PENDIENTE:** dato o mecanismo que debe decidirse explícitamente antes de implementar el flujo afectado.
 - **FUERA DE ALCANCE:** cuestión que DM-01 no debe resolver.
 
@@ -93,7 +93,7 @@ Invariantes de construcción:
 
 `Memory` representa la identidad lógica estable de una memoria, su propietario canónico, su scope y la referencia a la versión aprobada vigente.
 
-**PROPUESTA TÉCNICA**
+**DIRECCIÓN TÉCNICA ADOPTADA**
 
 ```text
 Memory
@@ -129,7 +129,7 @@ La consistencia entre la memoria y las versiones relacionadas requiere validaci�
 - La aprobación de una versión nueva, la transición de la anterior a `superseded` y el cambio del puntero vigente son atómicos.
 - El historial no concede acceso por sí mismo.
 
-**PROPUESTA TÉCNICA**
+**DIRECCIÓN TÉCNICA ADOPTADA**
 
 ```text
 MemoryVersion
@@ -192,7 +192,7 @@ Reglas:
 
 Una propuesta debe identificar si pretende crear una memoria lógica nueva o una versión nueva de una memoria existente. Debe vincularse con la memoria y la versión sometida a revisión, sin modificar una versión aprobada.
 
-**PROPUESTA TÉCNICA**
+**DIRECCIÓN TÉCNICA ADOPTADA**
 
 ```text
 MemoryProposal
@@ -204,7 +204,7 @@ MemoryProposal
   submitted_at: Instant
 ```
 
-Semántica propuesta:
+Semántica adoptada:
 
 - `CREATE_MEMORY`: identifica una nueva memoria lógica con scope explícito y una primera versión en `pending_review`. Su puntero aprobado permanece nulo hasta la aprobación.
 - `NEW_VERSION`: identifica una memoria existente y una nueva versión pendiente; hereda propietario y scope de la memoria objetivo. La propuesta no puede cambiar propietario ni scope.
@@ -218,7 +218,7 @@ Semántica propuesta:
 
 La procedencia es obligatoria por versión. Las referencias a fuentes y evidencias no conceden autorización. Si una fuente desaparece, se conserva la referencia histórica y se identifica como no disponible.
 
-**PROPUESTA TÉCNICA**
+**DIRECCIÓN TÉCNICA ADOPTADA**
 
 ```text
 MemoryProvenance
@@ -312,7 +312,7 @@ GrantResourceScope
   resource_ids: frozenset[ResourceId]
 ```
 
-Reglas propuestas:
+Reglas adoptadas:
 
 1. `resource_ids` debe ser no vacío para un Grant que autorice operaciones sobre recursos concretos.
 2. Cada ID es explícito; no se admiten `*`, prefijos, rangos implícitos ni coincidencia por tipo.
