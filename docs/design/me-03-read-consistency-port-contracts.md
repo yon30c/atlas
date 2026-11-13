@@ -425,7 +425,7 @@ Se añadió `tests/unit/test_memory_consistency_authority.py` con un fake determ
 
 ### Límites explícitos del fake
 
-El fake es una herramienta de prueba, no un adaptador de producción. Usa memoria local y un lock de proceso único. No prueba persistencia durable, compare-and-swap distribuido, fencing entre procesos, transporte de red, recuperación tras reinicio ni cobertura real de todos los endpoints. Tampoco implementa persistencia durable, recuperación tras reinicio, supresión global ni eliminación física. La extensión del fake para Forget en §14.3 solo prueba el contrato lógico en memoria y proceso único.
+El fake es una herramienta de prueba, no un adaptador de producción. Usa memoria local y un lock de proceso único. No prueba persistencia durable, compare-and-swap distribuido, fencing entre procesos ni transporte de red. La extensión de recuperación descrita en §14.4 simula un reinicio reconstruyendo el estado desde un snapshot inmutable de prueba; no prueba almacenamiento durable, autenticidad del registro ni recuperación real de procesos. Tampoco implementa supresión global ni eliminación física.
 
 La interfaz de `ReadConsistencyAuthorityPort` ya declara el inicio y la reconciliación del cierre lógico Forget. La autoridad concreta todavía debe implementar el ciclo completo con autorización verificable y evidencia CT-05 antes de que pueda considerarse completa. No se selecciona todavía almacenamiento ni transporte.
 
@@ -438,7 +438,7 @@ Las firmas tipadas de `ProtectedEgressPort.finish()` y `fence()` requieren `oper
 
 El fake de pruebas implementa la correlación explícita, acknowledgements idempotentes y serialización conservadora de invalidaciones que afectan una misma admisión. Una invalidación nueva que se solape con una operación aún pendiente se rechaza hasta reconciliar la anterior.
 
-El conjunto de pruebas de autoridad/egress contiene actualmente 20 métodos de prueba, incluidos los escenarios de cierre lógico Forget descritos en §14.3. Este número describe pruebas escritas, no pruebas ejecutadas.
+El conjunto de pruebas de autoridad/egress contiene actualmente 24 métodos de prueba, incluidos los escenarios de cierre lógico y recuperación Forget descritos en §§14.3–14.4. Este número describe pruebas escritas, no pruebas ejecutadas.
 
 
 ## 14. Estado de integración del Gateway protegido
@@ -492,3 +492,26 @@ Se amplió `ReadConsistencyAuthorityPort` con:
 El protocolo `VerifiedForgetAuthorization` representa la frontera tipada para la evidencia ya verificada. No implementa un emisor ni un verificador: el repositorio aún no dispone de un emisor confiable de OwnerDecisionProof. Por tanto, este contrato **no habilita una operación Forget invocable** ni admite sustituir la prueba por un booleano, texto de chat o afirmación del Assistant.
 
 Se añadieron siete pruebas de modelo en `tests/unit/test_memory_forget.py` y cinco escenarios adicionales de autoridad/egress en `tests/unit/test_memory_consistency_authority.py`; son pruebas escritas y no ejecutadas. El fake cubre idempotencia, rechazo de reutilización de clave, vínculo propietario/actor, carrera con admisión, bloqueo de nuevas lecturas y acknowledgements parciales/fencing. Aún falta recuperación tras reinicio y revisar todos los canales de entrega. No hay persistencia durable, supresión global ni eliminación física implementadas.
+
+### 14.4 Recuperación fail-closed de Forget (contrato y fake)
+
+Se añadió `ForgetRecoverySnapshot` en `src/atlas/memory/forget.py`. El snapshot exige:
+
+- generación restaurada no inferior a la generación del cierre;
+- inventario exacto de todas las admisiones afectadas, sin duplicados ni omisiones;
+- todas las admisiones pertenecen a la memoria objetivo;
+- todas las rutas observadas coinciden exactamente con el inventario de rutas del cierre;
+- cada admisión afectada pertenece a una generación anterior a la generación de fencing restaurada;
+- el conjunto de admisiones no terminales coincide exactamente con `unresolved_admission_ids` del cierre.
+
+El fake incorpora exportación/restauración de este snapshot para simular un reinicio. Al restaurar:
+
+1. reinstala la generación y mantiene la memoria en el conjunto de supresión;
+2. conserva el cierre y sus admisiones afectadas;
+3. convierte toda admisión que no estuviera ya en estado terminal a `UNRESOLVED`;
+4. no restaura acknowledgements volátiles en memoria;
+5. exige nuevos recibos de fencing en la generación restaurada antes de reconciliar el cierre como `SUPPRESSED`.
+
+Las pruebas cubren cierre pendiente tras reinicio, bloqueo de nuevas admisiones, rechazo de emisión de un proceso antiguo, rechazo de acknowledgements de generación obsoleta, inventario incompleto, retroceso de generación y persistencia del estado `SUPPRESSED` después de reiniciar.
+
+**Límite importante:** el snapshot es un contrato de datos, no una prueba de procedencia ni un mecanismo de persistencia. El fake no demuestra que el snapshot haya sido escrito atómicamente, protegido contra manipulación, recuperado desde almacenamiento durable ni coordinado entre procesos. En runtime, la autoridad debe cargar y validar el estado durable y restaurar cierres/generaciones antes de aceptar tráfico; si no puede verificarlo, debe mantener bloqueadas las rutas. No se añade todavía un adaptador ni una decisión tecnológica de almacenamiento.
