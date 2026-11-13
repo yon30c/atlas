@@ -491,7 +491,7 @@ Se amplió `ReadConsistencyAuthorityPort` con:
 
 El protocolo `VerifiedForgetAuthorization` representa la frontera tipada para la evidencia ya verificada. No implementa un emisor ni un verificador: el repositorio aún no dispone de un emisor confiable de OwnerDecisionProof. Por tanto, este contrato **no habilita una operación Forget invocable** ni admite sustituir la prueba por un booleano, texto de chat o afirmación del Assistant.
 
-Se añadieron siete pruebas de modelo en `tests/unit/test_memory_forget.py` y cinco escenarios adicionales de autoridad/egress en `tests/unit/test_memory_consistency_authority.py`; son pruebas escritas y no ejecutadas. El fake cubre idempotencia, rechazo de reutilización de clave, vínculo propietario/actor, carrera con admisión, bloqueo de nuevas lecturas y acknowledgements parciales/fencing. Aún falta recuperación tras reinicio y revisar todos los canales de entrega. No hay persistencia durable, supresión global ni eliminación física implementadas.
+Se añadieron siete pruebas de modelo en `tests/unit/test_memory_forget.py` y cinco escenarios adicionales de autoridad/egress en `tests/unit/test_memory_consistency_authority.py`; son pruebas escritas y no ejecutadas. El fake cubre idempotencia, rechazo de reutilización de clave, vínculo propietario/actor, carrera con admisión, bloqueo de nuevas lecturas y acknowledgements parciales/fencing. La recuperación fail-closed tras reinicio se desarrolla en §14.4; sigue pendiente revisar todos los canales de entrega. No hay persistencia durable, supresión global ni eliminación física implementadas.
 
 ### 14.4 Recuperación fail-closed de Forget (contrato y fake)
 
