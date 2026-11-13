@@ -438,7 +438,7 @@ Las firmas tipadas de `ProtectedEgressPort.finish()` y `fence()` requieren `oper
 
 El fake de pruebas implementa la correlación explícita, acknowledgements idempotentes y serialización conservadora de invalidaciones que afectan una misma admisión. Una invalidación nueva que se solape con una operación aún pendiente se rechaza hasta reconciliar la anterior.
 
-El conjunto de pruebas de autoridad/egress contiene actualmente 15 métodos de prueba. Este número describe pruebas escritas, no pruebas ejecutadas.
+El conjunto de pruebas de autoridad/egress contiene actualmente 20 métodos de prueba, incluidos los escenarios de cierre lógico Forget descritos en §14.3. Este número describe pruebas escritas, no pruebas ejecutadas.
 
 
 ## 14. Estado de integración del Gateway protegido
@@ -491,4 +491,4 @@ Se amplió `ReadConsistencyAuthorityPort` con:
 
 El protocolo `VerifiedForgetAuthorization` representa la frontera tipada para la evidencia ya verificada. No implementa un emisor ni un verificador: el repositorio aún no dispone de un emisor confiable de OwnerDecisionProof. Por tanto, este contrato **no habilita una operación Forget invocable** ni admite sustituir la prueba por un booleano, texto de chat o afirmación del Assistant.
 
-Se añadieron siete pruebas de modelo en `tests/unit/test_memory_forget.py`; son pruebas escritas y no ejecutadas. Aún falta implementar la semántica en el fake de autoridad/egress, cubrir idempotencia, carrera con admisión, acknowledgements parciales, fencing y recuperación, y después revisar todos los canales de entrega. No hay persistencia durable, supresión global ni eliminación física implementadas.
+Se añadieron siete pruebas de modelo en `tests/unit/test_memory_forget.py` y cinco escenarios adicionales de autoridad/egress en `tests/unit/test_memory_consistency_authority.py`; son pruebas escritas y no ejecutadas. El fake cubre idempotencia, rechazo de reutilización de clave, vínculo propietario/actor, carrera con admisión, bloqueo de nuevas lecturas y acknowledgements parciales/fencing. Aún falta recuperación tras reinicio y revisar todos los canales de entrega. No hay persistencia durable, supresión global ni eliminación física implementadas.
