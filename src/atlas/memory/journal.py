@@ -263,9 +263,6 @@ class ConsistencyTransition:
             ConsistencyRecordKind.READ_ADMITTED,
             ConsistencyRecordKind.READ_ACTIVATED,
             ConsistencyRecordKind.EGRESS_COMMITTED,
-            ConsistencyRecordKind.ENDPOINT_COMPLETED,
-            ConsistencyRecordKind.ENDPOINT_FENCED,
-            ConsistencyRecordKind.ADMISSION_RECONCILED,
         ):
             if self.operation_id != f"read:{self.admission_id}":
                 raise ContractError("operation_id debe corresponder a la admisión exacta")
