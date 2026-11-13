@@ -4,8 +4,8 @@ from datetime import datetime, timedelta
 
 from atlas.authorization.models import (
     AuthorizationDecision,
+    AuthorizationEvaluation,
     AuthorizationRequest,
-    AuthorizationResult,
     Grant,
 )
 from atlas.core.errors import ContractError
@@ -20,19 +20,19 @@ class AuthorizationEvaluator:
         request: AuthorizationRequest,
         grants: Iterable[Grant],
         now: datetime,
-    ) -> AuthorizationResult:
+    ) -> AuthorizationEvaluation:
         if not isinstance(request, AuthorizationRequest):
             raise ContractError("request debe ser AuthorizationRequest")
         self._validate_utc(now)
 
         if request.context.actor.status != IdentityStatus.ACTIVE:
-            return AuthorizationResult(AuthorizationDecision.DENY)
+            return AuthorizationEvaluation(AuthorizationDecision.DENY)
 
         for grant in grants:
             if not isinstance(grant, Grant):
                 raise ContractError("Todos los elementos deben ser Grant")
             if self._matches(request, grant, now):
-                return AuthorizationResult(AuthorizationDecision.ALLOW)
+                return AuthorizationEvaluation(AuthorizationDecision.ALLOW, grant)
 
         return AuthorizationResult(AuthorizationDecision.DENY)
 
