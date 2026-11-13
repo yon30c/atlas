@@ -30,13 +30,9 @@ from atlas.memory.metadata import (
 from atlas.memory.models import (
     Memory,
     MemoryClassification,
-    MemoryProvenance,
     MemoryScope,
     MemoryScopeKind,
-    MemoryVersion,
     MemoryVersionStatus,
-    ProvenanceContext,
-    SourceKind,
 )
 
 NOW = datetime(2026, 11, 13, 12, 0, tzinfo=timezone.utc)
@@ -214,35 +210,6 @@ def make_metadata_version():
         classification=MemoryClassification.CONFIDENTIAL,
         parent_version_id=None,
         revision=1,
-    )
-
-
-def make_content_version():
-    provenance = MemoryProvenance(
-        source_kind=SourceKind.USER_INPUT,
-        source_ref=None,
-        captured_at=NOW,
-        captured_by="identity-1",
-        origin_context=ProvenanceContext(
-            origin="integration-test",
-            actor_identity_id="identity-1",
-            request_id="request-1",
-            correlation_id="correlation-1",
-        ),
-    )
-    return MemoryVersion(
-        version_id=VERSION_ID,
-        memory_id=MEMORY_ID,
-        version_number=1,
-        content="contenido protegido de integración",
-        classification=MemoryClassification.CONFIDENTIAL,
-        status=MemoryVersionStatus.APPROVED,
-        provenance=provenance,
-        parent_version_id=None,
-        created_at=NOW - timedelta(days=1),
-        submitted_at=NOW - timedelta(days=1),
-        reviewed_at=NOW,
-        reviewed_by="owner-1",
     )
 
 
