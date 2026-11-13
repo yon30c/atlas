@@ -12,8 +12,6 @@ from atlas.memory.consistency import (
     DeliveryRouteSet,
     EgressReceipt,
     EndpointCompletionReceipt,
-    MemoryScope,
-    MemoryScopeKind,
     ReadAdmission,
     ReadAdmissionStatus,
     ReadTarget,
@@ -23,6 +21,8 @@ from atlas.memory.gateway import MemoryGatewayService
 from atlas.memory.models import (
     MemoryClassification,
     MemoryVersion,
+    MemoryScope,
+    MemoryScopeKind,
     MemoryVersionStatus,
 )
 from atlas.ports.protected_memory_read import ProtectedMemoryRead
@@ -259,6 +259,31 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         self.assertEqual(
             self.authority.reconciliations, ["read:admission-1"]
         )
+
+    def test_content_port_failure_closes_empty_admission(self):
+        self.content.error = TimeoutError("protected content unavailable")
+
+        result = self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
+
+        self.assertIsNone(result)
+        self.assertEqual(len(self.egress.finishes), len(ROUTES))
+        self.assertEqual(len(self.authority.acks), len(ROUTES))
+        self.assertEqual(
+            self.authority.reconciliations, ["read:admission-1"]
+        )
+
+    def test_snapshot_for_another_resource_is_rejected_before_admission(self):
+        other = make_snapshot()
+        object.__setattr__(other, "memory_id", "018bcfe5-7b3a-7cc2-98c4-dc0c0c073a13")
+        self.authorization.result = AuthorizationResult(
+            AuthorizationDecision.ALLOW, other
+        )
+
+        result = self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
+
+        self.assertIsNone(result)
+        self.assertEqual(self.authority.admit_calls, [])
+        self.assertEqual(self.content.calls, [])
 
     def test_restricted_or_mismatched_handle_is_never_returned(self):
         self.content.handle = FakeHandle(
