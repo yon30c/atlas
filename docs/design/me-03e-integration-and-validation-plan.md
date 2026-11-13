@@ -81,7 +81,7 @@ El flujo mínimo que debe probarse con una misma instancia de consistencia:
 8. Forget/invalidation cierran la misma autoridad y bloquean egress posterior.
 9. Recuperación no reabre si falta evidencia.
 
-La integración actual cubre lectura CAM → Gateway → fake de consistencia → egress → finalización → reconciliación. Las carreras Gateway/Forget se validan actualmente en la autoridad fake; el siguiente paso es unir esa carrera a una sesión Gateway real de prueba.
+La integración actual cubre lectura CAM → Gateway → fake de consistencia → egress → finalización → reconciliación. También se añadió una carrera de hilos entre una sesión Gateway real de prueba y Forget sobre la misma instancia fake; el contenido no puede emitirse después del cierre.
 
 ## 6. Decisión ME-03E-04 — Recuperación como operación de seguridad
 
@@ -143,12 +143,12 @@ Estos prerrequisitos no autorizan a seleccionar tecnología. La selección de pe
 | E25 | Restauración/reindexación con tombstone | No reaparición ni exposición. |
 | E26 | Evidencia de operación | Sin payload, fragmentos ni hashes de contenido. |
 
-E01–E10 tienen cobertura parcial con tests actuales de CAM/Gateway/autoridad fake. E11–E26 requieren ampliar pruebas o integrar adaptadores para poder declararse demostrados.
+E01–E10 tienen cobertura parcial o completa a nivel fake-in-process con tests actuales de CAM/Gateway/autoridad fake; no son evidencia distribuida. E11–E26 requieren ampliar pruebas o integrar adaptadores para poder declararse demostrados.
 
 ## 9. Secuencia de trabajo
 
 1. Ejecutar CI completa después de los tests concurrentes y Gateway añadidos.
-2. Añadir prueba Gateway-session vs Forget race usando la frontera única.
+2. [x] Añadir prueba Gateway-session vs Forget race usando la frontera única.
 3. Añadir recuperación integrada journal → reducer → autoridad fake, sin checkpoint no verificado.
 4. Añadir seguridad: rutas de contenido, capacidades, recibos, ids y payload ausentes.
 5. Ejecutar suite y revisar los resultados por versión Python.
