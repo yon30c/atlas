@@ -71,43 +71,13 @@ class ProtectedContentHandle(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class ProtectedMemoryRead:
-    """Lease opaco de lectura; no contiene ni expone MemoryVersion."""
+    """Capacidad bearer opaca; no contiene referencias a datos o handles internos."""
 
-    snapshot: AuthorizationSnapshot = field(repr=False)
-    admission: ReadAdmission
-    handle: ProtectedContentHandle = field(repr=False)
-    operation_id: str
+    read_id: str = field(repr=False)
 
     def __post_init__(self) -> None:
-        if not isinstance(self.snapshot, AuthorizationSnapshot):
-            raise ContractError("snapshot debe ser AuthorizationSnapshot")
-        if not isinstance(self.admission, ReadAdmission):
-            raise ContractError("admission debe ser ReadAdmission")
-        if self.admission.snapshot_id != self.snapshot.snapshot_id:
-            raise ContractError("admission no corresponde al snapshot")
-        if self.admission.status not in (
-            ReadAdmissionStatus.ADMITTED,
-            ReadAdmissionStatus.ACTIVE,
-        ):
-            raise ContractError("la admisión no está abierta para entrega")
-        if self.operation_id != f"read:{self.admission.admission_id}":
-            raise ContractError("operation_id no corresponde a la admisión")
-        target = self.admission.target
-        if (
-            target.memory_id != self.snapshot.memory_id
-            or target.version_id != self.snapshot.version_id
-            or getattr(self.handle, "admission_id", None) != self.admission.admission_id
-            or getattr(self.handle, "memory_id", None) != target.memory_id
-            or getattr(self.handle, "version_id", None) != target.version_id
-            or target.owner_id != self.snapshot.owner_id
-            or target.scope != self.snapshot.scope
-            or not isinstance(getattr(self.handle, "classification", None), MemoryClassification)
-            or self.handle.classification is not self.snapshot.classification
-            or self.handle.classification is MemoryClassification.RESTRICTED
-            or not isinstance(getattr(self.handle, "handle_id", None), str)
-            or not self.handle.handle_id.strip()
-        ):
-            raise ContractError("handle no corresponde al objetivo/admisión autorizados")
+        if not isinstance(self.read_id, str) or not self.read_id.strip():
+            raise ContractError("read_id debe ser una capacidad no vacía")
 
 
 class ProtectedMemoryContentPort(Protocol):
