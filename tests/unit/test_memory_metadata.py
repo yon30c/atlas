@@ -22,6 +22,7 @@ class MemoryMetadataTests(unittest.TestCase):
             status=MemoryVersionStatus.APPROVED,
             classification=MemoryClassification.CONFIDENTIAL,
             parent_version_id=PARENT_ID,
+            revision=1,
         )
         self.assertEqual(metadata.memory_id, MEMORY_ID)
         self.assertEqual(metadata.parent_version_id, PARENT_ID)
@@ -35,6 +36,7 @@ class MemoryMetadataTests(unittest.TestCase):
                 status=MemoryVersionStatus.APPROVED,
                 classification=MemoryClassification.CONFIDENTIAL,
                 parent_version_id=None,
+                revision=1,
             )
 
     def test_version_metadata_rejects_unknown_status_type(self):
@@ -58,18 +60,18 @@ class MemoryMetadataTests(unittest.TestCase):
             )
 
     def test_project_metadata_preserves_canonical_status(self):
-        self.assertEqual(ProjectMetadata("project-001", "active").status, "active")
+        self.assertEqual(ProjectMetadata("project-001", "active", 1).status, "active")
         with self.assertRaises(ContractError):
-            ProjectMetadata("", "active")
+            ProjectMetadata("", "active", 1)
         with self.assertRaises(ContractError):
-            ProjectMetadata("project-001", " ")
+            ProjectMetadata("project-001", " ", 1)
 
     def test_environment_metadata_preserves_canonical_status(self):
-        self.assertEqual(EnvironmentMetadata("development", "active").status, "active")
+        self.assertEqual(EnvironmentMetadata("development", "active", 1).status, "active")
         with self.assertRaises(ContractError):
-            EnvironmentMetadata(" ", "active")
+            EnvironmentMetadata(" ", "active", 1)
         with self.assertRaises(ContractError):
-            EnvironmentMetadata("development", " ")
+            EnvironmentMetadata("development", " ", 1)
 
 
 if __name__ == "__main__":
