@@ -201,6 +201,13 @@ class JournalRecoveryProjectionV2Tests(unittest.TestCase):
         self.assertEqual(
             item.endpoints[0].terminal_receipt_id, "endpoint-terminal-receipt"
         )
+        self.assertEqual(
+            item.endpoints[0].terminal_operation_id, "read:admission-v2"
+        )
+        self.assertEqual(item.endpoints[0].terminal_generation, 5)
+        self.assertEqual(item.endpoints[0].final_sequence, 0)
+        self.assertEqual(item.terminal_operation_id, "read:admission-v2")
+        self.assertEqual(item.terminal_generation, 5)
 
 
 if __name__ == "__main__":
