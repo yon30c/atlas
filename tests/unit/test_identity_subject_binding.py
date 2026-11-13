@@ -82,6 +82,12 @@ class IdentitySubjectBindingTests(unittest.TestCase):
         )
         self.assertIsNone(resolve_authenticated_user_subject(make_context(), port))
 
+    def test_stale_binding_revision_is_denied(self):
+        port = StubBindingPort(
+            AuthenticatedUserSubject("identity-user-1", "user-7", True, 2)
+        )
+        self.assertIsNone(resolve_authenticated_user_subject(make_context(), port))
+
     def test_missing_or_failing_binding_port_is_denied(self):
         self.assertIsNone(resolve_authenticated_user_subject(make_context(), None))
         port = StubBindingPort(error=TimeoutError("identity provider unavailable"))
@@ -90,6 +96,8 @@ class IdentitySubjectBindingTests(unittest.TestCase):
     def test_invalid_binding_values_are_rejected(self):
         with self.assertRaises(ContractError):
             AuthenticatedUserSubject("", "user-7", True, 1)
+        with self.assertRaises(ContractError):
+            AuthenticatedUserSubject("identity-user-1", "user-7", True, 0)
         with self.assertRaises(ContractError):
             AuthenticatedUserSubject("identity-user-1", "user-7", 1, 1)
 
