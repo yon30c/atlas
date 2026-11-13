@@ -456,7 +456,7 @@ Se sustituyó la ruta anterior de lectura cruda por el siguiente flujo de fronte
 3. El Gateway valida que la admisión devuelta coincida exactamente con snapshot, objetivo, propietario, scope y rutas configuradas.
 4. Solo entonces llama a `ProtectedMemoryContentPort.read_version_if_admitted(snapshot, admission)`.
 5. El puerto de contenido devuelve un `ProtectedContentHandle` opaco. El Gateway valida IDs, admisión y clasificación y construye `ProtectedMemoryRead`; el propio modelo comprueba que memoria y versión del objetivo coincidan con el snapshot. Nunca devuelve `MemoryVersion` ni su contenido.
-6. Cada unidad pasa por `emit_version()`, que llama a `ProtectedEgressPort.commit_and_emit()`. La expiración del Grant se comprueba en el Gateway y debe volver a comprobarse atómicamente en el último punto de egress.
+6. Cada unidad pasa por `emit_version()`, que llama a `ProtectedMemoryConsistencyPort.commit_and_emit()` a través de la misma instancia usada para admisión, Forget e invalidación. La expiración del Grant se comprueba en el Gateway y debe volver a comprobarse atómicamente en el último punto de egress.
 7. Cada endpoint confirma su finalización mediante `finish_version()`; el recibo queda vinculado a la operación `read:{admission_id}`, admisión, endpoint, generación y secuencia final. `reconcile_version()` consulta el resultado sin forzar terminalidad.
 
 Si la lectura condicional falla después de admitir, el Gateway intenta cerrar la admisión vacía con secuencia final cero para todos los endpoints. Si falta cualquier acknowledgement, la admisión permanece pendiente/no resuelta; no se presupone finalización.
@@ -474,7 +474,7 @@ Esta integración define el camino protegido, pero no acredita la garantía comp
 - `ProtectedMemoryRead` es un lease opaco a nivel de API Python; la seguridad final depende de que el handle real no exponga payload ni permita serialización o lectura fuera de egress.
 - La configuración de `DeliveryRouteSet` debe provenir de composición confiable y representar todas las rutas que puedan emitir contenido. No debe aceptar rutas elegidas libremente por el solicitante.
 - La autoridad concreta debe crear atómicamente la operación `read:{admission_id}` junto con la admisión y comprobar supresión, revisiones, generación y cobertura.
-- El egress concreto debe ordenar cada compromiso respecto de invalidaciones/Forget y validar revisiones y expiración de Grant por unidad.
+- La implementación concreta de `ProtectedMemoryConsistencyPort` debe ordenar cada compromiso respecto de admisiones, invalidaciones/Forget y validar revisiones y expiración de Grant por unidad.
 - `begin_forget` y `reconcile_forget` están definidos en el puerto y cubiertos por un fake de proceso único; no existe autoridad durable ni emisor/verificador confiable de OwnerDecisionProof. El inventario verificable de destinos de persistencia/derivados sigue pendiente.
 - `MemoryGatewayService` implementa actualmente `get_version`, `emit_version`, `finish_version` y `reconcile_version`. Los métodos `list_visible` y `submit_proposal` declarados en el Protocol `MemoryGateway`, así como las demás operaciones de ciclo de vida, siguen sin implementación en este servicio; no debe tratarse como implementación completa del Gateway.
 - La inspección del árbol actual no encontró consumidores de `MemoryGateway` conectados desde Assistant ni adaptadores de transporte/API/streaming. `src/atlas/assistant` contiene actualmente modelos, no un servicio de respuesta que mantenga la admisión hasta completar la entrega derivada. Los IDs de rutas usados por los fakes son fixtures; no demuestran que el inventario de rutas real esté completo.
@@ -551,7 +551,7 @@ Se incorporó una primera capa sin infraestructura:
 - `tests/unit/test_memory_journal_failures.py`: 20 pruebas de protocolo que mapean C45–C64, con fallos antes/después de append, resultados ambiguos, recuperación fail-closed, recibos y consumo de prueba de propietario.
 - El mismo archivo contiene un fake de proceso único que simula append condicional, replay idempotente, conflicto de clave, carga tras checkpoint, rechazo de checkpoint obsoleto y consulta correlacionada de recibos de endpoint.
 
-Los modelos y el puerto no persisten datos, no verifican por sí mismos la autenticidad del watermark y no garantizan atomicidad distribuida. `ConsistencyTransition` limita schema_version a la versión soportada 1, exige la revisión anterior/nueva en INVALIDATION_CLOSED y el resultado terminal explícito en ADMISSION_RECONCILED. C51 valida la correlación completa del recibo externo antes de registrar evidencia. Los fakes y las 20 pruebas C45–C64 son secuenciales y de protocolo: no prueban concurrencia real, durabilidad, protección antitruncamiento ni recuperación de procesos reales. Las 52 pruebas están escritas, no ejecutadas. C45–C64 tienen cobertura de escenarios sobre fakes, pero siguen pendientes de validación de integración contra la autoridad, Gateway, egress y un journal durable.
+Los modelos y el puerto no persisten datos, no verifican por sí mismos la autenticidad del watermark y no garantizan atomicidad distribuida. `ConsistencyTransition` limita schema_version a la versión soportada 1, aplica allowlists cerradas por tipo, exige la revisión anterior/nueva en INVALIDATION_CLOSED y el resultado terminal explícito en ADMISSION_RECONCILED. `ConsistencyJournalReducer` valida replay, correlación, inventarios, generaciones, secuencias y terminalidad. C45–C84 están representados por pruebas de modelos/reducer y fakes. Los 75 métodos de prueba de journal/reducer están escritos, no ejecutados; no prueban persistencia durable, anti-rollback criptográfico, transporte ni recuperación real de procesos.
 
 
 ## 15. ME-03A — Capacidad opaca de lectura
@@ -580,3 +580,16 @@ La composición del protocolo hace que la configuración del Gateway exija ambas
 El fake de autoridad ya contiene los métodos de admisión, Forget, invalidación y egress bajo un mismo lock de proceso único; el Gateway deja de envolverlo en un segundo fake de egress. Esto sirve para validar la forma de integración y el orden determinista local, no para afirmar durabilidad, coordinación distribuida ni fencing de transporte real.
 
 **Estado:** contrato compuesto e integración del Gateway implementados parcialmente en el código; pendientes revisión final y validación automatizada. Sin adaptadores reales ni validación de runtime declarada.
+
+
+## 17. ME-03C — Reducer semántico del journal
+
+Se añadió `src/atlas/memory/journal_reducer.py` con un reducer puro que consume `ConsistencyRecoveryState` y devuelve una proyección inmutable de admisiones, endpoints, recibos, cierres Forget e invalidaciones. El reducer valida que los eventos estén correlacionados con la admisión/operación exacta, que cada endpoint pertenezca al inventario admitido, que las secuencias de emisión sean crecientes, que no haya emisiones tras finalización/fencing/cierre, que los inventarios de Forget/invalidación sean exactos y que las operaciones terminales esperen la evidencia de todos los endpoints.
+
+Se cerró además el esquema de `ConsistencyTransition` mediante allowlist por `ConsistencyRecordKind`; un campo de otro tipo de transición se rechaza. El paquete `atlas.memory` exporta el reducer y sus modelos de proyección.
+
+La semántica de generación queda diferenciada: `ENDPOINT_FENCED.generation` es la nueva generación del cierre que cerca al endpoint; `ADMISSION_RECONCILED.generation` identifica la generación original de la admisión. Los recibos de finalización de una operación de cierre usan la generación de esa operación.
+
+**Límite:** el reducer solo valida la estructura y el significado de los registros que recibe. No autentica el journal, no verifica el watermark, no consulta endpoints y no habilita rutas. Una `continuity_reference` opaca no se convierte en una prueba confiable por pasar el reducer. No existe adaptador durable.
+
+**Cobertura escrita:** 33 métodos en `test_memory_journal.py`, 20 en `test_memory_journal_failures.py` y 22 en `test_memory_journal_reducer.py` (75 en total). No se han ejecutado.
