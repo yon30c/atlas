@@ -75,7 +75,7 @@ class GrantManagementService:
         if grant.revoked_at is not None:
             return grant
 
-        revoked_grant = replace(grant, revoked_at=now)
+        revoked_grant = replace(grant, revoked_at=now, revision=grant.revision + 1)
         self._repository.update(revoked_grant)
         return revoked_grant
 
