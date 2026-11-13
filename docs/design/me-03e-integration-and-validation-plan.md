@@ -239,3 +239,21 @@ Se añadió `docs/design/me-03f-journal-admission-recovery-schema-design.md` con
 - cualquier nueva entrega de contenido exige una autorización CAM y admisión nuevas.
 
 La propuesta incluye 21 escenarios F01–F21 y una secuencia de implementación por etapas. No modifica contratos normativos ni código; no selecciona almacenamiento, transporte o mecanismo criptográfico. La recuperación durable y el runtime siguen bloqueados.
+
+### 16.1 Implementación inicial del schema v2 y proyección exacta
+
+Se implementó la primera parte de ME-03F, sin adaptadores ni activación de runtime:
+
+- `ConsistencyTransition` acepta schema v1 y v2; schema v2 se limita a `READ_ADMITTED`.
+- v1 conserva su allowlist y semántica histórica; no puede incluir los campos de scope v2.
+- v2 añade `scope_kind` y `scope_project_id`, exige owner, actor y request, y valida las combinaciones PRIVATE/PROJECT contra las revisiones de autorización.
+- `AdmissionProjection` conserva owner, scope, instante de admisión, marca explícita de recuperabilidad y recibo terminal de admisión.
+- `reconstruct_read_target()` reconstruye el `ReadTarget` exacto solo desde una proyección v2 válida. Para v1 o datos incompletos devuelve `None`; no infiere el scope.
+
+Pruebas nuevas:
+- `tests/unit/test_memory_journal_schema_v2.py`: 11 casos de validación y compatibilidad.
+- `tests/unit/test_memory_journal_recovery_projection_v2.py`: 7 casos de proyección, reconstrucción PRIVATE/PROJECT, rechazo de inferencia v1 y recibo terminal.
+
+CI de la reconstrucción exacta: [Atlas CI #43529942908](https://github.com/yon30c/atlas/actions/runs/43529942908), Python 3.10, 3.11, 3.12 y 3.13: éxito.
+
+**Pendiente:** clasificar y recuperar estados de endpoint con verificación independiente de recibos. La reconstrucción de `ReadTarget` no crea una sesión de lectura, no autoriza contenido y no reactiva emisores antiguos. No se ha implementado recuperación distribuida ni persistencia durable.
