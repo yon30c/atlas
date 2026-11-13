@@ -195,6 +195,16 @@ Antes de integrar un proveedor real, construir pruebas deterministas con puertos
 | C08 | Forget activa la barrera primero y llega una lectura después | Lectura rechazada; no se entrega contenido |
 | C09 | Se intenta restaurar/reindexar contenido suprimido | No se publica ni expone |
 | C10 | El destino derivado no puede consultar la supresión | No expone contenido |
+| C11 | Una admisión de generación anterior intenta emitir después de que Forget incrementó el fencing | El punto de entrega rechaza la emisión, aunque el emisor conserve buffers o estado local |
+| C12 | Un stream valida fencing al abrirse, pero intenta emitir un fragmento después del cierre | El fragmento no se entrega; validar solo al abrir el stream no satisface la garantía |
+| C13 | Un buffer o cola intermedia conserva contenido de una admisión invalidada | El contenido se descarta o queda cercado; no puede alcanzar al consumidor |
+| C14 | Un punto de entrega no confirma fencing o su confirmación no identifica admisión/generación | La admisión sigue pendiente y Forget no confirma supresión |
+| C15 | El coordinador cae después de cerrar admisiones y avanzar generación | Tras reinicio, el cierre se conserva; no se admiten lecturas hasta reconciliar admisiones y puntos de entrega |
+| C16 | El proceso emisor se pausa, vence su lease y luego se reanuda | No se declara cancelado por timeout; la emisión antigua es rechazada por fencing |
+| C17 | Un destino/canal existente no figura en el inventario o no puede demostrar fencing | No se declara cobertura global ni se confirma supresión |
+| C18 | Forget de memoria afecta varias versiones, propuestas y destinos | El cierre cubre el conjunto completo autorizado; ninguna versión o ruta derivada queda accesible |
+| C19 | Forget de una versión concreta | El cierre afecta exactamente el alcance autorizado y no amplía silenciosamente la supresión a otras versiones |
+| C20 | Llegan acknowledgements duplicados, tardíos o de una generación distinta | No alteran el estado terminal de otra admisión ni permiten confirmar con evidencia no correlacionada |
 
 Las pruebas de concurrencia deben usar eventos/barreras explícitas, no sleeps ni temporizadores, para que los intercalados sean reproducibles.
 
