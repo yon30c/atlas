@@ -334,7 +334,7 @@ Las clases `ConsistencyPosition`, `ConsistencyTransition`, `JournalCommit`, `Con
 
 ## 11. Pruebas de aceptación propuestas
 
-Los escenarios siguientes amplían la cobertura C01–C44. Se añadieron 20 pruebas deterministas de protocolo en `tests/unit/test_memory_journal_failures.py`, una por escenario C45–C64. Son pruebas de modelos/fakes secuenciales: no demuestran concurrencia real, persistencia durable, transporte ni fencing distribuido, y no se han ejecutado.
+Los escenarios siguientes amplían la cobertura C01–C44. Se añadieron 20 pruebas deterministas de protocolo en `tests/unit/test_memory_journal_failures.py`, una por escenario C45–C64. C51 valida la correlación exacta del recibo externo por admisión, endpoint, generación, receipt_id, emission_id y secuencia de emisión antes de registrar la evidencia. Son pruebas de modelos/fakes secuenciales: no demuestran concurrencia real, persistencia durable, transporte ni fencing distribuido, y no se han ejecutado.
 
 | ID | Escenario | Resultado exigido |
 |---|---|---|
@@ -403,7 +403,7 @@ En el commit de referencia de esta propuesta:
 - el fake de recuperación no prueba reinicios reales, concurrencia entre procesos ni almacenamiento durable;
 - no existe emisor/verificador confiable de OwnerDecisionProof;
 - no se han completado inventarios reales de entrega y persistencia;
-- se escribieron 29 pruebas unitarias de modelos/fake de journal en `tests/unit/test_memory_journal.py` y 20 pruebas de fallos C45–C64 en `tests/unit/test_memory_journal_failures.py`; 49 en total, ninguna ejecutada;
+- se escribieron 31 pruebas unitarias de modelos/fake de journal en `tests/unit/test_memory_journal.py` y 20 pruebas de fallos C45–C64 en `tests/unit/test_memory_journal_failures.py`; 51 en total, ninguna ejecutada;
 - no se ha ejecutado la suite completa ni las pruebas C01–C64 en esta etapa.
 
 **Conclusión:** los modelos puros, el puerto tipado, el fake de proceso único y los 20 casos de fallo C45–C64 ya están escritos. La cobertura actual valida el comportamiento esperado de los fakes, no de un journal durable ni de los componentes reales de Atlas. El siguiente paso es revisar estáticamente los casos, ejecutar la suite en un entorno disponible y cerrar las brechas del modelo antes de diseñar adaptadores.
