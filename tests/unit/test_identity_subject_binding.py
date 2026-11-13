@@ -55,7 +55,7 @@ class IdentitySubjectBindingTests(unittest.TestCase):
 
     def test_non_user_actor_is_denied_without_lookup(self):
         port = StubBindingPort(
-            AuthenticatedUserSubject("identity-user-1", "user-7", True)
+            AuthenticatedUserSubject("identity-user-1", "user-7", True, 1)
         )
         context = make_context(kind=IdentityKind.AGENT)
 
