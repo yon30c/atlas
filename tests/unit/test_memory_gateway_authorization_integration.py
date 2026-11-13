@@ -58,13 +58,13 @@ class FakeMemoryMetadataPort:
 
 class FakeProjectMetadataPort:
     def get_project(self, project_id):
-        return ProjectMetadata(project_id, "active") if project_id == PROJECT_ID else None
+        return ProjectMetadata(project_id, "active", 1) if project_id == PROJECT_ID else None
 
 
 class FakeEnvironmentMetadataPort:
     def get_environment(self, environment_id):
         return (
-            EnvironmentMetadata(environment_id, "active")
+            EnvironmentMetadata(environment_id, "active", 1)
             if environment_id == ENVIRONMENT
             else None
         )
@@ -82,6 +82,7 @@ class FakeIdentityBindingPort:
             self.actor_identity_id,
             self.subject_user_id,
             True,
+            1,
         )
 
 
@@ -150,6 +151,7 @@ def make_metadata_version():
         status=MemoryVersionStatus.APPROVED,
         classification=MemoryClassification.CONFIDENTIAL,
         parent_version_id=None,
+        revision=1,
     )
 
 
