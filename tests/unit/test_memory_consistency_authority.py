@@ -103,11 +103,19 @@ class FakeReadConsistencyAndEgress:
             and current.status in (candidate.status, ReadAdmissionStatus.ACTIVE)
         )
 
-    def admit_read(self, snapshot, routes):
+    def admit_read(self, snapshot, routes, now=NOW):
         with self._lock:
             if not isinstance(snapshot, AuthorizationSnapshot):
                 return None
             if not isinstance(routes, DeliveryRouteSet):
+                return None
+            if (
+                not isinstance(now, datetime)
+                or now.tzinfo is None
+                or now.utcoffset().total_seconds() != 0
+            ):
+                return None
+            if snapshot.grant_expires_at is not None and now >= snapshot.grant_expires_at:
                 return None
             if not routes.route_ids.issubset(self.registered_routes):
                 return None
