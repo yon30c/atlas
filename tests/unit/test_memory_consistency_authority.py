@@ -824,6 +824,47 @@ class FakeHandle:
 
 class MemoryConsistencyAuthorityTests(unittest.TestCase):
 
+    def test_disjoint_invalidations_keep_independent_fencing_generations_and_receipts(self):
+        self.authority.revisions[(AuthorityKind.IDENTITY, "identity-2")] = 1
+        first = self.authority.admit_read(
+            private_snapshot(identity_id="identity-1"), DeliveryRouteSet(ROUTES)
+        )
+        second = self.authority.admit_read(
+            private_snapshot(identity_id="identity-2"), DeliveryRouteSet(ROUTES)
+        )
+        first_request = AuthorizationInvalidation(
+            "disjoint-invalidation-1", AuthorityKind.IDENTITY, "identity-1",
+            1, 2, frozenset({first.admission_id})
+        )
+        second_request = AuthorizationInvalidation(
+            "disjoint-invalidation-2", AuthorityKind.IDENTITY, "identity-2",
+            1, 2, frozenset({second.admission_id})
+        )
+        first_receipt = self.authority.begin_invalidation(first_request)
+        second_receipt = self.authority.begin_invalidation(second_request)
+        self.assertEqual(first_receipt.new_generation, 2)
+        self.assertEqual(second_receipt.new_generation, 3)
+        for admission, request, receipt in (
+            (first, first_request, first_receipt),
+            (second, second_request, second_receipt),
+        ):
+            for endpoint in sorted(admission.route_ids):
+                fence = self.egress.fence(
+                    admission, request.invalidation_id, endpoint,
+                    receipt.new_generation, NOW
+                )
+                self.assertIsNotNone(fence)
+                self.assertTrue(self.authority.record_endpoint_ack(fence))
+        self.assertEqual(
+            self.authority.reconcile(first_request.invalidation_id).resolved_admission_ids,
+            frozenset({first.admission_id})
+        )
+        self.assertEqual(
+            self.authority.reconcile(second_request.invalidation_id).resolved_admission_ids,
+            frozenset({second.admission_id})
+        )
+
+
     def test_read_operation_reconciles_from_terminal_invalidation_evidence(self):
         admission = self.authority.admit_read(
             private_snapshot(), DeliveryRouteSet(ROUTES)
