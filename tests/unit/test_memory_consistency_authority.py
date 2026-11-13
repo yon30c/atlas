@@ -724,7 +724,7 @@ class FakeReadConsistencyAndEgress:
 
 
 class FakeProtectedEgress:
-    """Fake separado para satisfacer el contrato de ProtectedEgressPort."""
+    """Fachada de prueba de endpoint que delega en la misma autoridad fake."""
 
     def __init__(self, authority):
         self.authority = authority
@@ -1593,7 +1593,7 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
             private_snapshot(), DeliveryRouteSet(ROUTES)
         )
         self.assertIs(
-            self.egress.reconcile(admission, "assistant-response"),
+            self.egress.reconcile_endpoint(admission, "assistant-response"),
             EndpointDeliveryStatus.ACTIVE,
         )
         self.assertIs(
