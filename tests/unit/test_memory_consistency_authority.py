@@ -1645,6 +1645,121 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
             )
         )
 
+
+    def test_commit_and_forget_share_one_ordering_lock(self):
+        admission = self.authority.admit_read(
+            private_snapshot(), DeliveryRouteSet(ROUTES)
+        )
+        handle = FakeHandle(admission)
+        barrier = threading.Barrier(3)
+        emitted = []
+        closures = []
+
+        def emit():
+            barrier.wait()
+            emitted.append(
+                self.egress.commit_and_emit(
+                    admission, handle, "assistant-response", "forget-race-emission", 1, NOW
+                )
+            )
+
+        def forget():
+            barrier.wait()
+            closures.append(
+                self.authority.begin_forget(
+                    ForgetTarget(MEMORY_ID), FakeVerifiedForgetAuthorization(),
+                    "forget-egress-race", NOW
+                )
+            )
+
+        first = threading.Thread(target=emit)
+        second = threading.Thread(target=forget)
+        first.start()
+        second.start()
+        barrier.wait()
+        first.join()
+        second.join()
+
+        self.assertIsNotNone(closures[0])
+        self.assertIn(admission.admission_id, closures[0].affected_admission_ids)
+        self.assertEqual(len(emitted), 1)
+        self.assertIsNone(
+            self.egress.commit_and_emit(
+                admission, handle, "assistant-response", "after-forget", 2, NOW
+            )
+        )
+
+    def test_two_concurrent_emissions_cannot_commit_same_endpoint_sequence(self):
+        admission = self.authority.admit_read(
+            private_snapshot(), DeliveryRouteSet(ROUTES)
+        )
+        handle = FakeHandle(admission)
+        barrier = threading.Barrier(3)
+        results = []
+
+        def emit(emission_id):
+            barrier.wait()
+            results.append(
+                self.egress.commit_and_emit(
+                    admission, handle, "assistant-response", emission_id, 1, NOW
+                )
+            )
+
+        first = threading.Thread(target=emit, args=("parallel-emission-a",))
+        second = threading.Thread(target=emit, args=("parallel-emission-b",))
+        first.start()
+        second.start()
+        barrier.wait()
+        first.join()
+        second.join()
+
+        self.assertEqual(sum(result is not None for result in results), 1)
+        self.assertEqual(
+            self.authority.emissions[(admission.admission_id, "assistant-response")],
+            1,
+        )
+
+    def test_overlapping_forget_and_invalidation_have_only_one_winner(self):
+        admission = self.authority.admit_read(
+            private_snapshot(), DeliveryRouteSet(ROUTES)
+        )
+        barrier = threading.Barrier(3)
+        closures = []
+        invalidations = []
+
+        def forget():
+            barrier.wait()
+            closures.append(
+                self.authority.begin_forget(
+                    ForgetTarget(MEMORY_ID), FakeVerifiedForgetAuthorization(),
+                    "overlap-forget", NOW
+                )
+            )
+
+        def invalidate():
+            barrier.wait()
+            invalidations.append(
+                self.authority.begin_invalidation(
+                    AuthorizationInvalidation(
+                        "overlap-invalidation", AuthorityKind.IDENTITY,
+                        "identity-1", 1, 2, frozenset({admission.admission_id})
+                    )
+                )
+            )
+
+        first = threading.Thread(target=forget)
+        second = threading.Thread(target=invalidate)
+        first.start()
+        second.start()
+        barrier.wait()
+        first.join()
+        second.join()
+
+        self.assertEqual(
+            int(closures[0] is not None) + int(invalidations[0] is not None),
+            1,
+        )
+
     def test_egress_rejects_handle_for_another_admission_target(self):
         admission = self.authority.admit_read(
             private_snapshot(), DeliveryRouteSet(ROUTES)
