@@ -444,3 +444,37 @@ Las firmas tipadas de `ProtectedEgressPort.finish()` y `fence()` requieren `oper
 El fake de pruebas implementa la correlación explícita, acknowledgements idempotentes y serialización conservadora de invalidaciones que afectan una misma admisión. Una invalidación nueva que se solape con una operación aún pendiente se rechaza hasta reconciliar la anterior.
 
 El conjunto de pruebas de autoridad/egress contiene actualmente 15 métodos de prueba. Este número describe pruebas escritas, no pruebas ejecutadas.
+
+
+## 14. Estado de integración del Gateway protegido
+
+Se sustituyó la ruta anterior de lectura cruda por el siguiente flujo de frontera:
+
+1. `MemoryGatewayService.get_version()` obtiene un resultado CAM. Solo continúa si es `AuthorizationResult(ALLOW, snapshot)` y el snapshot identifica exactamente la memoria, versión y acción solicitadas.
+2. El Gateway solicita `admit_read(snapshot, routes)` a la autoridad de consistencia. La autoridad debe validar revisiones actuales, supresión, generación y el conjunto completo de rutas registradas.
+3. El Gateway valida que la admisión devuelta coincida exactamente con snapshot, objetivo, propietario, scope y rutas configuradas.
+4. Solo entonces llama a `ProtectedMemoryContentPort.read_version_if_admitted(snapshot, admission)`.
+5. El puerto de contenido devuelve un `ProtectedContentHandle` opaco. El Gateway valida IDs, admisión y clasificación y construye `ProtectedMemoryRead`; nunca devuelve `MemoryVersion` ni su contenido.
+6. Cada unidad pasa por `emit_version()`, que llama a `ProtectedEgressPort.commit_and_emit()`. La expiración del Grant se comprueba en el Gateway y debe volver a comprobarse atómicamente en el último punto de egress.
+7. Cada endpoint confirma su finalización mediante `finish_version()`; el recibo queda vinculado a la operación `read:{admission_id}`, admisión, endpoint, generación y secuencia final. `reconcile_version()` consulta el resultado sin forzar terminalidad.
+
+Si la lectura condicional falla después de admitir, el Gateway intenta cerrar la admisión vacía con secuencia final cero para todos los endpoints. Si falta cualquier acknowledgement, la admisión permanece pendiente/no resuelta; no se presupone finalización.
+
+### 14.1 Retirada de la ruta cruda
+
+- Se retiró `src/atlas/ports/memory_content.py` y el puerto `MemoryVersionContentPort.get_version_content(memory_id, version_id)`.
+- El contrato público `MemoryGateway.get_version()` ahora devuelve `ProtectedMemoryRead | None`, no `MemoryVersion | None`.
+- La emisión y finalización están expuestas como operaciones explícitas del Gateway.
+
+### 14.2 Límites y pendientes
+
+Esta integración define el camino protegido, pero no acredita la garantía completa:
+
+- `ProtectedMemoryRead` es un lease opaco a nivel de API Python; la seguridad final depende de que el handle real no exponga payload ni permita serialización o lectura fuera de egress.
+- La configuración de `DeliveryRouteSet` debe provenir de composición confiable y representar todas las rutas que puedan emitir contenido. No debe aceptar rutas elegidas libremente por el solicitante.
+- La autoridad concreta debe crear atómicamente la operación `read:{admission_id}` junto con la admisión y comprobar supresión, revisiones, generación y cobertura.
+- El egress concreto debe ordenar cada compromiso respecto de invalidaciones/Forget y validar revisiones y expiración de Grant por unidad.
+- No se ha implementado aún `begin_forget` ni el inventario verificable de destinos de persistencia/derivados.
+- No hay adaptadores reales, persistencia durable, transporte ni recuperación distribuida.
+
+Los tests de Gateway y CAM usan fakes. No se han ejecutado en esta etapa y no prueban comportamiento de runtime. Esta implementación no habilita todavía lectura protegida en producción.
