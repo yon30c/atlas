@@ -88,6 +88,18 @@ class FakeReadConsistencyAndEgress:
         self.fenced_endpoints = set()
         self._next_admission = 1
 
+    @staticmethod
+    def _same_admission(current, candidate):
+        return (
+            current is not None
+            and current.admission_id == candidate.admission_id
+            and current.snapshot_id == candidate.snapshot_id
+            and current.target == candidate.target
+            and current.generation == candidate.generation
+            and current.route_ids == candidate.route_ids
+            and current.status in (candidate.status, ReadAdmissionStatus.ACTIVE)
+        )
+
     def admit_read(self, snapshot, routes):
         with self._lock:
             if not isinstance(snapshot, AuthorizationSnapshot):
@@ -265,7 +277,7 @@ class FakeReadConsistencyAndEgress:
     ):
         with self._lock:
             current = self.admissions.get(admission.admission_id)
-            if current != admission or admission.generation != self.generation:
+            if not self._same_admission(current, admission) or admission.generation != self.generation:
                 return None
             if admission.status not in (ReadAdmissionStatus.ADMITTED, ReadAdmissionStatus.ACTIVE):
                 return None
@@ -296,6 +308,10 @@ class FakeReadConsistencyAndEgress:
             if sequence != expected:
                 return None
             self.emissions[key] = sequence
+            if current.status is ReadAdmissionStatus.ADMITTED:
+                self.admissions[admission.admission_id] = replace(
+                    current, status=ReadAdmissionStatus.ACTIVE
+                )
             return EgressReceipt(
                 admission.admission_id,
                 endpoint_id,
@@ -308,7 +324,7 @@ class FakeReadConsistencyAndEgress:
     def finish(self, admission, endpoint_id, final_sequence, now):
         with self._lock:
             current = self.admissions.get(admission.admission_id)
-            if current != admission or endpoint_id not in admission.route_ids:
+            if not self._same_admission(current, admission) or endpoint_id not in admission.route_ids:
                 return None
             key = (admission.admission_id, endpoint_id)
             if key in self.fenced_endpoints:
@@ -339,7 +355,8 @@ class FakeReadConsistencyAndEgress:
                 return EndpointDeliveryStatus.FENCED
             if any(key in values for values in self.completion_acks.values()):
                 return EndpointDeliveryStatus.COMPLETED
-            if self.admissions.get(admission.admission_id) == admission:
+            current = self.admissions.get(admission.admission_id)
+            if current is not None and current.status in (ReadAdmissionStatus.ADMITTED, ReadAdmissionStatus.ACTIVE):
                 return EndpointDeliveryStatus.ACTIVE
             return EndpointDeliveryStatus.UNRESOLVED
 
@@ -558,6 +575,10 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
             admission, handle, "assistant-response", "emission-1", 1, NOW
         )
         self.assertIsNotNone(first)
+        self.assertEqual(
+            self.authority.admissions[admission.admission_id].status,
+            ReadAdmissionStatus.ACTIVE,
+        )
         self.assertIsNone(
             self.authority.commit_and_emit(
                 admission, handle, "assistant-response", "emission-2", 3, NOW
