@@ -7,6 +7,7 @@ from atlas.memory.consistency import (
     AuthorizationSnapshot,
     DeliveryRouteSet,
     EgressReceipt,
+    InvalidationReceipt,
     EndpointCompletionReceipt,
     EndpointDeliveryStatus,
     EndpointFenceReceipt,
@@ -59,7 +60,7 @@ class ReadConsistencyAuthorityPort(Protocol):
     def begin_invalidation(
         self,
         invalidation: AuthorizationInvalidation,
-    ) -> bool:
+    ) -> InvalidationReceipt | None:
         """Ordena la invalidación y el fencing antes de permitir nuevas emisiones."""
 
     def record_endpoint_ack(self, receipt: EndpointFenceReceipt) -> bool:
@@ -71,8 +72,8 @@ class ReadConsistencyAuthorityPort(Protocol):
     ) -> tuple[ReadAdmission, ...]:
         """Enumera admisiones aún no terminales para la operación."""
 
-    def reconcile(self, operation_id: str) -> bool:
-        """True solo cuando la reconciliación verificable ha concluido."""
+    def reconcile(self, operation_id: str) -> ReconciliationResult:
+        """Devuelve admisiones resueltas y no resueltas con evidencia verificable."""
 
 
 class ProtectedEgressPort(Protocol):
