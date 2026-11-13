@@ -319,7 +319,8 @@ class MemoryGatewayAuthorizationIntegrationTests(unittest.TestCase):
             VERSION_ID,
         )
 
-        self.assertIs(result, self.content.version)
+        self.assertIsNotNone(result)
+        self.assertIs(result.handle, self.content.handle)
         self.assertEqual(len(self.content.calls), 1)
         self.assertEqual(self.grant_repository.owner_requests, ["owner-1"])
 
