@@ -169,7 +169,7 @@ Reglas locales:
 
 - version_number debe ser entero, mayor o igual a 1; `True` y `False` se rechazan.
 - content se valida sin modificar el texto original.
-- classification y provenance no pueden mutar después de la construcción.
+- classification y provenance no pueden mutar después de la construcción. Una memoria nueva inicia con CONFIDENTIAL por defecto en el flujo de creación, salvo elección explícita más restrictiva del propietario; el modelo recibe y valida una clasificación explícita, no la infiere ni la inserta silenciosamente.
 - reviewed_at y reviewed_by son ambos nulos para pending_review.
 - Para approved, rejected, superseded y forgotten se conserva la evidencia de revisión de la decisión aprobatoria/rechazadora que corresponda; reviewed_at y reviewed_by deben estar presentes. La transición a superseded o forgotten no borra la revisión anterior.
 - La coherencia de estado, historial, padre e identidad de memoria requiere validación agregada.
@@ -285,7 +285,7 @@ Valida:
 - proposal.submitted_at == version.submitted_at;
 - la versión está pending_review al momento de envío;
 - CREATE_MEMORY: memory.current_approved_version_id es null, version_number=1 y parent_version_id es null;
-- NEW_VERSION: Memory ya tiene versión aprobada vigente; version.parent_version_id coincide exactamente con esa versión vigente y version_number es superior a todos los números existentes.
+- NEW_VERSION: Memory ya tiene versión aprobada vigente; version.parent_version_id coincide exactamente con esa versión vigente y version_number es exactamente el siguiente número no reutilizado (máximo existente + 1).
 
 Esta función valida consistencia de los objetos suministrados. No persiste nada ni demuestra que la operación haya sido atómica.
 
@@ -386,7 +386,7 @@ ME-01 cubre solo las aserciones que pueden resolverse con datos de dominio puros
 
 ME-01 estará listo para autorizar implementación de código cuando:
 
-1. Los campos y tipos de los seis modelos estén aceptados y no contradigan DM-01.
+1. Los campos y tipos de los modelos y objetos de valor estén aceptados y no contradigan DM-01.
 2. Los catálogos cerrados estén definidos sin estados legacy.
 3. Las reglas de UUIDv7 distingan IDs Atlas de IDs externos.
 4. Las reglas de UTC y contenido estén explícitas.
