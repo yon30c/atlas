@@ -8,7 +8,7 @@ import unittest
 from dataclasses import replace
 from datetime import datetime, timezone
 
-from atlas.memory.consistency import (
+from atlas.core.errors import ContractError\nfrom atlas.memory.consistency import (
     AuthorityKind,
     AuthorizationInvalidation,
     AuthorizationSnapshot,
@@ -956,6 +956,96 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
         self.assertEqual(
             self.authority.admissions[admission.admission_id].status,
             ReadAdmissionStatus.COMPLETED,
+        )
+
+    def test_restart_recovery_keeps_forget_closed_and_requires_new_endpoint_proofs(self):
+        admission = self.authority.admit_read(
+            private_snapshot(), DeliveryRouteSet(ROUTES)
+        )
+        closure = self.authority.begin_forget(
+            ForgetTarget(MEMORY_ID), FakeVerifiedForgetAuthorization(),
+            "forget-recovery-key", NOW
+        )
+        snapshot = self.authority.export_forget_recovery(closure.operation_id)
+        recovered = FakeReadConsistencyAndEgress.restore_forget_recovery(snapshot)
+
+        self.assertEqual(recovered.generation, closure.generation)
+        self.assertIn(MEMORY_ID, recovered.suppressed_memories)
+        recovered_admission = recovered.admissions[admission.admission_id]
+        self.assertEqual(recovered_admission.status, ReadAdmissionStatus.UNRESOLVED)
+        self.assertEqual(
+            recovered.reconcile_forget(closure.operation_id).status,
+            ForgetClosureStatus.CLOSING,
+        )
+        self.assertIsNone(
+            recovered.admit_read(private_snapshot(), DeliveryRouteSet(ROUTES))
+        )
+        self.assertIsNone(
+            FakeProtectedEgress(recovered).commit_and_emit(
+                admission, FakeHandle(admission), "assistant-response",
+                "post-restart-stale-emission", 1, NOW
+            )
+        )
+
+        for endpoint in sorted(admission.route_ids):
+            receipt = FakeProtectedEgress(recovered).fence(
+                admission, closure.operation_id, endpoint,
+                recovered.generation, NOW
+            )
+            self.assertIsNotNone(receipt)
+            self.assertTrue(recovered.record_endpoint_ack(receipt))
+            intermediate = recovered.reconcile_forget(closure.operation_id)
+            if endpoint != sorted(admission.route_ids)[-1]:
+                self.assertEqual(intermediate.status, ForgetClosureStatus.CLOSING)
+
+        final = recovered.reconcile_forget(closure.operation_id)
+        self.assertEqual(final.status, ForgetClosureStatus.SUPPRESSED)
+        self.assertFalse(final.unresolved_admission_ids)
+        self.assertEqual(
+            recovered.admissions[admission.admission_id].status,
+            ReadAdmissionStatus.CANCELLED,
+        )
+
+    def test_recovery_rejects_incomplete_admission_inventory(self):
+        admission = self.authority.admit_read(
+            private_snapshot(), DeliveryRouteSet(ROUTES)
+        )
+        closure = self.authority.begin_forget(
+            ForgetTarget(MEMORY_ID), FakeVerifiedForgetAuthorization(),
+            "forget-inventory-key", NOW
+        )
+        snapshot = self.authority.export_forget_recovery(closure.operation_id)
+        with self.assertRaises(ContractError):
+            replace(snapshot, admissions=())
+
+    def test_recovery_rejects_generation_rollback(self):
+        admission = self.authority.admit_read(
+            private_snapshot(), DeliveryRouteSet(ROUTES)
+        )
+        closure = self.authority.begin_forget(
+            ForgetTarget(MEMORY_ID), FakeVerifiedForgetAuthorization(),
+            "forget-generation-key", NOW
+        )
+        snapshot = self.authority.export_forget_recovery(closure.operation_id)
+        with self.assertRaises(ContractError):
+            replace(snapshot, generation=closure.generation - 1)
+
+    def test_suppressed_memory_remains_closed_after_restart(self):
+        closure = self.authority.begin_forget(
+            ForgetTarget(MEMORY_ID), FakeVerifiedForgetAuthorization(),
+            "forget-already-suppressed", NOW
+        )
+        suppressed = self.authority.reconcile_forget(closure.operation_id)
+        self.assertEqual(suppressed.status, ForgetClosureStatus.SUPPRESSED)
+        snapshot = self.authority.export_forget_recovery(closure.operation_id)
+        recovered = FakeReadConsistencyAndEgress.restore_forget_recovery(snapshot)
+        self.assertIn(MEMORY_ID, recovered.suppressed_memories)
+        self.assertEqual(
+            recovered.forget_closures[closure.operation_id].status,
+            ForgetClosureStatus.SUPPRESSED,
+        )
+        self.assertIsNone(
+            recovered.admit_read(private_snapshot(), DeliveryRouteSet(ROUTES))
         )
 
     def test_forget_closes_new_admissions_and_waits_for_every_endpoint_fence(self):
