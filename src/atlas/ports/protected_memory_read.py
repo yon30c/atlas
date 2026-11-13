@@ -92,7 +92,11 @@ class ReadConsistencyAuthorityPort(Protocol):
         snapshot: AuthorizationSnapshot,
         routes: DeliveryRouteSet,
     ) -> ReadAdmission | None:
-        """Registra durablemente una admisión o falla cerrada."""
+        """Registra admisión y operación read:{admission_id} de forma atómica.
+
+        La autoridad debe comprobar supresión, revisiones actuales, generación y
+        cobertura de rutas. Si falta cualquiera de esas evidencias, falla cerrado.
+        """
 
     def begin_invalidation(
         self,
@@ -128,7 +132,12 @@ class ProtectedEgressPort(Protocol):
         sequence: int,
         now: datetime,
     ) -> EgressReceipt | None:
-        """Acepta irrevocablemente una unidad solo si el fencing sigue vigente."""
+        """Acepta irrevocablemente una unidad solo si el fencing sigue vigente.
+
+        El último punto de entrega valida en cada unidad las revisiones actuales,
+        generación, supresión y expiración de Grant usando tiempo confiable. La
+        comprobación y la aceptación irreversible comparten el mismo orden lógico.
+        """
 
     def finish(
         self,
