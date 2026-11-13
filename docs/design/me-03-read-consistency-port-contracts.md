@@ -472,7 +472,7 @@ Esta integración define el camino protegido, pero no acredita la garantía comp
 - `begin_forget` y `reconcile_forget` están definidos en el puerto y cubiertos por un fake de proceso único; no existe autoridad durable ni emisor/verificador confiable de OwnerDecisionProof. El inventario verificable de destinos de persistencia/derivados sigue pendiente.
 - No hay adaptadores reales, persistencia durable, transporte ni recuperación distribuida.
 
-Los tests escritos para esta integración incluyen 18 casos unitarios del Gateway, 9 casos CAM/Gateway y 3 casos de seguridad de frontera. Usan fakes donde corresponde. No se han ejecutado en esta etapa y no prueban comportamiento de runtime. Esta implementación no habilita todavía lectura protegida en producción.
+Los tests escritos para esta integración incluyen 20 casos unitarios del Gateway, 9 casos CAM/Gateway y 3 casos de seguridad de frontera. Usan fakes donde corresponde. No se han ejecutado en esta etapa y no prueban comportamiento de runtime. Esta implementación no habilita todavía lectura protegida en producción.
 
 ### 14.3 Contrato inicial de cierre lógico Forget
 
