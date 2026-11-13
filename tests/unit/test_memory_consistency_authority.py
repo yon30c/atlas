@@ -109,6 +109,7 @@ class FakeReadConsistencyAndEgress:
         self.fenced_endpoints = set()
         self._next_admission = 1
         self.memory_owners = {MEMORY_ID: "owner-1"}
+        self.identity_subjects = {"identity-1": "owner-1"}
         self.suppressed_memories = set()
         self.forget_idempotency = {}
         self.forget_closures = {}
@@ -230,6 +231,8 @@ class FakeReadConsistencyAndEgress:
                 authorization.memory_id != target.memory_id
                 or authorization.subject_user_id != authorization.owner_id
                 or self.memory_owners.get(target.memory_id) != authorization.owner_id
+                or self.identity_subjects.get(authorization.actor_identity_id)
+                != authorization.subject_user_id
             ):
                 return None
             binding = (
