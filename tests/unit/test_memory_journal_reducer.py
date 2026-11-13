@@ -277,7 +277,7 @@ class ConsistencyJournalReducerTests(unittest.TestCase):
         admission = projection.admissions[0]
         self.assertIs(admission.status, ReadAdmissionStatus.COMPLETED)
         self.assertEqual(admission.endpoints[0].last_emission_sequence, 1)
-        self.assertEqual(len(projection.receipt_ids), 2)
+        self.assertEqual(len(projection.receipt_ids), 3)
 
     def test_reducer_accepts_forget_only_after_all_endpoints_are_fenced(self):
         admission = read_admitted()
