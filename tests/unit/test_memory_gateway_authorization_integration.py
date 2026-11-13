@@ -125,6 +125,9 @@ class FakeReadAuthority:
     def __init__(self):
         self.admissions = []
         self.acks = []
+        self.emissions = []
+        self.finishes = []
+        self.reconciliations = []
 
     def begin_forget(self, *args, **kwargs):
         raise AssertionError("Forget no se invoca en estas pruebas")
@@ -155,12 +158,14 @@ class FakeReadAuthority:
         return admission
 
     def commit_and_emit(self, admission, handle, endpoint_id, emission_id, sequence, now):
+        self.emissions.append((admission.admission_id, endpoint_id, emission_id, sequence))
         return EgressReceipt(
             admission.admission_id, endpoint_id, emission_id, sequence,
             admission.generation, now
         )
 
     def finish(self, admission, operation_id, endpoint_id, final_sequence, now):
+        self.finishes.append((admission.admission_id, operation_id, endpoint_id, final_sequence))
         return EndpointCompletionReceipt(
             operation_id, admission.admission_id, endpoint_id,
             admission.generation, final_sequence, now
@@ -177,7 +182,9 @@ class FakeReadAuthority:
         return True
 
     def reconcile(self, operation_id):
-        return ReconciliationResult(operation_id, frozenset(), frozenset())
+        self.reconciliations.append(operation_id)
+        resolved = frozenset(receipt.admission_id for receipt in self.acks)
+        return ReconciliationResult(operation_id, resolved, frozenset())
 
 
 class FixedClock:
@@ -267,6 +274,45 @@ class MemoryGatewayAuthorizationIntegrationTests(unittest.TestCase):
             self.routes,
             FixedClock(),
         )
+
+
+    def test_gateway_uses_one_consistency_boundary_for_admission_egress_and_reconcile(self):
+        read = self.gateway.get_version(make_context(), MEMORY_ID, VERSION_ID)
+        self.assertIsNotNone(read)
+
+        receipt = self.gateway.emit_version(
+            read, "assistant-response", "integration-emission-1", 1
+        )
+        self.assertIsNotNone(receipt)
+        self.assertEqual(
+            self.authority.emissions,
+            [("admission-1", "assistant-response", "integration-emission-1", 1)],
+        )
+
+        self.assertTrue(
+            self.gateway.finish_version(read, "assistant-response", 1)
+        )
+        self.assertEqual(len(self.authority.acks), 1)
+        reconciled = self.gateway.reconcile_version(read)
+        self.assertIn("admission-1", reconciled.resolved_admission_ids)
+        self.assertEqual(self.authority.reconciliations, ["read:admission-1"])
+
+        # Once the same boundary confirms terminality, the local capability retires.
+        self.assertIsNone(
+            self.gateway.emit_version(
+                read, "assistant-response", "late-integration-emission", 2
+            )
+        )
+
+    def test_gateway_rejects_unregistered_delivery_route_before_egress(self):
+        read = self.gateway.get_version(make_context(), MEMORY_ID, VERSION_ID)
+        self.assertIsNotNone(read)
+        self.assertIsNone(
+            self.gateway.emit_version(
+                read, "unregistered-endpoint", "invalid-route-emission", 1
+            )
+        )
+        self.assertEqual(self.authority.emissions, [])
 
     def test_private_owner_opens_protected_handle_after_real_cam_allows(self):
         result = self.gateway.get_version(make_context(), MEMORY_ID, VERSION_ID)
