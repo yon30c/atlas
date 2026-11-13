@@ -30,6 +30,7 @@ class Identity:
     identity_id: str
     kind: IdentityKind
     status: IdentityStatus
+    revision: int = 1
 
     def __post_init__(self) -> None:
         _required(self.identity_id, "identity_id")
@@ -39,3 +40,5 @@ class Identity:
 
         if not isinstance(self.status, IdentityStatus):
             raise ContractError("status debe ser un IdentityStatus valido")
+        if isinstance(self.revision, bool) or not isinstance(self.revision, int) or self.revision < 1:
+            raise ContractError("revision debe ser un entero positivo")
