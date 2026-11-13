@@ -49,7 +49,7 @@ class StubProjectPort:
         self.status = status
 
     def get_project(self, project_id):
-        return ProjectMetadata(project_id, self.status)
+        return ProjectMetadata(project_id, self.status, 1)
 
 
 class StubEnvironmentPort:
@@ -57,7 +57,7 @@ class StubEnvironmentPort:
         self.status = status
 
     def get_environment(self, environment_id):
-        return EnvironmentMetadata(environment_id, self.status)
+        return EnvironmentMetadata(environment_id, self.status, 1)
 
 
 class StubIdentityBindingPort:
@@ -70,7 +70,7 @@ class StubIdentityBindingPort:
         self.calls.append(actor_identity_id)
         if self.error:
             raise self.error
-        return AuthenticatedUserSubject(actor_identity_id, self.subject, True)
+        return AuthenticatedUserSubject(actor_identity_id, self.subject, True, 1)
 
 
 class StubGrantRepository:
