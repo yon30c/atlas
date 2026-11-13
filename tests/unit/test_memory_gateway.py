@@ -247,7 +247,7 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         self.assertIsNone(self.gateway.emit_version(read, "assistant-response", "emission-1", True))
         self.assertFalse(self.gateway.finish_version(read, [], 0))
         self.assertFalse(self.gateway.finish_version(read, "assistant-response", True))
-        self.assertEqual(self.egress.emissions, [])
+        self.assertEqual(self.authority.emissions, [])
         self.assertEqual(self.egress.finishes, [])
 
 
@@ -298,8 +298,6 @@ class MemoryGatewayServiceTests(unittest.TestCase):
             AuthorizationResult(AuthorizationDecision.ALLOW, self.snapshot)
         )
         self.authority = StubAuthority(self.admission)
-        # Una sola instancia implementa autoridad y egress.
-        self.egress = self.authority
         self.handle = FakeHandle(self.admission)
         self.content = StubContent(self.handle)
         self.clock = StubClock()
