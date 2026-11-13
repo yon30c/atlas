@@ -438,7 +438,7 @@ Las firmas tipadas de `ProtectedEgressPort.finish()` y `fence()` requieren `oper
 
 El fake de pruebas implementa la correlación explícita, acknowledgements idempotentes y serialización conservadora de invalidaciones que afectan una misma admisión. Una invalidación nueva que se solape con una operación aún pendiente se rechaza hasta reconciliar la anterior.
 
-El conjunto de pruebas de autoridad/egress contiene actualmente 24 métodos de prueba, incluidos los escenarios de cierre lógico y recuperación Forget descritos en §§14.3–14.4. Este número describe pruebas escritas, no pruebas ejecutadas.
+El conjunto de pruebas de autoridad/egress contiene actualmente 26 métodos de prueba, incluidos los escenarios de cierre lógico y recuperación Forget descritos en §§14.3–14.4. Este número describe pruebas escritas, no pruebas ejecutadas.
 
 
 ## 14. Estado de integración del Gateway protegido
@@ -512,6 +512,6 @@ El fake incorpora exportación/restauración de este snapshot para simular un re
 4. no restaura acknowledgements volátiles en memoria;
 5. exige nuevos recibos de fencing en la generación restaurada antes de reconciliar el cierre como `SUPPRESSED`.
 
-Las pruebas cubren cierre pendiente tras reinicio, bloqueo de nuevas admisiones, rechazo de emisión de un proceso antiguo, rechazo de acknowledgements de generación obsoleta, inventario incompleto, retroceso de generación y persistencia del estado `SUPPRESSED` después de reiniciar.
+Las pruebas cubren cierre pendiente tras reinicio, bloqueo de nuevas admisiones, rechazo de emisión de un proceso antiguo, rechazo de acknowledgements de generación obsoleta, inventario incompleto de admisiones/rutas, retroceso o igualdad indebida de generación y persistencia del estado `SUPPRESSED` después de reiniciar.
 
 **Límite importante:** el snapshot es un contrato de datos, no una prueba de procedencia ni un mecanismo de persistencia. El fake no demuestra que el snapshot haya sido escrito atómicamente, protegido contra manipulación, recuperado desde almacenamiento durable ni coordinado entre procesos. En runtime, la autoridad debe cargar y validar el estado durable y restaurar cierres/generaciones antes de aceptar tráfico; si no puede verificarlo, debe mantener bloqueadas las rutas. No se añade todavía un adaptador ni una decisión tecnológica de almacenamiento.
