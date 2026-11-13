@@ -107,6 +107,16 @@ class StubClock:
         return self.value
 
 
+class SequenceClock:
+    def __init__(self, values):
+        self.values = list(values)
+
+    def now(self):
+        if not self.values:
+            raise RuntimeError("clock sequence exhausted")
+        return self.values.pop(0)
+
+
 class StubAuthorization:
     def __init__(self, result):
         self.result = result
@@ -330,6 +340,27 @@ class MemoryGatewayServiceTests(unittest.TestCase):
             self.gateway.emit_version(read, "unregistered", "emission-2", 2)
         )
         self.assertEqual(len(self.egress.emissions), 1)
+
+    def test_grant_expiry_between_cam_and_admission_rejects_read(self):
+        expires = NOW + timedelta(seconds=5)
+        snapshot = make_snapshot(grant_expires_at=expires)
+        self.authorization.result = AuthorizationResult(
+            AuthorizationDecision.ALLOW, snapshot
+        )
+        self.gateway = MemoryGatewayService(
+            self.authorization,
+            self.content,
+            self.authority,
+            self.egress,
+            DeliveryRouteSet(ROUTES),
+            SequenceClock([NOW + timedelta(seconds=1), expires]),
+        )
+
+        result = self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
+
+        self.assertIsNone(result)
+        self.assertEqual(self.authority.admit_calls, [])
+        self.assertEqual(self.content.calls, [])
 
     def test_grant_expiry_is_checked_at_each_emission(self):
         expires = NOW + timedelta(seconds=5)
