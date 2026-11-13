@@ -142,6 +142,24 @@ class FakeReadAuthority:
         self.admissions.append(admission)
         return admission
 
+    def commit_and_emit(self, admission, handle, endpoint_id, emission_id, sequence, now):
+        return EgressReceipt(
+            admission.admission_id, endpoint_id, emission_id, sequence,
+            admission.generation, now
+        )
+
+    def finish(self, admission, operation_id, endpoint_id, final_sequence, now):
+        return EndpointCompletionReceipt(
+            operation_id, admission.admission_id, endpoint_id,
+            admission.generation, final_sequence, now
+        )
+
+    def fence(self, admission, operation_id, endpoint_id, new_generation, now):
+        return None
+
+    def reconcile_endpoint(self, admission, endpoint_id):
+        return None
+
     def record_endpoint_ack(self, receipt):
         self.acks.append(receipt)
         return True
@@ -254,7 +272,6 @@ class MemoryGatewayAuthorizationIntegrationTests(unittest.TestCase):
             authorization,
             self.content,
             self.authority,
-            FakeProtectedEgress(),
             self.routes,
             FixedClock(),
         )
