@@ -1,6 +1,6 @@
 # ME-03A — Protección de capacidades de lectura
 
-**Estado:** diseño aprobado para implementación incremental  
+**Estado:** implementación parcial; pendiente de validación automatizada  
 **Ámbito:** Memory Gateway y contrato de lectura protegida  
 **No incluido:** persistencia del journal, autoridad distribuida, egress real, selección de almacenamiento ni aislamiento entre procesos.
 
