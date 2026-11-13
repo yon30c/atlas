@@ -319,15 +319,25 @@ La respuesta pública debe seguir evitando distinguir denegación, inexistencia 
 
 ## 6. Consecuencias para la implementación actual
 
-La implementación actual no ofrece todavía esta garantía:
+La implementación avanzó parcialmente respecto de la línea base inicial:
 
-- `AuthorizationResult` contiene solo la decisión, no un snapshot de autorización.
-- `MemoryVersionMetadata` no contiene revisión/epoch.
-- `MemoryVersionContentPort.get_version_content()` es una lectura por IDs y no declara atomicidad, supresión ni coordinación de lecturas en curso.
-- No existe aún un puerto ni servicio de supresión/Forget.
-- No existe inventario de destinos, cachés, índices, réplicas, exportaciones o backups.
+- `AuthorizationResult` ahora exige un `AuthorizationSnapshot` cuando la decisión es ALLOW.
+- Memory, MemoryVersion, Identity, Project, Environment y Grant tienen revisiones representadas en el snapshot según el ámbito aplicable.
+- El puerto anterior `MemoryVersionContentPort.get_version_content()`, que recuperaba una versión completa por IDs, fue retirado.
+- `ProtectedMemoryContentPort.read_version_if_admitted(snapshot, admission)` sustituye esa lectura por IDs y devuelve un handle opaco vinculado al objetivo y admisión exactos.
+- `MemoryGatewayService.get_version()` coordina CAM, admisión y lectura condicional; devuelve `ProtectedMemoryRead`, no `MemoryVersion`.
+- El Gateway expone `emit_version()`, `finish_version()` y `reconcile_version()` para compromisos de entrega y acknowledgements correlacionados.
+- La expiración de Grant se comprueba en el Gateway en cada emisión como defensa adicional; el último punto de egress sigue obligado a validarla atómicamente junto con revisiones, supresión y fencing.
 
-Por tanto, las pruebas existentes demuestran orden de llamadas y fail-closed básico, pero no consistencia concurrente ni supresión global.
+Estos cambios eliminan la ruta directa de contenido crudo en el Gateway implementado, pero **no constituyen todavía una garantía completa de consistencia ni supresión**:
+
+- No hay adaptador real/durable de `ReadConsistencyAuthorityPort` ni de `ProtectedEgressPort`.
+- El fake de pruebas es de proceso único y no demuestra persistencia, recuperación, fencing entre procesos ni transporte real.
+- La comprobación efectiva de supresión debe formar parte de la admisión autoritativa; no existe todavía un servicio/operación completa de Forget ni una autoridad de supresión implementada.
+- El inventario real de rutas de entrega y de destinos de persistencia/derivados, cachés, índices, réplicas, exportaciones y backups sigue pendiente.
+- No se han ejecutado las pruebas añadidas para el flujo protegido ni se ha validado runtime.
+
+Por tanto, la implementación actual demuestra la estructura de integración y el fail-closed de sus límites locales; no demuestra consistencia concurrente, fencing distribuido ni supresión global.
 
 ## 7. Plan de verificación propuesto
 
