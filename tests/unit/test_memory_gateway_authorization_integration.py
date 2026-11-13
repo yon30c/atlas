@@ -259,7 +259,7 @@ class MemoryGatewayAuthorizationIntegrationTests(unittest.TestCase):
             FixedClock(),
         )
 
-    def test_private_owner_reads_content_after_real_cam_allows(self):
+    def test_private_owner_opens_protected_handle_after_real_cam_allows(self):
         result = self.gateway.get_version(make_context(), MEMORY_ID, VERSION_ID)
 
         self.assertIsNotNone(result)
@@ -276,7 +276,7 @@ class MemoryGatewayAuthorizationIntegrationTests(unittest.TestCase):
         self.assertIsNone(result)
         self.assertEqual(self.content.calls, [])
 
-    def test_project_memory_with_exact_grant_reads_content(self):
+    def test_project_memory_with_exact_grant_opens_protected_handle(self):
         self.memory_port.memory = make_memory(MemoryScopeKind.PROJECT, PROJECT_ID)
         self.grant_repository.grants = (make_grant(),)
 
