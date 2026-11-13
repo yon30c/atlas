@@ -199,3 +199,8 @@ En el commit de código `0a6d120337e07e4b1365a7592f85e46ffe89718f`, GitHub Actio
 - Workflow: [Atlas CI #43525199210](https://github.com/yon30c/atlas/actions/runs/43525199210).
 
 Los 78 métodos de prueba de journal/reducer quedaron incluidos en esa suite. La ejecución valida los modelos, reducer, fakes y pruebas existentes en el repositorio. **No** demuestra persistencia durable, continuidad criptográfica, anti-rollback, atomicidad distribuida, fencing de endpoints reales ni Forget físico. La cobertura sigue siendo de contratos/modelos y fakes.
+
+
+## 11. Validación cruzada posterior
+
+Los escenarios C65–C87 se ejecutaron dentro de la suite completa del repositorio en el commit `49244706a3f93f09ec7b1f2b7e350124b2715216`: 360 tests, Python 3.10–3.13, todos exitosos ([Atlas CI #43526491006](https://github.com/yon30c/atlas/actions/runs/43526491006)). La validación sigue siendo de modelos, reducer y fakes; no demuestra journal durable, checkpoint base autenticado ni anti-rollback.

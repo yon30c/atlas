@@ -273,6 +273,6 @@ Se implementó una primera capa pura en `src/atlas/memory/forget_coordinator.py`
 
 Se exportaron los modelos desde `atlas.memory` y se añadieron 30 métodos de prueba D01–D30 en `tests/unit/test_memory_forget_coordinator.py`.
 
-En el commit de código `f0415a1eaea8c8eb61e7fa7e8dee408041e243b8`, GitHub Actions ejecutó la suite completa: Python 3.10, 3.11, 3.12 y 3.13 finalizaron correctamente. Python 3.11 reportó `Ran 353 tests`, `OK`. Workflow: [Atlas CI #43525919366](https://github.com/yon30c/atlas/actions/runs/43525919366).
+En el commit `49244706a3f93f09ec7b1f2b7e350124b2715216`, GitHub Actions ejecutó la suite completa: Python 3.10, 3.11, 3.12 y 3.13 finalizaron correctamente. Python 3.11 reportó `Ran 360 tests`, `OK`. Workflow: [Atlas CI #43526491006](https://github.com/yon30c/atlas/actions/runs/43526491006).
 
 **Alcance de esa validación:** modelos, reducer puro y fakes. No demuestra inventario real, retención/backups aprobados, eliminación física, verificación contra almacenes reales, transacciones durables, recuperación distribuida ni Forget completado. No se han añadido adaptadores ni se ha marcado ninguna memoria/version como forgotten.
