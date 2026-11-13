@@ -124,10 +124,23 @@ class FakeReadConsistencyAndEgress:
                 if revision is not None
             ):
                 return None
+            snapshot_authorities = {
+                (revision.authority_kind, revision.authority_id)
+                for revision in (
+                    snapshot.revisions.memory_revision,
+                    snapshot.revisions.version_revision,
+                    snapshot.revisions.identity_revision,
+                    snapshot.revisions.project_revision,
+                    snapshot.revisions.environment_revision,
+                    snapshot.revisions.grant_revision,
+                )
+                if revision is not None
+            }
             if any(
                 operation["pending"]
                 and operation.get("kind") == "invalidation"
-                and operation["authority_id"] == snapshot.actor_identity_id
+                and (operation["authority_kind"], operation["authority_id"])
+                in snapshot_authorities
                 for operation in self.operations.values()
             ):
                 return None
@@ -170,6 +183,14 @@ class FakeReadConsistencyAndEgress:
             key = (invalidation.authority, invalidation.authority_id)
             if self.revisions.get(key) != invalidation.previous_revision:
                 return None
+            if any(
+                operation["pending"]
+                and operation.get("kind") == "invalidation"
+                and operation["authority_kind"] is invalidation.authority
+                and operation["authority_id"] == invalidation.authority_id
+                for operation in self.operations.values()
+            ):
+                return None
             if invalidation.new_revision <= invalidation.previous_revision:
                 return None
             if any(
@@ -206,6 +227,7 @@ class FakeReadConsistencyAndEgress:
             self.revisions[key] = invalidation.new_revision
             self.generation += 1
             self.operations[invalidation.invalidation_id] = {
+                "authority_kind": invalidation.authority,
                 "authority_id": invalidation.authority_id,
                 "affected": invalidation.affected_admission_ids,
                 "pending": True,
