@@ -54,6 +54,7 @@ from atlas.memory.journal_reducer import (
     EndpointProjectionStatus,
     ForgetProjection,
     InvalidationProjection,
+    IdempotencyProjection,
 )
 from atlas.memory.validation import (
     validate_memory_aggregate,
@@ -80,6 +81,7 @@ __all__ = [
     "EndpointProjectionStatus",
     "ForgetProjection",
     "InvalidationProjection",
+    "IdempotencyProjection",
     "AuthorityKind",
     "AuthorityRevision",
     "AuthorizationInvalidation",
