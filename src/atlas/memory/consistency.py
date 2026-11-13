@@ -5,12 +5,7 @@ from enum import Enum
 
 from atlas.core.errors import ContractError
 from atlas.memory.identifiers import validate_atlas_id
-from atlas.memory.models import (
-    MemoryClassification,
-    MemoryScope,
-    MemoryScopeKind,
-    MemoryVersionStatus,
-)
+from atlas.memory.models import MemoryClassification, MemoryScope, MemoryScopeKind, MemoryVersionStatus
 
 
 def _required(value: object, field: str) -> str:
@@ -20,11 +15,7 @@ def _required(value: object, field: str) -> str:
 
 
 def _utc(value: object, field: str) -> None:
-    if (
-        not isinstance(value, datetime)
-        or value.tzinfo is None
-        or value.utcoffset() != timedelta(0)
-    ):
+    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() != timedelta(0):
         raise ContractError(f"{field} debe ser un datetime UTC")
 
 
@@ -67,12 +58,12 @@ class AuthorizationRevisionSet:
     admission_generation: int | None = None
 
     def __post_init__(self) -> None:
-        expected = (
+        required = (
             (self.memory_revision, AuthorityKind.MEMORY, "memory_revision"),
             (self.version_revision, AuthorityKind.MEMORY_VERSION, "version_revision"),
             (self.identity_revision, AuthorityKind.IDENTITY, "identity_revision"),
         )
-        for value, kind, field in expected:
+        for value, kind, field in required:
             if not isinstance(value, AuthorityRevision) or value.authority_kind is not kind:
                 raise ContractError(f"{field} debe ser revisión de {kind.value}")
         optional = (
@@ -85,8 +76,6 @@ class AuthorizationRevisionSet:
                 not isinstance(value, AuthorityRevision) or value.authority_kind is not kind
             ):
                 raise ContractError(f"{field} debe ser revisión de {kind.value}")
-        if (self.grant_revision is None) != (self.grant_revision is None):
-            raise ContractError("grant_revision inválida")
         if self.admission_generation is not None:
             _positive_int(self.admission_generation, "admission_generation")
 
@@ -114,10 +103,8 @@ class AuthorizationSnapshot:
     grant_expires_at: datetime | None = None
 
     def __post_init__(self) -> None:
-        for field in (
-            "snapshot_id", "decision_id", "request_id", "action",
-            "actor_identity_id", "subject_user_id", "owner_id",
-        ):
+        for field in ("snapshot_id", "decision_id", "request_id", "action",
+                      "actor_identity_id", "subject_user_id", "owner_id"):
             _required(getattr(self, field), field)
         validate_atlas_id(self.memory_id, "memory_id")
         validate_atlas_id(self.version_id, "version_id")
@@ -127,35 +114,38 @@ class AuthorizationSnapshot:
             raise ContractError("revisions debe ser AuthorizationRevisionSet")
         if self.action != "memory.read":
             raise ContractError("action debe ser memory.read")
-        if not isinstance(self.version_status, MemoryVersionStatus):
-            raise ContractError("version_status inválido")
-        if self.version_status is not MemoryVersionStatus.APPROVED:
+        if not isinstance(self.version_status, MemoryVersionStatus) or self.version_status is not MemoryVersionStatus.APPROVED:
             raise ContractError("el snapshot solo puede representar versiones APPROVED")
-        if not isinstance(self.classification, MemoryClassification):
-            raise ContractError("classification inválida")
-        if self.classification is MemoryClassification.RESTRICTED:
-            raise ContractError("RESTRICTED no admite snapshot de lectura")
+        if not isinstance(self.classification, MemoryClassification) or self.classification is MemoryClassification.RESTRICTED:
+            raise ContractError("classification no permite un snapshot de lectura")
         _utc(self.issued_at, "issued_at")
+        if self.revisions.memory_revision.authority_id != self.memory_id:
+            raise ContractError("memory_revision no corresponde a memory_id")
+        if self.revisions.version_revision.authority_id != self.version_id:
+            raise ContractError("version_revision no corresponde a version_id")
+        if self.revisions.identity_revision.authority_id != self.actor_identity_id:
+            raise ContractError("identity_revision no corresponde al actor")
         if self.scope.kind is MemoryScopeKind.PRIVATE:
             if any(v is not None for v in (
                 self.project_id, self.environment_id, self.grant_expires_at,
                 self.revisions.project_revision, self.revisions.environment_revision,
                 self.revisions.grant_revision,
             )):
-                raise ContractError("PRIVATE no puede incluir revisiones ni datos PROJECT/Grant")
+                raise ContractError("PRIVATE no puede incluir datos/revisiones PROJECT o Grant")
         elif self.scope.kind is MemoryScopeKind.PROJECT:
             _required(self.project_id, "project_id")
             _required(self.environment_id, "environment_id")
             if self.project_id != self.scope.project_id:
                 raise ContractError("project_id no coincide con el scope canónico")
-            if any(v is None for v in (
-                self.revisions.project_revision,
-                self.revisions.environment_revision,
-                self.revisions.grant_revision,
-            )):
+            project_rev = self.revisions.project_revision
+            environment_rev = self.revisions.environment_revision
+            grant_rev = self.revisions.grant_revision
+            if any(v is None for v in (project_rev, environment_rev, grant_rev)):
                 raise ContractError("PROJECT requiere revisiones de proyecto, entorno y Grant")
-            if self.revisions.grant_revision.authority_id == "":
-                raise ContractError("Grant exacto inválido")
+            if project_rev.authority_id != self.project_id:
+                raise ContractError("project_revision no corresponde a project_id")
+            if environment_rev.authority_id != self.environment_id:
+                raise ContractError("environment_revision no corresponde a environment_id")
             if self.grant_expires_at is None:
                 raise ContractError("PROJECT requiere grant_expires_at")
             _utc(self.grant_expires_at, "grant_expires_at")
@@ -196,20 +186,9 @@ class ReadAdmissionStatus(str, Enum):
 
 
 _ALLOWED_ADMISSION_TRANSITIONS = {
-    ReadAdmissionStatus.ADMITTED: {
-        ReadAdmissionStatus.ACTIVE,
-        ReadAdmissionStatus.CANCELLED,
-        ReadAdmissionStatus.UNRESOLVED,
-    },
-    ReadAdmissionStatus.ACTIVE: {
-        ReadAdmissionStatus.COMPLETED,
-        ReadAdmissionStatus.CANCELLED,
-        ReadAdmissionStatus.UNRESOLVED,
-    },
-    ReadAdmissionStatus.UNRESOLVED: {
-        ReadAdmissionStatus.COMPLETED,
-        ReadAdmissionStatus.CANCELLED,
-    },
+    ReadAdmissionStatus.ADMITTED: {ReadAdmissionStatus.ACTIVE, ReadAdmissionStatus.CANCELLED, ReadAdmissionStatus.UNRESOLVED},
+    ReadAdmissionStatus.ACTIVE: {ReadAdmissionStatus.COMPLETED, ReadAdmissionStatus.CANCELLED, ReadAdmissionStatus.UNRESOLVED},
+    ReadAdmissionStatus.UNRESOLVED: {ReadAdmissionStatus.COMPLETED, ReadAdmissionStatus.CANCELLED},
     ReadAdmissionStatus.COMPLETED: set(),
     ReadAdmissionStatus.CANCELLED: set(),
 }
@@ -226,8 +205,8 @@ class ReadAdmission:
     admitted_at: datetime
 
     def __post_init__(self) -> None:
-        for field in ("admission_id", "snapshot_id"):
-            _required(getattr(self, field), field)
+        _required(self.admission_id, "admission_id")
+        _required(self.snapshot_id, "snapshot_id")
         if not isinstance(self.target, ReadTarget):
             raise ContractError("target debe ser ReadTarget")
         _positive_int(self.generation, "generation")
@@ -243,9 +222,7 @@ class ReadAdmission:
         if not isinstance(status, ReadAdmissionStatus):
             raise ContractError("status debe ser ReadAdmissionStatus")
         if status not in _ALLOWED_ADMISSION_TRANSITIONS[self.status]:
-            raise ContractError(
-                f"transición inválida: {self.status.value} -> {status.value}"
-            )
+            raise ContractError(f"transición inválida: {self.status.value} -> {status.value}")
         return replace(self, status=status)
 
 
