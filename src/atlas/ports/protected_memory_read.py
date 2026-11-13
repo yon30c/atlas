@@ -7,8 +7,11 @@ from atlas.memory.consistency import (
     AuthorizationSnapshot,
     DeliveryRouteSet,
     EgressReceipt,
+    EndpointCompletionReceipt,
+    EndpointDeliveryStatus,
     EndpointFenceReceipt,
     ReadAdmission,
+    ReconciliationResult,
 )
 from atlas.memory.models import MemoryClassification
 
@@ -92,7 +95,7 @@ class ProtectedEgressPort(Protocol):
         endpoint_id: str,
         final_sequence: int,
         now: datetime,
-    ) -> bool:
+    ) -> EndpointCompletionReceipt | None:
         """Confirma que no quedan buffers, fragmentos ni trabajo pendiente."""
 
     def fence(
@@ -108,5 +111,5 @@ class ProtectedEgressPort(Protocol):
         self,
         admission: ReadAdmission,
         endpoint_id: str,
-    ) -> bool:
+    ) -> EndpointDeliveryStatus:
         """Verifica el estado real del endpoint; timeout no equivale a fencing."""
