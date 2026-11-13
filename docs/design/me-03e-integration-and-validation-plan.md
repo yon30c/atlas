@@ -251,7 +251,7 @@ Se implementó la primera parte de ME-03F, sin adaptadores ni activación de run
 - `reconstruct_read_target()` reconstruye el `ReadTarget` exacto solo desde una proyección v2 válida. Para v1 o datos incompletos devuelve `None`; no infiere el scope.
 
 Pruebas nuevas:
-- `tests/unit/test_memory_journal_schema_v2.py`: 11 casos de validación y compatibilidad.
+- `tests/unit/test_memory_journal_schema_v2.py`: 12 casos de validación y compatibilidad.
 - `tests/unit/test_memory_journal_recovery_projection_v2.py`: 7 casos de proyección, reconstrucción PRIVATE/PROJECT, rechazo de inferencia v1 y recibo terminal.
 
 CI de la reconstrucción exacta: [Atlas CI #43529942908](https://github.com/yon30c/atlas/actions/runs/43529942908), Python 3.10, 3.11, 3.12 y 3.13: éxito.
