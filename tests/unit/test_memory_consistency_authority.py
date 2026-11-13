@@ -149,6 +149,7 @@ class FakeReadConsistencyAndEgress:
                 "affected": snapshot.closure.affected_admission_ids,
                 "pending": pending,
                 "kind": "forget",
+                "generation": snapshot.closure.generation,
             }
             for admission in snapshot.admissions:
                 recovered = admission
@@ -436,6 +437,16 @@ class FakeReadConsistencyAndEgress:
                 ):
                     expected_affected.add(admission_id)
             if expected_affected != set(invalidation.affected_admission_ids):
+                return None
+            # A shared admission cannot be fenced by two overlapping operations.
+            # Otherwise a later generation could supersede the generation carried
+            # by an earlier operation endpoint receipts.
+            if any(
+                operation["pending"]
+                and operation.get("kind") == "forget"
+                and expected_affected.intersection(operation["affected"])
+                for operation in self.operations.values()
+            ):
                 return None
             if any(
                 operation["pending"]
@@ -743,6 +754,34 @@ class FakeHandle:
 
 
 class MemoryConsistencyAuthorityTests(unittest.TestCase):
+
+    def test_invalidation_cannot_overlap_pending_forget_for_same_admission(self):
+        admission = self.authority.admit_read(
+            private_snapshot(), DeliveryRouteSet(ROUTES)
+        )
+        closure = self.authority.begin_forget(
+            ForgetTarget(MEMORY_ID),
+            FakeVerifiedForgetAuthorization(),
+            "forget-idempotency-1",
+        )
+        self.assertIsNotNone(closure)
+        self.assertEqual(closure.generation, 2)
+
+        invalidation = AuthorizationInvalidation(
+            "invalidation-during-forget",
+            AuthorityKind.IDENTITY,
+            "identity-1",
+            1,
+            2,
+            frozenset({admission.admission_id}),
+        )
+        self.assertIsNone(self.authority.begin_invalidation(invalidation))
+        self.assertEqual(self.authority.generation, closure.generation)
+        self.assertEqual(
+            self.authority.admission_generations[admission.admission_id],
+            closure.generation,
+        )
+
 
     def test_unrelated_invalidation_preserves_other_admission_generation_and_receipts(self):
         self.authority.revisions[(AuthorityKind.IDENTITY, "identity-2")] = 1
