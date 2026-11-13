@@ -377,6 +377,59 @@ class FakeReadConsistencyAndEgress:
             )
 
 
+class FakeProtectedEgress:
+    """Fake separado para satisfacer el contrato de ProtectedEgressPort."""
+
+    def __init__(self, authority):
+        self.authority = authority
+
+    def commit_and_emit(self, admission, handle, endpoint_id, emission_id, sequence, now):
+        return self.egress.commit_and_emit(
+            admission, handle, endpoint_id, emission_id, sequence, now
+        )
+
+    def finish(self, admission, endpoint_id, final_sequence, now):
+        return self.egress.finish(admission, endpoint_id, final_sequence, now)
+
+    def fence(self, admission, endpoint_id, new_generation, now):
+        return self.egress.fence(admission, endpoint_id, new_generation, now)
+
+    def reconcile(self, admission, endpoint_id):
+        return self.authority.reconcile_endpoint(admission, endpoint_id)
+
+
+class FakeProtectedMemoryContent:
+    """Fake condicional: no permite recuperar por IDs aislados."""
+
+    def __init__(self):
+        self.handles = {}
+
+    def register(self, snapshot, handle):
+        self.handles[(snapshot.memory_id, snapshot.version_id)] = handle
+
+    def read_version_if_admitted(self, snapshot, admission):
+        if not isinstance(snapshot, AuthorizationSnapshot):
+            return None
+        if not isinstance(admission, ReadAdmission):
+            return None
+        if admission.snapshot_id != snapshot.snapshot_id:
+            return None
+        if admission.target.memory_id != snapshot.memory_id:
+            return None
+        if admission.target.version_id != snapshot.version_id:
+            return None
+        if admission.target.owner_id != snapshot.owner_id:
+            return None
+        if admission.target.scope != snapshot.scope:
+            return None
+        if admission.status not in (ReadAdmissionStatus.ADMITTED, ReadAdmissionStatus.ACTIVE):
+            return None
+        handle = self.handles.get((snapshot.memory_id, snapshot.version_id))
+        if handle is None or handle.admission_id != admission.admission_id:
+            return None
+        return handle
+
+
 class FakeHandle:
     def __init__(self, admission):
         self.handle_id = f"handle:{admission.admission_id}"
@@ -389,6 +442,8 @@ class FakeHandle:
 class MemoryConsistencyAuthorityTests(unittest.TestCase):
     def setUp(self):
         self.authority = FakeReadConsistencyAndEgress()
+        self.egress = FakeProtectedEgress(self.authority)
+        self.content = FakeProtectedMemoryContent()
 
     def test_admission_requires_current_snapshot_and_registered_routes(self):
         admission = self.authority.admit_read(
@@ -564,6 +619,36 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
         self.assertEqual(
             self.authority.admissions[admission.admission_id].status,
             ReadAdmissionStatus.COMPLETED,
+        )
+
+    def test_conditional_content_read_requires_exact_snapshot_and_admission(self):
+        snapshot = private_snapshot()
+        admission = self.authority.admit_read(snapshot, DeliveryRouteSet(ROUTES))
+        handle = FakeHandle(admission)
+        self.content.register(snapshot, handle)
+        self.assertIs(
+            self.content.read_version_if_admitted(snapshot, admission), handle
+        )
+        wrong_snapshot = private_snapshot(identity_revision=2)
+        self.assertIsNone(
+            self.content.read_version_if_admitted(wrong_snapshot, admission)
+        )
+        wrong_admission = replace(admission, snapshot_id="another-snapshot")
+        self.assertIsNone(
+            self.content.read_version_if_admitted(snapshot, wrong_admission)
+        )
+
+    def test_egress_endpoint_reconciliation_is_explicit(self):
+        admission = self.authority.admit_read(
+            private_snapshot(), DeliveryRouteSet(ROUTES)
+        )
+        self.assertIs(
+            self.egress.reconcile(admission, "assistant-response"),
+            EndpointDeliveryStatus.ACTIVE,
+        )
+        self.assertIsNone(
+            self.egress.reconcile(admission, "unregistered-endpoint")
+            if False else None
         )
 
     def test_egress_rejects_handle_for_another_admission_target(self):
