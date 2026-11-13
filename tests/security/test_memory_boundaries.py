@@ -1,16 +1,24 @@
+from datetime import datetime, timezone
 import unittest
 
-from atlas.core.errors import ContractError
-from atlas.memory.models import MemoryProposal
+from atlas.memory.models import MemoryProposal, MemoryProposalIntent
 from atlas.ports.memory import MemoryGateway
-from tests.fixtures.contexts import user_context
+
+
+M1 = "018f0f00-0000-7000-8000-000000000001"
+V1 = "018f0f00-0000-7000-8000-000000000002"
+P1 = "018f0f00-0000-7000-8000-000000000003"
 
 
 class MemoryBoundarySecurityTests(unittest.TestCase):
-    def test_proposal_cannot_claim_another_users_ownership(self):
-        context = user_context("alice")
-        with self.assertRaises(ContractError):
-            MemoryProposal("bob", "private fact", context)
+    def test_proposal_does_not_claim_or_carry_memory_ownership(self):
+        proposal = MemoryProposal(
+            P1, MemoryProposalIntent.CREATE_MEMORY, M1, V1, "agent:delegate",
+            datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+        self.assertEqual(proposal.submitted_by, "agent:delegate")
+        self.assertNotIn("owner_id", MemoryProposal.__dataclass_fields__)
+        self.assertNotIn("context", MemoryProposal.__dataclass_fields__)
 
     def test_gateway_is_the_explicit_memory_port(self):
         self.assertTrue(hasattr(MemoryGateway, "list_visible"))

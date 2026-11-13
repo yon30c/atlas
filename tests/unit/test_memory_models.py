@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import unittest
 
 from atlas.core.errors import ContractError
+from atlas.core import enums as core_enums
 from atlas.memory.models import (
     Memory,
     MemoryClassification,
@@ -65,14 +66,15 @@ class MemoryModelTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             Memory(M1, "user-1", MemoryScope(MemoryScopeKind.PRIVATE), None, NOW, NOW - timedelta(seconds=1))
         with self.assertRaises(ContractError):
-            Memory(M1, "user-1", MemoryScope(MemoryScopeKind.PRIVATE), "018f0f00-0000-7000-8000-000000000002", NOW, NOW)
+            Memory(M1, "user-1", MemoryScope(MemoryScopeKind.PRIVATE),
+                   "018f0f00-0000-4000-8000-000000000002", NOW, NOW)
 
     def test_version_validates_content_number_status_and_review(self):
         self.assertEqual(version().version_number, 1)
         for invalid_number in (0, -1, True, 1.0):
             with self.subTest(number=invalid_number), self.assertRaises(ContractError):
                 version(version_number=invalid_number)
-        for content in ("", "  \n"):
+        for content in ("", "  \\n"):
             with self.subTest(content=content), self.assertRaises(ContractError):
                 version(content=content)
         with self.assertRaises(ContractError):
@@ -124,3 +126,6 @@ class MemoryModelTests(unittest.TestCase):
                    datetime(2026, 1, 1), NOW)
         with self.assertRaises(ContractError):
             version(submitted_at=datetime(2026, 1, 1, tzinfo=timezone(timedelta(hours=2))))
+
+    def test_legacy_memory_status_is_not_part_of_the_new_domain(self):
+        self.assertFalse(hasattr(core_enums, "MemoryStatus"))
