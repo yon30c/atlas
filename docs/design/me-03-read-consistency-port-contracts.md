@@ -133,9 +133,9 @@ La admisión contiene, como mínimo:
 
 La admisión no sustituye CAM. No puede utilizarse con otro actor, memoria, versión, acción, generación o endpoint.
 
-### 4.3 ReadConsistencyAuthorityPort
+### 4.3 ReadConsistencyAuthorityPort (faceta de autoridad)
 
-Contrato lógico propuesto:
+Contrato lógico de la faceta de autoridad. No se inyecta por separado en Memory Gateway; forma parte de ProtectedMemoryConsistencyPort:
 
 ```python
 class ReadConsistencyAuthorityPort(Protocol):
@@ -215,9 +215,9 @@ El adaptador de contenido no decide autorización. Solo verifica las condiciones
 
 ## 6. Contrato de entrega protegida
 
-### 6.1 ProtectedEgressPort
+### 6.1 ProtectedEgressPort (faceta de egress)
 
-El punto final de entrega debe ofrecer una operación indivisible de compromiso y liberación:
+El punto final de entrega debe ofrecer una operación indivisible de compromiso y liberación. Esta faceta no se inyecta por separado en Memory Gateway; forma parte de ProtectedMemoryConsistencyPort:
 
 ```python
 class ProtectedEgressPort(Protocol):
@@ -354,7 +354,7 @@ Los registros no contienen payloads, fragmentos, contenido olvidado ni hashes de
 | `Grant` y `GrantRepository` | Exponer revisión del Grant exacto y mantener semántica temporal actual |
 | `MemoryVersionContentPort` | Sustituir lectura por IDs por lectura condicional con snapshot y admisión |
 | `MemoryGateway.get_version` | Sustituir retorno crudo por sesión/entrega protegida |
-| Nuevos puertos | ReadConsistencyAuthorityPort y ProtectedEgressPort |
+| Frontera compuesta | ProtectedMemoryConsistencyPort agrupa las facetas de autoridad y egress para una única inyección en Gateway |
 
 No se debe hacer una migración parcial que deje coexistir una ruta nueva segura con un fallback antiguo que devuelva contenido crudo. La ruta antigua debe quedar retirada o estrictamente interna y no alcanzable por consumidores.
 
