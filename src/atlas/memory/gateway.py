@@ -130,6 +130,9 @@ class MemoryGatewayService:
                 return None
             operation_id = f"read:{admission.admission_id}"
 
+            if admission.status is not ReadAdmissionStatus.ADMITTED:
+                # Una admisión preexistente/activa no se puede cerrar como vacía.
+                return None
             if (
                 admission.snapshot_id != snapshot.snapshot_id
                 or admission.target.memory_id != memory_id
@@ -137,7 +140,6 @@ class MemoryGatewayService:
                 or admission.target.owner_id != snapshot.owner_id
                 or admission.target.scope != snapshot.scope
                 or admission.route_ids != self._routes.route_ids
-                or admission.status is not ReadAdmissionStatus.ADMITTED
             ):
                 self._finish_empty_admission(admission, operation_id)
                 return None
