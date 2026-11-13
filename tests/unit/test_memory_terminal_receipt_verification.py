@@ -295,7 +295,7 @@ class TerminalReceiptVerificationTests(unittest.TestCase):
             endpoint_id="assistant-response",
             final_sequence=2,
         )
-        verifier = FakeVerifier(mismatch_field="final_sequence")
+        verifier = FakeVerifier(mismatch_field="receipt_id")
         result = verifier.verify_terminal_receipt(request)
         self.assertIsNone(match_verified_receipt(request, result))
 
