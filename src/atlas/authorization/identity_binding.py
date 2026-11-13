@@ -37,11 +37,11 @@ class IdentitySubjectBindingPort(Protocol):
         """Devuelve la vinculación verificada para el actor indicado."""
 
 
-def resolve_authenticated_user_subject(
+def resolve_authenticated_user_binding(
     context: OperationContext,
     binding_port: IdentitySubjectBindingPort,
-) -> str | None:
-    """Devuelve el sujeto solo si la frontera confiable confirma la vinculación."""
+) -> AuthenticatedUserSubject | None:
+    """Devuelve la vinculación completa y versionada desde la fuente confiable."""
     if not isinstance(context, OperationContext):
         return None
     if context.actor.kind is not IdentityKind.USER:
@@ -50,16 +50,21 @@ def resolve_authenticated_user_subject(
         return None
     if not callable(getattr(binding_port, "resolve_user_subject", None)):
         return None
-
     try:
         binding = binding_port.resolve_user_subject(context.actor.identity_id)
     except Exception:
         return None
-
     if not isinstance(binding, AuthenticatedUserSubject):
         return None
-    if not binding.is_active:
+    if not binding.is_active or binding.actor_identity_id != context.actor.identity_id:
         return None
-    if binding.actor_identity_id != context.actor.identity_id:
-        return None
-    return binding.subject_user_id
+    return binding
+
+
+def resolve_authenticated_user_subject(
+    context: OperationContext,
+    binding_port: IdentitySubjectBindingPort,
+) -> str | None:
+    """Devuelve el sujeto solo si la frontera confiable confirma la vinculación."""
+    binding = resolve_authenticated_user_binding(context, binding_port)
+    return binding.subject_user_id if binding is not None else None
