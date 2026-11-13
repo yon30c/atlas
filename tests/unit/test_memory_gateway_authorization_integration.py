@@ -3,6 +3,7 @@
 Usan el servicio de autorización real y adaptadores en memoria de prueba;
 no demuestran integración con almacenamiento o proveedores reales.
 """
+import threading
 import unittest
 from datetime import datetime, timedelta, timezone
 
@@ -21,6 +22,7 @@ from atlas.memory.consistency import (
     ReadTarget,
     ReconciliationResult,
 )
+from atlas.memory.forget import ForgetClosure, ForgetClosureStatus, ForgetTarget
 from atlas.memory.gateway import MemoryGatewayService
 from atlas.memory.metadata import (
     EnvironmentMetadata,
@@ -123,11 +125,15 @@ class FakeProtectedHandle:
 
 class FakeReadAuthority:
     def __init__(self):
+        self._lock = threading.RLock()
         self.admissions = []
         self.acks = []
         self.emissions = []
         self.finishes = []
         self.reconciliations = []
+        self.generations = {}
+        self.suppressed_memories = set()
+        self.forget_closures = {}
 
     def begin_forget(self, *args, **kwargs):
         raise AssertionError("Forget no se invoca en estas pruebas")
@@ -142,27 +148,70 @@ class FakeReadAuthority:
         return None
 
     def admit_read(self, snapshot, routes, now):
-        admission = ReadAdmission(
-            admission_id=f"admission-{len(self.admissions) + 1}",
-            snapshot_id=snapshot.snapshot_id,
-            target=ReadTarget(
-                snapshot.memory_id, snapshot.version_id,
-                snapshot.owner_id, snapshot.scope
-            ),
-            generation=1,
-            route_ids=routes.route_ids,
-            status=ReadAdmissionStatus.ADMITTED,
-            admitted_at=NOW,
-        )
-        self.admissions.append(admission)
-        return admission
+        with self._lock:
+            if snapshot.memory_id in self.suppressed_memories:
+                return None
+            admission = ReadAdmission(
+                admission_id=f"admission-{len(self.admissions) + 1}",
+                snapshot_id=snapshot.snapshot_id,
+                target=ReadTarget(
+                    snapshot.memory_id, snapshot.version_id,
+                    snapshot.owner_id, snapshot.scope
+                ),
+                generation=self.generations.get(snapshot.memory_id, 1),
+                route_ids=routes.route_ids,
+                status=ReadAdmissionStatus.ADMITTED,
+                admitted_at=NOW,
+            )
+            self.admissions.append(admission)
+            return admission
 
     def commit_and_emit(self, admission, handle, endpoint_id, emission_id, sequence, now):
-        self.emissions.append((admission.admission_id, endpoint_id, emission_id, sequence))
-        return EgressReceipt(
-            admission.admission_id, endpoint_id, emission_id, sequence,
-            admission.generation, now
-        )
+        with self._lock:
+            if (
+                admission.target.memory_id in self.suppressed_memories
+                or admission.generation != self.generations.get(admission.target.memory_id, 1)
+                or endpoint_id not in admission.route_ids
+            ):
+                return None
+            self.emissions.append((admission.admission_id, endpoint_id, emission_id, sequence))
+            return EgressReceipt(
+                admission.admission_id, endpoint_id, emission_id, sequence,
+                admission.generation, now
+            )
+
+    def begin_forget(self, target, authorization, idempotency_key, now):
+        with self._lock:
+            if target.memory_id in self.suppressed_memories:
+                return None
+            affected = frozenset(
+                admission.admission_id for admission in self.admissions
+                if admission.target.memory_id == target.memory_id
+                and admission.status not in (
+                    ReadAdmissionStatus.COMPLETED, ReadAdmissionStatus.CANCELLED
+                )
+            )
+            routes = frozenset(
+                route for admission in self.admissions
+                if admission.admission_id in affected
+                for route in admission.route_ids
+            )
+            generation = self.generations.get(target.memory_id, 1) + 1
+            self.generations[target.memory_id] = generation
+            self.suppressed_memories.add(target.memory_id)
+            closure = ForgetClosure(
+                closure_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c073a15",
+                operation_id="forget:gateway-race",
+                idempotency_key=idempotency_key,
+                target=target,
+                generation=generation,
+                affected_admission_ids=affected,
+                unresolved_admission_ids=affected,
+                delivery_route_ids=routes,
+                status=ForgetClosureStatus.CLOSING,
+            )
+            self.forget_closures[closure.operation_id] = closure
+            return closure
 
     def finish(self, admission, operation_id, endpoint_id, final_sequence, now):
         self.finishes.append((admission.admission_id, operation_id, endpoint_id, final_sequence))
@@ -313,6 +362,47 @@ class MemoryGatewayAuthorizationIntegrationTests(unittest.TestCase):
             )
         )
         self.assertEqual(self.authority.emissions, [])
+
+
+    def test_gateway_session_and_forget_share_the_same_atomic_boundary(self):
+        read = self.gateway.get_version(make_context(), MEMORY_ID, VERSION_ID)
+        self.assertIsNotNone(read)
+        barrier = threading.Barrier(3)
+        emissions = []
+        closures = []
+
+        def emit():
+            barrier.wait()
+            emissions.append(
+                self.gateway.emit_version(
+                    read, "assistant-response", "gateway-forget-race", 1
+                )
+            )
+
+        def forget():
+            barrier.wait()
+            closures.append(
+                self.authority.begin_forget(
+                    ForgetTarget(MEMORY_ID), object(), "gateway-forget-race-key", NOW
+                )
+            )
+
+        first = threading.Thread(target=emit)
+        second = threading.Thread(target=forget)
+        first.start()
+        second.start()
+        barrier.wait()
+        first.join()
+        second.join()
+
+        self.assertIsNotNone(closures[0])
+        self.assertIn("admission-1", closures[0].affected_admission_ids)
+        self.assertEqual(len(emissions), 1)
+        self.assertIsNone(
+            self.gateway.emit_version(
+                read, "assistant-response", "gateway-after-forget", 2
+            )
+        )
 
     def test_private_owner_opens_protected_handle_after_real_cam_allows(self):
         result = self.gateway.get_version(make_context(), MEMORY_ID, VERSION_ID)
