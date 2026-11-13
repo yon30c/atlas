@@ -113,6 +113,7 @@ class GrantRenewalService:
             updated_grant = replace(
                 grant,
                 expires_at=request.proposed_expires_at,
+                revision=grant.revision + 1,
             )
             approved_request = replace(
                 request,
