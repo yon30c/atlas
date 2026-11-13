@@ -17,13 +17,14 @@ def closure(
     status=ForgetClosureStatus.CLOSING,
     affected=frozenset({"admission-1"}),
     unresolved=frozenset({"admission-1"}),
+    generation=2,
 ):
     return ForgetClosure(
         closure_id=CLOSURE_ID,
         operation_id="forget-op-1",
         idempotency_key="forget-key-1",
         target=ForgetTarget(MEMORY_ID),
-        generation=2,
+        generation=generation,
         affected_admission_ids=affected,
         unresolved_admission_ids=unresolved,
         delivery_route_ids=frozenset({"assistant-response", "api-response"}),
@@ -60,9 +61,7 @@ class ForgetClosureModelTests(unittest.TestCase):
 
     def test_closure_requires_positive_generation(self):
         with self.assertRaises(ContractError):
-            item = closure()
-            object.__setattr__(item, "generation", 0)
-            item.__post_init__()
+            closure(generation=0)
 
     def test_evidence_contains_no_memory_payload_or_content_hash_fields(self):
         item = closure()
