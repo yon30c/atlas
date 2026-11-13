@@ -35,6 +35,7 @@ def read_admitted(
     generation=1,
     routes=frozenset({"assistant-response", "api-response"}),
     identity_revision=1,
+    idempotency_key=None,
 ):
     return ConsistencyTransition(
         record_id=record_id,
@@ -42,6 +43,7 @@ def read_admitted(
         record_kind=ConsistencyRecordKind.READ_ADMITTED,
         operation_id=f"read:{admission_id}",
         occurred_at=NOW,
+        idempotency_key=idempotency_key,
         request_id=f"request:{admission_id}",
         actor_identity_id="identity-1",
         owner_id="owner-1",
@@ -334,6 +336,47 @@ class ConsistencyJournalReducerTests(unittest.TestCase):
         projection = self.reducer.reduce(recovery(transitions))
         self.assertTrue(projection.invalidations[0].reconciled)
         self.assertEqual(len(projection.admissions), 2)
+
+
+    def test_c85_checkpoint_reference_without_reconstructed_base_fails_closed(self):
+        from atlas.memory.journal import ConsistencyCheckpoint
+        checkpoint = ConsistencyCheckpoint(
+            checkpoint_id=RECORDS[0],
+            position=ConsistencyPosition(DOMAIN, 1, 1),
+            state_reference="opaque-state",
+            integrity_reference="opaque-integrity",
+            created_at=NOW,
+        )
+        state = ConsistencyRecoveryState(
+            domain_id=DOMAIN,
+            authority_epoch=1,
+            checkpoint=checkpoint,
+            entries=(),
+            head_sequence=1,
+            continuity_reference="opaque-continuity",
+        )
+        with self.assertRaises(ContractError):
+            self.reducer.reduce(state)
+
+    def test_c86_reused_idempotency_key_is_rejected_across_operations(self):
+        with self.assertRaises(ContractError):
+            self.reducer.reduce(recovery([
+                read_admitted(idempotency_key="reused-key"),
+                read_admitted(
+                    record_id=RECORDS[1], admission_id="admission-2",
+                    idempotency_key="reused-key",
+                ),
+            ]))
+
+    def test_c87_idempotency_tombstones_are_preserved_in_projection(self):
+        projection = self.reducer.reduce(
+            recovery([read_admitted(idempotency_key="durable-read-key")])
+        )
+        self.assertEqual(len(projection.idempotency_records), 1)
+        self.assertEqual(
+            projection.idempotency_records[0].idempotency_key,
+            "durable-read-key",
+        )
 
     def test_c66_read_activation_without_admission_is_rejected(self):
         with self.assertRaises(ContractError):
