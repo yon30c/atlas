@@ -48,6 +48,7 @@ El reducer consume un `ConsistencyRecoveryState` estructuralmente válido y devu
 
 La proyección conserva únicamente metadatos opacos necesarios para:
 - admisiones y estado;
+- tombstones de idempotencia (clave, operación y registro), sin payload de solicitud;
 - inventario de endpoints y últimas secuencias;
 - recibos y operaciones ya aplicadas;
 - cierres Forget e invalidaciones activos/terminales;
@@ -61,7 +62,7 @@ Cualquier transición desconocida, fuera de orden, duplicada contradictoriamente
 
 ### ME-03C-06 — Checkpoint no sustituye la continuidad confiable
 
-La validación estructural de un checkpoint y sus entradas no prueba autenticidad, anti-rollback ni que la fuente haya entregado el último estado confirmado. `continuity_reference` es una referencia opaca, no una prueba criptográfica por sí misma.
+La validación estructural de un checkpoint y sus entradas no prueba autenticidad, anti-rollback ni que la fuente haya entregado el último estado confirmado. `continuity_reference` es una referencia opaca, no una prueba criptográfica por sí misma. Como `ConsistencyRecoveryState` aún no incluye una proyección base decodificada/verificada del checkpoint, el reducer rechaza cualquier recuperación con checkpoint en lugar de reproducir únicamente las entradas posteriores como si el historial anterior estuviera vacío.
 
 La autoridad solo puede reabrir el dominio después de validar el resultado del reducer y obtener una verificación de continuidad/anti-rollback desde una fuente confiable definida por la futura implementación. ME-03C no inventa ni implementa esa fuente.
 
@@ -158,8 +159,11 @@ Se amplía C45–C64 con escenarios ME-03C:
 | C82 | Registro desconocido o futuro | Cuarentena completa del dominio. |
 | C83 | Transición terminal repetida con resultado distinto | Rechazo. |
 | C84 | Orden de cierre egress ambiguo | Estado UNRESOLVED; no generar proyección operativa reabierta. |
+| C85 | Checkpoint con referencia pero sin proyección base reconstruida | Reducer falla cerrado; no asume que el estado previo está vacío. |
+| C86 | Reutilización de idempotency_key en otra operación | Rechazo por conflicto. |
+| C87 | Recuperación con clave de idempotencia vigente | La proyección conserva el tombstone opaco para impedir replay.
 
-Los escenarios C65–C84 se implementarán inicialmente como pruebas puras del validador/reducer y fakes. No prueban persistencia durable, anti-rollback criptográfico ni endpoints reales.
+Los escenarios C65–C87 se implementarán inicialmente como pruebas puras del validador/reducer y fakes. No prueban persistencia durable, anti-rollback criptográfico ni endpoints reales.
 
 ## 8. Secuencia de implementación
 
@@ -174,7 +178,8 @@ Los escenarios C65–C84 se implementarán inicialmente como pruebas puras del v
 
 ME-03C no se declara cerrado hasta que:
 - todos los tipos tienen allowlist explícita;
-- el reducer valida orden, correlación, generación, inventarios y terminalidad;
+- el reducer valida orden, correlación, generación, inventarios, idempotencia y terminalidad;
+- un checkpoint no se utiliza hasta que su proyección base esté decodificada y verificada;
 - los registros desconocidos o ambiguos fallan cerrados;
 - se diferencia estructuralidad de continuidad confiable;
 - C45–C84 están representados y ejecutados en entorno de pruebas;
