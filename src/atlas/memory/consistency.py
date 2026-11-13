@@ -89,7 +89,7 @@ class AuthorizationSnapshot:
     request_id: str
     action: str
     actor_identity_id: str
-    subject_user_id: str
+    subject_user_id: str | None
     memory_id: str
     version_id: str
     owner_id: str
@@ -104,7 +104,7 @@ class AuthorizationSnapshot:
 
     def __post_init__(self) -> None:
         for field in ("snapshot_id", "decision_id", "request_id", "action",
-                      "actor_identity_id", "subject_user_id", "owner_id"):
+                      "actor_identity_id", "owner_id"):
             _required(getattr(self, field), field)
         validate_atlas_id(self.memory_id, "memory_id")
         validate_atlas_id(self.version_id, "version_id")
@@ -128,6 +128,7 @@ class AuthorizationSnapshot:
         if self.revisions.identity_revision.authority_id != self.actor_identity_id:
             raise ContractError("identity_revision no corresponde al actor")
         if self.scope.kind is MemoryScopeKind.PRIVATE:
+            _required(self.subject_user_id, "subject_user_id")
             if self.subject_user_id != self.owner_id:
                 raise ContractError("PRIVATE requiere que el sujeto autenticado sea el propietario")
             if any(v is not None for v in (
@@ -137,6 +138,8 @@ class AuthorizationSnapshot:
             )):
                 raise ContractError("PRIVATE no puede incluir datos/revisiones PROJECT o Grant")
         elif self.scope.kind is MemoryScopeKind.PROJECT:
+            if self.subject_user_id is not None:
+                _required(self.subject_user_id, "subject_user_id")
             _required(self.project_id, "project_id")
             _required(self.environment_id, "environment_id")
             if self.project_id != self.scope.project_id:
