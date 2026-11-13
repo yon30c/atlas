@@ -154,6 +154,7 @@ class GrantManagementTests(unittest.TestCase):
             revoked_at,
         )
         self.assertEqual(revoked_grant.revoked_at, revoked_at)
+        self.assertEqual(revoked_grant.revision, self.grant.revision + 1)
         self.assertEqual(
             self.repository.get(self.grant.grant_id),
             revoked_grant,
