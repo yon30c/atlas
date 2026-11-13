@@ -13,6 +13,8 @@ from atlas.memory.consistency import (
     AuthorityKind,
     AuthorizationInvalidation,
     AuthorizationSnapshot,
+    AuthorityRevision,
+    AuthorizationRevisionSet,
     DeliveryRouteSet,
     EgressReceipt,
     EndpointCompletionReceipt,
@@ -27,6 +29,14 @@ from atlas.memory.consistency import (
 from atlas.memory.forget import (
     ForgetClosure, ForgetClosureStatus, ForgetRecoverySnapshot, ForgetTarget,
 )
+from atlas.memory.journal import (
+    ConsistencyPosition,
+    ConsistencyRecordKind,
+    ConsistencyRecoveryState,
+    ConsistencyTransition,
+    JournalEntry,
+)
+from atlas.memory.journal_reducer import ConsistencyJournalReducer
 from atlas.memory.models import (
     MemoryClassification,
     MemoryScope,
@@ -134,6 +144,27 @@ class FakeReadConsistencyAndEgress:
                 closure=closure,
                 admissions=admissions,
             )
+
+    @classmethod
+    def restore_from_journal_projection(cls, projection):
+        """Test-only recovery consumer for closed memory gates."""
+        from atlas.memory.journal_reducer import ConsistencyProjection
+
+        if not isinstance(projection, ConsistencyProjection):
+            return None
+        restored = cls()
+        with restored._lock:
+            for closure in projection.forget_closures:
+                # FORGET_CLOSED already closes the gate; FORGET_SUPPRESSED is
+                # a later logical milestone, not the point at which reads stop.
+                restored.suppressed_memories.add(closure.memory_id)
+                restored.generation = max(restored.generation, closure.generation)
+            for invalidation in projection.invalidations:
+                restored.revisions[
+                    (invalidation.authority_kind, invalidation.authority_id)
+                ] = invalidation.new_revision
+                restored.generation = max(restored.generation, invalidation.generation)
+        return restored
 
     @classmethod
     def restore_forget_recovery(cls, snapshot):
@@ -928,6 +959,118 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
             )
         )
 
+
+
+    def test_journal_reducer_projection_restores_forget_gate_closed(self):
+        snapshot = private_snapshot()
+        admission_id = "recovered-admission-1"
+        forget_operation_id = "forget:recovered-operation"
+        route_ids = frozenset({"assistant-response"})
+        memory_id = MEMORY_ID
+        version_id = VERSION_ID
+        transitions = (
+            ConsistencyTransition(
+                record_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074101",
+                schema_version=1,
+                record_kind=ConsistencyRecordKind.READ_ADMITTED,
+                operation_id=f"read:{admission_id}",
+                occurred_at=NOW,
+                request_id="recovered-request",
+                actor_identity_id="identity-1",
+                subject_user_id="owner-1",
+                owner_id="owner-1",
+                memory_id=memory_id,
+                version_id=version_id,
+                snapshot_id=snapshot.snapshot_id,
+                revisions=AuthorizationRevisionSet(
+                    memory_revision=AuthorityRevision(AuthorityKind.MEMORY, memory_id, 1),
+                    version_revision=AuthorityRevision(AuthorityKind.MEMORY_VERSION, version_id, 1),
+                    identity_revision=AuthorityRevision(AuthorityKind.IDENTITY, "identity-1", 1),
+                ),
+                admission_id=admission_id,
+                generation=1,
+                route_ids=route_ids,
+            ),
+            ConsistencyTransition(
+                record_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074102",
+                schema_version=1,
+                record_kind=ConsistencyRecordKind.FORGET_CLOSED,
+                operation_id=forget_operation_id,
+                occurred_at=NOW,
+                idempotency_key="recovered-forget-key",
+                request_id="recovered-forget-request",
+                actor_identity_id="identity-1",
+                subject_user_id="owner-1",
+                owner_id="owner-1",
+                memory_id=memory_id,
+                generation=2,
+                proof_reference="opaque-owner-proof",
+                affected_admission_ids=frozenset({admission_id}),
+                route_ids=route_ids,
+            ),
+            ConsistencyTransition(
+                record_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074103",
+                schema_version=1,
+                record_kind=ConsistencyRecordKind.ENDPOINT_FENCED,
+                operation_id=forget_operation_id,
+                occurred_at=NOW,
+                admission_id=admission_id,
+                endpoint_id="assistant-response",
+                generation=2,
+                receipt_id="recovered-fence-receipt",
+            ),
+            ConsistencyTransition(
+                record_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074104",
+                schema_version=1,
+                record_kind=ConsistencyRecordKind.ADMISSION_RECONCILED,
+                operation_id=forget_operation_id,
+                occurred_at=NOW,
+                admission_id=admission_id,
+                generation=1,
+                receipt_id="recovered-terminal-receipt",
+                admission_terminal_status=ReadAdmissionStatus.CANCELLED,
+            ),
+            ConsistencyTransition(
+                record_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074105",
+                schema_version=1,
+                record_kind=ConsistencyRecordKind.FORGET_SUPPRESSED,
+                operation_id=forget_operation_id,
+                occurred_at=NOW,
+                memory_id=memory_id,
+                generation=2,
+                affected_admission_ids=frozenset({admission_id}),
+                route_ids=route_ids,
+            ),
+        )
+        entries = tuple(
+            JournalEntry(
+                ConsistencyPosition("memory-domain-recovery-test", 1, sequence),
+                transition,
+            )
+            for sequence, transition in enumerate(transitions, start=1)
+        )
+        recovery = ConsistencyRecoveryState(
+            domain_id="memory-domain-recovery-test",
+            authority_epoch=1,
+            checkpoint=None,
+            entries=entries,
+            head_sequence=len(entries),
+            continuity_reference="opaque-continuity-reference",
+        )
+        projection = ConsistencyJournalReducer().reduce(recovery)
+        self.assertTrue(projection.forget_closures[0].suppressed)
+        self.assertIs(
+            projection.admissions[0].status, ReadAdmissionStatus.CANCELLED
+        )
+
+        restored = FakeReadConsistencyAndEgress.restore_from_journal_projection(
+            projection
+        )
+        self.assertIsNotNone(restored)
+        self.assertIn(memory_id, restored.suppressed_memories)
+        self.assertIsNone(
+            restored.admit_read(snapshot, DeliveryRouteSet(route_ids))
+        )
 
     def test_content_port_rechecks_current_revisions_after_admission(self):
         snapshot = private_snapshot()
