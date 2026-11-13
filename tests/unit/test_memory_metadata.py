@@ -6,7 +6,7 @@ from atlas.memory.metadata import (
     MemoryVersionMetadata,
     ProjectMetadata,
 )
-from atlas.memory.models import MemoryVersionStatus
+from atlas.memory.models import MemoryClassification, MemoryVersionStatus
 
 
 MEMORY_ID = "018bcfe5-7b3a-7cc2-98c4-dc0c0c073a11"
@@ -20,10 +20,12 @@ class MemoryMetadataTests(unittest.TestCase):
             version_id=VERSION_ID,
             memory_id=MEMORY_ID,
             status=MemoryVersionStatus.APPROVED,
+            classification=MemoryClassification.CONFIDENTIAL,
             parent_version_id=PARENT_ID,
         )
         self.assertEqual(metadata.memory_id, MEMORY_ID)
         self.assertEqual(metadata.parent_version_id, PARENT_ID)
+        self.assertEqual(metadata.classification, MemoryClassification.CONFIDENTIAL)
 
     def test_version_metadata_rejects_invalid_identifiers(self):
         with self.assertRaises(ContractError):
@@ -31,6 +33,7 @@ class MemoryMetadataTests(unittest.TestCase):
                 version_id="not-a-uuid",
                 memory_id=MEMORY_ID,
                 status=MemoryVersionStatus.APPROVED,
+                classification=MemoryClassification.CONFIDENTIAL,
                 parent_version_id=None,
             )
 
@@ -40,6 +43,17 @@ class MemoryMetadataTests(unittest.TestCase):
                 version_id=VERSION_ID,
                 memory_id=MEMORY_ID,
                 status="approved",
+                classification=MemoryClassification.CONFIDENTIAL,
+                parent_version_id=None,
+            )
+
+    def test_version_metadata_rejects_unknown_classification_type(self):
+        with self.assertRaises(ContractError):
+            MemoryVersionMetadata(
+                version_id=VERSION_ID,
+                memory_id=MEMORY_ID,
+                status=MemoryVersionStatus.APPROVED,
+                classification="RESTRICTED",
                 parent_version_id=None,
             )
 
