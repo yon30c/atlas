@@ -90,7 +90,7 @@ class IdentitySubjectBindingTests(unittest.TestCase):
     def test_invalid_binding_values_are_rejected(self):
         with self.assertRaises(ContractError):
             AuthenticatedUserSubject("", "user-7", True)
-        with self.assertRaises(Exception):
+        with self.assertRaises(ContractError):
             AuthenticatedUserSubject("identity-user-1", "user-7", 1)
 
 
