@@ -366,8 +366,10 @@ class MemoryConsistencyModelTests(unittest.TestCase):
     def test_completion_receipt_and_reconciliation_are_typed_and_disjoint(self):
         from atlas.memory.consistency import EndpointCompletionReceipt, ReconciliationResult
         receipt = EndpointCompletionReceipt(
+            operation_id="read-operation-1",
             admission_id="admission-1",
             endpoint_id="assistant-response",
+            generation=1,
             final_sequence=0,
             completed_at=NOW,
         )
