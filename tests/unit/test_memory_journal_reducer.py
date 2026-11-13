@@ -262,6 +262,79 @@ class ConsistencyJournalReducerTests(unittest.TestCase):
     def setUp(self):
         self.reducer = ConsistencyJournalReducer()
 
+
+    def test_reducer_accepts_completed_read_and_returns_immutable_projection(self):
+        transitions = [
+            read_admitted(routes=frozenset({"assistant-response"})),
+            egress(RECORDS[1], 1),
+            endpoint_completed(RECORDS[2], final_sequence=1),
+            admission_reconciled(RECORDS[3]),
+        ]
+        projection = self.reducer.reduce(recovery(transitions))
+        self.assertEqual(len(projection.admissions), 1)
+        admission = projection.admissions[0]
+        self.assertIs(admission.status, ReadAdmissionStatus.COMPLETED)
+        self.assertEqual(admission.endpoints[0].last_emission_sequence, 1)
+        self.assertEqual(len(projection.receipt_ids), 2)
+
+    def test_reducer_accepts_forget_only_after_all_endpoints_are_fenced(self):
+        admission = read_admitted()
+        closure = forget_closed(
+            RECORDS[1],
+            affected=frozenset({"admission-1"}),
+            routes=frozenset({"assistant-response", "api-response"}),
+        )
+        transitions = [
+            admission,
+            closure,
+            endpoint_fenced(
+                RECORDS[2], closure.operation_id, endpoint="assistant-response",
+                receipt_id="fence-assistant",
+            ),
+            endpoint_fenced(
+                RECORDS[3], closure.operation_id, endpoint="api-response",
+                receipt_id="fence-api",
+            ),
+            admission_reconciled(
+                RECORDS[4], operation_id=closure.operation_id,
+                terminal=ReadAdmissionStatus.CANCELLED,
+            ),
+            forget_suppressed(RECORDS[5], closure),
+        ]
+        projection = self.reducer.reduce(recovery(transitions))
+        self.assertTrue(projection.forget_closures[0].suppressed)
+        self.assertIs(
+            projection.admissions[0].status, ReadAdmissionStatus.CANCELLED
+        )
+
+    def test_reducer_accepts_invalidation_and_new_revision_after_reconciliation(self):
+        admission = read_admitted()
+        closure = invalidation_closed(RECORDS[1])
+        transitions = [
+            admission,
+            closure,
+            endpoint_fenced(
+                RECORDS[2], closure.operation_id, generation=2,
+                endpoint="assistant-response", receipt_id="fence-assistant",
+            ),
+            endpoint_fenced(
+                RECORDS[3], closure.operation_id, generation=2,
+                endpoint="api-response", receipt_id="fence-api",
+            ),
+            admission_reconciled(
+                RECORDS[4], operation_id=closure.operation_id,
+                terminal=ReadAdmissionStatus.CANCELLED,
+            ),
+            invalidation_reconciled(RECORDS[5], closure),
+            read_admitted(
+                record_id=RECORDS[6], admission_id="admission-2",
+                generation=2, identity_revision=2,
+            ),
+        ]
+        projection = self.reducer.reduce(recovery(transitions))
+        self.assertTrue(projection.invalidations[0].reconciled)
+        self.assertEqual(len(projection.admissions), 2)
+
     def test_c66_read_activation_without_admission_is_rejected(self):
         with self.assertRaises(ContractError):
             self.reducer.reduce(recovery([activated(RECORDS[0])]))
