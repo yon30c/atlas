@@ -590,6 +590,6 @@ Se cerró además el esquema de `ConsistencyTransition` mediante allowlist por `
 
 La semántica de generación queda diferenciada: `ENDPOINT_FENCED.generation` es la nueva generación del cierre que cerca al endpoint; `ADMISSION_RECONCILED.generation` identifica la generación original de la admisión. Los recibos de finalización de una operación de cierre usan la generación de esa operación.
 
-**Límite:** el reducer solo valida la estructura y el significado de los registros que recibe. No autentica el journal, no verifica el watermark, no consulta endpoints y no habilita rutas. Una `continuity_reference` opaca no se convierte en una prueba confiable por pasar el reducer. No existe adaptador durable.
+**Límite:** el reducer solo valida la estructura y el significado de los registros que recibe. No autentica el journal, no verifica el watermark, no consulta endpoints y no habilita rutas. Rechaza recuperaciones con checkpoint si no se suministra una proyección base reconstruida y validada; no interpreta una referencia de checkpoint como estado vacío. Una `continuity_reference` opaca no se convierte en una prueba confiable por pasar el reducer. No existe adaptador durable.
 
 **Cobertura escrita:** 33 métodos en `test_memory_journal.py`, 20 en `test_memory_journal_failures.py` y 22 en `test_memory_journal_reducer.py` (75 en total). No se han ejecutado.
