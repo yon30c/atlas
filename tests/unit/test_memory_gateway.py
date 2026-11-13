@@ -133,7 +133,7 @@ class StubAuthority:
         self.acks = []
         self.reconciliations = []
 
-    def admit_read(self, snapshot, routes):
+    def admit_read(self, snapshot, routes, now):
         self.admit_calls.append((snapshot, routes))
         return self.admission
 
@@ -341,10 +341,10 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         )
         self.authority.admission = admission
         self.content.handle = handle
-        self.clock.value = expires
-
+        self.clock.value = NOW + timedelta(seconds=1)
         read = self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
         self.assertIsNotNone(read)
+        self.clock.value = expires
         self.assertIsNone(
             self.gateway.emit_version(read, "assistant-response", "late", 1)
         )
