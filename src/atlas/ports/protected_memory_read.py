@@ -63,7 +63,10 @@ class ReadConsistencyAuthorityPort(Protocol):
     ) -> InvalidationReceipt | None:
         """Ordena la invalidación y el fencing antes de permitir nuevas emisiones."""
 
-    def record_endpoint_ack(self, receipt: EndpointFenceReceipt) -> bool:
+    def record_endpoint_ack(
+        self,
+        receipt: EndpointFenceReceipt | EndpointCompletionReceipt,
+    ) -> bool:
         """Registra un acknowledgement correlacionado e idempotente."""
 
     def get_nonterminal_admissions(
