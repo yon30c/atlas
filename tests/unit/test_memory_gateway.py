@@ -248,7 +248,7 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         self.assertFalse(self.gateway.finish_version(read, [], 0))
         self.assertFalse(self.gateway.finish_version(read, "assistant-response", True))
         self.assertEqual(self.authority.emissions, [])
-        self.assertEqual(self.egress.finishes, [])
+        self.assertEqual(self.authority.finishes, [])
 
 
     def test_public_read_capability_contains_only_an_opaque_identifier(self):
@@ -340,7 +340,7 @@ class MemoryGatewayServiceTests(unittest.TestCase):
 
         self.assertIsNone(result)
         self.assertEqual(self.content.calls, [])
-        self.assertEqual(self.egress.finishes, [])
+        self.assertEqual(self.authority.finishes, [])
 
     def test_mismatched_admission_is_rejected_before_content_read(self):
         self.authority.admission = make_admission(self.snapshot, snapshot_id="other")
@@ -349,7 +349,7 @@ class MemoryGatewayServiceTests(unittest.TestCase):
 
         self.assertIsNone(result)
         self.assertEqual(self.content.calls, [])
-        self.assertEqual(len(self.egress.finishes), len(ROUTES))
+        self.assertEqual(len(self.authority.finishes), len(ROUTES))
 
     def test_missing_or_invalid_handle_closes_empty_admission(self):
         self.content.handle = None
@@ -357,7 +357,7 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         result = self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
 
         self.assertIsNone(result)
-        self.assertEqual(len(self.egress.finishes), len(ROUTES))
+        self.assertEqual(len(self.authority.finishes), len(ROUTES))
         self.assertEqual(len(self.authority.acks), len(ROUTES))
         self.assertEqual(
             self.authority.reconciliations, ["read:admission-1"]
@@ -369,7 +369,7 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         result = self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
 
         self.assertIsNone(result)
-        self.assertEqual(len(self.egress.finishes), len(ROUTES))
+        self.assertEqual(len(self.authority.finishes), len(ROUTES))
         self.assertEqual(len(self.authority.acks), len(ROUTES))
         self.assertEqual(
             self.authority.reconciliations, ["read:admission-1"]
@@ -396,7 +396,7 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         self.assertIsNone(
             self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
         )
-        self.assertEqual(len(self.egress.finishes), len(ROUTES))
+        self.assertEqual(len(self.authority.finishes), len(ROUTES))
 
     def test_handle_for_another_memory_or_version_is_rejected(self):
         self.content.handle = FakeHandle(self.admission)
@@ -405,7 +405,7 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         result = self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
 
         self.assertIsNone(result)
-        self.assertEqual(len(self.egress.finishes), len(ROUTES))
+        self.assertEqual(len(self.authority.finishes), len(ROUTES))
         self.assertEqual(len(self.authority.acks), len(ROUTES))
 
     def test_forged_or_unknown_capability_cannot_emit_finish_or_reconcile(self):
@@ -417,8 +417,8 @@ class MemoryGatewayServiceTests(unittest.TestCase):
             self.gateway.finish_version(forged, "assistant-response", 0)
         )
         self.assertIsNone(self.gateway.reconcile_version(forged))
-        self.assertEqual(self.egress.emissions, [])
-        self.assertEqual(self.egress.finishes, [])
+        self.assertEqual(self.authority.emissions, [])
+        self.assertEqual(self.authority.finishes, [])
         self.assertEqual(self.authority.reconciliations, [])
 
     def test_emit_requires_registered_endpoint_and_returns_egress_receipt(self):
@@ -428,12 +428,12 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         )
 
         self.assertIsInstance(receipt, EgressReceipt)
-        self.assertEqual(len(self.egress.emissions), 1)
-        self.assertEqual(self.egress.emissions[0][2], "assistant-response")
+        self.assertEqual(len(self.authority.emissions), 1)
+        self.assertEqual(self.authority.emissions[0][2], "assistant-response")
         self.assertIsNone(
             self.gateway.emit_version(read, "unregistered", "emission-2", 2)
         )
-        self.assertEqual(len(self.egress.emissions), 1)
+        self.assertEqual(len(self.authority.emissions), 1)
 
     def test_grant_expiry_between_cam_and_admission_rejects_read(self):
         expires = NOW + timedelta(seconds=5)
@@ -472,7 +472,7 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         self.assertIsNone(
             self.gateway.emit_version(read, "assistant-response", "late", 1)
         )
-        self.assertEqual(self.egress.emissions, [])
+        self.assertEqual(self.authority.emissions, [])
 
     def test_finish_requires_exact_endpoint_and_records_ack(self):
         read = self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
@@ -481,7 +481,7 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         self.assertTrue(
             self.gateway.finish_version(read, "assistant-response", 0)
         )
-        self.assertEqual(len(self.egress.finishes), 1)
+        self.assertEqual(len(self.authority.finishes), 1)
         self.assertEqual(len(self.authority.acks), 1)
 
     def test_reconciliation_is_read_only(self):
@@ -536,7 +536,7 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         self.assertIsNone(
             self.gateway.emit_version(read, "assistant-response", "bad-time", 1)
         )
-        self.assertEqual(self.egress.emissions, [])
+        self.assertEqual(self.authority.emissions, [])
 
     def test_clock_or_authorization_failure_never_reads_content(self):
         self.clock.error = RuntimeError("clock unavailable")
