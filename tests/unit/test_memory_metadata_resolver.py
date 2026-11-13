@@ -1,4 +1,6 @@
 import unittest
+
+from atlas.core.errors import ContractError
 from datetime import datetime, timezone
 
 from atlas.authorization.memory_metadata_resolver import MemoryMetadataResolver
@@ -124,6 +126,7 @@ class MemoryMetadataResolverTests(unittest.TestCase):
             status=MemoryVersionStatus.APPROVED,
             classification=MemoryClassification.CONFIDENTIAL,
             parent_version_id=None,
+            revision=1,
         )
         self.assertIsNone(self.resolver.resolve_version(MEMORY_ID, VERSION_ID))
 
@@ -149,7 +152,7 @@ class MemoryMetadataResolverTests(unittest.TestCase):
         self.assertIsNone(self.resolver.resolve_environment("environment-1"))
 
     def test_metadata_requires_positive_canonical_revisions(self):
-        with self.assertRaises(Exception):
+        with self.assertRaises(ContractError):
             MemoryVersionMetadata(
                 version_id=VERSION_ID,
                 memory_id=MEMORY_ID,
