@@ -8,7 +8,8 @@ import unittest
 from dataclasses import replace
 from datetime import datetime, timezone
 
-from atlas.core.errors import ContractError\nfrom atlas.memory.consistency import (
+from atlas.core.errors import ContractError
+from atlas.memory.consistency import (
     AuthorityKind,
     AuthorizationInvalidation,
     AuthorizationSnapshot,
@@ -23,7 +24,9 @@ from atlas.core.errors import ContractError\nfrom atlas.memory.consistency impor
     ReadTarget,
     ReconciliationResult,
 )
-from atlas.memory.forget import (\n    ForgetClosure, ForgetClosureStatus, ForgetRecoverySnapshot, ForgetTarget,\n)
+from atlas.memory.forget import (
+    ForgetClosure, ForgetClosureStatus, ForgetRecoverySnapshot, ForgetTarget,
+)
 from atlas.memory.models import (
     MemoryClassification,
     MemoryScope,
