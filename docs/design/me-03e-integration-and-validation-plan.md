@@ -157,3 +157,19 @@ E01–E10 tienen cobertura parcial con tests actuales de CAM/Gateway/autoridad f
 ## 10. Criterio de salida
 
 ME-03E no se declara completo porque pasen los tests de fakes. La fase se reporta por nivel de evidencia. El nivel adapter-integration/distributed permanece pendiente hasta que existan adaptadores reales, inventario aprobado, política de retención y pruebas de recuperación en el entorno seleccionado.
+
+
+## 11. Primera integración y validación ejecutada
+
+Se amplió la integración Gateway/CAM para comprobar que la misma instancia de `ProtectedMemoryConsistencyPort` recibe admisión, emisión, finalización y reconciliación. Se añadió además una carrera real de hilos entre una sesión Gateway y `begin_forget`: la emisión puede ganar antes del cierre o ser rechazada si el cierre gana; nunca puede emitirse una unidad posterior al cierre.
+
+En `tests/unit/test_memory_consistency_authority.py` se añadieron tres pruebas concurrentes con barreras:
+- emisión contra Forget;
+- dos emisiones con la misma secuencia;
+- Forget contra invalidación solapada.
+
+En `tests/unit/test_memory_gateway_authorization_integration.py` se añadió la carrera de sesión Gateway contra Forget y la integración de emisión/finalización/reconciliación en la misma frontera.
+
+El commit de código `a1e58b0f148cebf9e3f9c0b817b113fdd083ef4c` pasó GitHub Actions en Python 3.10, 3.11, 3.12 y 3.13. Python 3.11 reportó `Ran 366 tests`, `OK`. Workflow: [Atlas CI #43527225373](https://github.com/yon30c/atlas/actions/runs/43527225373).
+
+**Nivel demostrado:** fake integrado y concurrencia dentro de un proceso. No demuestra orden entre procesos/nodos, durabilidad, recuperación tras reinicio ni transporte real. Siguen pendientes E11–E26 y el nivel adapter-integration/distributed.
