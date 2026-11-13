@@ -1,6 +1,6 @@
 # Memory Engine — contrato técnico e invariantes
 
-**Estado:** propuesta técnica para revisión del propietario.  
+**Estado:** diseño técnico consolidado; decisiones de diseño confirmadas por el propietario. Parámetros operativos de retención y detalles de implementación permanecen pendientes.  
 **Base normativa:** `Contrato-de-diseno-Atlas-v1.md`, revisión 2, especialmente §§ 3, 9, 14.5 y 15.  
 **Alcance:** especificación de dominio y fronteras para la Fase 1.  
 **Implementación:** no incluida. Este documento no declara capacidades implementadas ni aprueba parámetros que el contrato vigente deja pendientes.
@@ -316,7 +316,7 @@ La inspección de `main` muestra una base de modelos y puertos, no un Memory Eng
 
 Esta correspondencia es una inspección del código disponible en la revisión de este documento; no equivale a pruebas de comportamiento ni a una certificación de runtime.
 
-## 11. Decisiones técnicas que requieren revisión antes de implementar
+## 11. Parámetros técnicos pendientes de especificación
 
 1. Aprobar o ajustar la representación propuesta de `MemoryScope` y sus invariantes.
 2. Confirmar el modelo de identidad lógica + versiones inmutables y el comportamiento de sustitución.
@@ -341,3 +341,74 @@ Una vez revisado y aceptado el diseño:
 7. **Proactividad:** eventos observados, análisis y propuestas, sin mutación de recursos.
 
 Cada fase debe quedar cubierta por pruebas antes de continuar. No se introducirán adaptadores de infraestructura ni despliegues como parte de esta especificación.
+
+## 13. Registro de decisiones confirmadas
+
+Las decisiones de esta sección fueron confirmadas por el propietario y complementan —o, cuando se indica expresamente, precisan— las secciones anteriores. En caso de discrepancia, esta sección representa la decisión consolidada más reciente. La confirmación del diseño no significa que estas capacidades estén implementadas.
+
+### 13.1 Autorización y scopes
+
+1. **Memoria privada:** el propietario puede acceder a su propia memoria privada mediante una regla explícita de autorización evaluada por CAM. No necesita un Grant de proyecto. Esto no constituye un bypass: el acceso sigue pasando por CAM y Memory Gateway. Ningún otro actor obtiene acceso por defecto.
+2. **Memoria de proyecto:** cada operación exige un `project_id` explícito, válido y coincidente con el scope de la memoria. CAM debe autorizar al actor, proyecto, recurso y acción. No se infiere el proyecto desde la identidad, conversación, origen o procedencia.
+3. **Fallos cerrados:** scopes ausentes, incompletos, ambiguos o inconsistentes deniegan la operación.
+4. **Autorización por recurso:** cuando la operación se dirige a un recurso concreto, CAM debe comprobar también el `resource_id`. Una autorización por tipo no concede acceso implícito a todos los recursos de ese tipo. Las operaciones genuinamente colectivas solo podrán usar autorización por tipo si esa semántica está expresamente definida y autorizada. No se admiten comodines implícitos.
+
+### 13.2 Identidad lógica, versiones y clasificación
+
+1. `Memory` representa la identidad lógica de una memoria, su propietario, scope y referencia a la versión aprobada vigente.
+2. `MemoryVersion` representa una versión inmutable del contenido, con estado, clasificación, procedencia, relación con la versión anterior y metadatos temporales/de revisión.
+3. `owner_id` tiene una única representación canónica en `Memory`; no se duplica en `MemoryScope`.
+4. Cada versión incluye una `classification` explícita. Una versión nueva no puede rebajar automáticamente la clasificación de la anterior. Los cambios de clasificación requieren revisión y decisión del propietario.
+5. Una `MemoryProposal` debe identificar si propone crear una memoria lógica o una nueva versión de una memoria existente. La propuesta se vincula con la memoria y la versión resultante; nunca modifica directamente una versión aprobada.
+6. Toda propuesta aceptada para revisión genera una versión en estado `pending_review`. Mientras esa versión está pendiente, la versión aprobada anterior continúa siendo la vigente.
+7. La aprobación de una nueva versión y la sustitución de la versión aprobada anterior son atómicas: la anterior pasa a `superseded`, la nueva a `approved` y se actualiza la referencia vigente en una sola transacción. Si la operación falla, no puede quedar un estado parcial.
+8. Las versiones son inmutables después de su creación. Una corrección genera otra versión; no reescribe el contenido histórico.
+
+### 13.3 Procedencia y decisiones del propietario
+
+1. La procedencia es obligatoria por versión. Debe registrar, según corresponda, actor/componente de origen, proyecto y contexto, fecha, propuesta originaria, referencias de fuente/evidencia y versión antecesora.
+2. Las referencias a fuentes, documentos o evidencias no conceden autorización. Cualquier resolución o lectura de esas referencias debe pasar por sus propios controles de acceso, scope y CAM.
+3. Si una fuente desaparece o deja de estar disponible, se conserva su referencia histórica y se marca como no disponible. Esto no elimina automáticamente la memoria ni permite afirmar que la fuente continúa verificándola. Una actualización de contenido requiere una nueva propuesta y versión.
+4. La aprobación y el rechazo son decisiones exclusivas y no delegables del propietario. Assistant, Memory Engine, Watchers y Analysis Engine no pueden aprobar, rechazar ni simular una decisión en su nombre.
+5. Cada decisión debe poder verificarse y vincularse con la identidad del propietario, la propuesta y versión afectadas, el resultado, la fecha/hora, el contexto de operación y evidencia de que la acción fue iniciada directamente por el propietario. La forma criptográfica o técnica concreta de esa evidencia queda pendiente de especificación, pero no puede sustituirse por una afirmación de un componente interno.
+
+### 13.4 Supresión y olvido
+
+1. Se distinguen el estado de ciclo de vida de cada versión y el estado del proceso de supresión de la memoria lógica. El estado de supresión no introduce nuevos estados al ciclo de vida normativo de las versiones.
+2. El proceso de supresión debe representar, como mínimo, que está activo, pendiente/en curso o completado. Los nombres definitivos de esos estados son una decisión de implementación; no deben confundirse con `pending_review`, `approved`, `rejected`, `superseded` o `forgotten`.
+3. La solicitud de olvido afecta a la memoria lógica completa y a todas sus versiones históricas, además de índices, réplicas, cachés, almacenes derivados y demás sistemas incluidos en el inventario de retención.
+4. El registro de supresión conserva solo los datos mínimos necesarios para impedir la reintroducción. Usa identificadores opacos; no conserva el contenido original ni hashes de contenido que puedan facilitar ataques de diccionario.
+5. La supresión se aplica a los almacenes activos y a los índices derivados tan pronto como sea posible. Las copias de respaldo inmutables quedan sujetas a un plazo de retención definido. Mientras una copia física retenida siga existiendo, el proceso no puede declararse completamente finalizado.
+6. La supresión lógica debe impedir inmediatamente que la memoria sea consultada, recuperada o expuesta, aunque la purga física de una copia retenida esté pendiente.
+7. Toda restauración, reindexación o importación debe consultar y aplicar el registro de supresión antes de hacer datos disponibles. Una memoria suprimida no puede reaparecer por restauración, reindexación, importación ni reconstrucción de índices.
+8. Si un almacén, índice, réplica o respaldo no responde, o la eliminación es parcial, no se declara el olvido completado ni se comunica éxito al propietario. La memoria permanece bloqueada para recuperación y el proceso continúa pendiente de reconciliación, reintento y verificación.
+9. El estado de versión `forgotten` solo puede reflejarse como resultado completado cuando se cumplan los criterios de verificación definidos para todos los destinos aplicables. La existencia temporal de un respaldo inmutable retenido debe quedar explícita y no puede ocultarse bajo una declaración de eliminación física completa.
+10. El plazo exacto de retención de respaldos, la propagación máxima permitida y los criterios operativos detallados de verificación quedan como parámetros técnicos pendientes.
+
+### 13.5 Fronteras de componentes
+
+1. **Memory Gateway** es la frontera obligatoria para todas las operaciones de memoria, incluidas lectura, propuesta, aprobación, rechazo y olvido. Esto se aplica también a procesos internos, tareas programadas y futuras integraciones.
+2. Gateway valida scope, solicita la evaluación de CAM y aplica el resultado. No concede permisos, no sustituye a CAM y no aprueba propuestas.
+3. Ningún componente accede directamente al almacenamiento de memoria para eludir Gateway.
+4. **Atlas Assistant** puede consultar memoria autorizada a través de Gateway, presentar propuestas, solicitar decisiones al propietario y explicar procedencia cuando tenga autorización. No aprueba/rechaza propuestas, no concede Grants ni modifica directamente memorias aprobadas.
+5. **Watchers** son observadores de solo lectura: observan fuentes autorizadas y publican eventos. No modifican recursos protegidos ni ejecutan operaciones.
+6. **Analysis Engine** analiza eventos y genera conclusiones o propuestas. No modifica recursos, permisos o memorias aprobadas, y no ejecuta acciones en nombre del propietario.
+
+### 13.6 Parámetros que siguen abiertos
+
+La confirmación de las reglas anteriores no cierra los detalles operativos que dependen de la infraestructura futura. Antes de implementar los flujos correspondientes deberán especificarse:
+
+- Plazo de retención de respaldos y copias inmutables.
+- Inventario de almacenes, índices, réplicas, cachés y sistemas derivados que participan en supresión.
+- Plazos de propagación y criterios verificables para declarar una supresión completada.
+- Representación técnica del registro de supresión y su reconciliación durante restauraciones/importaciones.
+- Mecanismo verificable para acreditar que una decisión fue iniciada directamente por el propietario.
+- Semántica exacta de autorizaciones por tipo para operaciones colectivas, separada de las autorizaciones por recurso concreto.
+- Política de retención de versiones históricas y límites de metadatos/contenido expuestos por índices.
+
+Estos parámetros no autorizan a relajar las invariantes confirmadas ni a declarar implementada una capacidad todavía inexistente.
+
+### 13.7 Alcance que permanece aplazado
+
+SecurityAudit continúa postergado. Cognee, Telegram, scheduler, RLM, despliegues, integración con producción y modificaciones de Broker/Registry v2 permanecen fuera del alcance de esta fase. Este documento consolida diseño; no autoriza cambios en esos sistemas ni afirma que las capacidades descritas estén implementadas.
+
