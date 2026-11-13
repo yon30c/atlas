@@ -539,7 +539,7 @@ Se incorporó una primera capa sin infraestructura:
 
 - `src/atlas/memory/journal.py`: modelos puros de `ConsistencyPosition`, `ConsistencyTransition`, `JournalCommit`, `JournalEntry`, `ConsistencyCheckpoint` y `ConsistencyRecoveryState`, con validación de secuencia, época, dominio, IDs y revisiones exactas en READ_ADMITTED.
 - `src/atlas/ports/consistency_journal.py`: protocolo tipado para append condicional, carga de estado de recuperación, consulta de recibos y commit de checkpoints.
-- `tests/unit/test_memory_journal.py`: 27 pruebas unitarias escritas para posiciones, transiciones, revisiones, recibos, checkpoints, secuencias, CAS e idempotencia.
-- El mismo archivo contiene un fake de proceso único que simula append condicional, replay idempotente, conflicto de clave, carga tras checkpoint y rechazo de checkpoint obsoleto.
+- `tests/unit/test_memory_journal.py`: 29 pruebas unitarias escritas para posiciones, transiciones, revisiones, recibos, checkpoints, secuencias, CAS e idempotencia.
+- El mismo archivo contiene un fake de proceso único que simula append condicional, replay idempotente, conflicto de clave, carga tras checkpoint, rechazo de checkpoint obsoleto y consulta correlacionada de recibos de endpoint.
 
-Los modelos y el puerto no persisten datos, no verifican por sí mismos la autenticidad del watermark y no garantizan atomicidad distribuida. El fake no prueba durabilidad, concurrencia entre procesos, protección antitruncamiento ni recuperación real. Las 27 pruebas están escritas, no ejecutadas; C45–C64 siguen siendo escenarios de aceptación pendientes de cobertura completa.
+Los modelos y el puerto no persisten datos, no verifican por sí mismos la autenticidad del watermark y no garantizan atomicidad distribuida. El fake no prueba durabilidad, concurrencia entre procesos, protección antitruncamiento ni recuperación real. Las 29 pruebas están escritas, no ejecutadas; C45–C64 siguen siendo escenarios de aceptación pendientes de cobertura completa.
