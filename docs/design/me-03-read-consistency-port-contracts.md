@@ -438,7 +438,7 @@ Las firmas tipadas de `ProtectedEgressPort.finish()` y `fence()` requieren `oper
 
 El fake de pruebas implementa la correlación explícita, acknowledgements idempotentes y generaciones de fencing vinculadas a cada admisión afectada, en lugar de invalidar lecturas no relacionadas al incrementar el contador monotónico del dominio. Las operaciones que se solapen sobre una misma admisión se rechazan mientras exista un cierre pendiente. Las operaciones conservan su propia generación para validar recibos aunque otras operaciones disjuntas avancen después el contador del dominio. Los reintentos de Forget devuelven el estado más reciente de la clausura; una operación desconocida devuelve `None` al consultar reconciliación/inventario, no un conjunto vacío que pudiera confundirse con éxito. La lectura condicional y cada compromiso de egress vuelven a comprobar las revisiones canónicas; egress también comprueba la expiración del Grant en cada emisión.
 
-El conjunto de pruebas de autoridad/egress contiene actualmente 36 métodos de prueba, incluidos los escenarios de cierre lógico, generaciones disjuntas, recibos contradictorios, operación desconocida y recuperación Forget descritos en §§14.3–14.4. Este número describe pruebas escritas, no pruebas ejecutadas.
+El conjunto de pruebas de autoridad/egress contiene actualmente 36 métodos de prueba, incluidos los escenarios de cierre lógico, generaciones disjuntas, recibos contradictorios, operación desconocida, revalidación de revisiones y expiración de Grant en egress, y recuperación Forget descritos en §§14.3–14.4. Este número describe pruebas escritas, no pruebas ejecutadas.
 
 
 ## 14. Estado de integración del Gateway protegido
@@ -506,7 +506,7 @@ Se añadió `ForgetRecoverySnapshot` en `src/atlas/memory/forget.py`. El snapsho
 
 El fake incorpora exportación/restauración de este snapshot para simular un reinicio. Al restaurar:
 
-1. reinstala la generación y mantiene la memoria en el conjunto de supresión;
+1. restaura el high-watermark monotónico del dominio y mantiene la memoria en el conjunto de supresión; cada admisión afectada conserva la generación de fencing específica de su cierre, sin invalidar admisiones disjuntas ni retroceder el contador del dominio;
 2. conserva el cierre y sus admisiones afectadas;
 3. convierte toda admisión que no estuviera ya en estado terminal a `UNRESOLVED`;
 4. no restaura acknowledgements volátiles en memoria;
