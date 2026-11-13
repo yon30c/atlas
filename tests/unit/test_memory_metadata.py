@@ -47,6 +47,7 @@ class MemoryMetadataTests(unittest.TestCase):
                 status="approved",
                 classification=MemoryClassification.CONFIDENTIAL,
                 parent_version_id=None,
+                revision=1,
             )
 
     def test_version_metadata_rejects_unknown_classification_type(self):
@@ -57,6 +58,7 @@ class MemoryMetadataTests(unittest.TestCase):
                 status=MemoryVersionStatus.APPROVED,
                 classification="RESTRICTED",
                 parent_version_id=None,
+                revision=1,
             )
 
     def test_project_metadata_preserves_canonical_status(self):
