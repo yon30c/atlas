@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from atlas.core.errors import ContractError
+
 from atlas.memory.consistency import (
     AuthorizationInvalidation,
     AuthorizationSnapshot,
@@ -48,22 +50,27 @@ class ProtectedMemoryRead:
 
     def __post_init__(self) -> None:
         if not isinstance(self.snapshot, AuthorizationSnapshot):
-            raise ValueError("snapshot debe ser AuthorizationSnapshot")
+            raise ContractError("snapshot debe ser AuthorizationSnapshot")
         if not isinstance(self.admission, ReadAdmission):
-            raise ValueError("admission debe ser ReadAdmission")
+            raise ContractError("admission debe ser ReadAdmission")
         if self.admission.snapshot_id != self.snapshot.snapshot_id:
-            raise ValueError("admission no corresponde al snapshot")
+            raise ContractError("admission no corresponde al snapshot")
         if self.operation_id != f"read:{self.admission.admission_id}":
-            raise ValueError("operation_id no corresponde a la admisión")
+            raise ContractError("operation_id no corresponde a la admisión")
         target = self.admission.target
         if (
             getattr(self.handle, "admission_id", None) != self.admission.admission_id
             or getattr(self.handle, "memory_id", None) != target.memory_id
             or getattr(self.handle, "version_id", None) != target.version_id
-            or getattr(self.handle, "classification", None) is not self.snapshot.classification
-            or not getattr(self.handle, "handle_id", None)
+            or target.owner_id != self.snapshot.owner_id
+            or target.scope != self.snapshot.scope
+            or not isinstance(getattr(self.handle, "classification", None), MemoryClassification)
+            or self.handle.classification is not self.snapshot.classification
+            or self.handle.classification is MemoryClassification.RESTRICTED
+            or not isinstance(getattr(self.handle, "handle_id", None), str)
+            or not self.handle.handle_id.strip()
         ):
-            raise ValueError("handle no corresponde al objetivo/admisión autorizados")
+            raise ContractError("handle no corresponde al objetivo/admisión autorizados")
 
 
 class ProtectedMemoryContentPort(Protocol):
