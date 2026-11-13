@@ -287,6 +287,16 @@ class ForgetOperation:
                 ForgetOperationState.COMPLETED,
             ):
                 raise ContractError("resume_state debe ser una fase reanudable no terminal")
+            if (
+                self.resume_state is ForgetOperationState.CLOSING
+                and self.closure.status is not ForgetClosureStatus.CLOSING
+            ):
+                raise ContractError("resume CLOSING requiere closure CLOSING")
+            if (
+                self.resume_state is not ForgetOperationState.CLOSING
+                and self.closure.status is not ForgetClosureStatus.SUPPRESSED
+            ):
+                raise ContractError("fases reanudables posteriores requieren closure SUPPRESSED")
         elif self.block_reason is not None or self.resume_state is not None:
             raise ContractError("block_reason/resume_state solo aplican a BLOCKED")
         if self.canonical_state_revision is not None:
@@ -387,6 +397,7 @@ class ForgetCoordinatorReducer:
             or (
                 operation.state is ForgetOperationState.BLOCKED
                 and operation.resume_state is ForgetOperationState.SUPPRESSED
+                and operation.closure.status is ForgetClosureStatus.SUPPRESSED
             ),
             "inventario solo puede solicitarse después de SUPPRESSED",
         )
