@@ -37,7 +37,7 @@ Definir un punto de linealización para una lectura protegida y otro para la act
 
 **Garantía mínima propuesta:** una lectura no puede comenzar a entregar contenido si, en su punto de validación atómica, la memoria o versión está suprimida, no está aprobada, tiene clasificación no permitida o sus metadatos ya no coinciden con los que CAM autorizó.
 
-**Garantía para Forget propuesta:** después de confirmar la activación de la supresión lógica, no se admiten nuevas lecturas de la memoria/versión afectada. Las lecturas ya admitidas deben quedar sujetas a una barrera de finalización/cancelación antes de que Forget comunique que la supresión inmediata está aplicada. El contrato actual no define todavía cómo se drenan lecturas en curso; este detalle requiere aceptación explícita antes de implementarlo.
+**Garantía para Forget aceptada por el propietario del proyecto:** después de confirmar la activación de la supresión lógica, no se admiten nuevas lecturas de la memoria/versión afectada. Toda lectura admitida antes de que comience Forget debe finalizar de forma verificable o ser cancelada, con confirmación de que ya no puede entregar contenido, antes de que Forget confirme que la supresión lógica está aplicada. Si no puede verificarse una de esas dos condiciones, Forget no puede confirmar la supresión y debe permanecer en un estado no completado/fail-closed. Esta aceptación no selecciona todavía el mecanismo técnico de coordinación.
 
 Esta garantía es más fuerte que consultar un tombstone antes de leer y luego recuperar contenido por separado: esa secuencia también tiene una carrera entre la consulta del tombstone y la entrega.
 
@@ -85,9 +85,9 @@ El estado operativo de supresión no debe introducir un nuevo estado normativo d
 
 ### 4.4 Coordinación con lecturas en curso
 
-Una lectura admitida debe tener una duración/lease acotada o una forma equivalente de coordinación. Forget debe impedir nuevas admisiones y esperar la finalización o cancelación verificable de las admisiones previas antes de considerar aplicada la barrera de supresión inmediata.
+Una lectura admitida debe tener una duración/lease acotada o una forma equivalente de coordinación. Al comenzar Forget, el sistema debe cerrar la admisión de nuevas lecturas afectadas y resolver todas las admisiones anteriores: cada una debe finalizar de forma verificable o ser cancelada, confirmando que no puede entregar contenido. Solo después puede confirmarse la supresión lógica.
 
-La semántica exacta de cancelación, expiración, bloqueo y recuperación tras caída queda pendiente. No se debe elegir un mecanismo de locks distribuidos, leases, transacciones o mensajería hasta definir los requisitos operativos y el proveedor.
+Si una lectura no responde, el proceso cae o no puede determinarse si todavía puede entregar contenido, Forget no puede confirmar la supresión. La recuperación debe conservar el bloqueo de nuevas lecturas hasta reconciliar de forma segura las admisiones pendientes. La semántica exacta de cancelación, expiración, bloqueo y recuperación tras caída queda pendiente. No se debe elegir un mecanismo de locks distribuidos, leases, transacciones o mensajería hasta definir los requisitos operativos y el proveedor.
 
 ## 5. Reglas de fallo cerrado
 
@@ -127,8 +127,8 @@ Antes de integrar un proveedor real, construir pruebas deterministas con puertos
 | C04 | Se activa supresión de versión entre CAM y lectura | No se entrega contenido |
 | C05 | Cambia la revisión de metadatos | Snapshot rechazado |
 | C06 | El servicio de supresión no responde | Fail closed |
-| C07 | La lectura se admite primero y Forget empieza después | Forget bloquea nuevas lecturas y coordina la lectura en curso |
-| C08 | Forget activa la barrera primero y llega una lectura después | Lectura rechazada |
+| C07 | La lectura se admite primero y Forget empieza después | Forget bloquea nuevas admisiones; espera finalización verificable o cancelación confirmada antes de confirmar la supresión |
+| C08 | Forget activa la barrera primero y llega una lectura después | Lectura rechazada; no se entrega contenido |
 | C09 | Se intenta restaurar/reindexar contenido suprimido | No se publica ni expone |
 | C10 | El destino derivado no puede consultar la supresión | No expone contenido |
 
@@ -136,13 +136,14 @@ Las pruebas de concurrencia deben usar eventos/barreras explícitas, no sleeps n
 
 ## 8. Decisiones pendientes antes de implementar
 
-1. Aceptar o ajustar la garantía propuesta para lecturas ya admitidas cuando comienza Forget.
-2. Definir la autoridad única de supresión y cómo la consultan todos los destinos.
-3. Definir cómo se versionan los metadatos canónicos y cómo se detecta un cambio desde el snapshot CAM.
-4. Definir la semántica de lease/admisión y su recuperación ante caída del proceso.
-5. Definir cómo una revocación de Grant o expiración durante el intervalo se refleja en la admisión de lectura.
-6. Inventariar destinos reales antes de afirmar que la supresión es global.
-7. Definir evidencia verificable para que Forget avance de supresión lógica a eliminación física y finalmente a `forgotten`.
+1. Definir la autoridad única de supresión y cómo la consultan todos los destinos.
+2. Definir cómo se versionan los metadatos canónicos y cómo se detecta un cambio desde el snapshot CAM.
+3. Definir la semántica de lease/admisión y su recuperación ante caída del proceso, respetando la política aceptada para lecturas en curso.
+4. Definir cómo una revocación de Grant o expiración durante el intervalo se refleja en la admisión de lectura.
+5. Inventariar destinos reales antes de afirmar que la supresión es global.
+6. Definir evidencia verificable para que Forget avance de supresión lógica a eliminación física y finalmente a `forgotten`.
+
+**Decisión 1 — aceptada:** las lecturas admitidas antes de comenzar Forget deben finalizar o cancelarse de forma verificable antes de confirmar la supresión lógica. No se confirma la supresión si una lectura previa aún puede entregar contenido o si su estado no puede determinarse.
 
 Ninguno de estos puntos autoriza a seleccionar una base de datos, caché, índice, proveedor, scheduler o plataforma.
 
