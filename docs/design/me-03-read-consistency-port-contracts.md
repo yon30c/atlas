@@ -237,13 +237,19 @@ class ProtectedEgressPort(Protocol):
     def finish(
         self,
         admission: ReadAdmission,
+        operation_id: str,
+        endpoint_id: str,
         final_sequence: int,
+        now: datetime,
     ) -> EndpointCompletionReceipt | None: ...
 
     def fence(
         self,
         admission: ReadAdmission,
+        operation_id: str,
+        endpoint_id: str,
         new_generation: int,
+        now: datetime,
     ) -> EndpointFenceReceipt | None: ...
 
     def reconcile(
@@ -426,3 +432,12 @@ El fake es una herramienta de prueba, no un adaptador de producción. Usa memori
 La interfaz de `ReadConsistencyAuthorityPort` sigue necesitando integrar el ciclo completo de Forget con autorización verificable y evidencia CT-05 antes de que pueda considerarse completa. No se selecciona todavía almacenamiento ni transporte.
 
 **Verificación:** se incorporaron pruebas adicionales para admisión, inventario de invalidación, fencing, finalización y egress. No se ha ejecutado la suite ni existe status check/workflow asociado a estos commits. No se afirma validación de runtime.
+
+
+### 13.1 Aclaración de correlación de acknowledgements
+
+Las firmas tipadas de `ProtectedEgressPort.finish()` y `fence()` requieren `operation_id` y `endpoint_id` explícitos. El egress no debe inferir qué invalidación o ciclo de lectura intenta completar a partir de estado ambiental. Cada recibo debe quedar vinculado a una operación y endpoint concretos; la autoridad valida esa correlación antes de aceptarlo.
+
+El fake de pruebas implementa la correlación explícita, acknowledgements idempotentes y serialización conservadora de invalidaciones que afectan una misma admisión. Una invalidación nueva que se solape con una operación aún pendiente se rechaza hasta reconciliar la anterior.
+
+El conjunto de pruebas de autoridad/egress contiene actualmente 15 métodos de prueba. Este número describe pruebas escritas, no pruebas ejecutadas.
