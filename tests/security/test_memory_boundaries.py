@@ -1,8 +1,11 @@
 from datetime import datetime, timezone
+import importlib.util
 import unittest
+from typing import get_type_hints
 
 from atlas.memory.models import MemoryProposal, MemoryProposalIntent
 from atlas.ports.memory import MemoryGateway
+from atlas.ports.protected_memory_read import ProtectedMemoryRead
 
 
 M1 = "018f0f00-0000-7000-8000-000000000001"
@@ -19,6 +22,13 @@ class MemoryBoundarySecurityTests(unittest.TestCase):
         self.assertEqual(proposal.submitted_by, "agent:delegate")
         self.assertNotIn("owner_id", MemoryProposal.__dataclass_fields__)
         self.assertNotIn("context", MemoryProposal.__dataclass_fields__)
+
+    def test_gateway_never_returns_raw_memory_versions(self):
+        return_type = get_type_hints(MemoryGateway.get_version)["return"]
+        self.assertEqual(return_type, ProtectedMemoryRead | None)
+        self.assertTrue(hasattr(MemoryGateway, "emit_version"))
+        self.assertTrue(hasattr(MemoryGateway, "finish_version"))
+        self.assertIsNone(importlib.util.find_spec("atlas.ports.memory_content"))
 
     def test_gateway_is_the_explicit_memory_port(self):
         self.assertTrue(hasattr(MemoryGateway, "list_visible"))
