@@ -33,6 +33,7 @@ Los eventos permiten reconstruir qué ocurrió y bajo qué contexto, sin convert
 | `deduplication_key` | Clave opcional para identificar eventos duplicados o relacionados. |
 | `evidence` | Referencias a evidencias asociadas al evento, cuando corresponda. |
 | `related_event_ids` | Identificadores de otros eventos relacionados, cuando corresponda. |
+| `context`	| OperationContext asociado al evento, que conserva el contexto de la operación. |
 
 Los campos opcionales deben utilizarse según la naturaleza del evento. Su ausencia no invalida un evento cuando el campo no resulte aplicable.
 
