@@ -561,3 +561,16 @@ La implementación de Gateway adopta el contrato detallado en `me-03a-protected-
 - El diseño no protege contra introspección o ejecución arbitraria de código Python dentro del mismo proceso. Consumidores mutuamente no confiables requieren aislamiento de proceso/IPC autenticado.
 
 **Cobertura escrita:** pruebas unitarias verifican que el objeto público no expone snapshot/admission/handle, que una capacidad inventada no permite operaciones y que una reconciliación resuelta retira la capacidad local. La integración sigue usando adaptadores fake; no demuestra aislamiento de proceso, persistencia durable, fencing real ni seguridad de transporte.
+
+
+## 16. ME-03B — Frontera compuesta única
+
+ME-03B añade `ProtectedMemoryConsistencyPort`, un protocolo compuesto por las facetas `ReadConsistencyAuthorityPort` y `ProtectedEgressPort`. El Gateway recibe una sola instancia de esa frontera y utiliza esa misma instancia para admisión, compromiso de emisión, finalización, acknowledgements y reconciliación. Ya no recibe un puerto de egress separado.
+
+Para evitar la colisión semántica entre la reconciliación de una operación completa y la consulta de un endpoint, el método de la faceta de egress se denomina `reconcile_endpoint(admission, endpoint_id)`; `reconcile(operation_id)` queda reservado a la reconciliación de la operación de consistencia.
+
+La composición del protocolo hace que la configuración del Gateway exija ambas capacidades en un único objeto. No demuestra por sí sola que un adaptador sea linealizable: la implementación concreta debe compartir estado y orden autoritativo entre admisión, Forget, invalidación y compromiso irrevocable de emisión. Un proxy que solo reenvíe llamadas a subsistemas independientes no satisface la garantía.
+
+El fake de autoridad ya contiene los métodos de admisión, Forget, invalidación y egress bajo un mismo lock de proceso único; el Gateway deja de envolverlo en un segundo fake de egress. Esto sirve para validar la forma de integración y el orden determinista local, no para afirmar durabilidad, coordinación distribuida ni fencing de transporte real.
+
+**Estado:** contrato compuesto e integración del Gateway en progreso. Sin adaptadores reales ni validación automatizada declarada.
