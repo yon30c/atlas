@@ -327,14 +327,18 @@ class EndpointDeliveryStatus(str, Enum):
 
 @dataclass(frozen=True, slots=True)
 class EndpointCompletionReceipt:
+    operation_id: str
     admission_id: str
     endpoint_id: str
+    generation: int
     final_sequence: int
     completed_at: datetime
 
     def __post_init__(self) -> None:
+        _required(self.operation_id, "operation_id")
         _required(self.admission_id, "admission_id")
         _required(self.endpoint_id, "endpoint_id")
+        _positive_int(self.generation, "generation")
         if isinstance(self.final_sequence, bool) or not isinstance(self.final_sequence, int) or self.final_sequence < 0:
             raise ContractError("final_sequence debe ser un entero no negativo")
         _utc(self.completed_at, "completed_at")
