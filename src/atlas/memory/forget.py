@@ -8,6 +8,7 @@ from enum import Enum
 
 from atlas.core.errors import ContractError
 from atlas.memory.identifiers import validate_atlas_id
+from atlas.memory.consistency import ReadAdmission, ReadAdmissionStatus
 
 
 def _required(value: object, field: str) -> None:
@@ -75,3 +76,51 @@ class ForgetClosure:
             and self.unresolved_admission_ids
         ):
             raise ContractError("SUPPRESSED requiere reconciliar todas las admisiones previas")
+
+
+
+@dataclass(frozen=True, slots=True)
+class ForgetRecoverySnapshot:
+    """Estado mínimo que debe restaurarse antes de reabrir cualquier ruta.
+
+    El snapshot es un contrato de datos para recuperación; no afirma que exista
+    persistencia durable ni autentica por sí mismo el origen del registro.
+    """
+
+    generation: int
+    closure: ForgetClosure
+    admissions: tuple[ReadAdmission, ...]
+
+    def __post_init__(self) -> None:
+        _positive_int(self.generation, "generation")
+        if not isinstance(self.closure, ForgetClosure):
+            raise ContractError("closure debe ser ForgetClosure")
+        if self.generation < self.closure.generation:
+            raise ContractError("recovery no puede retroceder la generación")
+        if not isinstance(self.admissions, tuple):
+            raise ContractError("admissions debe ser tuple")
+        if any(not isinstance(item, ReadAdmission) for item in self.admissions):
+            raise ContractError("admissions solo puede contener ReadAdmission")
+        admission_ids = tuple(item.admission_id for item in self.admissions)
+        if len(admission_ids) != len(set(admission_ids)):
+            raise ContractError("recovery no admite IDs de admisión duplicados")
+        if frozenset(admission_ids) != self.closure.affected_admission_ids:
+            raise ContractError("recovery requiere el inventario completo de admisiones afectadas")
+        if any(
+            item.target.memory_id != self.closure.target.memory_id
+            or not item.route_ids.issubset(self.closure.delivery_route_ids)
+            for item in self.admissions
+        ):
+            raise ContractError("admission fuera del objetivo o rutas del cierre")
+        nonterminal = frozenset(
+            item.admission_id
+            for item in self.admissions
+            if item.status not in (
+                ReadAdmissionStatus.COMPLETED,
+                ReadAdmissionStatus.CANCELLED,
+            )
+        )
+        if nonterminal != self.closure.unresolved_admission_ids:
+            raise ContractError("recovery y closure discrepan sobre admisiones no resueltas")
+        if self.closure.status is ForgetClosureStatus.SUPPRESSED and nonterminal:
+            raise ContractError("un cierre SUPPRESSED no puede recuperar admisiones abiertas")
