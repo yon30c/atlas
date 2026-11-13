@@ -14,6 +14,22 @@ from atlas.memory.models import (
     ReferenceAvailability,
     SourceKind,
 )
+from atlas.memory.consistency import (
+    AuthorityKind,
+    AuthorityRevision,
+    AuthorizationInvalidation,
+    AuthorizationRevisionSet,
+    AuthorizationSnapshot,
+    DeliveryRouteSet,
+    EgressReceipt,
+    EndpointCompletionReceipt,
+    EndpointDeliveryStatus,
+    EndpointFenceReceipt,
+    ReadAdmission,
+    ReadAdmissionStatus,
+    ReadTarget,
+    ReconciliationResult,
+)
 from atlas.memory.validation import (
     validate_memory_aggregate,
     validate_proposal_links,
@@ -21,6 +37,20 @@ from atlas.memory.validation import (
 )
 
 __all__ = [
+    "AuthorityKind",
+    "AuthorityRevision",
+    "AuthorizationInvalidation",
+    "AuthorizationRevisionSet",
+    "AuthorizationSnapshot",
+    "DeliveryRouteSet",
+    "EgressReceipt",
+    "EndpointCompletionReceipt",
+    "EndpointDeliveryStatus",
+    "EndpointFenceReceipt",
+    "ReadAdmission",
+    "ReadAdmissionStatus",
+    "ReadTarget",
+    "ReconciliationResult",
     "Memory",
     "MemoryClassification",
     "MemoryProposal",
