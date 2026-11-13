@@ -193,3 +193,18 @@ Se añadieron dos pruebas de seguridad:
 El commit de código `3cf9febb22fb7214f7ada30c56883606d33882e2` pasó la suite completa en Python 3.10–3.13. Python 3.11 reportó `Ran 369 tests`, `OK`. Workflow: [Atlas CI #43527681299](https://github.com/yon30c/atlas/actions/runs/43527681299).
 
 Esta comprobación es estructural y de proceso. No sustituye una auditoría de rutas de transporte, aislamiento entre procesos, autenticidad de recibos, almacenamiento real ni seguridad distribuida.
+
+## 14. Recuperación parcial: rechazo explícito de proyecciones incompletas
+
+La inspección del reducer confirmó que AdmissionProjection conserva generación, revisiones, rutas, secuencias y recibos por endpoint, pero el journal actual no persiste todos los campos de ReadTarget necesarios para reconstruir una admisión viva (en particular, el scope canónico completo). Tampoco existe todavía una autoridad durable que pueda volver a validar recibos externos.
+
+Por tanto, el fake de recuperación ahora:
+- rechaza la restauración si existe cualquier admisión no terminal, en vez de descartarla y tratar el dominio como vacío;
+- rechaza invalidaciones aún no reconciliadas;
+- comprueba que las referencias de los cierres Forget correspondan a admisiones presentes en la proyección;
+- conserva las claves de idempotencia como tombstones opacos y bloquea su reutilización;
+- solo restaura gates/revisiones cuando la proyección no requiere reanudar emisores o endpoints pendientes.
+
+Se añadieron pruebas para verificar el rechazo de una proyección con una admisión ADMITTED sin resolver y la conservación de la clave de idempotencia de Forget tras restaurar un cierre terminal.
+
+**Límite deliberado:** esto mejora el comportamiento fail-closed del fake; no completa la recuperación de admisiones activas. El siguiente trabajo de diseño debe ampliar el sobre journalizado de READ_ADMITTED con los datos mínimos de target/scope, definir cómo se revalidan recibos y reconstruir estados de endpoint/admisión sin confiar únicamente en el reducer. El esquema actual no se considera suficiente para recuperación durable.
