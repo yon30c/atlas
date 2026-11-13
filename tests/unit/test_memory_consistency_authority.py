@@ -126,6 +126,7 @@ class FakeReadConsistencyAndEgress:
                 return None
             if any(
                 operation["pending"]
+                and operation.get("kind") == "invalidation"
                 and operation["authority_id"] == snapshot.actor_identity_id
                 for operation in self.operations.values()
             ):
@@ -149,6 +150,12 @@ class FakeReadConsistencyAndEgress:
             )
             self.admissions[admission_id] = admission
             self.admission_snapshots[admission_id] = snapshot
+            self.operations[f"read:{admission_id}"] = {
+                "authority_id": None,
+                "affected": frozenset({admission_id}),
+                "pending": True,
+                "kind": "read",
+            }
             return admission
 
     def begin_invalidation(self, invalidation):
@@ -202,6 +209,7 @@ class FakeReadConsistencyAndEgress:
                 "authority_id": invalidation.authority_id,
                 "affected": invalidation.affected_admission_ids,
                 "pending": True,
+                "kind": "invalidation",
             }
             receipt = InvalidationReceipt(
                 invalidation.invalidation_id,
@@ -350,12 +358,16 @@ class FakeReadConsistencyAndEgress:
                 (
                     operation_id
                     for operation_id, operation in self.operations.items()
-                    if operation["pending"] and admission.admission_id in operation["affected"]
+                    if (
+                        operation["pending"]
+                        and operation.get("kind") == "invalidation"
+                        and admission.admission_id in operation["affected"]
+                    )
                 ),
                 None,
             )
             return EndpointCompletionReceipt(
-                operation_id=pending or f"completion:{admission.admission_id}",
+                operation_id=pending or f"read:{admission.admission_id}",
                 admission_id=admission.admission_id,
                 endpoint_id=endpoint_id,
                 generation=self.generation,
@@ -644,6 +656,21 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
         self.assertEqual(
             self.authority.admissions[admission.admission_id].status,
             ReadAdmissionStatus.CANCELLED,
+        )
+
+    def test_normal_read_completes_only_after_all_delivery_endpoints_ack(self):
+        admission = self.authority.admit_read(
+            private_snapshot(), DeliveryRouteSet(ROUTES)
+        )
+        for endpoint in admission.route_ids:
+            receipt = self.egress.finish(admission, endpoint, 0, NOW)
+            self.assertEqual(receipt.operation_id, f"read:{admission.admission_id}")
+            self.assertTrue(self.authority.record_endpoint_ack(receipt))
+        result = self.authority.reconcile(f"read:{admission.admission_id}")
+        self.assertEqual(result.resolved_admission_ids, frozenset({admission.admission_id}))
+        self.assertEqual(
+            self.authority.admissions[admission.admission_id].status,
+            ReadAdmissionStatus.COMPLETED,
         )
 
     def test_invalidation_can_resolve_after_all_endpoints_complete(self):
