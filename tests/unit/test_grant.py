@@ -37,6 +37,12 @@ class GrantTests(unittest.TestCase):
             with self.subTest(invalid=invalid), self.assertRaises(ContractError):
                 GrantResourceScope("files", invalid)
 
+    def test_grant_revision_must_be_positive(self):
+        with self.assertRaises(ContractError):
+            replace(self.grant, revision=0)
+        with self.assertRaises(ContractError):
+            replace(self.grant, revision=True)
+
     def test_grant_is_immutable(self):
         with self.assertRaises(FrozenInstanceError):
             self.grant.owner_user_id = "user-002"
