@@ -194,7 +194,7 @@ class ProtectedEgressPort(Protocol):
     ) -> EndpointFenceReceipt | None:
         """Confirma fencing para la operación y generación exactas."""
 
-    def reconcile(
+    def reconcile_endpoint(
         self,
         admission: ReadAdmission,
         endpoint_id: str,
