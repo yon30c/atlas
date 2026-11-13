@@ -46,6 +46,15 @@ from atlas.memory.journal import (
     JournalCommit,
     JournalEntry,
 )
+from atlas.memory.journal_reducer import (
+    AdmissionProjection,
+    ConsistencyJournalReducer,
+    ConsistencyProjection,
+    EndpointProjection,
+    EndpointProjectionStatus,
+    ForgetProjection,
+    InvalidationProjection,
+)
 from atlas.memory.validation import (
     validate_memory_aggregate,
     validate_proposal_links,
@@ -64,6 +73,13 @@ __all__ = [
     "ConsistencyTransition",
     "JournalCommit",
     "JournalEntry",
+    "AdmissionProjection",
+    "ConsistencyJournalReducer",
+    "ConsistencyProjection",
+    "EndpointProjection",
+    "EndpointProjectionStatus",
+    "ForgetProjection",
+    "InvalidationProjection",
     "AuthorityKind",
     "AuthorityRevision",
     "AuthorizationInvalidation",
