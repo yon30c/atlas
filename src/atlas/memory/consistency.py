@@ -192,8 +192,9 @@ class ReadAdmissionStatus(str, Enum):
 
 
 _ALLOWED_ADMISSION_TRANSITIONS = {
-    ReadAdmissionStatus.ADMITTED: {ReadAdmissionStatus.ACTIVE, ReadAdmissionStatus.CANCELLED, ReadAdmissionStatus.UNRESOLVED},
-    ReadAdmissionStatus.ACTIVE: {ReadAdmissionStatus.COMPLETED, ReadAdmissionStatus.CANCELLED, ReadAdmissionStatus.UNRESOLVED},
+    # Los estados terminales requieren recibos de egress/fencing validados por la autoridad.
+    ReadAdmissionStatus.ADMITTED: {ReadAdmissionStatus.ACTIVE, ReadAdmissionStatus.UNRESOLVED},
+    ReadAdmissionStatus.ACTIVE: {ReadAdmissionStatus.UNRESOLVED},
     # UNRESOLVED solo puede resolverse con evidencia reconciliada por la autoridad;
     # no se permite una transición local sin ese recibo.
     ReadAdmissionStatus.UNRESOLVED: set(),
