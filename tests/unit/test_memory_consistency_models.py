@@ -251,10 +251,12 @@ class MemoryConsistencyModelTests(unittest.TestCase):
         original = admission()
         active = original.transition(ReadAdmissionStatus.ACTIVE)
         unresolved = active.transition(ReadAdmissionStatus.UNRESOLVED)
-        completed = unresolved.transition(ReadAdmissionStatus.COMPLETED)
+        completed = active.transition(ReadAdmissionStatus.COMPLETED)
         self.assertEqual(original.status, ReadAdmissionStatus.ADMITTED)
         self.assertEqual(active.status, ReadAdmissionStatus.ACTIVE)
         self.assertEqual(completed.status, ReadAdmissionStatus.COMPLETED)
+        with self.assertRaises(ContractError):
+            unresolved.transition(ReadAdmissionStatus.COMPLETED)
         with self.assertRaises(FrozenInstanceError):
             original.generation = 2
         with self.assertRaises(ContractError):
