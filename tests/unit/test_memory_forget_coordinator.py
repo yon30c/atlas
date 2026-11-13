@@ -477,6 +477,28 @@ class ForgetCoordinatorReducerTests(unittest.TestCase):
 
 
 
+
+    def test_d34_unknown_attempt_must_be_reconciled_before_inventory_refresh(self):
+        reducer, operation = begin_purging()
+        operation = reducer.record_deletion_attempt(
+            operation,
+            ForgetDeletionAttempt(
+                operation.closure.operation_id, "primary-store", 1, "attempt-unknown",
+                ForgetDeletionOutcome.UNKNOWN,
+            ),
+        )
+        with self.assertRaises(ContractError):
+            reducer.accept_inventory(
+                operation,
+                inventory(
+                    revision=2,
+                    destinations=(
+                        ForgetDestination("primary-store", ForgetDestinationKind.PRIMARY_STORAGE),
+                        ForgetDestination("history-store", ForgetDestinationKind.VERSION_HISTORY),
+                    ),
+                ),
+            )
+
     def test_d32_inventory_must_be_bound_to_exact_forget_operation(self):
         reducer, operation = suppressed_operation()
         operation = reducer.request_inventory(operation)
