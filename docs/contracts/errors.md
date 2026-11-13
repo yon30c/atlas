@@ -183,3 +183,9 @@ Estas decisiones no modifican la semántica de las clases existentes ni autoriza
 6. Los reintentos deben reevaluar estado y autorización.
 7. Los adaptadores no pueden filtrar secretos ni convertir fallos inesperados en éxitos aparentes.
 8. Ningún error sustituye los controles de autorización, aislamiento o consistencia de Atlas.
+
+## 11. Referencias a CT-08
+
+CT-08 complementa este contrato como matriz transversal; las resoluciones siguientes precisan su aplicación sin duplicar sus reglas:
+
+- [CT-08 R08-09](consistency-matrix-ct-08.md#r08-09-errores-y-reevaluacion): Uso del catálogo CT-03 y reevaluación segura ante errores; la denegación, indisponibilidad o concurrencia no habilitan rutas alternativas.
