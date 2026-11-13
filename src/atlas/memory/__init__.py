@@ -39,6 +39,7 @@ from atlas.memory.forget import (
 )
 from atlas.memory.forget_coordinator import (
     ForgetBlockReason,
+    ForgetCanonicalStateReceipt,
     ForgetCoordinatorReducer,
     ForgetDeletionAttempt,
     ForgetDeletionOutcome,
@@ -81,6 +82,7 @@ __all__ = [
     "ForgetRecoverySnapshot",
     "ForgetTarget",
     "ForgetBlockReason",
+    "ForgetCanonicalStateReceipt",
     "ForgetCoordinatorReducer",
     "ForgetDeletionAttempt",
     "ForgetDeletionOutcome",
