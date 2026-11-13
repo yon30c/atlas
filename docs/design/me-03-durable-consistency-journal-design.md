@@ -330,7 +330,7 @@ Este pseudocódigo describe responsabilidades, no nombres o firmas finales. La a
 - No devuelve contenido de memoria.
 - No autoriza reabrir rutas; la autoridad realiza validación y reconciliación.
 
-Las clases `ConsistencyPosition`, `ConsistencyTransition`, `JournalCommit`, `ConsistencyRecoveryState`, `EndpointReceiptReference` y `ConsistencyCheckpoint` son conceptos de diseño, no clases ya implementadas.
+Las clases `ConsistencyPosition`, `ConsistencyTransition`, `JournalCommit`, `ConsistencyRecoveryState` y `ConsistencyCheckpoint` están implementadas como modelos puros. `EndpointReceiptReference` permanece como concepto de diseño; el puerto actual consulta entradas correlacionadas del journal.
 
 ## 11. Pruebas de aceptación propuestas
 
@@ -407,3 +407,23 @@ En el commit de referencia de esta propuesta:
 - no se ha ejecutado la suite completa ni las pruebas C01–C64 en esta etapa.
 
 **Conclusión:** los modelos puros, el puerto tipado, el fake de proceso único y los 20 casos de fallo C45–C64 ya están escritos. La cobertura actual valida el comportamiento esperado de los fakes, no de un journal durable ni de los componentes reales de Atlas. El siguiente paso es revisar estáticamente los casos, ejecutar la suite en un entorno disponible y cerrar las brechas del modelo antes de diseñar adaptadores.
+
+
+## 14.6 ME-03C — Esquema cerrado y reducer semántico
+
+Se añadió `docs/design/me-03c-journal-reducer-recovery-design.md` con decisiones ME-03C-01 a ME-03C-06, matriz de campos permitidos por tipo de transición, reglas de replay, separación entre integridad estructural y continuidad confiable, y escenarios C65–C84.
+
+Implementación parcial añadida:
+
+- `src/atlas/memory/journal.py`: allowlist explícita de campos por `ConsistencyRecordKind`; los campos no aplicables se rechazan. Los eventos READ_ADMITTED, READ_ACTIVATED y EGRESS_COMMITTED deben usar el `operation_id` exacto de la admisión.
+- `src/atlas/memory/journal_reducer.py`: reducer puro que reconstruye admisiones, endpoints, recibos, cierres Forget e invalidaciones; valida orden, inventarios, generaciones, secuencias, correlación y terminalidad.
+- `src/atlas/memory/__init__.py`: exporta el reducer y los modelos inmutables de proyección.
+- `tests/unit/test_memory_journal.py`: 33 métodos escritos.
+- `tests/unit/test_memory_journal_failures.py`: 20 métodos escritos para C45–C64.
+- `tests/unit/test_memory_journal_reducer.py`: 22 métodos escritos, incluyendo C66–C84 y tres recorridos positivos del reducer. C65 se cubre en el archivo de modelos.
+
+La revisión del reducer corrigió una distinción importante del contrato de egress: `ENDPOINT_FENCED.generation` identifica la nueva generación del cierre, no la generación original de la admisión. Los recibos de finalización asociados a un cierre también se correlacionan con la generación de esa operación; `ADMISSION_RECONCILED` mantiene la generación original de la admisión.
+
+**Límite:** el reducer valida estructura y semántica de los registros entregados. No autentica su origen, no demuestra continuidad/anti-rollback, no consulta endpoints y no habilita rutas. Una referencia opaca de continuidad no se trata como prueba verificada.
+
+**Validación:** 75 métodos de prueba están escritos en los tres archivos de journal/reducer; ninguno se ha ejecutado en esta etapa. No existe journal durable ni adaptador real y no se declara CI exitoso.
