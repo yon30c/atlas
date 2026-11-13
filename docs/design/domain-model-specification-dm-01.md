@@ -5,7 +5,7 @@
 **Commit base:** `8832e59c8d6895750bfc7053a26bf4f4f3932437`  
 **Alcance:** modelo de dominio, identidad de recursos y contrato lógico de autorización requerido para Memory Engine / Memory Gateway.  
 **Implementación:** no incluida. Este documento no modifica ni sustituye los contratos normativos.  
-**Autoridad:** el contrato principal de Atlas v1 prevalece sobre este documento. El propietario aprobó las recomendaciones técnicas identificadas en el registro de decisiones de §9. Las decisiones de detalle que continúan pendientes no se consideran aprobadas por inferencia.
+**Autoridad:** el contrato principal de Atlas v1 prevalece sobre este documento. Las decisiones técnicas de dominio se registran como adoptadas en §9. Los parámetros operativos y de infraestructura expresamente aplazados no se consideran resueltos por inferencia.
 
 ---
 
@@ -70,7 +70,7 @@ Esta tabla describe código observado; no certifica comportamiento de runtime ni
 - El scope no se infiere del contexto, la conversación, el origen o la procedencia.
 - No hay transferencia ni reclasificación implícita entre scopes.
 
-**PROPUESTA TÉCNICA**
+**DIRECCIÓN TÉCNICA ADOPTADA**
 
 Representación lógica:
 
@@ -156,8 +156,7 @@ Invariantes:
 5. `content`, `classification` y `provenance` no se modifican en sitio.
 6. Una corrección crea otra versión.
 7. La clasificación es obligatoria y utiliza el catálogo ordenado INTERNAL < CONFIDENTIAL < RESTRICTED, definido en §9.3.5. La clasificación no concede permisos ni sustituye CAM.
-8. Una nueva versión hereda por defecto la clasificación de la versión aprobada vigente. Cualquier cambio solicitado requiere revisión y decisión directa del propietario; una reducción nunca se aplica automáticamente.
-8. Los campos de revisión son nulos mientras la versión no haya sido decidida y deben ser coherentes con el resultado de revisión.
+9. Los campos de revisión son nulos mientras la versión no haya sido decidida y deben ser coherentes con el resultado de revisión.
 
 ### 4.4 Estados de MemoryVersion
 
@@ -249,7 +248,7 @@ Reglas:
 
 Cuando una operación identifica un recurso concreto, CAM debe verificar el `resource_id` exacto. Un permiso sobre el tipo no autoriza todas sus instancias. Un ID ausente, distinto o no verificable produce denegación.
 
-**PROPUESTA TÉCNICA**
+**DIRECCIÓN TÉCNICA ADOPTADA**
 
 Un recurso se identifica dentro de un contexto de autorización por la tupla:
 
@@ -273,11 +272,11 @@ La comparación de autorización no debe depender de `resource_id` aislado. Debe
 - Vigencia y estado del Grant, cuando la operación dependa de uno.
 - Restricciones especiales de la operación, incluidas las decisiones no delegables del propietario.
 
-Los IDs son opacos en esta fase. No se decide formato, UUID, normalización, longitud o sensibilidad a mayúsculas.
+Los IDs generados por Atlas siguen UUIDv7 canónico conforme a §9.3.6. Los IDs externos se conservan opacos y sin normalización.
 
 ### 5.2 Vinculación de versiones con la memoria
 
-**PROPUESTA TÉCNICA**
+**DIRECCIÓN TÉCNICA ADOPTADA**
 
 Toda operación dirigida a una `MemoryVersion` debe incluir o resolver también su `memory_id` padre. El sistema debe comprobar que la versión pertenece a esa memoria y hereda su propietario y scope.
 
@@ -303,9 +302,9 @@ El Grant de lectura/propuesta se limita al ID exacto de la memoria lógica (memo
 
 ### 6.2 Alcance exacto de recurso
 
-**PROPUESTA TÉCNICA RECOMENDADA**
+**APROBADO POR EL PROPIETARIO**
 
-Extender el modelo lógico de Grant con un conjunto explícito de IDs:
+El modelo lógico de Grant con un conjunto explícito de IDs:
 
 ```text
 GrantResourceScope
@@ -336,7 +335,7 @@ No habilitar Grants genéricos por tipo ni comodines.
 - Una creación de memoria PROJECT puede evaluarse contra el recurso contenedor explícito del proyecto (`resource_type=project`, `resource_id=project_id`) y la acción `memory.propose`. La memoria creada obtiene después su propio ID y scope. Esta convención queda aprobada como dirección técnica: la creación PROJECT se autoriza sobre el ID exacto del proyecto contenedor, mediante CAM.
 - Las operaciones colectivas por tipo quedan deshabilitadas hasta que tengan semántica, permiso y criterios de aceptación propios.
 
-La enumeración de candidatos requiere una fuente de metadatos que no exponga contenido antes de autorización. La interfaz y confianza de esa fuente permanecen pendientes.
+La enumeración de candidatos utiliza los puertos de metadatos definidos en §9.3.2 y nunca expone contenido ni metadatos protegidos antes de la autorización individual.
 
 ### 6.4 Memoria PRIVATE del propietario
 
@@ -374,6 +373,8 @@ AuthorizationRequest
   target:
     resource_type: ResourceType
     resource_id: ResourceId
+    subresource_type: ResourceType | null
+    subresource_id: ResourceId | null
     owner_id: UserId
     scope:
       kind: PRIVATE | PROJECT
@@ -385,7 +386,8 @@ La estructura es conceptual. No obliga a cambiar inmediatamente la API pública 
 
 Invariantes:
 
-- `target.resource_id` es obligatorio para operaciones sobre una instancia concreta.
+- `target.resource_id` es obligatorio para operaciones sobre una instancia concreta; cuando la operación apunta a una versión, `subresource_type=memory_version` y `subresource_id=version_id` son también obligatorios.
+- CAM compara el Grant contra el recurso lógico exacto y valida el ID exacto del subrecurso y su relación padre/hijo mediante metadatos confiables.
 - `target.owner_id` y `target.scope` deben provenir de metadatos confiables, no del payload no verificado del solicitante.
 - `PRIVATE` exige `project_id = null`.
 - `PROJECT` exige `project_id` explícito, válido y coincidente con `context.project_id`.
@@ -395,9 +397,9 @@ Invariantes:
 
 ### 6.6 Fuente confiable de metadatos
 
-**PENDIENTE BLOQUEANTE**
+**DECISIÓN CERRADA — ver §9.3.2**
 
-Debe identificarse qué componente proporciona a CAM o a Gateway la relación autoritativa entre:
+La autoridad de metadatos y sus puertos se definen en §9.3.2. La implementación debe respetar esa frontera y no usar los datos del solicitante como autoridad.
 
 - recurso e ID;
 - propietario;
@@ -442,7 +444,7 @@ La paginación, filtros, búsqueda y garantías de rendimiento quedan fuera de D
 ### 7.3 Propuesta de memoria nueva
 
 1. Se define un scope explícito.
-2. Se genera una identidad lógica y una versión pendiente, conforme a la estrategia de IDs que se apruebe.
+2. Se genera una identidad lógica y una versión pendiente, conforme a UUIDv7 canónico según §9.3.6.
 3. En PRIVATE, CAM evalúa la regla explícita del propietario.
 4. En PROJECT, la operación debe estar autorizada sobre el recurso contenedor del proyecto o bajo otra semántica explícita aprobada.
 5. Se conserva la procedencia.
@@ -505,11 +507,11 @@ Estas invariantes deben traducirse en QA-01:
 
 Las recomendaciones y decisiones de detalle de DM-01 quedan cerradas conforme a las decisiones siguientes. Estas precisan cómo implementar los contratos; no modifican las reglas normativas de CT-01 a CT-08 ni seleccionan infraestructura.
 
-### 9.1 Recomendaciones aprobadas
+### 9.1 Direcciones técnicas aprobadas
 
 | Referencia | Dirección aprobada |
 |---|---|
-| §5.2 | Toda operación sobre una versión debe vincularla y validarla contra su memoria padre; la semántica exacta del ID usado por el Grant se resolverá en DM-P02. |
+| §5.2 | Grant sobre la memoria lógica exacta; versión como subrecurso exacto validado contra su padre, conforme a §9.3.1. |
 | §6.2 | GrantResourceScope utiliza IDs explícitos e inmutables por tipo de recurso; no hay wildcard ni autorización por tipo solamente. |
 | §6.3 | `list_visible` autoriza individualmente cada recurso antes de devolver contenido o metadatos protegidos; las operaciones colectivas permanecen deshabilitadas salvo alcance explícito. |
 | §6.3 | La creación de memoria PROJECT se autoriza mediante CAM sobre el ID exacto del proyecto contenedor. |
@@ -639,7 +641,7 @@ DM-01 no define:
 - Scheduler, RLM, Broker, Registry v2 o runtime.
 - SecurityAudit (su implementación sigue postergada).
 - API HTTP, transporte, interfaz de usuario o integración con Telegram.
-- Algoritmos de clasificación o catálogo de niveles todavía no aprobados.
+- Adaptadores de clasificación o controles adicionales para RESTRICTED; el catálogo de dominio está definido en §9.3.5.
 - Retención y purga física del proceso de olvido.
 
 ## 11. Secuencia posterior
