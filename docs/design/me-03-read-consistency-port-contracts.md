@@ -515,3 +515,22 @@ El fake incorpora exportación/restauración de este snapshot para simular un re
 Las pruebas cubren cierre pendiente tras reinicio, bloqueo de nuevas admisiones, rechazo de emisión de un proceso antiguo, rechazo de acknowledgements de generación obsoleta, inventario incompleto de admisiones/rutas, retroceso o igualdad indebida de generación y persistencia del estado `SUPPRESSED` después de reiniciar.
 
 **Límite importante:** el snapshot es un contrato de datos, no una prueba de procedencia ni un mecanismo de persistencia. El fake no demuestra que el snapshot haya sido escrito atómicamente, protegido contra manipulación, recuperado desde almacenamiento durable ni coordinado entre procesos. En runtime, la autoridad debe cargar y validar el estado durable y restaurar cierres/generaciones antes de aceptar tráfico; si no puede verificarlo, debe mantener bloqueadas las rutas. No se añade todavía un adaptador ni una decisión tecnológica de almacenamiento.
+
+
+### 14.5 Diseño del registro durable y recuperación
+
+Se añadió el documento complementario `docs/design/me-03-durable-consistency-journal-design.md`. Define, a nivel lógico y sin seleccionar infraestructura:
+
+- dominios de consistencia y secuencias monotónicas;
+- sobre tipado de registros y catálogo inicial de transiciones;
+- fronteras atómicas de admisión, Forget, invalidación y egress;
+- idempotencia de operaciones y consumo de OwnerDecisionProof;
+- checkpoints, continuidad/anti-rollback y recuperación fail-closed;
+- tratamiento de resultados inciertos entre el punto de egress y la autoridad;
+- escenarios de aceptación C45–C64.
+
+El registro se mantiene separado de EventStore y SecurityAudit. EventStore no se presume idempotente ni se usa como autoridad de fencing. El diseño exige que cualquier compromiso de emisión tenga recibo durable recuperable del último endpoint controlado; si no puede demostrarse, la admisión queda UNRESOLVED.
+
+**Brechas detectadas para la futura implementación:** el protocolo actual `VerifiedForgetAuthorization` no expone por sí solo issuer, proof_id/nonce, acción ni evidencia de consumo de un solo uso; el journal no existe; tampoco hay watermark confiable, checkpoint durable ni protección antitruncamiento. Forget continúa deshabilitado hasta resolver OwnerDecisionProof conforme a DM-P06.
+
+Este documento es una propuesta técnica de diseño y no cambia CT-04, CT-05, EventStore, SecurityAudit ni los contratos normativos. No se ha implementado ni ejecutado C45–C64.
