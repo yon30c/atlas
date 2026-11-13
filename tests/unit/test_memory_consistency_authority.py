@@ -41,18 +41,18 @@ VERSION_ID = "018bcfe5-7b3a-7cc2-98c4-dc0c0c073a12"
 ROUTES = frozenset({"assistant-response", "api-response"})
 
 
-def private_snapshot(identity_revision=1):
+def private_snapshot(identity_revision=1, identity_id="identity-1", snapshot_id=None):
     from atlas.memory.consistency import (
         AuthorityRevision,
         AuthorizationRevisionSet,
     )
 
     return AuthorizationSnapshot(
-        snapshot_id=f"snapshot-{identity_revision}",
-        decision_id=f"decision-{identity_revision}",
+        snapshot_id=snapshot_id or f"snapshot-{identity_id}-{identity_revision}",
+        decision_id=f"decision-{identity_id}-{identity_revision}",
         request_id="request-1",
         action="memory.read",
-        actor_identity_id="identity-1",
+        actor_identity_id=identity_id,
         subject_user_id="owner-1",
         memory_id=MEMORY_ID,
         version_id=VERSION_ID,
@@ -62,7 +62,7 @@ def private_snapshot(identity_revision=1):
             memory_revision=AuthorityRevision(AuthorityKind.MEMORY, MEMORY_ID, 1),
             version_revision=AuthorityRevision(AuthorityKind.MEMORY_VERSION, VERSION_ID, 1),
             identity_revision=AuthorityRevision(
-                AuthorityKind.IDENTITY, "identity-1", identity_revision
+                AuthorityKind.IDENTITY, identity_id, identity_revision
             ),
         ),
         version_status=MemoryVersionStatus.APPROVED,
@@ -101,6 +101,7 @@ class FakeReadConsistencyAndEgress:
         }
         self.registered_routes = set(ROUTES)
         self.generation = 1
+        self.admission_generations = {}
         self.admissions = {}
         self.admission_snapshots = {}
         self.operations = {}
@@ -129,7 +130,7 @@ class FakeReadConsistencyAndEgress:
                 for item in sorted(closure.affected_admission_ids)
             )
             return ForgetRecoverySnapshot(
-                generation=self.generation,
+                generation=closure.generation,
                 closure=closure,
                 admissions=admissions,
             )
@@ -140,7 +141,7 @@ class FakeReadConsistencyAndEgress:
             return None
         restored = cls()
         with restored._lock:
-            restored.generation = snapshot.generation
+            restored.generation = max(snapshot.generation, snapshot.closure.generation)
             restored.suppressed_memories.add(snapshot.closure.target.memory_id)
             restored.forget_closures[snapshot.closure.operation_id] = snapshot.closure
             pending = snapshot.closure.status is ForgetClosureStatus.CLOSING
@@ -161,10 +162,12 @@ class FakeReadConsistencyAndEgress:
                         terminal_evidence_id=None,
                     )
                 restored.admissions[recovered.admission_id] = recovered
+                restored.admission_generations[recovered.admission_id] = snapshot.generation
                 restored.operations[f"read:{recovered.admission_id}"] = {
                     "affected": frozenset({recovered.admission_id}),
                     "pending": False,
                     "kind": "read",
+                    "generation": admission.generation,
                 }
             # No se restauran acknowledgements en memoria: cada endpoint debe
             # demostrar de nuevo finalización o fencing en la generación vigente.
@@ -252,12 +255,14 @@ class FakeReadConsistencyAndEgress:
                 admitted_at=NOW,
             )
             self.admissions[admission_id] = admission
+            self.admission_generations[admission_id] = admission.generation
             self.admission_snapshots[admission_id] = snapshot
             self.operations[f"read:{admission_id}"] = {
                 "authority_id": None,
                 "affected": frozenset({admission_id}),
                 "pending": True,
                 "kind": "read",
+                "generation": admission.generation,
             }
             return admission
 
@@ -352,7 +357,10 @@ class FakeReadConsistencyAndEgress:
                 "affected": affected,
                 "pending": True,
                 "kind": "forget",
+                "generation": self.generation,
             }
+            for admission_id in affected:
+                self.admission_generations[admission_id] = self.generation
             self.forget_idempotency[idempotency_key] = (binding, closure)
             self.forget_closures[operation_id] = closure
             return closure
@@ -444,7 +452,10 @@ class FakeReadConsistencyAndEgress:
                 "affected": invalidation.affected_admission_ids,
                 "pending": True,
                 "kind": "invalidation",
+                "generation": self.generation,
             }
+            for admission_id in invalidation.affected_admission_ids:
+                self.admission_generations[admission_id] = self.generation
             receipt = InvalidationReceipt(
                 invalidation.invalidation_id,
                 self.generation,
@@ -468,7 +479,7 @@ class FakeReadConsistencyAndEgress:
                 return False
             if receipt.endpoint_id not in admission.route_ids:
                 return False
-            if receipt.generation != self.generation:
+            if receipt.generation != operation.get("generation"):
                 return False
             key = (receipt.admission_id, receipt.endpoint_id)
             if isinstance(receipt, EndpointFenceReceipt):
@@ -538,7 +549,10 @@ class FakeReadConsistencyAndEgress:
     ):
         with self._lock:
             current = self.admissions.get(admission.admission_id)
-            if not self._same_admission(current, admission) or admission.generation != self.generation:
+            if (
+                not self._same_admission(current, admission)
+                or self.admission_generations.get(admission.admission_id) != admission.generation
+            ):
                 return None
             if admission.status not in (ReadAdmissionStatus.ADMITTED, ReadAdmissionStatus.ACTIVE):
                 return None
@@ -611,7 +625,7 @@ class FakeReadConsistencyAndEgress:
                 operation_id=operation_id,
                 admission_id=admission.admission_id,
                 endpoint_id=endpoint_id,
-                generation=self.generation,
+                generation=operation.get("generation"),
                 final_sequence=final_sequence,
                 completed_at=now,
             )
@@ -639,7 +653,7 @@ class FakeReadConsistencyAndEgress:
                 or admission.admission_id not in operation["affected"]
                 or endpoint_id not in admission.route_ids
                 or new_generation <= admission.generation
-                or new_generation != self.generation
+                or new_generation != operation.get("generation")
             ):
                 return None
             self.fenced_endpoints.add((admission.admission_id, endpoint_id))
@@ -729,6 +743,49 @@ class FakeHandle:
 
 
 class MemoryConsistencyAuthorityTests(unittest.TestCase):
+
+    def test_unrelated_invalidation_preserves_other_admission_generation_and_receipts(self):
+        self.authority.revisions[(AuthorityKind.IDENTITY, "identity-2")] = 1
+        first_snapshot = private_snapshot(identity_id="identity-1")
+        second_snapshot = private_snapshot(identity_id="identity-2")
+        first = self.authority.admit_read(first_snapshot, DeliveryRouteSet(ROUTES))
+        second = self.authority.admit_read(second_snapshot, DeliveryRouteSet(ROUTES))
+        self.assertIsNotNone(first)
+        self.assertIsNotNone(second)
+        self.assertEqual(first.generation, second.generation)
+
+        invalidation = AuthorizationInvalidation(
+            "invalidate-identity-1",
+            AuthorityKind.IDENTITY,
+            "identity-1",
+            1,
+            2,
+            frozenset({first.admission_id}),
+        )
+        closure = self.authority.begin_invalidation(invalidation)
+        self.assertIsNotNone(closure)
+        self.assertEqual(closure.new_generation, 2)
+
+        # The unaffected admission keeps its own fencing generation and can finish.
+        handle = FakeHandle(second)
+        emission = self.egress.commit_and_emit(
+            second, handle, "assistant-response", "unrelated-emission", 1, NOW
+        )
+        self.assertIsNotNone(emission)
+        completion = self.egress.finish(
+            second, f"read:{second.admission_id}", "assistant-response", 1, NOW
+        )
+        self.assertIsNotNone(completion)
+        self.assertEqual(completion.generation, second.generation)
+        self.assertTrue(self.authority.record_endpoint_ack(completion))
+
+        # The affected admission is fenced with the new generation.
+        self.assertNotEqual(
+            self.authority.admission_generations[first.admission_id],
+            first.generation,
+        )
+
+
     def setUp(self):
         self.authority = FakeReadConsistencyAndEgress()
         self.egress = FakeProtectedEgress(self.authority)
