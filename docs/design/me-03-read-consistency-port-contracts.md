@@ -403,3 +403,26 @@ La primera parte de la implementación de los contratos de revisión quedó inco
 5. No hay adaptadores reales ni almacenamiento implementado en esta etapa.
 
 **Verificación:** se añadieron y actualizaron pruebas unitarias para revisiones y snapshots, pero no se ha ejecutado la suite ni existe un workflow/status check asociado al commit de esta implementación. No se declara validación de runtime.
+
+
+## 13. Estado de implementación — fakes de autoridad y egress
+
+Se añadió `tests/unit/test_memory_consistency_authority.py` con un fake determinista de proceso único que implementa los comportamientos principales de `ReadConsistencyAuthorityPort` y `ProtectedEgressPort` para pruebas:
+
+- Admisión únicamente cuando las revisiones Memory, MemoryVersion e Identity coinciden con el snapshot y todas las rutas están registradas.
+- Inventario exacto de admisiones afectadas por una invalidación; se rechazan inventarios incompletos o con IDs ajenos.
+- Incremento de generación al iniciar invalidación.
+- Rechazo de nuevas emisiones de admisiones con generación anterior.
+- Acknowledgements correlacionados por operación, admisión, endpoint y generación.
+- Reconciliación no terminal hasta que cada endpoint afectado confirma finalización o fencing.
+- Transición a COMPLETED solo cuando todos los endpoints confirman finalización; si hay una combinación de finalización y fencing, la admisión queda CANCELLED.
+- Emisiones con secuencia estricta y handle vinculado a la admisión y objetivo exactos.
+- Una emisión comprometida antes del cierre puede completar su acknowledgement después del cierre; no puede comprometer una unidad adicional.
+
+### Límites explícitos del fake
+
+El fake es una herramienta de prueba, no un adaptador de producción. Usa memoria local y un lock de proceso único. No prueba persistencia durable, compare-and-swap distribuido, fencing entre procesos, transporte de red, recuperación tras reinicio ni cobertura real de todos los endpoints. Tampoco implementa Forget ni supresión física/lógica global.
+
+La interfaz de `ReadConsistencyAuthorityPort` sigue necesitando integrar el ciclo completo de Forget con autorización verificable y evidencia CT-05 antes de que pueda considerarse completa. No se selecciona todavía almacenamiento ni transporte.
+
+**Verificación:** se incorporaron pruebas adicionales para admisión, inventario de invalidación, fencing, finalización y egress. No se ha ejecutado la suite ni existe status check/workflow asociado a estos commits. No se afirma validación de runtime.
