@@ -14,6 +14,8 @@ from atlas.memory.consistency import (
     AuthorizationSnapshot,
     DeliveryRouteSet,
     EgressReceipt,
+    EndpointCompletionReceipt,
+    EndpointDeliveryStatus,
     EndpointFenceReceipt,
     InvalidationReceipt,
     ReadAdmission,
@@ -80,6 +82,7 @@ class FakeReadConsistencyAndEgress:
         self.admissions = {}
         self.operations = {}
         self.fence_acks = {}
+        self.completion_acks = {}
         self.emissions = {}
         self.fenced_endpoints = set()
         self._next_admission = 1
@@ -168,11 +171,19 @@ class FakeReadConsistencyAndEgress:
                 return False
             if receipt.generation != self.generation:
                 return False
-            if not isinstance(receipt, EndpointFenceReceipt) or not receipt.confirmed:
-                return False
             key = (receipt.admission_id, receipt.endpoint_id)
-            self.fence_acks.setdefault(receipt.operation_id, set()).add(key)
-            return True
+            if isinstance(receipt, EndpointFenceReceipt):
+                if not receipt.confirmed:
+                    return False
+                self.fence_acks.setdefault(receipt.operation_id, set()).add(key)
+                return True
+            if isinstance(receipt, EndpointCompletionReceipt):
+                last_sequence = self.emissions.get(key, 0)
+                if receipt.final_sequence != last_sequence:
+                    return False
+                self.completion_acks.setdefault(receipt.operation_id, set()).add(key)
+                return True
+            return False
 
     def get_nonterminal_admissions(self, operation_id):
         with self._lock:
@@ -192,11 +203,20 @@ class FakeReadConsistencyAndEgress:
             if operation is None:
                 return ReconciliationResult(operation_id, frozenset(), frozenset())
             resolved, unresolved = set(), set()
-            acks = self.fence_acks.get(operation_id, set())
+            fence_acks = self.fence_acks.get(operation_id, set())
+            completion_acks = self.completion_acks.get(operation_id, set())
             for admission_id in operation["affected"]:
                 admission = self.admissions[admission_id]
                 required = {(admission_id, endpoint) for endpoint in admission.route_ids}
-                if required.issubset(acks):
+                if required.issubset(completion_acks):
+                    evidence = f"completion:{operation_id}:{admission_id}"
+                    self.admissions[admission_id] = replace(
+                        admission,
+                        status=ReadAdmissionStatus.COMPLETED,
+                        terminal_evidence_id=evidence,
+                    )
+                    resolved.add(admission_id)
+                elif required.issubset(fence_acks | completion_acks):
                     evidence = f"fencing:{operation_id}:{admission_id}"
                     self.admissions[admission_id] = replace(
                         admission,
@@ -240,6 +260,36 @@ class FakeReadConsistencyAndEgress:
                 admission.generation,
                 now,
             )
+
+    def finish(self, admission, endpoint_id, final_sequence, now):
+        with self._lock:
+            current = self.admissions.get(admission.admission_id)
+            if current != admission or endpoint_id not in admission.route_ids:
+                return None
+            key = (admission.admission_id, endpoint_id)
+            if key in self.fenced_endpoints:
+                return None
+            if final_sequence != self.emissions.get(key, 0):
+                return None
+            return EndpointCompletionReceipt(
+                operation_id=f"completion:{admission.admission_id}",
+                admission_id=admission.admission_id,
+                endpoint_id=endpoint_id,
+                generation=admission.generation,
+                final_sequence=final_sequence,
+                completed_at=now,
+            )
+
+    def reconcile_endpoint(self, admission, endpoint_id):
+        with self._lock:
+            key = (admission.admission_id, endpoint_id)
+            if key in self.fenced_endpoints:
+                return EndpointDeliveryStatus.FENCED
+            if any(key in values for values in self.completion_acks.values()):
+                return EndpointDeliveryStatus.COMPLETED
+            if self.admissions.get(admission.admission_id) == admission:
+                return EndpointDeliveryStatus.ACTIVE
+            return EndpointDeliveryStatus.UNRESOLVED
 
     def fence(self, admission, endpoint_id, new_generation, now):
         with self._lock:
@@ -367,6 +417,28 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
         )
         self.assertFalse(self.authority.record_endpoint_ack(unknown))
         self.assertFalse(self.authority.record_endpoint_ack(stale))
+
+    def test_invalidation_can_resolve_after_all_endpoints_complete(self):
+        admission = self.authority.admit_read(
+            private_snapshot(), DeliveryRouteSet(ROUTES)
+        )
+        invalidation = AuthorizationInvalidation(
+            "invalidate-complete", AuthorityKind.IDENTITY, "identity-1", 1, 2,
+            frozenset({admission.admission_id})
+        )
+        receipt = self.authority.begin_invalidation(invalidation)
+        for endpoint in admission.route_ids:
+            completion = EndpointCompletionReceipt(
+                "invalidate-complete", admission.admission_id, endpoint,
+                receipt.new_generation, 0, NOW
+            )
+            self.assertTrue(self.authority.record_endpoint_ack(completion))
+        result = self.authority.reconcile("invalidate-complete")
+        self.assertEqual(result.resolved_admission_ids, frozenset({admission.admission_id}))
+        self.assertEqual(
+            self.authority.admissions[admission.admission_id].status,
+            ReadAdmissionStatus.COMPLETED,
+        )
 
     def test_egress_is_sequence_checked_and_fenced_by_generation(self):
         admission = self.authority.admit_read(
