@@ -19,6 +19,35 @@ from atlas.memory.consistency import (
     ReconciliationResult,
 )
 from atlas.memory.models import MemoryClassification
+from atlas.memory.forget import ForgetClosure, ForgetTarget
+
+
+class VerifiedForgetAuthorization(Protocol):
+    """Evidencia ya verificada/consumida por CAM y OwnerDecisionVerifier.
+
+    Solo el adaptador de CAM puede producir este objeto tras verificar una
+    decisión directa, no delegable y de un solo uso del propietario. La
+    autoridad de consistencia vuelve a comprobar el vínculo exacto de campos;
+    este protocolo no implementa ni sustituye al emisor/verificador confiable.
+    """
+
+    @property
+    def decision_id(self) -> str: ...
+
+    @property
+    def request_id(self) -> str: ...
+
+    @property
+    def actor_identity_id(self) -> str: ...
+
+    @property
+    def subject_user_id(self) -> str: ...
+
+    @property
+    def memory_id(self) -> str: ...
+
+    @property
+    def owner_id(self) -> str: ...
 
 
 class ProtectedContentHandle(Protocol):
@@ -108,6 +137,28 @@ class ReadConsistencyAuthorityPort(Protocol):
 
         La autoridad debe comprobar supresión, revisiones actuales, generación y
         cobertura de rutas. Si falta cualquiera de esas evidencias, falla cerrado.
+        """
+
+    def begin_forget(
+        self,
+        target: ForgetTarget,
+        authorization: VerifiedForgetAuthorization,
+        idempotency_key: str,
+        now: datetime,
+    ) -> ForgetClosure | None:
+        """Cierra atómicamente admisiones y avanza fencing para toda la Memory.
+
+        Requiere autorización directa del propietario ya verificada y consumida
+        por CAM. Debe serializarse con admit_read, conservar la operación por
+        idempotencia y capturar todas las admisiones/rutas previas. Nunca
+        confirma supresión mientras una admisión siga UNRESOLVED.
+        """
+
+    def reconcile_forget(self, operation_id: str) -> ForgetClosure | None:
+        """Devuelve CLOSING hasta verificar terminalidad de todas las lecturas.
+
+        SUPPRESSED solo significa que ninguna admisión previa puede emitir más;
+        no significa eliminación física ni permite marcar versiones forgotten.
         """
 
     def begin_invalidation(
