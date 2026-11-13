@@ -374,6 +374,8 @@ class FakeReadConsistencyAndEgress:
             if closure is None:
                 return None
             result = self.reconcile(operation_id)
+            if result is None:
+                return None
             status = (
                 ForgetClosureStatus.SUPPRESSED
                 if not result.unresolved_admission_ids
@@ -481,6 +483,8 @@ class FakeReadConsistencyAndEgress:
 
     def record_endpoint_ack(self, receipt):
         with self._lock:
+            if not isinstance(receipt, (EndpointFenceReceipt, EndpointCompletionReceipt)):
+                return False
             operation = self.operations.get(receipt.operation_id)
             if operation is None:
                 return False
@@ -517,7 +521,7 @@ class FakeReadConsistencyAndEgress:
         with self._lock:
             operation = self.operations.get(operation_id)
             if operation is None:
-                return ()
+                return None
             return tuple(
                 self.admissions[item]
                 for item in operation["affected"]
@@ -529,7 +533,7 @@ class FakeReadConsistencyAndEgress:
         with self._lock:
             operation = self.operations.get(operation_id)
             if operation is None:
-                return ReconciliationResult(operation_id, frozenset(), frozenset())
+                return None
             resolved, unresolved = set(), set()
             fence_acks = self.fence_acks.get(operation_id, set())
             completion_acks = self.completion_acks.get(operation_id, set())
@@ -759,6 +763,14 @@ class FakeHandle:
 
 
 class MemoryConsistencyAuthorityTests(unittest.TestCase):
+
+    def test_unknown_operation_cannot_look_like_successful_reconciliation(self):
+        self.assertIsNone(self.authority.reconcile("missing-operation"))
+        self.assertIsNone(self.authority.get_nonterminal_admissions("missing-operation"))
+
+    def test_endpoint_ack_rejects_untyped_receipt(self):
+        self.assertFalse(self.authority.record_endpoint_ack(object()))
+
 
     def test_forget_idempotent_retry_returns_latest_reconciled_closure(self):
         closure = self.authority.begin_forget(
