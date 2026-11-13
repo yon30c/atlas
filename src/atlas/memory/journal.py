@@ -93,6 +93,7 @@ class ConsistencyTransition:
     final_sequence: int | None = None
     receipt_id: str | None = None
     proof_reference: str | None = None
+    checkpoint_reference: str | None = None
     route_ids: frozenset[str] = frozenset()
     affected_admission_ids: frozenset[str] = frozenset()
 
@@ -108,7 +109,7 @@ class ConsistencyTransition:
             "idempotency_key", "request_id", "correlation_id",
             "actor_identity_id", "subject_user_id", "owner_id", "snapshot_id",
             "authority_id", "admission_id", "endpoint_id", "emission_id",
-            "receipt_id", "proof_reference",
+            "receipt_id", "proof_reference", "checkpoint_reference",
         ):
             value = getattr(self, field)
             if value is not None:
@@ -172,6 +173,7 @@ class ConsistencyTransition:
             ConsistencyRecordKind.INVALIDATION_RECONCILED: (
                 "authority_kind", "authority_id", "generation",
             ),
+            ConsistencyRecordKind.CHECKPOINT_COMMITTED: ("checkpoint_reference",),
         }
         for field in required_by_kind.get(self.record_kind, ()):
             value = getattr(self, field)
