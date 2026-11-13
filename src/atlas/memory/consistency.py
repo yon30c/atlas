@@ -212,6 +212,7 @@ class ReadAdmission:
     route_ids: frozenset[str]
     status: ReadAdmissionStatus
     admitted_at: datetime
+    terminal_evidence_id: str | None = None
 
     def __post_init__(self) -> None:
         _required(self.admission_id, "admission_id")
@@ -225,6 +226,11 @@ class ReadAdmission:
             _required(route_id, "route_id")
         if not isinstance(self.status, ReadAdmissionStatus):
             raise ContractError("status debe ser ReadAdmissionStatus")
+        terminal = self.status in (ReadAdmissionStatus.COMPLETED, ReadAdmissionStatus.CANCELLED)
+        if terminal:
+            _required(self.terminal_evidence_id, "terminal_evidence_id")
+        elif self.terminal_evidence_id is not None:
+            raise ContractError("una admisión no terminal no puede tener terminal_evidence_id")
         _utc(self.admitted_at, "admitted_at")
 
     def transition(self, status: ReadAdmissionStatus) -> "ReadAdmission":
