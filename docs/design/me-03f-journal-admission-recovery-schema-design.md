@@ -159,3 +159,23 @@ Do not combine this work with real persistence, anti-rollback cryptography, netw
 ## 9. Explicit limitations
 
 This design does not establish durable storage, authenticated journal origin, anti-rollback, distributed consensus, atomic network egress, endpoint liveness, complete delivery-route inventory, backup/restore policy, or physical Forget. Those remain blocked by ME-03E prerequisites and CT-05. A passing fake/test suite will validate the model and integration contract only, not those runtime guarantees.
+
+## 10. Implementation tracking
+
+**Implemented and CI-validated (partial):**
+- schema v2 for `READ_ADMITTED`, with frozen v1 compatibility and strict PRIVATE/PROJECT scope validation;
+- projection of owner, scope, admitted_at, recoverability marker and admission terminal receipt;
+- pure `reconstruct_read_target()` that refuses v1/incomplete projections;
+- 19 focused tests across schema validation and reducer projection/reconstruction.
+
+**Still pending:**
+- recovery classification for mixed v1/v2 journals with unresolved v1 admissions;
+- reconstruction of endpoint/admission lifecycle state as unresolved/fenced after restart;
+- receipt verification port and verifier fake;
+- validation of endpoint issuer, generation, sequence, operation and receipt bindings;
+- stale-emitter rejection after recovery;
+- tests F12–F18 and full adapter/runtime validation.
+
+CI for the implemented portion: [Atlas CI #43529942908](https://github.com/yon30c/atlas/actions/runs/43529942908), all four Python versions successful.
+
+This tracking note does not change the design's non-goals or imply durable recovery.
