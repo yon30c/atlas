@@ -89,6 +89,38 @@ Una lectura admitida debe tener una duración/lease acotada o una forma equivale
 
 Si una lectura no responde, el proceso cae o no puede determinarse si todavía puede entregar contenido, Forget no puede confirmar la supresión. La recuperación debe conservar el bloqueo de nuevas lecturas hasta reconciliar de forma segura las admisiones pendientes. La semántica exacta de cancelación, expiración, bloqueo y recuperación tras caída queda pendiente. No se debe elegir un mecanismo de locks distribuidos, leases, transacciones o mensajería hasta definir los requisitos operativos y el proveedor.
 
+### 4.5 Autoridad lógica de admisión y supresión — recomendación de diseño
+
+Se recomienda modelar una única **autoridad lógica de supresión y admisión de lecturas**, separada conceptualmente de:
+
+- `MemoryMetadataPort`, que sigue siendo autoridad de los metadatos canónicos de memoria;
+- CAM, que decide si el actor puede realizar la operación;
+- los almacenes, índices, cachés y demás destinos, que conservan o derivan contenido.
+
+Esta separación evita convertir los metadatos de memoria en un registro operativo de Forget y evita que cada destino mantenga una interpretación independiente del estado de supresión. No implica elegir un servicio, base de datos, protocolo de red ni topología física.
+
+El límite lógico debe serializar dos operaciones incompatibles:
+
+1. **Admitir lectura:** aceptar una lectura solo si no hay supresión activa ni una operación de Forget que haya cerrado nuevas admisiones para la memoria/versión.
+2. **Cerrar admisiones para Forget:** impedir nuevas lecturas y enumerar o contabilizar todas las lecturas admitidas previamente que todavía no estén en estado terminal.
+
+Cada lectura debe conservar una admisión vinculada a los IDs exactos y al snapshot CAM durante todo el periodo en que pueda entregar contenido. La admisión no sustituye CAM ni constituye por sí misma autorización. Su propósito es coordinar concurrencia y supresión.
+
+Una admisión solo puede terminar en uno de estos resultados verificables:
+
+- **Completada:** la entrega controlada terminó y no quedan bytes, fragmentos ni trabajo pendiente que esa operación pueda emitir.
+- **Cancelada:** el emisor fue detenido y existe confirmación de que ya no puede continuar entregando contenido.
+
+Forget solo puede confirmar la supresión lógica cuando la autoridad haya cerrado nuevas admisiones y todas las admisiones previas afectadas estén en estado terminal. La operación de cierre y el registro de admisiones deben compartir un mismo orden de consistencia: no puede existir una lectura que se cuele entre el cierre y el inventario de lecturas previas.
+
+La admisión debe cubrir también rutas derivadas que entreguen contenido —por ejemplo, cachés, búsquedas con fragmentos, exportaciones y recuperación—, no solo el almacén primario. Los índices que devuelvan únicamente candidatos opacos todavía deben pasar por Gateway antes de exponer contenido o metadatos protegidos.
+
+Si la autoridad lógica no está disponible, no se admiten lecturas ni se confirma supresión. Si un proceso cae y deja una admisión sin estado terminal verificable, esta permanece pendiente y bloquea la confirmación de Forget hasta que un mecanismo seguro de recuperación demuestre que ya no puede emitir contenido. No se debe liberar una admisión únicamente porque haya vencido un timeout, salvo que el mecanismo aprobado pueda demostrar que el emisor quedó efectivamente cercado (*fenced*) y no puede reanudar la entrega.
+
+**Límite de la garantía:** esta coordinación impide nuevas exposiciones después de confirmar la supresión y resuelve entregas que estaban en curso dentro del sistema. No puede retirar copias que un consumidor ya recibió legítimamente antes de comenzar Forget.
+
+Esta sección es una recomendación de arquitectura lógica para revisión; todavía no constituye una decisión normativa ni selecciona un mecanismo de implementación.
+
 ## 5. Reglas de fallo cerrado
 
 - Snapshot ausente, inválido, caducado o con IDs distintos: no leer.
