@@ -130,7 +130,7 @@ class FakeReadConsistencyAndEgress:
                 for item in sorted(closure.affected_admission_ids)
             )
             return ForgetRecoverySnapshot(
-                generation=closure.generation,
+                generation=self.generation,
                 closure=closure,
                 admissions=admissions,
             )
@@ -163,7 +163,7 @@ class FakeReadConsistencyAndEgress:
                         terminal_evidence_id=None,
                     )
                 restored.admissions[recovered.admission_id] = recovered
-                restored.admission_generations[recovered.admission_id] = snapshot.generation
+                restored.admission_generations[recovered.admission_id] = snapshot.closure.generation
                 restored.operations[f"read:{recovered.admission_id}"] = {
                     "affected": frozenset({recovered.admission_id}),
                     "pending": False,
@@ -763,6 +763,34 @@ class FakeHandle:
 
 
 class MemoryConsistencyAuthorityTests(unittest.TestCase):
+
+    def test_forget_recovery_preserves_domain_high_watermark_and_closure_generation(self):
+        admission = self.authority.admit_read(
+            private_snapshot(), DeliveryRouteSet(ROUTES)
+        )
+        closure = self.authority.begin_forget(
+            ForgetTarget(MEMORY_ID), FakeVerifiedForgetAuthorization(),
+            "forget-domain-watermark-key", NOW
+        )
+        # Simulate a later, disjoint operation advancing the domain high-watermark.
+        self.authority.generation = closure.generation + 1
+        snapshot = self.authority.export_forget_recovery(closure.operation_id)
+        self.assertEqual(snapshot.generation, closure.generation + 1)
+        restored = FakeReadConsistencyAndEgress.restore_forget_recovery(snapshot)
+        self.assertEqual(restored.generation, snapshot.generation)
+        self.assertEqual(
+            restored.admission_generations[admission.admission_id],
+            closure.generation,
+        )
+        for endpoint in sorted(admission.route_ids):
+            receipt = self.egress.fence(
+                admission, closure.operation_id, endpoint, closure.generation, NOW
+            )
+            self.assertIsNotNone(receipt)
+            self.assertTrue(self.authority.record_endpoint_ack(receipt))
+        final = self.authority.reconcile_forget(closure.operation_id)
+        self.assertEqual(final.status, ForgetClosureStatus.SUPPRESSED)
+
 
     def test_unknown_operation_cannot_look_like_successful_reconciliation(self):
         self.assertIsNone(self.authority.reconcile("missing-operation"))
