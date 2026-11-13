@@ -405,13 +405,13 @@ El orden propuesto para la implementación posterior es:
 
 1. **ME-02 — MemoryGateway + CAM:** integración de frontera única, puertos tipados de metadatos, autorización exacta por memoria/versión, aislamiento PRIVATE/PROJECT y fail-closed. No comenzar hasta que ME-01 esté implementado y sus pruebas pasen.
 2. **ME-03 — Review y publicación:** propuestas, OwnerDecisionVerifier, prueba directa del propietario, aprobación/rechazo, sustitución atómica de versiones e idempotencia. Si no existe emisor confiable, approve/reject permanecen deshabilitados.
-3. **ME-04 — Forget y supresión:** diseñar e implementar solo tras aprobar inventario de destinos, backups, retención física, plazos y verificación de purga. Supresión lógica inmediata y prevención de reaparición son obligatorias.
-4. **ME-05 — Persistencia y adaptadores:** seleccionar almacenamiento y adaptadores solo cuando los contratos anteriores estén probados y exista decisión explícita de arquitectura. Implementar transacciones/CAS y pruebas de integración sin usar Broker Registry como autoridad de memoria.
+3. **ME-04 — Persistencia y adaptadores:** seleccionar almacenamiento y adaptadores solo cuando los contratos de dominio y Gateway estén probados y exista decisión explícita de arquitectura. Implementar transacciones/CAS, metadatos autoritativos y pruebas de integración sin usar Broker Registry como autoridad de memoria.
+4. **ME-05 — Forget y supresión:** diseñar e implementar solo después de ME-04 y de aprobar inventario de destinos, backups, retención física, plazos y criterios verificables de purga. Supresión lógica inmediata y prevención de reaparición son obligatorias.
 5. **ME-06 — Assistant mínimo:** recuperación exclusivamente por Gateway, presentación de memoria aprobada y envío de propuestas; sin aprobar, rechazar, olvidar ni conceder permisos.
 6. **ME-07 — Proactivity:** Watchers de solo lectura, Analysis Engine y propuestas a Assistant; sin mutación de recursos ni autoridad adicional.
 7. **ME-08 — Hardening y aceptación integral:** pruebas de seguridad, regresión contractual, concurrencia, filtraciones, recuperación y revisión de amenazas. SecurityAudit solo se incorporará cuando su alcance se apruebe expresamente.
 
-La selección de almacenamiento y adaptadores puede requerirse antes de ME-04/ME-05 según la secuencia de implementación acordada, pero no se anticipa en ME-01. La numeración y el orden final de esas fases se confirmarán antes de cada implementación.
+La selección de almacenamiento y adaptadores se mantiene fuera de ME-01 y se decide cuando las fases anteriores proporcionen criterios suficientes. Forget no comienza hasta que existan adaptadores reales, inventario de destinos, política de backups y criterios de purga verificables. La numeración y el orden final de esas fases se confirmarán antes de cada implementación.
 
 ## 14. Registro de cambios
 
