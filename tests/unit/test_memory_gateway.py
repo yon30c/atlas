@@ -212,6 +212,18 @@ def make_admission(snapshot, routes=ROUTES, snapshot_id=None):
 
 class MemoryGatewayServiceTests(unittest.TestCase):
 
+    def test_gateway_rejects_malformed_egress_arguments_before_calling_ports(self):
+        read = self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
+        self.assertIsNotNone(read)
+        self.assertIsNone(self.gateway.emit_version(read, [], "emission-1", 1))
+        self.assertIsNone(self.gateway.emit_version(read, "assistant-response", "", 1))
+        self.assertIsNone(self.gateway.emit_version(read, "assistant-response", "emission-1", True))
+        self.assertFalse(self.gateway.finish_version(read, [], 0))
+        self.assertFalse(self.gateway.finish_version(read, "assistant-response", True))
+        self.assertEqual(self.egress.emissions, [])
+        self.assertEqual(self.egress.finishes, [])
+
+
     def test_protected_read_rejects_admission_target_different_from_snapshot(self):
         other_target = ReadTarget(
             "018bcfe5-7b3a-7cc2-98c4-dc0c0c073a13",
