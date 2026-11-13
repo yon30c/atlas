@@ -109,9 +109,17 @@ class ForgetRecoverySnapshot:
         if any(
             item.target.memory_id != self.closure.target.memory_id
             or not item.route_ids.issubset(self.closure.delivery_route_ids)
+            or item.generation >= self.generation
             for item in self.admissions
         ):
-            raise ContractError("admission fuera del objetivo o rutas del cierre")
+            raise ContractError(
+                "admission fuera del objetivo/rutas o no anterior al fencing restaurado"
+            )
+        observed_routes = frozenset(
+            route_id for item in self.admissions for route_id in item.route_ids
+        )
+        if observed_routes != self.closure.delivery_route_ids:
+            raise ContractError("recovery requiere el inventario completo de rutas de entrega")
         nonterminal = frozenset(
             item.admission_id
             for item in self.admissions
