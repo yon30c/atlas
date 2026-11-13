@@ -187,9 +187,8 @@ class InMemoryConsistencyJournalFake:
 class ConsistencyJournalModelTests(unittest.TestCase):
 
     def test_transition_rejects_unsupported_schema_version(self):
+        # The schema is closed: unknown versions cannot enter a recovery state.
         with self.assertRaises(ContractError):
-            read_admitted()
-            # The schema is closed: unknown versions cannot enter a recovery state.
             replace(read_admitted(), schema_version=2)
 
 
