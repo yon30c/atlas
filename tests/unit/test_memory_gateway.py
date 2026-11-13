@@ -246,6 +246,7 @@ class MemoryGatewayServiceTests(unittest.TestCase):
     def test_public_read_capability_contains_only_an_opaque_identifier(self):
         capability = ProtectedMemoryRead("opaque-test-capability")
         self.assertEqual(capability.read_id, "opaque-test-capability")
+        self.assertNotIn(capability.read_id, repr(capability))
         for attribute in ("snapshot", "admission", "handle", "operation_id"):
             self.assertFalse(hasattr(capability, attribute))
 
@@ -487,6 +488,20 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         self.assertEqual(
             self.authority.reconciliations, ["read:admission-1"]
         )
+
+    def test_unresolved_admission_keeps_capability_for_reconciliation(self):
+        read = self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
+        self.authority.reconcile_result = ReconciliationResult(
+            "read:admission-1", frozenset(), frozenset({"admission-1"})
+        )
+
+        result = self.gateway.reconcile_version(read)
+
+        self.assertIn("admission-1", result.unresolved_admission_ids)
+        receipt = self.gateway.emit_version(
+            read, "assistant-response", "still-authorized-by-egress", 1
+        )
+        self.assertIsInstance(receipt, EgressReceipt)
 
     def test_resolved_admission_retires_local_read_capability(self):
         read = self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
