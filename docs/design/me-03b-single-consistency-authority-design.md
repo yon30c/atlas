@@ -142,3 +142,14 @@ El fake de pruebas puede demostrar un orden determinista dentro de un proceso y 
 4. Mantener pruebas de concurrencia de la autoridad y dejar claro que son fakes de proceso único.
 5. Actualizar el contrato ME-03 y registrar las limitaciones reales.
 6. Revisar referencias, diff, estado de commit y CI sin abrir PR ni hacer merge.
+
+
+## 11. Estado de implementación parcial
+
+Se incorporó `ProtectedMemoryConsistencyPort` como protocolo compuesto por las facetas de autoridad y egress. `MemoryGatewayService` ahora recibe una sola instancia de ese contrato; admisión, compromiso de emisión, finalización, acknowledgements y reconciliación pasan por la misma dependencia. El constructor ya no acepta un `ProtectedEgressPort` independiente.
+
+Se renombró la consulta de estado de un endpoint a `reconcile_endpoint(admission, endpoint_id)` para evitar colisión con `reconcile(operation_id)`, que consulta la operación completa.
+
+Los fakes de Gateway fueron adaptados para implementar ambas facetas sobre la misma instancia. El fake de autoridad de consistencia ya serializa admisión, invalidación y compromiso de egress bajo su lock de proceso único; la prueba concurrente existente cubre ese orden local mediante barrera determinista.
+
+**Limitaciones:** el fake no demuestra linealizabilidad distribuida, persistencia durable, atomicidad real con transporte, recuperación tras reinicio ni fencing de endpoints reales. Las pruebas fueron modificadas, pero no se han ejecutado en esta etapa. No se declara validación automatizada ni CI exitoso.
