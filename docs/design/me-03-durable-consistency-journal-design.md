@@ -398,11 +398,12 @@ En el commit de referencia de esta propuesta:
 - existen modelos inmutables de snapshots, revisiones, admisiones, invalidaciones, recibos, cierres y `ForgetRecoverySnapshot`;
 - existe un Gateway protegido que devuelve un handle opaco y delega emisión/finalización a puertos;
 - existen fakes de proceso único para autoridad, egress y recuperación simulada;
-- no existe `ConsistencyJournalPort` implementado;
+- se definieron modelos puros iniciales en `src/atlas/memory/journal.py` y el protocolo `ConsistencyJournalPort` en `src/atlas/ports/consistency_journal.py`;
 - no existe journal durable, watermark confiable, checkpoint durable ni protección antitruncamiento;
 - el fake de recuperación no prueba reinicios reales, concurrencia entre procesos ni almacenamiento durable;
 - no existe emisor/verificador confiable de OwnerDecisionProof;
 - no se han completado inventarios reales de entrega y persistencia;
+- se escribieron 18 pruebas unitarias para los modelos del journal en `tests/unit/test_memory_journal.py`; no se han ejecutado;
 - no se ha ejecutado la suite completa ni las pruebas C01–C64 en esta etapa.
 
-**Conclusión:** la siguiente implementación deberá empezar por modelos puros de posición/transición/commit/checkpoint y un puerto tipado del journal, con fakes deterministas. No deberá comenzar por un adaptador de base de datos ni declarar durabilidad hasta que el contrato y sus pruebas estén implementados y ejecutados.
+**Conclusión:** la primera capa de modelos puros de posición/transición/commit/checkpoint y el puerto tipado del journal ya están definidos. El siguiente trabajo será endurecer sus invariantes, crear un fake de journal con CAS/idempotencia/recovery deterministas y cubrir C45–C64. No deberá comenzar un adaptador de base de datos ni declararse durabilidad hasta que esas pruebas estén implementadas y ejecutadas.
