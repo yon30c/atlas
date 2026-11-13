@@ -99,6 +99,14 @@ class AuthorizationEvaluatorTests(unittest.TestCase):
                     AuthorizationDecision.DENY,
                 )
 
+    def test_actor_and_context_user_may_differ_when_grant_subject_matches(self):
+        context = replace(self.context, user_id="different-context-user")
+        request = replace(self.request, context=context)
+        self.assertIs(
+            self.evaluate(request=request).decision,
+            AuthorizationDecision.ALLOW,
+        )
+
     def test_resource_owner_must_match_grant_owner(self):
         request = replace(self.request, resource_owner_id="other-user")
         self.assertIs(
