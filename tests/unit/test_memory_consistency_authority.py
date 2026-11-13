@@ -568,6 +568,11 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
         repeated = self.authority.begin_invalidation(request)
         self.assertEqual(first, repeated)
         self.assertEqual(self.authority.generation, 2)
+        next_epoch = AuthorizationInvalidation(
+            "invalidate-next-epoch", AuthorityKind.IDENTITY, "identity-1", 2, 3,
+            frozenset()
+        )
+        self.assertIsNone(self.authority.begin_invalidation(next_epoch))
         reused = AuthorizationInvalidation(
             "invalidate-idempotent", AuthorityKind.MEMORY, MEMORY_ID, 1, 2,
             frozenset({admission.admission_id})
@@ -621,6 +626,11 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
         final = self.authority.reconcile("invalidate-2")
         self.assertEqual(final.resolved_admission_ids, frozenset({admission.admission_id}))
         self.assertEqual(self.authority.admissions[admission.admission_id].status, ReadAdmissionStatus.CANCELLED)
+        reopened = self.authority.admit_read(
+            private_snapshot(identity_revision=2), DeliveryRouteSet(ROUTES)
+        )
+        self.assertIsNotNone(reopened)
+        self.assertEqual(reopened.generation, 2)
 
     def test_ack_from_unknown_endpoint_or_wrong_generation_is_rejected(self):
         admission = self.authority.admit_read(
