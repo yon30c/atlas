@@ -12,6 +12,15 @@ from atlas.authorization.memory_service import MemoryAuthorizationService
 from atlas.authorization.models import Grant, GrantResourceScope, AuthorizationDecision
 from atlas.core.context import OperationContext
 from atlas.core.identity import Identity, IdentityKind, IdentityStatus
+from atlas.memory.consistency import (
+    DeliveryRouteSet,
+    EgressReceipt,
+    EndpointCompletionReceipt,
+    ReadAdmission,
+    ReadAdmissionStatus,
+    ReadTarget,
+    ReconciliationResult,
+)
 from atlas.memory.gateway import MemoryGatewayService
 from atlas.memory.metadata import (
     EnvironmentMetadata,
@@ -97,18 +106,71 @@ class FakeGrantRepository:
 
 
 class SpyContentPort:
-    def __init__(self, version):
-        self.version = version
+    def __init__(self):
         self.calls = []
+        self.handle = None
 
-    def get_version_content(self, memory_id, version_id):
-        self.calls.append((memory_id, version_id))
-        if (
-            self.version
-            and self.version.memory_id == memory_id
-            and self.version.version_id == version_id
-        ):
-            return self.version
+    def read_version_if_admitted(self, snapshot, admission):
+        self.calls.append((snapshot, admission))
+        self.handle = FakeProtectedHandle(admission, snapshot.classification)
+        return self.handle
+
+
+class FakeProtectedHandle:
+    def __init__(self, admission, classification):
+        self.handle_id = f"handle:{admission.admission_id}"
+        self.admission_id = admission.admission_id
+        self.memory_id = admission.target.memory_id
+        self.version_id = admission.target.version_id
+        self.classification = classification
+
+
+class FakeReadAuthority:
+    def __init__(self):
+        self.admissions = []
+        self.acks = []
+
+    def admit_read(self, snapshot, routes):
+        admission = ReadAdmission(
+            admission_id=f"admission-{len(self.admissions) + 1}",
+            snapshot_id=snapshot.snapshot_id,
+            target=ReadTarget(
+                snapshot.memory_id, snapshot.version_id,
+                snapshot.owner_id, snapshot.scope
+            ),
+            generation=1,
+            route_ids=routes.route_ids,
+            status=ReadAdmissionStatus.ADMITTED,
+            admitted_at=NOW,
+        )
+        self.admissions.append(admission)
+        return admission
+
+    def record_endpoint_ack(self, receipt):
+        self.acks.append(receipt)
+        return True
+
+    def reconcile(self, operation_id):
+        return ReconciliationResult(operation_id, frozenset(), frozenset())
+
+
+class FakeProtectedEgress:
+    def commit_and_emit(self, admission, handle, endpoint_id, emission_id, sequence, now):
+        return EgressReceipt(
+            admission.admission_id, endpoint_id, emission_id, sequence,
+            admission.generation, now
+        )
+
+    def finish(self, admission, operation_id, endpoint_id, final_sequence, now):
+        return EndpointCompletionReceipt(
+            operation_id, admission.admission_id, endpoint_id,
+            admission.generation, final_sequence, now
+        )
+
+    def fence(self, admission, operation_id, endpoint_id, new_generation, now):
+        return None
+
+    def reconcile(self, admission, endpoint_id):
         return None
 
 
@@ -218,18 +280,24 @@ class MemoryGatewayAuthorizationIntegrationTests(unittest.TestCase):
             self.identity_port,
             grant_repository=self.grant_repository,
         )
-        self.content = SpyContentPort(make_content_version())
+        self.content = SpyContentPort()
+        self.authority = FakeReadAuthority()
+        self.routes = DeliveryRouteSet(frozenset({"assistant-response"}))
         self.gateway = MemoryGatewayService(
             authorization,
             self.content,
+            self.authority,
+            FakeProtectedEgress(),
+            self.routes,
             FixedClock(),
         )
 
     def test_private_owner_reads_content_after_real_cam_allows(self):
         result = self.gateway.get_version(make_context(), MEMORY_ID, VERSION_ID)
 
-        self.assertIs(result, self.content.version)
-        self.assertEqual(self.content.calls, [(MEMORY_ID, VERSION_ID)])
+        self.assertIsNotNone(result)
+        self.assertIs(result.handle, self.content.handle)
+        self.assertEqual(len(self.content.calls), 1)
         self.assertEqual(self.identity_port.calls, ["identity-1"])
         self.assertEqual(self.grant_repository.owner_requests, [])
 
@@ -252,7 +320,7 @@ class MemoryGatewayAuthorizationIntegrationTests(unittest.TestCase):
         )
 
         self.assertIs(result, self.content.version)
-        self.assertEqual(self.content.calls, [(MEMORY_ID, VERSION_ID)])
+        self.assertEqual(len(self.content.calls), 1)
         self.assertEqual(self.grant_repository.owner_requests, ["owner-1"])
 
     def test_project_memory_without_grant_never_reads_content(self):
