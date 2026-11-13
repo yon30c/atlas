@@ -87,7 +87,7 @@ class ConsistencyProjection:
     forget_closures: tuple[ForgetProjection, ...]
     invalidations: tuple[InvalidationProjection, ...]
     idempotency_records: tuple[IdempotencyProjection, ...]
-    receipt_ids: frozenset[str>
+    receipt_ids: frozenset[str]
 
 
 class ConsistencyJournalReducer:
