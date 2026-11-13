@@ -8,7 +8,8 @@ from atlas.memory.consistency import (
     EgressReceipt,
     ReconciliationResult,
 )
-from atlas.memory.models import MemoryId, MemoryVersionId
+from atlas.memory.consistency import ReadAdmissionStatus
+from atlas.memory.models import MemoryClassification, MemoryId, MemoryVersionId
 from atlas.ports.clock import Clock
 from atlas.ports.protected_memory_read import (
     ProtectedEgressPort,
@@ -122,22 +123,30 @@ class MemoryGatewayService:
                 or admission.target.owner_id != snapshot.owner_id
                 or admission.target.scope != snapshot.scope
                 or admission.route_ids != self._routes.route_ids
-                or admission.status.value != "admitted"
+                or admission.status is not ReadAdmissionStatus.ADMITTED
             ):
                 self._finish_empty_admission(admission, operation_id)
                 return None
 
-            handle = self._content.read_version_if_admitted(snapshot, admission)
+            try:
+                handle = self._content.read_version_if_admitted(snapshot, admission)
+            except Exception:
+                self._finish_empty_admission(admission, operation_id)
+                return None
             if not self._valid_handle(handle, admission, snapshot):
                 self._finish_empty_admission(admission, operation_id)
                 return None
 
-            return ProtectedMemoryRead(
-                snapshot=snapshot,
-                admission=admission,
-                handle=handle,
-                operation_id=operation_id,
-            )
+            try:
+                return ProtectedMemoryRead(
+                    snapshot=snapshot,
+                    admission=admission,
+                    handle=handle,
+                    operation_id=operation_id,
+                )
+            except Exception:
+                self._finish_empty_admission(admission, operation_id)
+                return None
         except Exception:
             return None
 
