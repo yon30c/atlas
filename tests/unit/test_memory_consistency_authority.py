@@ -253,7 +253,7 @@ class FakeReadConsistencyAndEgress:
                 generation=self.generation,
                 route_ids=routes.route_ids,
                 status=ReadAdmissionStatus.ADMITTED,
-                admitted_at=NOW,
+                admitted_at=now,
             )
             self.admissions[admission_id] = admission
             self.admission_generations[admission_id] = admission.generation
@@ -308,7 +308,9 @@ class FakeReadConsistencyAndEgress:
             prior = self.forget_idempotency.get(idempotency_key)
             if prior is not None:
                 prior_binding, prior_closure = prior
-                return prior_closure if prior_binding == binding else None
+                if prior_binding != binding:
+                    return None
+                return self.forget_closures.get(prior_closure.operation_id, prior_closure)
             if target.memory_id in self.suppressed_memories:
                 return None
 
@@ -492,6 +494,9 @@ class FakeReadConsistencyAndEgress:
                 return False
             if receipt.generation != operation.get("generation"):
                 return False
+            previous_receipt = self.ack_receipts.get(ack_key)
+            if previous_receipt is not None:
+                return previous_receipt == receipt
             key = (receipt.admission_id, receipt.endpoint_id)
             if isinstance(receipt, EndpointFenceReceipt):
                 if not receipt.confirmed:
@@ -754,6 +759,37 @@ class FakeHandle:
 
 
 class MemoryConsistencyAuthorityTests(unittest.TestCase):
+
+    def test_forget_idempotent_retry_returns_latest_reconciled_closure(self):
+        closure = self.authority.begin_forget(
+            ForgetTarget(MEMORY_ID),
+            FakeVerifiedForgetAuthorization(),
+            "forget-idempotency-empty",
+        )
+        self.assertIsNotNone(closure)
+        reconciled = self.authority.reconcile_forget(closure.operation_id)
+        self.assertEqual(reconciled.status, ForgetClosureStatus.SUPPRESSED)
+        repeated = self.authority.begin_forget(
+            ForgetTarget(MEMORY_ID),
+            FakeVerifiedForgetAuthorization(),
+            "forget-idempotency-empty",
+        )
+        self.assertEqual(repeated.status, ForgetClosureStatus.SUPPRESSED)
+        self.assertEqual(repeated, reconciled)
+
+    def test_conflicting_duplicate_endpoint_ack_is_rejected(self):
+        admission = self.authority.admit_read(
+            private_snapshot(), DeliveryRouteSet(ROUTES)
+        )
+        completion = self.egress.finish(
+            admission, f"read:{admission.admission_id}",
+            "assistant-response", 0, NOW
+        )
+        self.assertIsNotNone(completion)
+        self.assertTrue(self.authority.record_endpoint_ack(completion))
+        contradictory = replace(completion, completed_at=datetime(2026, 11, 13, 16, 1, tzinfo=timezone.utc))
+        self.assertFalse(self.authority.record_endpoint_ack(contradictory))
+
 
     def test_invalidation_cannot_overlap_pending_forget_for_same_admission(self):
         admission = self.authority.admit_read(
