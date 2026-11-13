@@ -436,5 +436,23 @@ class MemoryConsistencyModelTests(unittest.TestCase):
             )
 
 
+    def test_terminal_admission_requires_a_terminal_evidence_reference(self):
+        with self.assertRaises(ContractError):
+            ReadAdmission(
+                admission_id="admission-1",
+                snapshot_id="snapshot-1",
+                target=ReadTarget(
+                    memory_id=MEMORY_ID,
+                    version_id=VERSION_ID,
+                    owner_id="user-1",
+                    scope=MemoryScope(MemoryScopeKind.PRIVATE),
+                ),
+                generation=1,
+                route_ids=frozenset({"assistant-response"}),
+                status=ReadAdmissionStatus.COMPLETED,
+                admitted_at=NOW,
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
