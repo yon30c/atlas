@@ -43,19 +43,19 @@ class MemoryMetadataTests(unittest.TestCase):
                 parent_version_id=None,
             )
 
-    def test_project_metadata_requires_opaque_id_and_boolean_state(self):
-        self.assertTrue(ProjectMetadata("project-001", True).is_active)
+    def test_project_metadata_preserves_canonical_status(self):
+        self.assertEqual(ProjectMetadata("project-001", "active").status, "active")
         with self.assertRaises(ContractError):
-            ProjectMetadata("", True)
+            ProjectMetadata("", "active")
         with self.assertRaises(ContractError):
-            ProjectMetadata("project-001", "active")
+            ProjectMetadata("project-001", " ")
 
-    def test_environment_metadata_requires_opaque_id_and_boolean_state(self):
-        self.assertTrue(EnvironmentMetadata("development", True).is_active)
+    def test_environment_metadata_preserves_canonical_status(self):
+        self.assertEqual(EnvironmentMetadata("development", "active").status, "active")
         with self.assertRaises(ContractError):
-            EnvironmentMetadata(" ", True)
+            EnvironmentMetadata(" ", "active")
         with self.assertRaises(ContractError):
-            EnvironmentMetadata("development", 1)
+            EnvironmentMetadata("development", " ")
 
 
 if __name__ == "__main__":
