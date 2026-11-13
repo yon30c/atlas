@@ -771,7 +771,7 @@ La evaluación debe considerar:
 
 Cuando la operación identifica un recurso concreto, CAM MUST comprobar que el `resource_id` autorizado coincide con el recurso solicitado. Una autorización limitada únicamente al tipo de recurso no concede acceso implícito a todas sus instancias. Las operaciones colectivas podrán autorizarse por tipo solo cuando su semántica, alcance y permiso estén definidos expresamente. Si el identificador es obligatorio y falta, no coincide o no puede verificarse, la decisión será `deny`. CAM MUST comprobar también que el recurso pertenece al propietario y proyecto compatibles con el scope y la autorización evaluada.
 
-Para operaciones de memoria privada, CAM evaluará una regla explícita de acceso del propietario a su propia memoria. Esta regla não requiere un Grant de proyecto, pero no omite CAM ni Memory Gateway y no concede acceso a otros actores. Para memoria de proyecto, se requiere un `project_id` explícito y coincidente, además de la autorización CAM correspondiente.
+Para operaciones de memoria privada, CAM evaluará una regla explícita de acceso del propietario a su propia memoria. Esta regla no requiere un Grant de proyecto, pero no omite CAM ni Memory Gateway y no concede acceso a otros actores. Para memoria de proyecto, se requiere un `project_id` explícito y coincidente, además de la autorización CAM correspondiente.
 
 Resultados lógicos:
 
