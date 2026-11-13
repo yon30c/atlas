@@ -1,4 +1,5 @@
 """Puertos tipados para admisión y entrega protegida de memoria ME-03."""
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
@@ -34,6 +35,35 @@ class ProtectedContentHandle(Protocol):
 
     @property
     def classification(self) -> MemoryClassification: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ProtectedMemoryRead:
+    """Lease opaco de lectura; no contiene ni expone MemoryVersion."""
+
+    snapshot: AuthorizationSnapshot
+    admission: ReadAdmission
+    handle: ProtectedContentHandle
+    operation_id: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.snapshot, AuthorizationSnapshot):
+            raise ValueError("snapshot debe ser AuthorizationSnapshot")
+        if not isinstance(self.admission, ReadAdmission):
+            raise ValueError("admission debe ser ReadAdmission")
+        if self.admission.snapshot_id != self.snapshot.snapshot_id:
+            raise ValueError("admission no corresponde al snapshot")
+        if self.operation_id != f"read:{self.admission.admission_id}":
+            raise ValueError("operation_id no corresponde a la admisión")
+        target = self.admission.target
+        if (
+            getattr(self.handle, "admission_id", None) != self.admission.admission_id
+            or getattr(self.handle, "memory_id", None) != target.memory_id
+            or getattr(self.handle, "version_id", None) != target.version_id
+            or getattr(self.handle, "classification", None) is not self.snapshot.classification
+            or not getattr(self.handle, "handle_id", None)
+        ):
+            raise ValueError("handle no corresponde al objetivo/admisión autorizados")
 
 
 class ProtectedMemoryContentPort(Protocol):
