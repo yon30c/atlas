@@ -151,6 +151,18 @@ class StubAuthority:
         self.admit_calls.append((snapshot, routes))
         return self.admission
 
+    def begin_forget(self, *args, **kwargs):
+        raise AssertionError("Forget no se invoca en estas pruebas")
+
+    def reconcile_forget(self, operation_id):
+        return None
+
+    def begin_invalidation(self, invalidation):
+        raise AssertionError("invalidación no se invoca en estas pruebas")
+
+    def get_nonterminal_admissions(self, operation_id):
+        return None
+
     def commit_and_emit(self, admission, handle, endpoint_id, emission_id, sequence, now):
         self.emissions.append((admission, handle, endpoint_id, emission_id, sequence, now))
         return EgressReceipt(
@@ -193,32 +205,6 @@ class StubContent:
         if self.error:
             raise self.error
         return self.handle
-
-
-class StubEgress:
-    def __init__(self):
-        self.emissions = []
-        self.finishes = []
-
-    def commit_and_emit(self, admission, handle, endpoint_id, emission_id, sequence, now):
-        self.emissions.append((admission, handle, endpoint_id, emission_id, sequence, now))
-        return EgressReceipt(
-            admission.admission_id, endpoint_id, emission_id, sequence,
-            admission.generation, now
-        )
-
-    def finish(self, admission, operation_id, endpoint_id, final_sequence, now):
-        self.finishes.append((admission, operation_id, endpoint_id, final_sequence, now))
-        return EndpointCompletionReceipt(
-            operation_id, admission.admission_id, endpoint_id,
-            admission.generation, final_sequence, now
-        )
-
-    def fence(self, admission, operation_id, endpoint_id, new_generation, now):
-        raise AssertionError("no debe llamarse desde el flujo de lectura normal")
-
-    def reconcile(self, admission, endpoint_id):
-        raise AssertionError("no se usa en estas pruebas")
 
 
 def make_admission(snapshot, routes=ROUTES, snapshot_id=None):
@@ -461,7 +447,6 @@ class MemoryGatewayServiceTests(unittest.TestCase):
             self.authorization,
             self.content,
             self.authority,
-            self.egress,
             DeliveryRouteSet(ROUTES),
             SequenceClock([NOW + timedelta(seconds=1), expires]),
         )
