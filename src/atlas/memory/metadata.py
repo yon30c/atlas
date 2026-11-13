@@ -34,12 +34,11 @@ class ProjectMetadata:
     """Estado mínimo de un proyecto resuelto desde su fuente canónica."""
 
     project_id: ProjectId
-    is_active: bool
+    status: str
 
     def __post_init__(self) -> None:
         _opaque_id(self.project_id, "project_id")
-        if not isinstance(self.is_active, bool):
-            raise ContractError("is_active debe ser bool")
+        _opaque_id(self.status, "status")
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,9 +46,8 @@ class EnvironmentMetadata:
     """Identidad mínima de un entorno resuelto desde su fuente canónica."""
 
     environment_id: str
-    is_active: bool
+    status: str
 
     def __post_init__(self) -> None:
         _opaque_id(self.environment_id, "environment_id")
-        if not isinstance(self.is_active, bool):
-            raise ContractError("is_active debe ser bool")
+        _opaque_id(self.status, "status")
