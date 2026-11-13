@@ -5,6 +5,7 @@ from enum import Enum
 
 from atlas.core.context import OperationContext
 from atlas.core.errors import ContractError
+from atlas.memory.consistency import AuthorizationSnapshot
 
 
 def _validate_utc_datetime(value: datetime, field: str) -> None:
@@ -50,12 +51,36 @@ class AuthorizationRequest:
 
 
 @dataclass(frozen=True, slots=True)
-class AuthorizationResult:
+class AuthorizationEvaluation:
+    """Resultado interno del evaluador; no constituye autorización pública."""
+
     decision: AuthorizationDecision
+    matched_grant: "Grant | None" = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.decision, AuthorizationDecision):
             raise ContractError("decision debe ser AuthorizationDecision")
+        if self.decision is AuthorizationDecision.ALLOW and not isinstance(self.matched_grant, Grant):
+            raise ContractError("ALLOW interno requiere el Grant exacto que coincidió")
+        if self.decision is not AuthorizationDecision.ALLOW and self.matched_grant is not None:
+            raise ContractError("una evaluación no permitida no puede incluir Grant")
+
+
+@dataclass(frozen=True, slots=True)
+class AuthorizationResult:
+    """Resultado CAM público: ALLOW solo existe junto a snapshot confiable."""
+
+    decision: AuthorizationDecision
+    snapshot: AuthorizationSnapshot | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.decision, AuthorizationDecision):
+            raise ContractError("decision debe ser AuthorizationDecision")
+        if self.decision is AuthorizationDecision.ALLOW:
+            if not isinstance(self.snapshot, AuthorizationSnapshot):
+                raise ContractError("ALLOW requiere exactamente un AuthorizationSnapshot")
+        elif self.snapshot is not None:
+            raise ContractError("DENY/REQUIRE_APPROVAL no pueden incluir snapshot de lectura")
 
 
 @dataclass(frozen=True, slots=True)
