@@ -366,6 +366,8 @@ El contrato de cada operación deberá especificar expresamente si admite idempo
 
 Los campos anteriores expresan el contrato lógico. La representación física puede variar.
 
+Los campos `project_id` y `environment_id` son condicionales según la operación. Para operaciones sobre memoria privada, pueden ser `null` o estar ausentes cuando el scope explícito sea `PRIVATE`; su ausencia no convierte la operación en global ni elimina la obligación de identificar y validar el scope. Para memoria de proyecto, `project_id` es obligatorio, explícito y debe coincidir con el proyecto de la memoria. Los requisitos de entorno se determinan por la política de la operación correspondiente.
+
 ### Procedencia de ejecución de Skills
 
 Cuando una operación involucre una o varias Skills, el contexto de la operación MUST conservar la procedencia de cada Skill que participe directamente en su ejecución.
@@ -766,6 +768,10 @@ La evaluación debe considerar:
 12. Aprobación, si corresponde.
 13. Presupuesto y concurrencia.
 14. Estado y vigencia de las políticas.
+
+Cuando la operación identifica un recurso concreto, CAM MUST comprobar que el `resource_id` autorizado coincide con el recurso solicitado. Una autorización limitada únicamente al tipo de recurso no concede acceso implícito a todas sus instancias. Las operaciones colectivas podrán autorizarse por tipo solo cuando su semántica, alcance y permiso estén definidos expresamente. Si el identificador es obligatorio y falta, no coincide o no puede verificarse, la decisión será `deny`. CAM MUST comprobar también que el recurso pertenece al propietario y proyecto compatibles con el scope y la autorización evaluada.
+
+Para operaciones de memoria privada, CAM evaluará una regla explícita de acceso del propietario a su propia memoria. Esta regla não requiere un Grant de proyecto, pero no omite CAM ni Memory Gateway y no concede acceso a otros actores. Para memoria de proyecto, se requiere un `project_id` explícito y coincidente, además de la autorización CAM correspondiente.
 
 Resultados lógicos:
 
@@ -1379,8 +1385,12 @@ La memoria histórica no debe presentarse como evidencia del estado actual.
 
 **APROBADO:**
 
-- La memoria se separa por proyecto.
-- Un proyecto no puede acceder a la memoria privada de otro por defecto.
+- La memoria se separa por scope: memoria privada del propietario y memoria asociada a un proyecto.
+- El propietario puede acceder a su propia memoria privada mediante una regla explícita de autorización evaluada por CAM; no necesita un Grant de proyecto. Esta regla no constituye un bypass de CAM ni de Memory Gateway.
+- Ningún otro actor obtiene acceso a la memoria privada del propietario por defecto.
+- Un proyecto no puede acceder a la memoria privada de otro ni a la memoria privada del propietario por defecto.
+- El acceso a memoria de proyecto exige un `project_id` explícito, válido y coincidente con el scope de la memoria, y la autorización correspondiente de CAM.
+- Scopes ausentes, incompletos, ambiguos o inconsistentes producen denegación.
 - CAM controla acceso y alcance.
 - Un índice global puede localizar referencias, pero no revelar contenido privado.
 - Cognee es candidato para almacenamiento o recuperación semántica.
@@ -1412,6 +1422,9 @@ Una modificación posterior a una memoria aprobada crea una nueva versión y req
 - Las propuestas en estado `pending_review` no pueden utilizarse como conocimiento aprobado ni incorporarse al índice de memorias aprobadas.
 - La aprobación corresponde al propietario y no puede ser realizada automáticamente por Atlas Assistant, Memory Engine o una skill.
 - La aprobación de una memoria no concede permisos de acceso a otros proyectos ni modifica las reglas de clasificación.
+- Cada versión conserva una clasificación explícita. Una nueva versión no puede rebajar automáticamente la clasificación de la anterior; cualquier cambio de clasificación requiere revisión y decisión directa del propietario.
+- La versión aprobada anterior permanece vigente mientras una nueva versión está pendiente.
+- La aprobación de una nueva versión, la transición de la anterior a `superseded` y la actualización de la referencia a la versión vigente deben realizarse atómicamente. Una operación fallida no puede dejar dos versiones vigentes ni una referencia inconsistente.
 
 ### 9.4 Olvido y eliminación
 
@@ -1437,24 +1450,33 @@ Atlas podrá analizar, proponer y solicitar estas decisiones, pero no podrá apr
 - La restauración o reindexación no puede reintroducir una memoria cuyo olvido haya sido aprobado y ejecutado.
 - La evidencia de eliminación debe permitir verificar la operación sin conservar innecesariamente el contenido olvidado.
 
-**PROPUESTA TÉCNICA:**
+**APROBADO:**
 
-- Mantener un registro mínimo de supresión que permita reconocer memorias olvidadas durante reindexaciones, importaciones y restauraciones, sin conservar su contenido original.
+- Mantener un registro mínimo de supresión que permita reconocer memorias olvidadas durante reindexaciones, importaciones y restauraciones, sin conservar su contenido original ni hashes de contenido susceptibles a ataques de diccionario.
+- La supresión lógica debe impedir inmediatamente la consulta, recuperación o exposición, aunque una copia de respaldo inmutable permanezca retenida temporalmente.
+- La eliminación no se considera completada mientras existan destinos aplicables sin verificar o copias físicas retenidas dentro del plazo de retención.
+- Si un almacén, índice, réplica o respaldo no responde, o la eliminación es parcial, la memoria permanece bloqueada para recuperación; el proceso queda pendiente de reconciliación y no se comunica éxito.
+- Restauraciones, reindexaciones e importaciones deben aplicar el registro de supresión antes de exponer datos.
+- El estado de supresión de la memoria lógica se distingue del ciclo de vida de sus versiones y no introduce estados adicionales a los definidos en §9.3.
+
+**PARÁMETROS TÉCNICOS PENDIENTES:**
+
+- Plazo de retención de respaldos inmutables y propagación máxima.
+- Inventario de almacenes, índices, réplicas, cachés y sistemas derivados.
+- Criterios verificables y mecanismo de reconciliación para declarar completada la supresión.
 
 ### 9.5 Propuesta técnica de registro
 
-Un registro puede contener:
+La identidad lógica de memoria y sus versiones se representan por separado:
 
-- ID y versión.
-- Scope usuario/proyecto.
-- Contenido.
-- Procedencia.
-- Actor y origen.
-- Clasificación.
-- Estado.
-- Timestamps.
-- Referencia a versión anterior.
-- Revisión y decisión.
+- `Memory`: identificador lógico, propietario canónico, scope explícito, referencia a la versión aprobada vigente y timestamps de creación/actualización.
+- `MemoryVersion`: identificador de versión, memoria asociada, número monotónico, contenido inmutable, clasificación explícita, estado, procedencia, referencia a versión antecesora y metadatos temporales/de revisión.
+- `MemoryScope`: tipo `PRIVATE` o `PROJECT`; `project_id` es obligatorio solo para `PROJECT`. El propietario se mantiene de forma canónica en `Memory.owner_id` y no se duplica en el scope.
+- `MemoryProposal`: identifica si propone crear una memoria lógica o una nueva versión de una memoria existente y mantiene referencias a la propuesta, memoria y versión resultante.
+- La procedencia es obligatoria por versión. Incluye actor/componente de origen, contexto y proyecto cuando correspondan, fecha, propuesta originaria, referencias de fuente/evidencia y versión antecesora.
+- Las referencias a fuentes y evidencias no conceden acceso; su lectura requiere autorización y scope propios.
+- Una fuente que desaparece conserva su referencia histórica y se marca como no disponible. Esto no elimina automáticamente la memoria ni prueba que la fuente siga verificándola.
+- La aprobación o rechazo registra identidad del propietario, propuesta y versión afectadas, decisión, fecha/hora, contexto y evidencia verificable de inicio directo por el propietario.
 
 **APROBADO:**
 
@@ -1465,9 +1487,12 @@ Un registro puede contener:
 
 **PARÁMETROS TÉCNICOS PENDIENTES:**
 
-- Definición formal de los scopes y sus identificadores.
+- Formato definitivo de los identificadores de scope y política de transferencia/reclasificación entre scopes.
 - Política de retención de versiones históricas.
-- Representación técnica del registro de supresión.
+- Representación técnica del registro de supresión, su reconciliación y protección contra reintroducción.
+- Mecanismo técnico verificable de evidencia de decisión directa del propietario.
+- Catálogo y reglas de clasificación específicas de Memory Engine.
+- Inventario de almacenes/índices/réplicas/cachés y criterios/plazos de verificación de supresión.
 
 ---
 
@@ -2503,6 +2528,12 @@ El aislamiento entre proyectos, el control de acceso mediante CAM y el proceso d
 - Importación histórica.
 - Verificación de borrado en respaldos e índices.
 - Permisos específicos para proponer cada clase de memoria.
+- Catálogo definitivo de clasificación de memoria y reglas de propagación de clasificación entre versiones.
+- Formato técnico de los scopes e identificadores.
+- Evidencia técnica de aprobación directa del propietario.
+- Plazos de retención y propagación de supresión en respaldos, réplicas e índices.
+- Implementación y validación de autorización granular por recurso en CAM.
+- Estrategia de reconciliación de supresión durante restauraciones e importaciones.
 
 ### 17.4 Eventos y auditoría
 
@@ -2584,6 +2615,7 @@ No se debe afirmar que un componente está operativo sin evidencia actual.
 8. El contrato aprobado no implica autorización de implementación.
 9. La implementación se planifica por fases y requiere autorización independiente.
 10. Ninguna fase puede modificar Broker, Registry v2, producción o infraestructura protegida sin autorización explícita.
+11. La armonización documental de Memory Engine debe reflejar las decisiones confirmadas por el propietario, sin convertir parámetros técnicos pendientes en decisiones aprobadas ni declarar implementadas capacidades aún no verificadas.
 
 ---
 
