@@ -51,6 +51,7 @@ class AuthorizationEvaluator:
                 grant.project_id == context.project_id,
                 grant.environment == context.environment,
                 grant.resource_type == request.resource_type,
+                request.resource_id in grant.resource_ids,
                 request.action in grant.actions,
                 grant.issued_at <= now < grant.expires_at,
                 grant.revoked_at is None or grant.revoked_at > now,

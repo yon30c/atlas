@@ -7,6 +7,7 @@ from atlas.authorization.models import (
     Grant,
     GrantRenewalRequest,
     RenewalStatus,
+    GrantResourceScope,
 )
 from atlas.authorization.renewal_service import GrantRenewalService
 from atlas.core.context import OperationContext
@@ -57,7 +58,7 @@ class GrantRenewalServiceTests(unittest.TestCase):
             subject_identity_id="agent-001",
             project_id="atlas",
             environment="development",
-            resource_type="files",
+            resource_scope=GrantResourceScope("files", frozenset({"file-001"})),
             actions=frozenset({"read"}),
             issued_at=NOW - timedelta(days=1),
             expires_at=NOW + timedelta(days=2),

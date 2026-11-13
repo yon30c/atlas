@@ -59,15 +59,36 @@ class AuthorizationResult:
 
 
 @dataclass(frozen=True, slots=True)
+class GrantResourceScope:
+    """Conjunto explícito e inmutable de IDs para un tipo de recurso."""
+
+    resource_type: str
+    resource_ids: frozenset[str]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.resource_type, str) or not self.resource_type.strip():
+            raise ContractError("resource_type debe ser una cadena no vacía")
+        if not isinstance(self.resource_ids, frozenset):
+            raise ContractError("resource_ids debe ser un frozenset")
+        if not self.resource_ids:
+            raise ContractError("resource_ids no puede estar vacío")
+        for resource_id in self.resource_ids:
+            if not isinstance(resource_id, str) or not resource_id.strip():
+                raise ContractError("Cada resource_id debe ser una cadena no vacía")
+            if "*" in resource_id or "?" in resource_id:
+                raise ContractError("No se permiten wildcards ni patrones de IDs")
+
+
+@dataclass(frozen=True, slots=True)
 class Grant:
-    """Permiso explícito sobre un tipo de recurso."""
+    """Permiso explícito sobre IDs concretos de un tipo de recurso."""
 
     grant_id: str
     owner_user_id: str
     subject_identity_id: str
     project_id: str
     environment: str
-    resource_type: str
+    resource_scope: GrantResourceScope
     actions: frozenset[str]
     issued_at: datetime
     expires_at: datetime
@@ -80,7 +101,6 @@ class Grant:
             "subject_identity_id",
             "project_id",
             "environment",
-            "resource_type",
         )
         for field in required_fields:
             value = getattr(self, field)
@@ -89,6 +109,8 @@ class Grant:
                     f"{field} debe ser una cadena no vacía"
                 )
 
+        if not isinstance(self.resource_scope, GrantResourceScope):
+            raise ContractError("resource_scope debe ser GrantResourceScope")
         if not isinstance(self.actions, frozenset):
             raise ContractError("actions debe ser un frozenset")
         if not self.actions:
@@ -109,6 +131,14 @@ class Grant:
             )
         if self.revoked_at is not None:
             _validate_utc_datetime(self.revoked_at, "revoked_at")
+
+    @property
+    def resource_type(self) -> str:
+        return self.resource_scope.resource_type
+
+    @property
+    def resource_ids(self) -> frozenset[str]:
+        return self.resource_scope.resource_ids
 
 
 class RenewalStatus(str, Enum):

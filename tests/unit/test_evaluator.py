@@ -7,6 +7,7 @@ from atlas.authorization.models import (
     AuthorizationDecision,
     AuthorizationRequest,
     Grant,
+    GrantResourceScope,
 )
 from atlas.core.context import OperationContext
 from atlas.core.errors import ContractError
@@ -49,7 +50,7 @@ class AuthorizationEvaluatorTests(unittest.TestCase):
             subject_identity_id="agent-001",
             project_id="atlas",
             environment="development",
-            resource_type="files",
+            resource_scope=GrantResourceScope("files", frozenset({"file-001"})),
             actions=frozenset({"read"}),
             issued_at=NOW - timedelta(days=1),
             expires_at=NOW + timedelta(days=1),
@@ -63,10 +64,18 @@ class AuthorizationEvaluatorTests(unittest.TestCase):
             now,
         )
 
-    def test_matching_grant_allows_resource_type_not_specific_id(self):
+    def test_matching_grant_allows_only_the_exact_resource_id(self):
+        self.assertIs(
+            self.evaluate().decision,
+            AuthorizationDecision.ALLOW,
+        )
+
+    def test_matching_grant_denies_an_unlisted_resource_id(self):
         request = replace(self.request, resource_id="another-file")
-        result = self.evaluate(request=request)
-        self.assertIs(result.decision, AuthorizationDecision.ALLOW)
+        self.assertIs(
+            self.evaluate(request=request).decision,
+            AuthorizationDecision.DENY,
+        )
 
     def test_missing_or_mismatched_grant_is_denied(self):
         self.assertIs(
@@ -79,7 +88,7 @@ class AuthorizationEvaluatorTests(unittest.TestCase):
             {"owner_user_id": "other-user"},
             {"project_id": "other-project"},
             {"environment": "production"},
-            {"resource_type": "documents"},
+            {"resource_scope": GrantResourceScope("documents", frozenset({"file-001"}))},
             {"actions": frozenset({"write"})},
         )
         for changes in mismatches:

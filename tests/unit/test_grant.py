@@ -2,7 +2,7 @@ from dataclasses import FrozenInstanceError, replace
 from datetime import datetime, timedelta, timezone
 import unittest
 
-from atlas.authorization.models import Grant
+from atlas.authorization.models import Grant, GrantResourceScope
 from atlas.core.errors import ContractError
 
 
@@ -17,7 +17,7 @@ class GrantTests(unittest.TestCase):
             subject_identity_id="agent-001",
             project_id="atlas",
             environment="development",
-            resource_type="files",
+            resource_scope=GrantResourceScope("files", frozenset({"file-001"})),
             actions=frozenset({"read", "write"}),
             issued_at=self.issued_at,
             expires_at=self.issued_at + timedelta(days=7),
@@ -30,6 +30,12 @@ class GrantTests(unittest.TestCase):
             frozenset({"read", "write"}),
         )
         self.assertIsNone(self.grant.revoked_at)
+        self.assertEqual(self.grant.resource_ids, frozenset({"file-001"}))
+
+    def test_resource_scope_rejects_empty_mutable_and_pattern_ids(self):
+        for invalid in (frozenset(), {"file-001"}, frozenset({"*"}), frozenset({"file-?"})):
+            with self.subTest(invalid=invalid), self.assertRaises(ContractError):
+                GrantResourceScope("files", invalid)
 
     def test_grant_is_immutable(self):
         with self.assertRaises(FrozenInstanceError):
@@ -42,7 +48,6 @@ class GrantTests(unittest.TestCase):
             "subject_identity_id",
             "project_id",
             "environment",
-            "resource_type",
         )
         for field in fields:
             with self.subTest(field=field):

@@ -8,6 +8,7 @@ from atlas.authorization.models import (
     Grant,
     GrantRenewalRequest,
     RenewalStatus,
+    GrantResourceScope,
 )
 from atlas.core.errors import ConcurrencyError
 from tests.fakes.authorization_unit_of_work import (
@@ -29,7 +30,7 @@ class AuthorizationUnitOfWorkTests(unittest.TestCase):
             subject_identity_id="agent-001",
             project_id="atlas",
             environment="development",
-            resource_type="files",
+            resource_scope=GrantResourceScope("files", frozenset({"file-001"})),
             actions=frozenset({"read"}),
             issued_at=NOW - timedelta(days=1),
             expires_at=NOW + timedelta(days=2),
