@@ -470,6 +470,7 @@ Esta integración define el camino protegido, pero no acredita la garantía comp
 - La autoridad concreta debe crear atómicamente la operación `read:{admission_id}` junto con la admisión y comprobar supresión, revisiones, generación y cobertura.
 - El egress concreto debe ordenar cada compromiso respecto de invalidaciones/Forget y validar revisiones y expiración de Grant por unidad.
 - `begin_forget` y `reconcile_forget` están definidos en el puerto y cubiertos por un fake de proceso único; no existe autoridad durable ni emisor/verificador confiable de OwnerDecisionProof. El inventario verificable de destinos de persistencia/derivados sigue pendiente.
+- `MemoryGatewayService` implementa actualmente `get_version`, `emit_version`, `finish_version` y `reconcile_version`. Los métodos `list_visible` y `submit_proposal` declarados en el Protocol `MemoryGateway`, así como las demás operaciones de ciclo de vida, siguen sin implementación en este servicio; no debe tratarse como implementación completa del Gateway.
 - No hay adaptadores reales, persistencia durable, transporte ni recuperación distribuida.
 
 Los tests escritos para esta integración incluyen 21 casos unitarios del Gateway, 9 casos CAM/Gateway y 3 casos de seguridad de frontera. Usan fakes donde corresponde. No se han ejecutado en esta etapa y no prueban comportamiento de runtime. Esta implementación no habilita todavía lectura protegida en producción.
