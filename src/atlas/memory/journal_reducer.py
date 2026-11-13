@@ -72,6 +72,13 @@ class InvalidationProjection:
 
 
 @dataclass(frozen=True, slots=True)
+class IdempotencyProjection:
+    idempotency_key: str
+    operation_id: str
+    record_id: str
+
+
+@dataclass(frozen=True, slots=True)
 class ConsistencyProjection:
     domain_id: str
     authority_epoch: int
@@ -79,7 +86,8 @@ class ConsistencyProjection:
     admissions: tuple[AdmissionProjection, ...]
     forget_closures: tuple[ForgetProjection, ...]
     invalidations: tuple[InvalidationProjection, ...]
-    receipt_ids: frozenset[str]
+    idempotency_records: tuple[IdempotencyProjection, ...]
+    receipt_ids: frozenset[str>
 
 
 class ConsistencyJournalReducer:
@@ -107,6 +115,10 @@ class ConsistencyJournalReducer:
     def reduce(self, recovery: ConsistencyRecoveryState) -> ConsistencyProjection:
         if not isinstance(recovery, ConsistencyRecoveryState):
             raise ContractError("recovery debe ser ConsistencyRecoveryState")
+        if recovery.checkpoint is not None:
+            raise ContractError(
+                "checkpoint sin proyección base validada: recuperación fail-closed"
+            )
 
         admissions = {}
         forgets = {}
@@ -115,6 +127,7 @@ class ConsistencyJournalReducer:
         forgotten_memories = set()
         receipts = set()
         emission_ids = set()
+        idempotency_records = {}
         latest_invalidation = {}
 
         def admission_for(transition: ConsistencyTransition):
@@ -137,6 +150,14 @@ class ConsistencyJournalReducer:
         for entry in recovery.entries:
             transition = entry.transition
             kind = transition.record_kind
+            if transition.idempotency_key is not None:
+                self._require(
+                    transition.idempotency_key not in idempotency_records,
+                    "idempotency_key duplicada en journal",
+                )
+                idempotency_records[transition.idempotency_key] = (
+                    transition.operation_id, transition.record_id
+                )
 
             if kind is ConsistencyRecordKind.READ_ADMITTED:
                 admission_id = transition.admission_id
@@ -384,6 +405,10 @@ class ConsistencyJournalReducer:
                     not prior_generations or transition.generation > max(prior_generations),
                     "FORGET_CLOSED no avanza la generación",
                 )
+                self._require(
+                    transition.operation_id not in forgets,
+                    "operation_id de Forget duplicado",
+                )
                 forgotten_memories.add(memory_id)
                 forgets[transition.operation_id] = {
                     "memory_id": memory_id,
@@ -419,6 +444,10 @@ class ConsistencyJournalReducer:
                 continue
 
             if kind is ConsistencyRecordKind.INVALIDATION_CLOSED:
+                self._require(
+                    transition.operation_id not in invalidations,
+                    "operation_id de invalidación duplicado",
+                )
                 key = (transition.authority_kind, transition.authority_id)
                 self._require(
                     not (
@@ -581,5 +610,9 @@ class ConsistencyJournalReducer:
             admissions=admission_projection,
             forget_closures=forget_projection,
             invalidations=invalidation_projection,
+            idempotency_records=tuple(
+                IdempotencyProjection(key, value[0], value[1])
+                for key, value in sorted(idempotency_records.items())
+            ),
             receipt_ids=frozenset(receipts),
         )
