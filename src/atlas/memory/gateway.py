@@ -9,8 +9,10 @@ from atlas.authorization.memory_service import MemoryAuthorizationService
 from atlas.authorization.models import AuthorizationDecision, AuthorizationResult
 from atlas.core.context import OperationContext
 from atlas.memory.consistency import (
+    AuthorizationSnapshot,
     DeliveryRouteSet,
     EgressReceipt,
+    ReadAdmission,
     ReadAdmissionStatus,
     ReconciliationResult,
 )
@@ -20,15 +22,16 @@ from atlas.ports.protected_memory_read import (
     ProtectedEgressPort,
     ProtectedMemoryContentPort,
     ProtectedMemoryRead,
+    ProtectedContentHandle,
     ReadConsistencyAuthorityPort,
 )
 
 
 @dataclass(frozen=True, slots=True)
 class _ProtectedReadSession:
-    snapshot: object
-    admission: object
-    handle: object
+    snapshot: AuthorizationSnapshot
+    admission: ReadAdmission
+    handle: ProtectedContentHandle
     operation_id: str
 
 
@@ -69,7 +72,9 @@ class MemoryGatewayService:
         )
 
     @staticmethod
-    def _valid_handle(handle: object, admission: object, snapshot: object) -> bool:
+    def _valid_handle(
+        handle: object, admission: ReadAdmission, snapshot: AuthorizationSnapshot
+    ) -> bool:
         if handle is None:
             return False
         classification = getattr(handle, "classification", None)
