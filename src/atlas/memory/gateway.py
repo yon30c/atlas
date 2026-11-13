@@ -1,80 +1,207 @@
-"""Frontera de lectura autorizada para versiones de memoria."""
+"""Frontera de lectura autorizada y entrega protegida de memoria."""
 
 from atlas.authorization.memory_service import MemoryAuthorizationService
 from atlas.authorization.models import AuthorizationDecision, AuthorizationResult
 from atlas.core.context import OperationContext
-from atlas.memory.models import (
-    MemoryClassification,
-    MemoryId,
-    MemoryVersion,
-    MemoryVersionId,
-    MemoryVersionStatus,
+from atlas.memory.consistency import (
+    DeliveryRouteSet,
+    EgressReceipt,
+    ReconciliationResult,
 )
+from atlas.memory.models import MemoryId, MemoryVersionId
 from atlas.ports.clock import Clock
-from atlas.ports.memory_content import MemoryVersionContentPort
+from atlas.ports.protected_memory_read import (
+    ProtectedEgressPort,
+    ProtectedMemoryContentPort,
+    ProtectedMemoryRead,
+    ReadConsistencyAuthorityPort,
+)
 
 
 class MemoryGatewayService:
-    """Aplica CAM antes de recuperar contenido de una versión.
+    """Coordina CAM, admisión, lectura condicional y egress protegido.
 
-    Esta implementación cubre la lectura versionada. Las operaciones de
-    enumeración y propuestas permanecen en el puerto MemoryGateway y se
-    implementarán en sus fases correspondientes.
+    El Gateway nunca devuelve MemoryVersion ni contenido crudo. Devuelve un
+    lease opaco que solo puede utilizarse mediante los métodos de emisión y
+    finalización de esta frontera.
     """
 
     def __init__(
         self,
         authorization: MemoryAuthorizationService,
-        content_port: MemoryVersionContentPort,
+        content_port: ProtectedMemoryContentPort,
+        consistency_authority: ReadConsistencyAuthorityPort,
+        egress: ProtectedEgressPort,
+        routes: DeliveryRouteSet,
         clock: Clock,
     ) -> None:
         self._authorization = authorization
         self._content = content_port
+        self._authority = consistency_authority
+        self._egress = egress
+        self._routes = routes
         self._clock = clock
+
+    @staticmethod
+    def _valid_handle(handle: object, admission: object, snapshot: object) -> bool:
+        return (
+            handle is not None
+            and getattr(handle, "admission_id", None)
+            == getattr(admission, "admission_id", None)
+            and getattr(handle, "memory_id", None)
+            == getattr(admission.target, "memory_id", None)
+            and getattr(handle, "version_id", None)
+            == getattr(admission.target, "version_id", None)
+            and getattr(handle, "classification", None)
+            is getattr(snapshot, "classification", None)
+            and getattr(handle, "classification", None).value != "restricted"
+            and isinstance(getattr(handle, "handle_id", None), str)
+            and bool(handle.handle_id.strip())
+        )
+
+    def _finish_empty_admission(self, admission, operation_id: str) -> None:
+        """Cierra una admisión que no llegó a abrir ninguna entrega."""
+        try:
+            now = self._clock.now()
+            for endpoint_id in admission.route_ids:
+                receipt = self._egress.finish(
+                    admission, operation_id, endpoint_id, 0, now
+                )
+                if receipt is None or not self._authority.record_endpoint_ack(receipt):
+                    return
+            self._authority.reconcile(operation_id)
+        except Exception:
+            # La admisión queda pendiente y recuperable; nunca se presume terminal.
+            return
 
     def get_version(
         self,
         context: OperationContext,
         memory_id: MemoryId,
         version_id: MemoryVersionId,
-    ) -> MemoryVersion | None:
-        """Devuelve contenido solo tras ALLOW para memoria y versión exactas.
-
-        None representa tanto denegación como ausencia/no disponibilidad para
-        evitar que esta frontera revele la existencia de recursos protegidos.
-        """
+    ) -> ProtectedMemoryRead | None:
+        """Abre una lectura protegida sin devolver el contenido al llamador."""
         if (
             not isinstance(context, OperationContext)
             or not isinstance(memory_id, str)
             or not memory_id.strip()
             or not isinstance(version_id, str)
             or not version_id.strip()
+            or not isinstance(self._routes, DeliveryRouteSet)
         ):
             return None
 
         try:
             now = self._clock.now()
-            decision = self._authorization.authorize_read(
-                context,
-                memory_id,
-                now,
-                version_id,
+            result = self._authorization.authorize_read(
+                context, memory_id, now, version_id
             )
             if (
-                not isinstance(decision, AuthorizationResult)
-                or decision.decision is not AuthorizationDecision.ALLOW
+                not isinstance(result, AuthorizationResult)
+                or result.decision is not AuthorizationDecision.ALLOW
             ):
                 return None
 
-            version = self._content.get_version_content(memory_id, version_id)
-            if not isinstance(version, MemoryVersion):
+            snapshot = result.snapshot
+            if (
+                snapshot.memory_id != memory_id
+                or snapshot.version_id != version_id
+                or snapshot.action != "memory.read"
+            ):
                 return None
-            if version.memory_id != memory_id or version.version_id != version_id:
+
+            admission = self._authority.admit_read(snapshot, self._routes)
+            if admission is None:
                 return None
-            if version.status is not MemoryVersionStatus.APPROVED:
+            operation_id = f"read:{admission.admission_id}"
+
+            if (
+                admission.snapshot_id != snapshot.snapshot_id
+                or admission.target.memory_id != memory_id
+                or admission.target.version_id != version_id
+                or admission.target.owner_id != snapshot.owner_id
+                or admission.target.scope != snapshot.scope
+                or admission.route_ids != self._routes.route_ids
+                or admission.status.value != "admitted"
+            ):
+                self._finish_empty_admission(admission, operation_id)
                 return None
-            if version.classification is MemoryClassification.RESTRICTED:
+
+            handle = self._content.read_version_if_admitted(snapshot, admission)
+            if not self._valid_handle(handle, admission, snapshot):
+                self._finish_empty_admission(admission, operation_id)
                 return None
-            return version
+
+            return ProtectedMemoryRead(
+                snapshot=snapshot,
+                admission=admission,
+                handle=handle,
+                operation_id=operation_id,
+            )
+        except Exception:
+            return None
+
+    def emit_version(
+        self,
+        read: ProtectedMemoryRead,
+        endpoint_id: str,
+        emission_id: str,
+        sequence: int,
+    ) -> EgressReceipt | None:
+        """Compromete una unidad en el último punto controlado de entrega."""
+        if not isinstance(read, ProtectedMemoryRead):
+            return None
+        if endpoint_id not in read.admission.route_ids:
+            return None
+        try:
+            now = self._clock.now()
+            expires_at = read.snapshot.grant_expires_at
+            if expires_at is not None and now >= expires_at:
+                return None
+            return self._egress.commit_and_emit(
+                read.admission,
+                read.handle,
+                endpoint_id,
+                emission_id,
+                sequence,
+                now,
+            )
+        except Exception:
+            return None
+
+    def finish_version(
+        self,
+        read: ProtectedMemoryRead,
+        endpoint_id: str,
+        final_sequence: int,
+    ) -> bool:
+        """Registra la finalización verificable de un endpoint de entrega."""
+        if not isinstance(read, ProtectedMemoryRead):
+            return False
+        if endpoint_id not in read.admission.route_ids:
+            return False
+        try:
+            now = self._clock.now()
+            receipt = self._egress.finish(
+                read.admission,
+                read.operation_id,
+                endpoint_id,
+                final_sequence,
+                now,
+            )
+            if receipt is None:
+                return False
+            return self._authority.record_endpoint_ack(receipt)
+        except Exception:
+            return False
+
+    def reconcile_version(
+        self, read: ProtectedMemoryRead
+    ) -> ReconciliationResult | None:
+        """Revisa si todos los endpoints finalizaron; no fuerza terminalidad."""
+        if not isinstance(read, ProtectedMemoryRead):
+            return None
+        try:
+            return self._authority.reconcile(read.operation_id)
         except Exception:
             return None
