@@ -58,6 +58,8 @@ def resolve_authenticated_user_binding(
         return None
     if not binding.is_active or binding.actor_identity_id != context.actor.identity_id:
         return None
+    if binding.revision != context.actor.revision:
+        return None
     return binding
 
 
