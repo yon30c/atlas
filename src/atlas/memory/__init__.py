@@ -70,6 +70,16 @@ from atlas.memory.journal_reducer import (
     InvalidationProjection,
     IdempotencyProjection,
 )
+from atlas.memory.receipt_verification import (
+    ReceiptVerificationResult,
+    ReceiptVerificationStatus,
+    TerminalReceiptKind,
+    TerminalReceiptVerificationRequest,
+    VerifiedAdmissionTerminalEvidence,
+    VerifiedTerminalReceipt,
+    match_verified_receipt,
+)
+from atlas.memory.terminal_recovery import verify_terminal_admission_projection
 from atlas.memory.validation import (
     validate_memory_aggregate,
     validate_proposal_links,
@@ -77,6 +87,14 @@ from atlas.memory.validation import (
 )
 
 __all__ = [
+    "ReceiptVerificationResult",
+    "ReceiptVerificationStatus",
+    "TerminalReceiptKind",
+    "TerminalReceiptVerificationRequest",
+    "VerifiedAdmissionTerminalEvidence",
+    "VerifiedTerminalReceipt",
+    "match_verified_receipt",
+    "verify_terminal_admission_projection",
     "ForgetClosure",
     "ForgetClosureStatus",
     "ForgetRecoverySnapshot",
