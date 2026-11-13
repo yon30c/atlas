@@ -429,7 +429,7 @@ Cada etapa conserva las garantías de los contratos previos. La implementación 
 
 **Regla final:** Atlas Assistant debe ser suficientemente inteligente para comprender, planificar y coordinar el trabajo del propietario, pero nunca debe convertirse en una autoridad independiente sobre la seguridad, los permisos, la memoria o los recursos de Atlas.
 
-## 15. Armonización transversal con CT-08
+## 18. Armonización transversal con CT-08
 
 Este contrato se interpreta conjuntamente con **CT-08 — Matriz de consistencia entre CT-01 y CT-07** (`docs/contracts/consistency-matrix-ct-08.md`). CT-08 complementa las fronteras de integración sin sustituir las responsabilidades específicas de CT-06 ni ampliar la autoridad de Assistant.
 
