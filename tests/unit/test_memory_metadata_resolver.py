@@ -90,11 +90,12 @@ class MemoryMetadataResolverTests(unittest.TestCase):
             status=MemoryVersionStatus.APPROVED,
             classification=MemoryClassification.CONFIDENTIAL,
             parent_version_id=None,
+            revision=1,
         )
         self.memory_port = StubMemoryPort(self.memory, self.version)
-        self.project_port = StubProjectPort(ProjectMetadata("project-1", "active"))
+        self.project_port = StubProjectPort(ProjectMetadata("project-1", "active", 1))
         self.environment_port = StubEnvironmentPort(
-            EnvironmentMetadata("environment-1", "active")
+            EnvironmentMetadata("environment-1", "active", 1)
         )
         self.resolver = MemoryMetadataResolver(
             self.memory_port, self.project_port, self.environment_port
@@ -137,14 +138,14 @@ class MemoryMetadataResolverTests(unittest.TestCase):
 
     def test_resolves_project_and_rejects_mismatched_id(self):
         self.assertEqual(self.resolver.resolve_project("project-1").status, "active")
-        self.project_port.result = ProjectMetadata("other-project", "active")
+        self.project_port.result = ProjectMetadata("other-project", "active", 1)
         self.assertIsNone(self.resolver.resolve_project("project-1"))
 
     def test_resolves_environment_and_rejects_mismatched_id(self):
         self.assertEqual(
             self.resolver.resolve_environment("environment-1").status, "active"
         )
-        self.environment_port.result = EnvironmentMetadata("other", "active")
+        self.environment_port.result = EnvironmentMetadata("other", "active", 1)
         self.assertIsNone(self.resolver.resolve_environment("environment-1"))
 
     def test_invalid_ids_fail_closed_without_port_calls(self):
