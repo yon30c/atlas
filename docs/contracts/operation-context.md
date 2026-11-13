@@ -263,3 +263,10 @@ Estas decisiones técnicas no reabren ni modifican las políticas arquitectónic
 - Ningún componente puede utilizar el contexto para atribuirse permisos que no hayan sido concedidos.
 
 Cualquier implementación posterior debe respetar estas reglas y no puede introducir capacidades incompatibles con ellas sin una revisión explícita del contrato arquitectónico.
+
+## 13. Referencias a CT-08
+
+CT-08 complementa este contrato como matriz transversal; las resoluciones siguientes precisan su aplicación sin duplicar sus reglas:
+
+- [CT-08 R08-04](consistency-matrix-ct-08.md#r08-04-aplicacion-proporcionada-de-rlm-a-observaciones-de-solo-lectura): Aplicación de RLM a lecturas de solo lectura según la política del recurso.
+- [CT-08 R08-05](consistency-matrix-ct-08.md#r08-05-separacion-de-actor-origen-fuente-y-contexto): Distinción explícita entre actor, usuario contextual, origen, fuente y contexto de operación.
