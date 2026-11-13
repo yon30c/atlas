@@ -210,6 +210,35 @@ def make_admission(snapshot, routes=ROUTES, snapshot_id=None):
 
 
 class MemoryGatewayServiceTests(unittest.TestCase):
+
+    def test_snapshot_for_another_actor_is_rejected_before_admission(self):
+        revisions = replace(
+            self.snapshot.revisions,
+            identity_revision=AuthorityRevision(AuthorityKind.IDENTITY, "other-identity", 1),
+        )
+        other_actor_snapshot = replace(
+            self.snapshot, actor_identity_id="other-identity", revisions=revisions
+        )
+        self.authorization.result = AuthorizationResult(
+            AuthorizationDecision.ALLOW, other_actor_snapshot
+        )
+        self.assertIsNone(
+            self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
+        )
+        self.assertEqual(self.authority.admit_calls, [])
+        self.assertEqual(self.content.calls, [])
+
+    def test_snapshot_for_another_request_is_rejected_before_admission(self):
+        other_request_snapshot = replace(self.snapshot, request_id="other-request")
+        self.authorization.result = AuthorizationResult(
+            AuthorizationDecision.ALLOW, other_request_snapshot
+        )
+        self.assertIsNone(
+            self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
+        )
+        self.assertEqual(self.authority.admit_calls, [])
+        self.assertEqual(self.content.calls, [])
+
     def setUp(self):
         self.snapshot = make_snapshot()
         self.admission = make_admission(self.snapshot)
