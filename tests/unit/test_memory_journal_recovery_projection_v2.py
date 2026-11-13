@@ -15,8 +15,11 @@ from atlas.memory.journal import (
     ConsistencyTransition,
     JournalEntry,
 )
-from atlas.memory.journal_reducer import ConsistencyJournalReducer
-from atlas.memory.models import MemoryScopeKind
+from atlas.memory.journal_reducer import (
+    ConsistencyJournalReducer,
+    reconstruct_read_target,
+)
+from atlas.memory.models import MemoryScope, MemoryScopeKind
 
 NOW = datetime(2026, 11, 13, 12, 0, tzinfo=timezone.utc)
 DOMAIN = "schema-v2-reducer-domain"
@@ -123,6 +126,46 @@ class JournalRecoveryProjectionV2Tests(unittest.TestCase):
         self.assertIsNone(item.owner_id)
         self.assertIsNone(item.scope_kind)
         self.assertIsNone(item.scope_project_id)
+
+    def test_v2_private_projection_reconstructs_exact_read_target(self):
+        projection = ConsistencyJournalReducer().reduce(
+            recovery((admitted_v2(MemoryScopeKind.PRIVATE),))
+        )
+        target = reconstruct_read_target(projection.admissions[0])
+        self.assertIsNotNone(target)
+        self.assertEqual(target.memory_id, MEMORY)
+        self.assertEqual(target.version_id, VERSION)
+        self.assertEqual(target.owner_id, "owner-1")
+        self.assertEqual(target.scope, MemoryScope(MemoryScopeKind.PRIVATE))
+
+    def test_v2_project_projection_reconstructs_exact_read_target(self):
+        projection = ConsistencyJournalReducer().reduce(
+            recovery((admitted_v2(MemoryScopeKind.PROJECT),))
+        )
+        target = reconstruct_read_target(projection.admissions[0])
+        self.assertIsNotNone(target)
+        self.assertEqual(
+            target.scope, MemoryScope(MemoryScopeKind.PROJECT, "project-1")
+        )
+
+    def test_v1_projection_cannot_reconstruct_a_target_by_inference(self):
+        transition = ConsistencyTransition(
+            record_id=RECORDS[0],
+            schema_version=1,
+            record_kind=ConsistencyRecordKind.READ_ADMITTED,
+            operation_id="read:legacy",
+            occurred_at=NOW,
+            actor_identity_id="identity-1",
+            memory_id=MEMORY,
+            version_id=VERSION,
+            snapshot_id="snapshot-legacy",
+            revisions=revisions(MemoryScopeKind.PRIVATE),
+            admission_id="legacy",
+            generation=1,
+            route_ids=frozenset({"assistant-response"}),
+        )
+        projection = ConsistencyJournalReducer().reduce(recovery((transition,)))
+        self.assertIsNone(reconstruct_read_target(projection.admissions[0]))
 
     def test_admission_terminal_receipt_is_preserved_in_projection(self):
         admitted = admitted_v2()
