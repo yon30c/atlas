@@ -403,7 +403,7 @@ En el commit de referencia de esta propuesta:
 - el fake de recuperación no prueba reinicios reales, concurrencia entre procesos ni almacenamiento durable;
 - no existe emisor/verificador confiable de OwnerDecisionProof;
 - no se han completado inventarios reales de entrega y persistencia;
-- se escribieron 18 pruebas unitarias para los modelos del journal en `tests/unit/test_memory_journal.py`; no se han ejecutado;
+- se escribieron 27 pruebas unitarias de modelos y fake de journal en `tests/unit/test_memory_journal.py`; no se han ejecutado;
 - no se ha ejecutado la suite completa ni las pruebas C01–C64 en esta etapa.
 
-**Conclusión:** la primera capa de modelos puros de posición/transición/commit/checkpoint y el puerto tipado del journal ya están definidos. El siguiente trabajo será endurecer sus invariantes, crear un fake de journal con CAS/idempotencia/recovery deterministas y cubrir C45–C64. No deberá comenzar un adaptador de base de datos ni declararse durabilidad hasta que esas pruebas estén implementadas y ejecutadas.
+**Conclusión:** los modelos puros, el puerto tipado y un fake de proceso único con CAS/idempotencia/recovery/checkpoint ya están definidos. El siguiente trabajo será endurecer las invariantes restantes, completar los escenarios C45–C64, ejecutar las pruebas en un entorno disponible y revisar la relación con egress antes de considerar cualquier adaptador durable.
