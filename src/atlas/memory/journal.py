@@ -7,7 +7,10 @@ from datetime import datetime, timedelta
 from enum import Enum
 
 from atlas.core.errors import ContractError
-from atlas.memory.consistency import AuthorityKind
+from atlas.memory.consistency import (
+    AuthorityKind,
+    AuthorizationRevisionSet,
+)
 from atlas.memory.identifiers import validate_atlas_id
 
 
@@ -78,6 +81,7 @@ class ConsistencyTransition:
     memory_id: str | None = None
     version_id: str | None = None
     snapshot_id: str | None = None
+    revisions: AuthorizationRevisionSet | None = None
     authority_kind: AuthorityKind | None = None
     authority_id: str | None = None
     admission_id: str | None = None
@@ -85,6 +89,7 @@ class ConsistencyTransition:
     generation: int | None = None
     emission_id: str | None = None
     emission_sequence: int | None = None
+    final_sequence: int | None = None
     receipt_id: str | None = None
     proof_reference: str | None = None
     route_ids: frozenset[str] = frozenset()
@@ -112,6 +117,10 @@ class ConsistencyTransition:
             validate_atlas_id(self.memory_id, "memory_id")
         if self.version_id is not None:
             validate_atlas_id(self.version_id, "version_id")
+        if self.revisions is not None and not isinstance(
+            self.revisions, AuthorizationRevisionSet
+        ):
+            raise ContractError("revisions debe ser AuthorizationRevisionSet")
         if self.authority_kind is not None and not isinstance(
             self.authority_kind, AuthorityKind
         ):
@@ -120,6 +129,8 @@ class ConsistencyTransition:
             _positive(self.generation, "generation")
         if self.emission_sequence is not None:
             _positive(self.emission_sequence, "emission_sequence")
+        if self.final_sequence is not None:
+            _non_negative(self.final_sequence, "final_sequence")
         for field in ("route_ids", "affected_admission_ids"):
             values = getattr(self, field)
             if not isinstance(values, frozenset):
@@ -129,8 +140,8 @@ class ConsistencyTransition:
 
         required_by_kind = {
             ConsistencyRecordKind.READ_ADMITTED: (
-                "memory_id", "version_id", "snapshot_id", "admission_id",
-                "generation",
+                "memory_id", "version_id", "snapshot_id", "revisions",
+                "admission_id", "generation",
             ),
             ConsistencyRecordKind.READ_ACTIVATED: ("admission_id", "generation"),
             ConsistencyRecordKind.EGRESS_COMMITTED: (
@@ -139,6 +150,7 @@ class ConsistencyTransition:
             ),
             ConsistencyRecordKind.ENDPOINT_COMPLETED: (
                 "admission_id", "endpoint_id", "generation", "receipt_id",
+                "final_sequence",
             ),
             ConsistencyRecordKind.ENDPOINT_FENCED: (
                 "admission_id", "endpoint_id", "generation", "receipt_id",
@@ -164,11 +176,25 @@ class ConsistencyTransition:
             if value is None:
                 raise ContractError(f"{field} es obligatorio para {self.record_kind.value}")
 
-        if (
-            self.record_kind is ConsistencyRecordKind.READ_ADMITTED
-            and not self.route_ids
-        ):
-            raise ContractError("READ_ADMITTED requiere al menos una ruta registrada")
+        if self.record_kind is ConsistencyRecordKind.READ_ADMITTED:
+            if not self.route_ids:
+                raise ContractError("READ_ADMITTED requiere al menos una ruta registrada")
+            if self.revisions.memory_revision.authority_id != self.memory_id:
+                raise ContractError("revisions.memory_revision no coincide con memory_id")
+            if self.revisions.version_revision.authority_id != self.version_id:
+                raise ContractError("revisions.version_revision no coincide con version_id")
+            if (
+                self.actor_identity_id is None
+                or self.revisions.identity_revision.authority_id != self.actor_identity_id
+            ):
+                raise ContractError("READ_ADMITTED requiere la revisión de la identidad exacta")
+        if self.record_kind in (
+            ConsistencyRecordKind.FORGET_CLOSED,
+            ConsistencyRecordKind.INVALIDATION_CLOSED,
+            ConsistencyRecordKind.FORGET_SUPPRESSED,
+            ConsistencyRecordKind.INVALIDATION_RECONCILED,
+        ) and bool(self.route_ids) != bool(self.affected_admission_ids):
+            raise ContractError("rutas y admisiones afectadas deben estar vacías o presentes juntas")
         if self.record_kind is ConsistencyRecordKind.FORGET_CLOSED:
             if self.authority_kind is not None or self.authority_id is not None:
                 raise ContractError("FORGET_CLOSED usa memory_id, no authority genérica")
