@@ -1,5 +1,5 @@
 """Puertos tipados para admisión y entrega protegida de memoria ME-03."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 
@@ -43,9 +43,9 @@ class ProtectedContentHandle(Protocol):
 class ProtectedMemoryRead:
     """Lease opaco de lectura; no contiene ni expone MemoryVersion."""
 
-    snapshot: AuthorizationSnapshot
+    snapshot: AuthorizationSnapshot = field(repr=False)
     admission: ReadAdmission
-    handle: ProtectedContentHandle
+    handle: ProtectedContentHandle = field(repr=False)
     operation_id: str
 
     def __post_init__(self) -> None:
