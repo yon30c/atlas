@@ -143,6 +143,7 @@ class StubAuthority:
         self.admit_calls = []
         self.acks = []
         self.reconciliations = []
+        self.reconcile_result = None
 
     def admit_read(self, snapshot, routes, now):
         self.admit_calls.append((snapshot, routes))
@@ -154,7 +155,9 @@ class StubAuthority:
 
     def reconcile(self, operation_id):
         self.reconciliations.append(operation_id)
-        return ReconciliationResult(operation_id, frozenset(), frozenset())
+        return self.reconcile_result or ReconciliationResult(
+            operation_id, frozenset(), frozenset()
+        )
 
 
 class StubContent:
@@ -483,6 +486,19 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         self.assertIsInstance(result, ReconciliationResult)
         self.assertEqual(
             self.authority.reconciliations, ["read:admission-1"]
+        )
+
+    def test_resolved_admission_retires_local_read_capability(self):
+        read = self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
+        self.authority.reconcile_result = ReconciliationResult(
+            "read:admission-1", frozenset({"admission-1"}), frozenset()
+        )
+
+        result = self.gateway.reconcile_version(read)
+
+        self.assertIn("admission-1", result.resolved_admission_ids)
+        self.assertIsNone(
+            self.gateway.emit_version(read, "assistant-response", "after-close", 1)
         )
 
     def test_non_utc_clock_is_rejected_before_admission_and_emission(self):
