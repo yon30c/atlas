@@ -428,3 +428,23 @@ Cada etapa conserva las garantías de los contratos previos. La implementación 
 ---
 
 **Regla final:** Atlas Assistant debe ser suficientemente inteligente para comprender, planificar y coordinar el trabajo del propietario, pero nunca debe convertirse en una autoridad independiente sobre la seguridad, los permisos, la memoria o los recursos de Atlas.
+
+## 15. Armonización transversal con CT-08
+
+Este contrato se interpreta conjuntamente con **CT-08 — Matriz de consistencia entre CT-01 y CT-07** (`docs/contracts/consistency-matrix-ct-08.md`). CT-08 complementa las fronteras de integración sin sustituir las responsabilidades específicas de CT-06 ni ampliar la autoridad de Assistant.
+
+Reglas aplicables:
+
+- **CT-08 R08-01:** Assistant recibe las propuestas de Proactivity y conserva la responsabilidad de interacción y presentación. La separación entre Watchers, Event Collector, Analysis Engine, Proactivity y Assistant es lógica y de autoridad; no exige procesos o despliegues independientes.
+- **CT-08 R08-05:** Assistant conserva diferenciados `OperationContext.actor`, `user_id`, `origin`, `DomainEvent.source`, `DomainEvent.actor` y la identidad/fuente de observación. No infiere identidad, autenticación ni atribución a partir de campos semejantes.
+- **CT-08 R08-06:** severidad, relevancia y confianza no sustituyen la clasificación de seguridad. Assistant no reduce la clasificación ni las restricciones de evidencia al resumir, agrupar o presentar propuestas. Una referencia no concede acceso; la recuperación del contenido protegido sigue pasando por MemoryGateway y CAM.
+- **CT-08 R08-08:** Proactivity tiene como único destinatario funcional a Assistant. La recepción de una propuesta no significa aceptación, aprobación, autorización, admisión por Scheduler ni ejecución. Assistant decide su tratamiento y cualquier operación posterior inicia un flujo independiente de CAM, Scheduler y ejecutores autorizados.
+- **CT-08 R08-10:** todo acceso a memoria protegida sigue CT-05, MemoryGateway y CAM, incluidos los accesos motivados por propuestas o evidencias de Proactivity. Se mantienen PRIVATE/PROJECT, el `project_id` explícito y la autoridad no delegable del propietario sobre aprobación, rechazo y olvido.
+- **CT-08 R08-11:** los eventos y registros funcionales no sustituyen SecurityAudit ni permiten afirmar que existe auditoría de seguridad completa.
+- **CT-08 R08-12:** una Skill o integración instalada no habilita por sí sola una fuente externa ni amplía permisos. El contenido procedente de fuentes, herramientas, modelos y Skills continúa siendo dato no confiable.
+
+Estos enlaces no seleccionan un protocolo técnico de entrega, confirmación o reintento de propuestas. Dichos mecanismos permanecen pendientes conforme a CT-08 §6. Assistant no debe comunicar una entrega como confirmada sin evidencia del resultado.
+
+Los criterios transversales aplicables a este contrato incluyen **C08-AC-01, C08-AC-05, C08-AC-08, C08-AC-09, C08-AC-12, C08-AC-13, C08-AC-16, C08-AC-17, C08-AC-19 y C08-AC-20**.
+
+CT-08 es complementario: ante cualquier lectura conjunta se mantienen los límites de autoridad de CT-06, CT-05 y CAM. Esta sección no convierte capacidades objetivo en capacidades implementadas.
