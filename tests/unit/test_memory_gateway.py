@@ -348,6 +348,26 @@ class MemoryGatewayServiceTests(unittest.TestCase):
             self.authority.reconciliations, ["read:admission-1"]
         )
 
+    def test_non_utc_clock_is_rejected_before_admission_and_emission(self):
+        self.clock.value = datetime(
+            2026, 11, 13, 8, 0, tzinfo=timezone(timedelta(hours=-4))
+        )
+        self.assertIsNone(
+            self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
+        )
+        self.assertEqual(self.authority.admit_calls, [])
+        self.assertEqual(self.content.calls, [])
+
+        self.clock.value = NOW
+        read = self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
+        self.clock.value = datetime(
+            2026, 11, 13, 8, 0, tzinfo=timezone(timedelta(hours=-4))
+        )
+        self.assertIsNone(
+            self.gateway.emit_version(read, "assistant-response", "bad-time", 1)
+        )
+        self.assertEqual(self.egress.emissions, [])
+
     def test_clock_or_authorization_failure_never_reads_content(self):
         self.clock.error = RuntimeError("clock unavailable")
         self.assertIsNone(
