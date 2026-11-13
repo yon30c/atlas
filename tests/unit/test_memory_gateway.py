@@ -212,6 +212,22 @@ def make_admission(snapshot, routes=ROUTES, snapshot_id=None):
 
 class MemoryGatewayServiceTests(unittest.TestCase):
 
+    def test_snapshot_with_stale_actor_revision_is_rejected_before_admission(self):
+        revisions = replace(
+            self.snapshot.revisions,
+            identity_revision=AuthorityRevision(AuthorityKind.IDENTITY, "identity-1", 2),
+        )
+        stale_snapshot = replace(self.snapshot, revisions=revisions)
+        self.authorization.result = AuthorizationResult(
+            AuthorizationDecision.ALLOW, stale_snapshot
+        )
+        self.assertIsNone(
+            self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
+        )
+        self.assertEqual(self.authority.admit_calls, [])
+        self.assertEqual(self.content.calls, [])
+
+
     def test_gateway_rejects_malformed_egress_arguments_before_calling_ports(self):
         read = self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
         self.assertIsNotNone(read)
