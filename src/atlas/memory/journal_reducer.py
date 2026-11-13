@@ -4,6 +4,7 @@ The reducer validates replay relationships. It does not authenticate journal
 origin, prove anti-rollback, contact endpoints, or authorize protected reads.
 """
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 
 from atlas.core.errors import ContractError
@@ -45,7 +46,7 @@ class AdmissionProjection:
     owner_id: str | None
     scope_kind: MemoryScopeKind | None
     scope_project_id: str | None
-    admitted_at: object
+    admitted_at: datetime
     recoverable: bool
     generation: int
     revisions: AuthorizationRevisionSet
