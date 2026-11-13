@@ -47,7 +47,6 @@ class AuthorizationEvaluator:
             (
                 grant.subject_identity_id == context.actor.identity_id,
                 grant.owner_user_id == request.resource_owner_id,
-                grant.owner_user_id == context.user_id,
                 grant.project_id == context.project_id,
                 grant.environment == context.environment,
                 grant.resource_type == request.resource_type,

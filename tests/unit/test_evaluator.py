@@ -99,7 +99,7 @@ class AuthorizationEvaluatorTests(unittest.TestCase):
                     AuthorizationDecision.DENY,
                 )
 
-    def test_resource_owner_must_match_context_owner(self):
+    def test_resource_owner_must_match_grant_owner(self):
         request = replace(self.request, resource_owner_id="other-user")
         self.assertIs(
             self.evaluate(request=request).decision,
