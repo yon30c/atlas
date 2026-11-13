@@ -183,7 +183,11 @@ class FakeReadConsistencyAndEgress:
             and current.target == candidate.target
             and current.generation == candidate.generation
             and current.route_ids == candidate.route_ids
-            and current.status in (candidate.status, ReadAdmissionStatus.ACTIVE)
+            and current.status in (
+                candidate.status,
+                ReadAdmissionStatus.ACTIVE,
+                ReadAdmissionStatus.UNRESOLVED,
+            )
         )
 
     def admit_read(self, snapshot, routes, now=NOW):
