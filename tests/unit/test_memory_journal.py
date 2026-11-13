@@ -284,7 +284,8 @@ class ConsistencyJournalModelTests(unittest.TestCase):
         self.assertEqual(repeated.position, first.position)
         self.assertEqual(repeated.record_id, first.record_id)
         self.assertTrue(repeated.replayed)
-        self.assertEqual(len(journal.entries), 1)
+        # The prior READ_ACTIVATED remains; replay must not append a third entry.
+        self.assertEqual(len(journal.entries), 2)
 
     def test_fake_journal_rejects_idempotency_key_reuse_for_other_request(self):
         journal = InMemoryConsistencyJournalFake()
