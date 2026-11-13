@@ -361,22 +361,6 @@ Con las decisiones de diseño consolidadas, la implementación solo avanzará de
 
 Cada fase debe quedar cubierta por pruebas antes de continuar. No se introducirán adaptadores de infraestructura ni despliegues como parte de esta especificación.
 
-## 14. Resoluciones técnicas complementarias de DM-01
-
-El documento `docs/design/domain-model-specification-dm-01.md`, en su revisión vigente de la rama de diseño, desarrolla y cierra decisiones de dominio que este contrato había dejado como parámetros técnicos. Para evitar duplicar especificaciones, se aplican estas referencias:
-
-- **Autorización de versiones:** Grant sobre la memoria lógica exacta; versión como subrecurso exacto validado contra el padre (DM-01 §9.3.1).
-- **Metadatos confiables:** puertos tipados de memoria, proyecto y entorno, sin usar el Registry del Broker como autoridad de memoria (DM-01 §9.3.2).
-- **Prueba directa del propietario:** contrato de OwnerDecisionProof y OwnerDecisionVerifier definido; proveedor de autenticación aún por seleccionar (DM-01 §9.3.4).
-- **Clasificación:** catálogo INTERNAL, CONFIDENTIAL y RESTRICTED, y reglas de herencia (DM-01 §9.3.5).
-- **IDs:** UUIDv7 para IDs generados por Atlas; IDs externos opacos (DM-01 §9.3.6).
-- **Transferencias/reclasificación:** no soportadas en v1 (DM-01 §9.3.7).
-- **Retención histórica y procedencia:** sin TTL automático durante la vida de la memoria; referencias mínimas y opacas (DM-01 §§9.3.8 y 9.3.10).
-- **Propuestas:** transacción lógica atómica e idempotencia por clave de envío (DM-01 §9.3.9).
-- **Operaciones colectivas:** deshabilitadas por tipo en v1 (DM-01 §9.3.11).
-
-Estas resoluciones no seleccionan proveedor de autenticación, almacenamiento, adaptadores, retención física de backups ni inventario de destinos. Cuando DM-01 deja esos elementos como pendientes operativos, este contrato no los da por resueltos. El contrato normativo principal y CT-01 a CT-08 mantienen precedencia.
-
 ## 13. Registro de decisiones confirmadas
 
 Las decisiones de esta sección fueron confirmadas por el propietario y complementan —o, cuando se indica expresamente, precisan— las secciones anteriores. En caso de discrepancia, esta sección representa la decisión consolidada más reciente. La confirmación del diseño no significa que estas capacidades estén implementadas.
@@ -437,13 +421,29 @@ La confirmación de las reglas anteriores no cierra los detalles operativos que 
 - Inventario de almacenes, índices, réplicas, cachés y sistemas derivados que participan en supresión.
 - Plazos de propagación y criterios verificables para declarar una supresión completada.
 - Representación técnica del registro de supresión y su reconciliación durante restauraciones/importaciones.
-- Mecanismo verificable para acreditar que una decisión fue iniciada directamente por el propietario.
-- Semántica exacta de autorizaciones por tipo para operaciones colectivas, separada de las autorizaciones por recurso concreto.
-- Política de retención de versiones históricas y límites de metadatos/contenido expuestos por índices.
+- Proveedor/emisor de autenticación confiable capaz de emitir la prueba definida por OwnerDecisionVerifier en DM-01 §9.3.4; si no existe, approve/reject/forget permanecen deshabilitados.
+- Operaciones colectivas por tipo: deshabilitadas en v1 conforme a DM-01 §9.3.11; cualquier futura habilitación exige una especificación y aprobación separadas.
+- Límites de metadatos/contenido expuestos por índices y política operativa de inventario/supresión; la política de dominio de retención histórica sin TTL automático está definida en DM-01 §9.3.8.
 
 Estos parámetros no autorizan a relajar las invariantes confirmadas ni a declarar implementada una capacidad todavía inexistente.
 
 ### 13.7 Alcance que permanece aplazado
 
 SecurityAudit continúa postergado. Cognee, Telegram, scheduler, RLM, despliegues, integración con producción y modificaciones de Broker/Registry v2 permanecen fuera del alcance de esta fase. Este documento consolida diseño; no autoriza cambios en esos sistemas ni afirma que las capacidades descritas estén implementadas.
+
+## 14. Resoluciones técnicas complementarias de DM-01
+
+El documento `docs/design/domain-model-specification-dm-01.md`, en su revisión vigente de la rama de diseño, desarrolla y cierra decisiones de dominio que este contrato había dejado como parámetros técnicos. Para evitar duplicar especificaciones, se aplican estas referencias:
+
+- **Autorización de versiones:** Grant sobre la memoria lógica exacta; versión como subrecurso exacto validado contra el padre (DM-01 §9.3.1).
+- **Metadatos confiables:** puertos tipados de memoria, proyecto y entorno, sin usar el Registry del Broker como autoridad de memoria (DM-01 §9.3.2).
+- **Prueba directa del propietario:** contrato de OwnerDecisionProof y OwnerDecisionVerifier definido; proveedor de autenticación aún por seleccionar (DM-01 §9.3.4).
+- **Clasificación:** catálogo INTERNAL, CONFIDENTIAL y RESTRICTED, y reglas de herencia (DM-01 §9.3.5).
+- **IDs:** UUIDv7 para IDs generados por Atlas; IDs externos opacos (DM-01 §9.3.6).
+- **Transferencias/reclasificación:** no soportadas en v1 (DM-01 §9.3.7).
+- **Retención histórica y procedencia:** sin TTL automático durante la vida de la memoria; referencias mínimas y opacas (DM-01 §§9.3.8 y 9.3.10).
+- **Propuestas:** transacción lógica atómica e idempotencia por clave de envío (DM-01 §9.3.9).
+- **Operaciones colectivas:** deshabilitadas por tipo en v1 (DM-01 §9.3.11).
+
+Estas resoluciones no seleccionan proveedor de autenticación, almacenamiento, adaptadores, retención física de backups ni inventario de destinos. Cuando DM-01 deja esos elementos como pendientes operativos, este contrato no los da por resueltos. El contrato normativo principal y CT-01 a CT-08 mantienen precedencia.
 
