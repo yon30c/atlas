@@ -314,3 +314,10 @@ Los criterios que dependan de parámetros técnicos pendientes deberán concreta
 10. Ejecutar la matriz de aceptación y revisar las garantías de seguridad.
 
 Cada etapa requiere pruebas y revisión antes de avanzar. La aprobación de este contrato valida las reglas de diseño aquí descritas; no significa que estas capacidades ya estén implementadas ni autoriza cambios fuera del alcance de Atlas Core.
+
+## 15. Referencias a CT-08
+
+CT-08 complementa este contrato como matriz transversal; las resoluciones siguientes precisan su aplicación sin duplicar sus reglas:
+
+- [CT-08 R08-06](consistency-matrix-ct-08.md#r08-06-clasificacion-y-proteccion-de-evidencia-derivada): Clasificación y protección de evidencia derivada; una referencia no concede acceso.
+- [CT-08 R08-10](consistency-matrix-ct-08.md#r08-10-memoria-protegida): Acceso protegido mediante MemoryGateway y CAM, con ámbitos PRIVATE/PROJECT y autoridad no delegable del propietario.
