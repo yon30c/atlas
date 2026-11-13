@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 from atlas.authorization.models import AuthorizationDecision, AuthorizationResult
@@ -238,6 +239,17 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         self.assertIs(result.handle, self.handle)
         self.assertEqual(len(self.authority.admit_calls), 1)
         self.assertEqual(len(self.content.calls), 1)
+
+    def test_preexisting_active_admission_is_not_closed_as_empty(self):
+        self.authority.admission = replace(
+            self.admission, status=ReadAdmissionStatus.ACTIVE
+        )
+
+        result = self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
+
+        self.assertIsNone(result)
+        self.assertEqual(self.content.calls, [])
+        self.assertEqual(self.egress.finishes, [])
 
     def test_mismatched_admission_is_rejected_before_content_read(self):
         self.authority.admission = make_admission(self.snapshot, snapshot_id="other")
