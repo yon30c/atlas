@@ -183,7 +183,10 @@ class ForgetCoordinatorReducerTests(unittest.TestCase):
         operation = delete_all(reducer, operation)
         with self.assertRaises(ContractError):
             reducer.mark_canonical_forgotten(
-                operation, operation.inventory.revision, 7, "tombstone"
+                operation,
+                operation.inventory.revision,
+                6,
+                canonical_receipt(operation),
             )
 
     def test_d07_all_destinations_absent_allows_canonical_mark_and_completion(self):
@@ -369,7 +372,7 @@ class ForgetCoordinatorReducerTests(unittest.TestCase):
         receipt = canonical_receipt(operation, tombstone="tombstone-1")
         operation = reducer.mark_canonical_forgotten(operation, 1, 6, receipt)
         self.assertIs(
-            reducer.mark_canonical_forgotten(operation, 1, receipt),
+            reducer.mark_canonical_forgotten(operation, 1, 6, receipt),
             operation,
         )
         with self.assertRaises(ContractError):
