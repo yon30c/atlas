@@ -151,6 +151,18 @@ class MemoryMetadataResolverTests(unittest.TestCase):
         self.environment_port.result = EnvironmentMetadata("other", "active", 1)
         self.assertIsNone(self.resolver.resolve_environment("environment-1"))
 
+    def test_memory_revision_is_positive_and_immutable(self):
+        with self.assertRaises(ContractError):
+            Memory(
+                memory_id=MEMORY_ID,
+                owner_id="owner-1",
+                scope=MemoryScope(MemoryScopeKind.PRIVATE),
+                current_approved_version_id=VERSION_ID,
+                created_at=NOW,
+                updated_at=NOW,
+                revision=0,
+            )
+
     def test_metadata_requires_positive_canonical_revisions(self):
         with self.assertRaises(ContractError):
             MemoryVersionMetadata(
