@@ -21,6 +21,7 @@ from atlas.memory.receipt_verification import (
     ReceiptVerificationStatus,
     TerminalReceiptKind,
     TerminalReceiptVerificationRequest,
+    VerifiedAdmissionTerminalEvidence,
     VerifiedTerminalReceipt,
     match_verified_receipt,
 )
@@ -298,6 +299,19 @@ class TerminalReceiptVerificationTests(unittest.TestCase):
         verifier = FakeVerifier(mismatch_field="receipt_id")
         result = verifier.verify_terminal_receipt(request)
         self.assertIsNone(match_verified_receipt(request, result))
+
+    def test_terminal_evidence_rejects_receipt_for_different_outcome(self):
+        verified = verify_terminal_admission_projection(
+            admission(), "consistency-domain", 7, FakeVerifier()
+        )
+        self.assertIsNotNone(verified)
+        with self.assertRaises(ContractError):
+            VerifiedAdmissionTerminalEvidence(
+                admission_id=verified.admission_id,
+                terminal_status=ReadAdmissionStatus.CANCELLED,
+                endpoint_receipts=verified.endpoint_receipts,
+                admission_receipt=verified.admission_receipt,
+            )
 
     def test_verified_metadata_is_not_a_content_capability_or_authorization(self):
         result = verify_terminal_admission_projection(
