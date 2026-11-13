@@ -449,7 +449,16 @@ ME-03 de diseño estará listo para implementación cuando se hayan aceptado las
 - coordinar lecturas en curso con Forget y con revocaciones/suspensiones;
 - aplicar fencing en cada compromiso de emisión y cubrir buffers/intermediarios;
 - recuperar durablemente cierres, generaciones, admisiones y acknowledgements sin reabrir antes de reconciliar;
-- añadir y ejecutar pruebas deterministas C01–C44;
+- añadir y ejecutar pruebas deterministas C01–C44 y los escenarios de registro durable/recuperación C45–C64 definidos en `me-03-durable-consistency-journal-design.md`;
 - mantener los adaptadores de prueba separados de cualquier afirmación de integración real.
 
 **Estado actual:** este documento registra una propuesta de diseño. No implementa snapshots, leases, supresión, Forget, persistencia ni garantías de runtime.
+
+
+## 10. Diseño complementario del registro durable
+
+El detalle del registro durable, su orden, atomicidad, idempotencia, checkpoints, protección antitruncamiento y recuperación tras fallos se desarrolla en `me-03-durable-consistency-journal-design.md`.
+
+Este documento complementario amplía los escenarios de validación de C01–C44 con C45–C64. No selecciona almacenamiento ni cambia las decisiones de §§3–4 y 8. EventStore y SecurityAudit mantienen sus responsabilidades separadas; ninguno sustituye la autoridad lógica de consistencia.
+
+**Estado:** propuesta técnica de diseño. No hay journal durable ni protocolo de recuperación distribuida implementados.
