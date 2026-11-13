@@ -125,7 +125,17 @@ class MemoryGatewayService:
             ):
                 return None
 
-            admission = self._authority.admit_read(snapshot, self._routes)
+            admission_now = self._clock.now()
+            if not self._valid_utc(admission_now):
+                return None
+            if (
+                snapshot.grant_expires_at is not None
+                and admission_now >= snapshot.grant_expires_at
+            ):
+                return None
+            admission = self._authority.admit_read(
+                snapshot, self._routes, admission_now
+            )
             if admission is None:
                 return None
             operation_id = f"read:{admission.admission_id}"
