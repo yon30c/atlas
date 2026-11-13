@@ -130,7 +130,7 @@ class ConsistencyTransition:
         required_by_kind = {
             ConsistencyRecordKind.READ_ADMITTED: (
                 "memory_id", "version_id", "snapshot_id", "admission_id",
-                "generation", "route_ids",
+                "generation",
             ),
             ConsistencyRecordKind.READ_ACTIVATED: ("admission_id", "generation"),
             ConsistencyRecordKind.EGRESS_COMMITTED: (
@@ -145,31 +145,30 @@ class ConsistencyTransition:
             ),
             ConsistencyRecordKind.FORGET_CLOSED: (
                 "memory_id", "generation", "proof_reference", "idempotency_key",
-                "route_ids", "affected_admission_ids",
             ),
             ConsistencyRecordKind.INVALIDATION_CLOSED: (
                 "authority_kind", "authority_id", "generation",
-                "route_ids", "affected_admission_ids",
             ),
             ConsistencyRecordKind.ADMISSION_RECONCILED: (
                 "admission_id", "generation", "receipt_id",
             ),
             ConsistencyRecordKind.FORGET_SUPPRESSED: (
-                "memory_id", "generation", "route_ids", "affected_admission_ids",
+                "memory_id", "generation",
             ),
             ConsistencyRecordKind.INVALIDATION_RECONCILED: (
                 "authority_kind", "authority_id", "generation",
-                "route_ids", "affected_admission_ids",
             ),
         }
         for field in required_by_kind.get(self.record_kind, ()):
             value = getattr(self, field)
-            if field in ("route_ids", "affected_admission_ids"):
-                if not value:
-                    raise ContractError(f"{field} es obligatorio para {self.record_kind.value}")
-            elif value is None:
+            if value is None:
                 raise ContractError(f"{field} es obligatorio para {self.record_kind.value}")
 
+        if (
+            self.record_kind is ConsistencyRecordKind.READ_ADMITTED
+            and not self.route_ids
+        ):
+            raise ContractError("READ_ADMITTED requiere al menos una ruta registrada")
         if self.record_kind is ConsistencyRecordKind.FORGET_CLOSED:
             if self.authority_kind is not None or self.authority_id is not None:
                 raise ContractError("FORGET_CLOSED usa memory_id, no authority genérica")
