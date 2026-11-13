@@ -225,6 +225,13 @@ class FakeReadConsistencyAndEgress:
                     expected_affected.add(admission_id)
             if expected_affected != set(invalidation.affected_admission_ids):
                 return None
+            if any(
+                operation["pending"]
+                and operation.get("kind") == "invalidation"
+                and expected_affected.intersection(operation["affected"])
+                for operation in self.operations.values()
+            ):
+                return None
             self.revisions[key] = invalidation.new_revision
             self.generation += 1
             self.operations[invalidation.invalidation_id] = {
@@ -425,9 +432,21 @@ class FakeReadConsistencyAndEgress:
                 or new_generation != self.generation
             ):
                 return None
+            operation_id = next(
+                (
+                    identifier
+                    for identifier, operation in self.operations.items()
+                    if operation["pending"]
+                    and operation.get("kind") == "invalidation"
+                    and admission.admission_id in operation["affected"]
+                ),
+                None,
+            )
+            if operation_id is None:
+                return None
             self.fenced_endpoints.add((admission.admission_id, endpoint_id))
             return EndpointFenceReceipt(
-                operation_id="direct-fence",
+                operation_id=operation_id,
                 admission_id=admission.admission_id,
                 endpoint_id=endpoint_id,
                 generation=new_generation,
@@ -838,9 +857,18 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
                 admission, handle, "assistant-response", "emission-2", 3, NOW
             )
         )
-        self.assertIsNotNone(
-            self.egress.fence(admission, "assistant-response", 2, NOW)
+        closure = self.authority.begin_invalidation(
+            AuthorizationInvalidation(
+                "fence-emission-test", AuthorityKind.IDENTITY, "identity-1",
+                1, 2, frozenset({admission.admission_id})
+            )
         )
+        fence_receipt = self.egress.fence(
+            admission, "assistant-response", closure.new_generation, NOW
+        )
+        self.assertIsNotNone(fence_receipt)
+        self.assertEqual(fence_receipt.operation_id, "fence-emission-test")
+        self.assertTrue(self.authority.record_endpoint_ack(fence_receipt))
         self.assertIsNone(
             self.egress.commit_and_emit(
                 admission, handle, "assistant-response", "emission-2", 2, NOW
