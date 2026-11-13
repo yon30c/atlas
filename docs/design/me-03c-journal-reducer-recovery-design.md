@@ -95,7 +95,7 @@ Colecciones vacías solo se aceptan cuando el tipo permite inventario vacío y a
 - Egress requiere admisión conocida, endpoint incluido y generación exacta.
 - Secuencias por endpoint son estrictamente crecientes. El contrato del endpoint determina si deben ser contiguas; el reducer no inventará contigüidad si el contrato de emisión permite secuencias no consecutivas.
 - `ENDPOINT_COMPLETED` requiere que `final_sequence` no sea menor que la última secuencia comprometida. No puede aparecer otra emisión para ese endpoint después.
-- `ENDPOINT_FENCED` debe identificar la generación antigua que se cercó y su recibo. El sentido exacto de `generation` debe coincidir con el contrato de recibos; no se aceptan mezclas de generación actual y nueva sin una regla explícita.
+- `ENDPOINT_FENCED.generation` identifica la nueva generación de fencing de la operación de cierre, y debe coincidir con `FORGET_CLOSED.generation` o `INVALIDATION_CLOSED.generation`; no con la generación original de la admisión. `ENDPOINT_COMPLETED.generation` coincide con la generación de la operación que emite el recibo (lectura normal o cierre). `ADMISSION_RECONCILED.generation` identifica la generación original de la admisión.
 - `ADMISSION_RECONCILED` solo puede ser terminal una vez y cuando todos los endpoints estén COMPLETED para resultado COMPLETED o FENCED para resultado CANCELLED.
 
 ### 4.2 Forget
