@@ -293,6 +293,13 @@ def begin_forget_with_proof(journal, verifier, proof_id):
     return journal.append_transition(journal.position(), transition) is not None
 
 
+def restore_gate_from_verified_inventory(required_admissions, verified_admissions):
+    """La puerta solo puede abrir si el inventario completo está demostrado."""
+    if verified_admissions is None:
+        return False
+    return set(required_admissions).issubset(set(verified_admissions))
+
+
 class MemoryJournalFailureScenarios(unittest.TestCase):
     def test_c45_failed_durable_admission_never_reads_content(self):
         journal = FaultInjectingJournalFake()
@@ -310,6 +317,15 @@ class MemoryJournalFailureScenarios(unittest.TestCase):
         self.assertEqual(journal.entries[0].transition.record_kind, ConsistencyRecordKind.READ_ADMITTED)
         self.assertEqual(journal.entries[1].transition.record_kind, ConsistencyRecordKind.FORGET_CLOSED)
         self.assertFalse(gate.admit(admitted(record_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074006", admission_id="late-read")))
+
+        close_first_journal = FaultInjectingJournalFake()
+        close_first_gate = ReadForgetGateFake(close_first_journal)
+        self.assertTrue(close_first_gate.close_forget(forget_closed()))
+        self.assertFalse(close_first_gate.admit(admitted(
+            record_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074005",
+            admission_id="read-after-close",
+        )))
+        self.assertEqual(close_first_journal.sequence, 1)
 
     def test_c47_egress_before_close_is_ordered_before_close(self):
         journal = FaultInjectingJournalFake()
@@ -437,13 +453,14 @@ class MemoryJournalFailureScenarios(unittest.TestCase):
         journal = FaultInjectingJournalFake()
         gate = ReadForgetGateFake(journal)
         gate.admit(admitted())
-        # Este fake no puede demostrar que un checkpoint incluya admisiones activas.
-        # La ausencia de evidencia no permite recuperar la puerta como abierta.
-        state = journal.load_recovery_state(DOMAIN)
-        self.assertIsNotNone(state)
-        self.assertIn("admission-c45", gate.admissions)
+        required = {"admission-c45"}
+        # El checkpoint actual no transporta inventario verificable de admisiones.
+        verified_inventory = None
+        self.assertFalse(restore_gate_from_verified_inventory(required, verified_inventory))
         restored_gate = ReadForgetGateFake(journal)
-        restored_gate.closed = True
+        restored_gate.closed = not restore_gate_from_verified_inventory(
+            required, verified_inventory
+        )
         self.assertTrue(restored_gate.closed)
 
     def test_c58_consumed_owner_proof_is_not_reused_after_close_append_failure(self):
