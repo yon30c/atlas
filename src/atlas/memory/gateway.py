@@ -106,6 +106,8 @@ class MemoryGatewayService:
 
         try:
             now = self._clock.now()
+            if not self._valid_utc(now):
+                return None
             result = self._authorization.authorize_read(
                 context, memory_id, now, version_id
             )
