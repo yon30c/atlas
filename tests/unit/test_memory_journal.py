@@ -95,12 +95,34 @@ class ConsistencyJournalModelTests(unittest.TestCase):
             operation_id="forget:op-1",
             occurred_at=NOW,
             idempotency_key="forget-key-1",
+            request_id="forget-request-1",
+            actor_identity_id="owner-identity-1",
+            subject_user_id="owner-user-1",
+            owner_id="owner-user-1",
             memory_id=MEMORY_ID,
             generation=2,
             proof_reference="owner-proof-receipt-1",
         )
         self.assertFalse(item.route_ids)
         self.assertFalse(item.affected_admission_ids)
+
+    def test_forget_closed_rejects_subject_that_is_not_canonical_owner(self):
+        with self.assertRaises(ContractError):
+            ConsistencyTransition(
+                record_id=RECORD_2,
+                schema_version=1,
+                record_kind=ConsistencyRecordKind.FORGET_CLOSED,
+                operation_id="forget:op-mismatch",
+                occurred_at=NOW,
+                idempotency_key="forget-key-mismatch",
+                request_id="forget-request-mismatch",
+                actor_identity_id="owner-identity-1",
+                subject_user_id="another-user",
+                owner_id="owner-user-1",
+                memory_id=MEMORY_ID,
+                generation=2,
+                proof_reference="owner-proof-receipt-mismatch",
+            )
 
     def test_forget_closed_requires_owner_proof_reference_and_idempotency(self):
         with self.assertRaises(ContractError):
