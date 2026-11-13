@@ -87,7 +87,12 @@ class ProtectedMemoryContentPort(Protocol):
         snapshot: AuthorizationSnapshot,
         admission: ReadAdmission,
     ) -> ProtectedContentHandle | None:
-        """Devuelve un handle interno o None; nunca aplica fallback por IDs."""
+        """Devuelve un handle interno o None; nunca aplica fallback por IDs.
+
+        Debe comprobar de nuevo que snapshot y admisión siguen vigentes, que no
+        hay supresión y que la creación del handle no puede escapar a una admisión
+        cerrada. El handle no expone payload ni ofrece lectura fuera de egress.
+        """
 
 
 class ReadConsistencyAuthorityPort(Protocol):
@@ -97,6 +102,7 @@ class ReadConsistencyAuthorityPort(Protocol):
         self,
         snapshot: AuthorizationSnapshot,
         routes: DeliveryRouteSet,
+        now: datetime,
     ) -> ReadAdmission | None:
         """Registra admisión y operación read:{admission_id} de forma atómica.
 
