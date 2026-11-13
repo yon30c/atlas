@@ -92,6 +92,7 @@ class ForgetDestinationInventory:
     destinations: tuple[ForgetDestination, ...]
     coverage_reference: str
     complete: bool
+    retention_policy_reference: str | None = None
 
     def __post_init__(self) -> None:
         _required(self.inventory_id, "inventory_id")
@@ -108,6 +109,8 @@ class ForgetDestinationInventory:
             raise ContractError("inventario contiene destination_id duplicado")
         if not isinstance(self.complete, bool):
             raise ContractError("complete debe ser bool")
+        if self.retention_policy_reference is not None:
+            _required(self.retention_policy_reference, "retention_policy_reference")
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,8 +219,23 @@ class ForgetOperation:
         if self.state in (
             ForgetOperationState.PURGING,
             ForgetOperationState.VERIFYING,
+            ForgetOperationState.COMPLETED,
         ) and (self.inventory is None or not self.inventory.complete):
-            raise ContractError("PURGING/VERIFYING requiere inventario completo")
+            raise ContractError("PURGING/VERIFYING/COMPLETED requiere inventario completo")
+        if self.state in (
+            ForgetOperationState.PURGING,
+            ForgetOperationState.VERIFYING,
+            ForgetOperationState.COMPLETED,
+        ) and self.inventory is not None:
+            has_backup = any(
+                item.kind in (
+                    ForgetDestinationKind.BACKUP,
+                    ForgetDestinationKind.RESTORE_SOURCE,
+                )
+                for item in self.inventory.destinations
+            )
+            if has_backup and self.inventory.retention_policy_reference is None:
+                raise ContractError("destinos de backup requieren política de retención verificable")
         if self.state is ForgetOperationState.BLOCKED:
             if not isinstance(self.block_reason, ForgetBlockReason):
                 raise ContractError("BLOCKED requiere block_reason")
@@ -305,7 +323,10 @@ class ForgetCoordinatorReducer:
                 ForgetOperationState.VERIFYING,
             ) or (
                 operation.state is ForgetOperationState.BLOCKED
-                and operation.resume_state is ForgetOperationState.INVENTORY_PENDING
+                and operation.resume_state in (
+                    ForgetOperationState.INVENTORY_PENDING,
+                    ForgetOperationState.VERIFYING,
+                )
             ),
             "estado no admite inventario",
         )
@@ -337,6 +358,23 @@ class ForgetCoordinatorReducer:
                 inventory=inventory,
                 state=ForgetOperationState.BLOCKED,
                 block_reason=ForgetBlockReason.INVENTORY_INCOMPLETE,
+                resume_state=ForgetOperationState.INVENTORY_PENDING,
+                canonical_state_revision=None,
+                tombstone_reference=None,
+            )
+        has_backup = any(
+            item.kind in (
+                ForgetDestinationKind.BACKUP,
+                ForgetDestinationKind.RESTORE_SOURCE,
+            )
+            for item in inventory.destinations
+        )
+        if has_backup and inventory.retention_policy_reference is None:
+            return replace(
+                operation,
+                inventory=inventory,
+                state=ForgetOperationState.BLOCKED,
+                block_reason=ForgetBlockReason.RETENTION_POLICY_UNDEFINED,
                 resume_state=ForgetOperationState.INVENTORY_PENDING,
                 canonical_state_revision=None,
                 tombstone_reference=None,
@@ -496,10 +534,17 @@ class ForgetCoordinatorReducer:
             ),
             "verificación sin intento de eliminación conocido",
         )
-        self._require(
-            not any(item.verification_id == receipt.verification_id for item in operation.verification_receipts),
-            "verification_id duplicado",
+        existing = next(
+            (item for item in operation.verification_receipts
+             if item.verification_id == receipt.verification_id),
+            None,
         )
+        if existing is not None:
+            self._require(
+                existing == receipt,
+                "verification_id repetido con evidencia contradictoria",
+            )
+            return operation
         updated = replace(
             operation,
             verification_receipts=operation.verification_receipts + (receipt,),
@@ -544,12 +589,23 @@ class ForgetCoordinatorReducer:
         _positive(canonical_state_revision, "canonical_state_revision")
         _required(tombstone_reference, "tombstone_reference")
         self._require(operation.state is ForgetOperationState.VERIFYING, "operación no está VERIFYING")
-        self._require(
-            operation.inventory is not None
-            and operation.inventory.complete
-            and operation.inventory.revision == expected_inventory_revision,
-            "revisión de inventario cambió o no está completa",
-        )
+        if (
+            operation.inventory is None
+            or not operation.inventory.complete
+            or operation.inventory.revision != expected_inventory_revision
+        ):
+            return self.block(
+                operation,
+                ForgetBlockReason.INVENTORY_CHANGED,
+                ForgetOperationState.VERIFYING,
+            )
+        if operation.canonical_state_revision is not None:
+            self._require(
+                operation.canonical_state_revision == canonical_state_revision
+                and operation.tombstone_reference == tombstone_reference,
+                "actualización canónica repetida con resultado contradictorio",
+            )
+            return operation
         self._require(
             operation._all_destinations_absent(),
             "no todos los destinos tienen verificación ABSENT",
@@ -568,17 +624,34 @@ class ForgetCoordinatorReducer:
     ) -> ForgetOperation:
         _positive(current_inventory_revision, "current_inventory_revision")
         _required(tombstone_reference, "tombstone_reference")
+        if operation.state is ForgetOperationState.COMPLETED:
+            self._require(
+                operation.inventory is not None
+                and operation.inventory.revision == current_inventory_revision
+                and operation.tombstone_reference == tombstone_reference,
+                "reintento COMPLETED contradice el resultado registrado",
+            )
+            return operation
         self._require(operation.state is ForgetOperationState.VERIFYING, "operación no está VERIFYING")
-        self._require(
-            operation.inventory is not None
-            and operation.inventory.revision == current_inventory_revision
-            and operation.inventory.complete,
-            "inventario dejó de ser estable",
-        )
+        if (
+            operation.inventory is None
+            or operation.inventory.revision != current_inventory_revision
+            or not operation.inventory.complete
+        ):
+            return self.block(
+                operation,
+                ForgetBlockReason.INVENTORY_CHANGED,
+                ForgetOperationState.VERIFYING,
+            )
+        if not operation._all_destinations_absent():
+            return self.block(
+                operation,
+                ForgetBlockReason.VERIFICATION_INDETERMINATE,
+                ForgetOperationState.VERIFYING,
+            )
         self._require(
             operation.canonical_state_revision is not None
-            and operation.tombstone_reference == tombstone_reference
-            and operation._all_destinations_absent(),
-            "faltan verificación física, actualización canónica o tombstone",
+            and operation.tombstone_reference == tombstone_reference,
+            "faltan actualización canónica o tombstone",
         )
         return replace(operation, state=ForgetOperationState.COMPLETED)
