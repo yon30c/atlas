@@ -116,8 +116,11 @@ class Memory:
     current_approved_version_id: MemoryVersionId | None
     created_at: datetime
     updated_at: datetime
+    revision: int = 1
 
     def __post_init__(self) -> None:
+        if isinstance(self.revision, bool) or not isinstance(self.revision, int) or self.revision < 1:
+            raise ContractError("revision debe ser un entero positivo")
         validate_atlas_id(self.memory_id, "memory_id")
         _opaque_id(self.owner_id, "owner_id")
         if not isinstance(self.scope, MemoryScope):
