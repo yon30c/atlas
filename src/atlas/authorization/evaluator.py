@@ -34,7 +34,7 @@ class AuthorizationEvaluator:
             if self._matches(request, grant, now):
                 return AuthorizationEvaluation(AuthorizationDecision.ALLOW, grant)
 
-        return AuthorizationResult(AuthorizationDecision.DENY)
+        return AuthorizationEvaluation(AuthorizationDecision.DENY)
 
     @staticmethod
     def _matches(
