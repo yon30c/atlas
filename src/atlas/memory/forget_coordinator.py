@@ -227,9 +227,20 @@ class ForgetOperation:
         ):
             raise ContractError("verification_receipts debe ser tuple tipado")
         attempt_ids = tuple(item.attempt_id for item in self.deletion_attempts)
+        deletion_receipt_ids = tuple(
+            item.receipt_id for item in self.deletion_attempts if item.receipt_id is not None
+        )
         verification_ids = tuple(item.verification_id for item in self.verification_receipts)
+        verification_evidence = tuple(
+            item.evidence_reference for item in self.verification_receipts
+            if item.evidence_reference is not None
+        )
         if len(attempt_ids) != len(set(attempt_ids)):
             raise ContractError("attempt_id duplicado")
+        if len(deletion_receipt_ids) != len(set(deletion_receipt_ids)):
+            raise ContractError("receipt_id de eliminación duplicado")
+        if len(verification_evidence) != len(set(verification_evidence)):
+            raise ContractError("evidencia de verificación reutilizada")
         if len(verification_ids) != len(set(verification_ids)):
             raise ContractError("verification_id duplicado")
         for item in self.deletion_attempts + self.verification_receipts:
@@ -262,6 +273,11 @@ class ForgetOperation:
             if has_backup and self.inventory.retention_policy_reference is None:
                 raise ContractError("destinos de backup requieren política de retención verificable")
         if self.state is ForgetOperationState.BLOCKED:
+            if self.resume_state in (
+                ForgetOperationState.PURGING,
+                ForgetOperationState.VERIFYING,
+            ) and (self.inventory is None or not self.inventory.complete):
+                raise ContractError("BLOCKED reanudable en purga/verificación requiere inventario completo")
             if not isinstance(self.block_reason, ForgetBlockReason):
                 raise ContractError("BLOCKED requiere block_reason")
             if not isinstance(self.resume_state, ForgetOperationState):
@@ -334,7 +350,18 @@ class ForgetCoordinatorReducer:
         if operation.state is ForgetOperationState.SUPPRESSED:
             self._require(closure == operation.closure, "reintento SUPPRESSED contradictorio")
             return operation
-        self._require(operation.state is ForgetOperationState.CLOSING, "operación no está CLOSING")
+        self._require(
+            isinstance(closure, ForgetClosure),
+            "closure debe ser ForgetClosure",
+        )
+        self._require(
+            operation.state is ForgetOperationState.CLOSING
+            or (
+                operation.state is ForgetOperationState.BLOCKED
+                and operation.resume_state is ForgetOperationState.CLOSING
+            ),
+            "operación no está CLOSING",
+        )
         self._require(
             closure.closure_id == operation.closure.closure_id
             and closure.operation_id == operation.closure.operation_id
@@ -356,7 +383,11 @@ class ForgetCoordinatorReducer:
         if operation.state is ForgetOperationState.INVENTORY_PENDING:
             return operation
         self._require(
-            operation.state is ForgetOperationState.SUPPRESSED,
+            operation.state is ForgetOperationState.SUPPRESSED
+            or (
+                operation.state is ForgetOperationState.BLOCKED
+                and operation.resume_state is ForgetOperationState.SUPPRESSED
+            ),
             "inventario solo puede solicitarse después de SUPPRESSED",
         )
         return replace(operation, state=ForgetOperationState.INVENTORY_PENDING)
@@ -366,6 +397,10 @@ class ForgetCoordinatorReducer:
         operation: ForgetOperation,
         inventory: ForgetDestinationInventory,
     ) -> ForgetOperation:
+        self._require(
+            isinstance(inventory, ForgetDestinationInventory),
+            "inventory debe ser ForgetDestinationInventory",
+        )
         self._require(
             operation.state in (
                 ForgetOperationState.INVENTORY_PENDING,
@@ -468,6 +503,10 @@ class ForgetCoordinatorReducer:
     def record_deletion_attempt(
         self, operation: ForgetOperation, attempt: ForgetDeletionAttempt
     ) -> ForgetOperation:
+        self._require(
+            isinstance(attempt, ForgetDeletionAttempt),
+            "attempt debe ser ForgetDeletionAttempt",
+        )
         allowed = operation.state is ForgetOperationState.PURGING or (
             operation.state is ForgetOperationState.BLOCKED
             and operation.resume_state is ForgetOperationState.PURGING
@@ -582,6 +621,10 @@ class ForgetCoordinatorReducer:
     def record_verification(
         self, operation: ForgetOperation, receipt: ForgetVerificationReceipt
     ) -> ForgetOperation:
+        self._require(
+            isinstance(receipt, ForgetVerificationReceipt),
+            "receipt debe ser ForgetVerificationReceipt",
+        )
         allowed = operation.state is ForgetOperationState.VERIFYING or (
             operation.state is ForgetOperationState.BLOCKED
             and operation.resume_state is ForgetOperationState.VERIFYING
