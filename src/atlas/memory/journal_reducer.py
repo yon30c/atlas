@@ -654,6 +654,9 @@ class ConsistencyJournalReducer:
                         status=endpoint["status"],
                         receipt_ids=frozenset(endpoint["receipt_ids"]),
                         terminal_receipt_id=endpoint["terminal_receipt_id"],
+                        terminal_operation_id=endpoint["terminal_operation_id"],
+                        terminal_generation=endpoint["terminal_generation"],
+                        final_sequence=endpoint["final_sequence"],
                     )
                     for endpoint_id, endpoint in sorted(item["endpoints"].items())
                 ),
