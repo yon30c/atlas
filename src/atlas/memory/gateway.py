@@ -19,11 +19,10 @@ from atlas.memory.consistency import (
 from atlas.memory.models import MemoryClassification, MemoryId, MemoryVersionId
 from atlas.ports.clock import Clock
 from atlas.ports.protected_memory_read import (
-    ProtectedEgressPort,
     ProtectedMemoryContentPort,
     ProtectedMemoryRead,
     ProtectedContentHandle,
-    ReadConsistencyAuthorityPort,
+    ProtectedMemoryConsistencyPort,
 )
 
 
@@ -47,15 +46,13 @@ class MemoryGatewayService:
         self,
         authorization: MemoryAuthorizationService,
         content_port: ProtectedMemoryContentPort,
-        consistency_authority: ReadConsistencyAuthorityPort,
-        egress: ProtectedEgressPort,
+        consistency: ProtectedMemoryConsistencyPort,
         routes: DeliveryRouteSet,
         clock: Clock,
     ) -> None:
         self._authorization = authorization
         self._content = content_port
-        self._authority = consistency_authority
-        self._egress = egress
+        self._consistency = consistency
         self._routes = routes
         self._clock = clock
         # Solo el Gateway conserva referencias internas al snapshot/admisión/handle.
@@ -97,12 +94,12 @@ class MemoryGatewayService:
             if not self._valid_utc(now):
                 return
             for endpoint_id in admission.route_ids:
-                receipt = self._egress.finish(
+                receipt = self._consistency.finish(
                     admission, operation_id, endpoint_id, 0, now
                 )
-                if receipt is None or not self._authority.record_endpoint_ack(receipt):
+                if receipt is None or not self._consistency.record_endpoint_ack(receipt):
                     return
-            self._authority.reconcile(operation_id)
+            self._consistency.reconcile(operation_id)
         except Exception:
             # La admisión queda pendiente y recuperable; nunca se presume terminal.
             return
@@ -156,7 +153,7 @@ class MemoryGatewayService:
                 and admission_now >= snapshot.grant_expires_at
             ):
                 return None
-            admission = self._authority.admit_read(
+            admission = self._consistency.admit_read(
                 snapshot, self._routes, admission_now
             )
             if admission is None:
@@ -241,7 +238,7 @@ class MemoryGatewayService:
             expires_at = session.snapshot.grant_expires_at
             if expires_at is not None and now >= expires_at:
                 return None
-            return self._egress.commit_and_emit(
+            return self._consistency.commit_and_emit(
                 session.admission,
                 session.handle,
                 endpoint_id,
