@@ -8,6 +8,8 @@ from atlas.memory.consistency import (
     EgressReceipt,
     ReconciliationResult,
 )
+from datetime import datetime, timedelta
+
 from atlas.memory.consistency import ReadAdmissionStatus
 from atlas.memory.models import MemoryClassification, MemoryId, MemoryVersionId
 from atlas.ports.clock import Clock
@@ -44,6 +46,14 @@ class MemoryGatewayService:
         self._clock = clock
 
     @staticmethod
+    def _valid_utc(value: object) -> bool:
+        return (
+            isinstance(value, datetime)
+            and value.tzinfo is not None
+            and value.utcoffset() == timedelta(0)
+        )
+
+    @staticmethod
     def _valid_handle(handle: object, admission: object, snapshot: object) -> bool:
         if handle is None:
             return False
@@ -64,6 +74,8 @@ class MemoryGatewayService:
         """Cierra una admisión que no llegó a abrir ninguna entrega."""
         try:
             now = self._clock.now()
+            if not self._valid_utc(now):
+                return
             for endpoint_id in admission.route_ids:
                 receipt = self._egress.finish(
                     admission, operation_id, endpoint_id, 0, now
@@ -164,6 +176,8 @@ class MemoryGatewayService:
             return None
         try:
             now = self._clock.now()
+            if not self._valid_utc(now):
+                return None
             expires_at = read.snapshot.grant_expires_at
             if expires_at is not None and now >= expires_at:
                 return None
@@ -191,6 +205,8 @@ class MemoryGatewayService:
             return False
         try:
             now = self._clock.now()
+            if not self._valid_utc(now):
+                return False
             receipt = self._egress.finish(
                 read.admission,
                 read.operation_id,
