@@ -814,6 +814,44 @@ class FakeHandle:
 
 class MemoryConsistencyAuthorityTests(unittest.TestCase):
 
+    def test_egress_rechecks_project_grant_expiry_at_each_emission(self):
+        from atlas.memory.consistency import AuthorityRevision, AuthorizationRevisionSet
+
+        expiry = datetime(2026, 11, 13, 16, 1, tzinfo=timezone.utc)
+        self.authority.revisions.update({
+            (AuthorityKind.PROJECT, "project-1"): 1,
+            (AuthorityKind.ENVIRONMENT, "environment-1"): 1,
+            (AuthorityKind.GRANT, "grant-1"): 1,
+        })
+        snapshot = AuthorizationSnapshot(
+            snapshot_id="project-snapshot", decision_id="project-decision",
+            request_id="project-request", action="memory.read",
+            actor_identity_id="identity-1", subject_user_id=None,
+            memory_id=MEMORY_ID, version_id=VERSION_ID, owner_id="owner-1",
+            scope=MemoryScope(MemoryScopeKind.PROJECT, "project-1"),
+            revisions=AuthorizationRevisionSet(
+                memory_revision=AuthorityRevision(AuthorityKind.MEMORY, MEMORY_ID, 1),
+                version_revision=AuthorityRevision(AuthorityKind.MEMORY_VERSION, VERSION_ID, 1),
+                identity_revision=AuthorityRevision(AuthorityKind.IDENTITY, "identity-1", 1),
+                project_revision=AuthorityRevision(AuthorityKind.PROJECT, "project-1", 1),
+                environment_revision=AuthorityRevision(AuthorityKind.ENVIRONMENT, "environment-1", 1),
+                grant_revision=AuthorityRevision(AuthorityKind.GRANT, "grant-1", 1),
+            ),
+            version_status=MemoryVersionStatus.APPROVED,
+            classification=MemoryClassification.CONFIDENTIAL,
+            issued_at=NOW, project_id="project-1",
+            environment_id="environment-1", grant_expires_at=expiry,
+        )
+        admission = self.authority.admit_read(snapshot, DeliveryRouteSet(ROUTES))
+        self.assertIsNotNone(admission)
+        self.assertIsNone(
+            self.egress.commit_and_emit(
+                admission, FakeHandle(admission), "assistant-response",
+                "expired-grant-emission", 1, expiry
+            )
+        )
+
+
     def test_content_port_rechecks_current_revisions_after_admission(self):
         snapshot = private_snapshot()
         admission = self.authority.admit_read(snapshot, DeliveryRouteSet(ROUTES))
