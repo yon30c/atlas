@@ -37,7 +37,7 @@ Definir un punto de linealización para una lectura protegida y otro para la act
 
 **Garantía mínima propuesta:** una lectura no puede comenzar a entregar contenido si, en su punto de validación atómica, la memoria o versión está suprimida, no está aprobada, tiene clasificación no permitida o sus metadatos ya no coinciden con los que CAM autorizó.
 
-**Garantía para Forget aceptada por el propietario del proyecto:** después de confirmar la activación de la supresión lógica, no se admiten nuevas lecturas de la memoria/versión afectada. Toda lectura admitida antes de que comience Forget debe finalizar de forma verificable o ser cancelada, con confirmación de que ya no puede entregar contenido, antes de que Forget confirme que la supresión lógica está aplicada. Si no puede verificarse una de esas dos condiciones, Forget no puede confirmar la supresión y debe permanecer en un estado no completado/fail-closed. Esta aceptación no selecciona todavía el mecanismo técnico de coordinación.
+**Garantía para Forget aceptada por el propietario del proyecto:** al validar e iniciar Forget, la autoridad cierra inmediatamente nuevas admisiones y avanza el fencing del alcance afectado. Desde ese punto no puede emitirse ningún byte, fragmento o contenido pendiente de una admisión anterior. Una admisión solo cuenta como **completada** si toda su entrega terminó antes de que el cierre/fencing surtiera efecto; cualquier admisión que todavía pudiera emitir debe quedar cercada y confirmarse como **cancelada**. Forget confirma que la supresión lógica está aplicada únicamente después de verificar que todas las admisiones previas están en uno de esos estados terminales y que ningún punto de entrega puede reanudar una emisión antigua. Si no puede verificarse, la operación permanece no completada/fail-closed. Esta interpretación preserva la supresión inmediata exigida por CT-05 y no selecciona el mecanismo físico.
 
 Esta garantía es más fuerte que consultar un tombstone antes de leer y luego recuperar contenido por separado: esa secuencia también tiene una carrera entre la consulta del tombstone y la entrega.
 
@@ -85,7 +85,7 @@ El estado operativo de supresión no debe introducir un nuevo estado normativo d
 
 ### 4.4 Coordinación con lecturas en curso
 
-Una lectura admitida debe tener una duración/lease acotada o una forma equivalente de coordinación. Al comenzar Forget, el sistema debe cerrar la admisión de nuevas lecturas afectadas y resolver todas las admisiones anteriores: cada una debe finalizar de forma verificable o ser cancelada, confirmando que no puede entregar contenido. Solo después puede confirmarse la supresión lógica.
+Una lectura admitida debe tener una duración/lease acotada o una forma equivalente de coordinación. Al comenzar Forget, el sistema cierra nuevas admisiones y avanza el fencing de inmediato. Ninguna emisión posterior puede atravesar ese cierre. Las admisiones cuya entrega terminó antes del cierre se registran como completadas; las demás deben ser cercadas y confirmadas como canceladas. Solo después de que todas las admisiones previas sean terminales y los puntos de entrega confirmen el fencing puede confirmarse que la supresión lógica está aplicada.
 
 Si una lectura no responde, el proceso cae o no puede determinarse si todavía puede entregar contenido, Forget no puede confirmar la supresión. La recuperación debe conservar el bloqueo de nuevas lecturas hasta reconciliar de forma segura las admisiones pendientes. La semántica exacta de cancelación, expiración, bloqueo y recuperación tras caída queda pendiente. No se debe elegir un mecanismo de locks distribuidos, leases, transacciones o mensajería hasta definir los requisitos operativos y el proveedor.
 
@@ -108,8 +108,8 @@ Cada lectura debe conservar una admisión vinculada a los IDs exactos y al snaps
 
 Una admisión solo puede terminar en uno de estos resultados verificables:
 
-- **Completada:** la entrega controlada terminó y no quedan bytes, fragmentos ni trabajo pendiente que esa operación pueda emitir.
-- **Cancelada:** el emisor fue detenido y existe confirmación de que ya no puede continuar entregando contenido.
+- **Completada:** toda la entrega terminó antes de que el cierre/fencing de Forget surtiera efecto; no quedan bytes, fragmentos ni trabajo pendiente que esa operación pueda emitir.
+- **Cancelada:** la admisión no había terminado al surtir efecto el cierre; todos sus puntos de entrega confirman que las emisiones posteriores fueron cercadas y que no puede continuar entregando contenido.
 
 Forget solo puede confirmar la supresión lógica cuando la autoridad haya cerrado nuevas admisiones y todas las admisiones previas afectadas estén en estado terminal. La operación de cierre y el registro de admisiones deben compartir un mismo orden de consistencia: no puede existir una lectura que se cuele entre el cierre y el inventario de lecturas previas.
 
@@ -278,6 +278,9 @@ Antes de integrar un proveedor real, construir pruebas deterministas con puertos
 | C30 | El inventario de rutas de entrega omite un intermediario o canal capaz de emitir | La cobertura no se considera completa y el componente no sirve contenido protegido |
 | C31 | Un destino de persistencia/backup no está inventariado o no puede verificarse | Forget permanece incompleto y la supresión lógica se conserva |
 | C32 | Un componente se declara no aplicable en un inventario | Se exige evidencia de que no persiste ni puede entregar contenido dentro del alcance declarado |
+| C33 | Forget cierra admisiones mientras un stream tiene fragmentos pendientes en buffers | El fencing impide entregar cualquier fragmento después del cierre; la admisión solo termina como cancelada |
+| C34 | La última emisión de una lectura termina antes del cierre y su confirmación llega después | Puede registrarse completada solo con evidencia correlacionada de que la entrega terminó antes del punto de cierre |
+| C35 | Un emisor intenta marcar completada una admisión después del cierre aunque conserve bytes pendientes | La finalización se rechaza; debe confirmarse fencing/cancelación de todos los puntos de entrega |
 
 Las pruebas de concurrencia deben usar eventos/barreras explícitas, no sleeps ni temporizadores, para que los intercalados sean reproducibles.
 
@@ -292,7 +295,7 @@ Los bloqueos conceptuales de esta etapa quedan resueltos mediante las direccione
 5. Especificar el registro durable de admisiones, cierres, generaciones y acknowledgements, manteniendo los resultados idempotentes y correlacionados.
 6. Derivar pruebas deterministas para cambios de revisión, revocación, expiración, inventario incompleto y recuperación.
 
-**Decisión 1 — aceptada:** las lecturas admitidas antes de comenzar Forget deben finalizar o cancelarse de forma verificable antes de confirmar la supresión lógica. No se confirma la supresión si una lectura previa aún puede entregar contenido o si su estado no puede determinarse.
+**Decisión 1 — aceptada y precisada:** al iniciar Forget se cierran nuevas admisiones y se aplica fencing inmediato. Una lectura previa solo se considera completada si terminó toda su entrega antes de ese cierre; de lo contrario debe cancelarse con confirmación verificable de que no puede emitir más contenido. No se confirma la supresión lógica mientras alguna admisión previa pueda entregar contenido o su estado no pueda determinarse.
 
 **Decisión 2 — aceptada:** la dirección de diseño será una autoridad lógica única que coordine admisión de lecturas y supresión. Su mecanismo físico, disponibilidad y recuperación ante fallos siguen pendientes de diseño.
 
