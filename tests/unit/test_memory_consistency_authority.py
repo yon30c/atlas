@@ -76,9 +76,10 @@ class FakeVerifiedForgetAuthorization:
         memory_id=MEMORY_ID,
         owner_id="owner-1",
         subject_user_id="owner-1",
+        request_id="request-forget-1",
     ):
         self.decision_id = "decision-forget-1"
-        self.request_id = "request-forget-1"
+        self.request_id = request_id
         self.actor_identity_id = "identity-1"
         self.subject_user_id = subject_user_id
         self.memory_id = memory_id
@@ -108,6 +109,7 @@ class FakeReadConsistencyAndEgress:
         self.emissions = {}
         self.fenced_endpoints = set()
         self._next_admission = 1
+        self._next_forget = 1
         self.memory_owners = {MEMORY_ID: "owner-1"}
         self.identity_subjects = {"identity-1": "owner-1"}
         self.suppressed_memories = set()
@@ -278,7 +280,8 @@ class FakeReadConsistencyAndEgress:
             )
             self.generation += 1
             self.suppressed_memories.add(target.memory_id)
-            closure_id = "018bcfe5-7b3a-7cc2-98c4-dc0c0c073a14"
+            closure_id = f"018bcfe5-7b3a-7cc2-98c4-dc0c0c073a{14 + self._next_forget:02x}"
+            self._next_forget += 1
             operation_id = f"forget:{closure_id}"
             closure = ForgetClosure(
                 closure_id=closure_id,
@@ -952,9 +955,11 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
         )
         self.assertEqual(first, repeated)
         self.assertEqual(self.authority.generation, 2)
-        other_target = ForgetTarget("018bcfe5-7b3a-7cc2-98c4-dc0c0c073a15")
+        different_request = FakeVerifiedForgetAuthorization(request_id="another-request")
         self.assertIsNone(
-            self.authority.begin_forget(other_target, authorization, "forget-key-2", NOW)
+            self.authority.begin_forget(
+                ForgetTarget(MEMORY_ID), different_request, "forget-key-2", NOW
+            )
         )
         self.assertEqual(self.authority.generation, 2)
 
@@ -966,9 +971,15 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
             )
         )
         wrong_memory = FakeVerifiedForgetAuthorization(memory_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c073a15")
+        wrong_subject = FakeVerifiedForgetAuthorization(subject_user_id="someone-else")
         self.assertIsNone(
             self.authority.begin_forget(
                 ForgetTarget(MEMORY_ID), wrong_memory, "forget-key-4", NOW
+            )
+        )
+        self.assertIsNone(
+            self.authority.begin_forget(
+                ForgetTarget(MEMORY_ID), wrong_subject, "forget-key-6", NOW
             )
         )
         self.assertEqual(self.authority.generation, 1)
