@@ -17,6 +17,7 @@ from atlas.memory.journal import (
     ConsistencyRecoveryState,
     ConsistencyTransition,
 )
+from atlas.memory.models import MemoryScopeKind
 
 
 class EndpointProjectionStatus(str, Enum):
@@ -41,10 +42,16 @@ class AdmissionProjection:
     memory_id: str
     version_id: str
     snapshot_id: str
+    owner_id: str | None
+    scope_kind: MemoryScopeKind | None
+    scope_project_id: str | None
+    admitted_at: object
+    recoverable: bool
     generation: int
     revisions: AuthorizationRevisionSet
     route_ids: frozenset[str]
     status: ReadAdmissionStatus
+    terminal_receipt_id: str | None
     endpoints: tuple[EndpointProjection, ...]
 
 
@@ -199,10 +206,16 @@ class ConsistencyJournalReducer:
                     "memory_id": transition.memory_id,
                     "version_id": transition.version_id,
                     "snapshot_id": transition.snapshot_id,
+                    "owner_id": transition.owner_id,
+                    "scope_kind": transition.scope_kind,
+                    "scope_project_id": transition.scope_project_id,
+                    "admitted_at": transition.occurred_at,
+                    "recoverable": transition.schema_version == 2,
                     "generation": transition.generation,
                     "revisions": transition.revisions,
                     "route_ids": transition.route_ids,
                     "status": ReadAdmissionStatus.ADMITTED,
+                    "terminal_receipt_id": None,
                     "endpoints": endpoints,
                 }
                 continue
@@ -359,6 +372,7 @@ class ConsistencyJournalReducer:
                     )
                 add_receipt(transition.receipt_id)
                 item["status"] = terminal
+                item["terminal_receipt_id"] = transition.receipt_id
                 continue
 
             if kind is ConsistencyRecordKind.FORGET_CLOSED:
@@ -561,10 +575,16 @@ class ConsistencyJournalReducer:
                 memory_id=item["memory_id"],
                 version_id=item["version_id"],
                 snapshot_id=item["snapshot_id"],
+                owner_id=item["owner_id"],
+                scope_kind=item["scope_kind"],
+                scope_project_id=item["scope_project_id"],
+                admitted_at=item["admitted_at"],
+                recoverable=item["recoverable"],
                 generation=item["generation"],
                 revisions=item["revisions"],
                 route_ids=item["route_ids"],
                 status=item["status"],
+                terminal_receipt_id=item["terminal_receipt_id"],
                 endpoints=tuple(
                     EndpointProjection(
                         endpoint_id=endpoint_id,
