@@ -599,6 +599,25 @@ class FakeReadConsistencyAndEgress:
                 or now.utcoffset().total_seconds() != 0
             ):
                 return None
+            snapshot = self.admission_snapshots.get(admission.admission_id)
+            if snapshot is None or snapshot.snapshot_id != admission.snapshot_id:
+                return None
+            if snapshot.grant_expires_at is not None and now >= snapshot.grant_expires_at:
+                return None
+            if any(
+                self.revisions.get((revision.authority_kind, revision.authority_id))
+                != revision.revision
+                for revision in (
+                    snapshot.revisions.memory_revision,
+                    snapshot.revisions.version_revision,
+                    snapshot.revisions.identity_revision,
+                    snapshot.revisions.project_revision,
+                    snapshot.revisions.environment_revision,
+                    snapshot.revisions.grant_revision,
+                )
+                if revision is not None
+            ):
+                return None
             if not isinstance(emission_id, str) or not emission_id.strip():
                 return None
             if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 1:
@@ -721,7 +740,8 @@ class FakeProtectedEgress:
 class FakeProtectedMemoryContent:
     """Fake condicional: no permite recuperar por IDs aislados."""
 
-    def __init__(self):
+    def __init__(self, authority=None):
+        self.authority = authority
         self.handles = {}
 
     def register(self, snapshot, handle):
@@ -744,6 +764,29 @@ class FakeProtectedMemoryContent:
             return None
         if admission.status not in (ReadAdmissionStatus.ADMITTED, ReadAdmissionStatus.ACTIVE):
             return None
+        if self.authority is not None:
+            current = self.authority.admissions.get(admission.admission_id)
+            if (
+                not self.authority._same_admission(current, admission)
+                or self.authority.admission_generations.get(admission.admission_id)
+                != admission.generation
+                or snapshot.memory_id in self.authority.suppressed_memories
+            ):
+                return None
+            if any(
+                self.authority.revisions.get((revision.authority_kind, revision.authority_id))
+                != revision.revision
+                for revision in (
+                    snapshot.revisions.memory_revision,
+                    snapshot.revisions.version_revision,
+                    snapshot.revisions.identity_revision,
+                    snapshot.revisions.project_revision,
+                    snapshot.revisions.environment_revision,
+                    snapshot.revisions.grant_revision,
+                )
+                if revision is not None
+            ):
+                return None
         handle = self.handles.get((snapshot.memory_id, snapshot.version_id))
         if (
             handle is None
@@ -767,6 +810,26 @@ class FakeHandle:
 
 
 class MemoryConsistencyAuthorityTests(unittest.TestCase):
+
+    def test_content_port_rechecks_current_revisions_after_admission(self):
+        snapshot = private_snapshot()
+        admission = self.authority.admit_read(snapshot, DeliveryRouteSet(ROUTES))
+        handle = FakeHandle(admission)
+        self.content.register(snapshot, handle)
+        self.authority.revisions[(AuthorityKind.IDENTITY, "identity-1")] = 2
+        self.assertIsNone(self.content.read_version_if_admitted(snapshot, admission))
+
+    def test_egress_rechecks_current_revisions_even_before_invalidation_callback(self):
+        snapshot = private_snapshot()
+        admission = self.authority.admit_read(snapshot, DeliveryRouteSet(ROUTES))
+        handle = FakeHandle(admission)
+        self.authority.revisions[(AuthorityKind.IDENTITY, "identity-1")] = 2
+        self.assertIsNone(
+            self.egress.commit_and_emit(
+                admission, handle, "assistant-response", "stale-revision", 1, NOW
+            )
+        )
+
 
     def test_forget_recovery_preserves_domain_high_watermark_and_closure_generation(self):
         admission = self.authority.admit_read(
@@ -909,7 +972,7 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
     def setUp(self):
         self.authority = FakeReadConsistencyAndEgress()
         self.egress = FakeProtectedEgress(self.authority)
-        self.content = FakeProtectedMemoryContent()
+        self.content = FakeProtectedMemoryContent(self.authority)
 
     def test_admission_requires_current_snapshot_and_registered_routes(self):
         admission = self.authority.admit_read(
