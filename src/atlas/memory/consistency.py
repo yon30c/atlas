@@ -119,6 +119,8 @@ class AuthorizationSnapshot:
         if not isinstance(self.classification, MemoryClassification) or self.classification is MemoryClassification.RESTRICTED:
             raise ContractError("classification no permite un snapshot de lectura")
         _utc(self.issued_at, "issued_at")
+        if self.revisions.admission_generation is not None:
+            raise ContractError("CAM no puede asignar admission_generation antes de la admisión")
         if self.revisions.memory_revision.authority_id != self.memory_id:
             raise ContractError("memory_revision no corresponde a memory_id")
         if self.revisions.version_revision.authority_id != self.version_id:
@@ -126,6 +128,8 @@ class AuthorizationSnapshot:
         if self.revisions.identity_revision.authority_id != self.actor_identity_id:
             raise ContractError("identity_revision no corresponde al actor")
         if self.scope.kind is MemoryScopeKind.PRIVATE:
+            if self.subject_user_id != self.owner_id:
+                raise ContractError("PRIVATE requiere que el sujeto autenticado sea el propietario")
             if any(v is not None for v in (
                 self.project_id, self.environment_id, self.grant_expires_at,
                 self.revisions.project_revision, self.revisions.environment_revision,
@@ -283,3 +287,44 @@ class EgressReceipt:
         _positive_int(self.sequence, "sequence")
         _positive_int(self.generation, "generation")
         _utc(self.committed_at, "committed_at")
+
+
+
+class EndpointDeliveryStatus(str, Enum):
+    ACTIVE = "active"
+    COMPLETED = "completed"
+    FENCED = "fenced"
+    UNRESOLVED = "unresolved"
+
+
+@dataclass(frozen=True, slots=True)
+class EndpointCompletionReceipt:
+    admission_id: str
+    endpoint_id: str
+    final_sequence: int
+    completed_at: datetime
+
+    def __post_init__(self) -> None:
+        _required(self.admission_id, "admission_id")
+        _required(self.endpoint_id, "endpoint_id")
+        if isinstance(self.final_sequence, bool) or not isinstance(self.final_sequence, int) or self.final_sequence < 0:
+            raise ContractError("final_sequence debe ser un entero no negativo")
+        _utc(self.completed_at, "completed_at")
+
+
+@dataclass(frozen=True, slots=True)
+class ReconciliationResult:
+    operation_id: str
+    resolved_admission_ids: frozenset[str]
+    unresolved_admission_ids: frozenset[str]
+
+    def __post_init__(self) -> None:
+        _required(self.operation_id, "operation_id")
+        for field in ("resolved_admission_ids", "unresolved_admission_ids"):
+            values = getattr(self, field)
+            if not isinstance(values, frozenset):
+                raise ContractError(f"{field} debe ser frozenset")
+            for value in values:
+                _required(value, field)
+        if self.resolved_admission_ids & self.unresolved_admission_ids:
+            raise ContractError("una admisión no puede estar resuelta y no resuelta")
