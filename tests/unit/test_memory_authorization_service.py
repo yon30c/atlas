@@ -12,6 +12,7 @@ from atlas.authorization.models import (
 )
 from atlas.core.context import OperationContext
 from atlas.core.identity import Identity, IdentityKind, IdentityStatus
+from atlas.core.errors import ContractError
 from atlas.memory.metadata import (
     EnvironmentMetadata,
     MemoryVersionMetadata,
@@ -173,13 +174,13 @@ class MemoryAuthorizationServiceTests(unittest.TestCase):
         self.assertEqual(self.grant_repository.owner_requests, [])
 
     def test_public_cam_allow_requires_snapshot_and_denials_forbid_one(self):
-        with self.assertRaises(Exception):
+        with self.assertRaises(ContractError):
             AuthorizationResult(AuthorizationDecision.ALLOW)
         allowed = self.service.authorize_read(make_context(), MEMORY_ID, NOW)
         denied = AuthorizationResult(AuthorizationDecision.DENY)
         self.assertIsNotNone(allowed.snapshot)
         self.assertIsNone(denied.snapshot)
-        with self.assertRaises(Exception):
+        with self.assertRaises(ContractError):
             AuthorizationResult(AuthorizationDecision.DENY, allowed.snapshot)
 
     def test_private_owner_does_not_use_context_user_id(self):
