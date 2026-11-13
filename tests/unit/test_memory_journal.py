@@ -8,6 +8,7 @@ from atlas.memory.consistency import (
     AuthorityKind,
     AuthorityRevision,
     AuthorizationRevisionSet,
+    ReadAdmissionStatus,
 )
 from atlas.memory.journal import (
     ConsistencyCheckpoint,
@@ -184,6 +185,51 @@ class InMemoryConsistencyJournalFake:
 
 
 class ConsistencyJournalModelTests(unittest.TestCase):
+
+    def test_invalidation_closed_requires_monotonic_revision_interval(self):
+        base = dict(
+            record_id=RECORD_1,
+            schema_version=1,
+            record_kind=ConsistencyRecordKind.INVALIDATION_CLOSED,
+            operation_id="invalidation:identity-1",
+            occurred_at=NOW,
+            authority_kind=AuthorityKind.IDENTITY,
+            authority_id="identity-1",
+            generation=2,
+            previous_revision=4,
+            new_revision=5,
+        )
+        self.assertIsInstance(ConsistencyTransition(**base), ConsistencyTransition)
+        with self.assertRaises(ContractError):
+            ConsistencyTransition(**{**base, "new_revision": 4})
+        with self.assertRaises(ContractError):
+            ConsistencyTransition(**{k: v for k, v in base.items() if k != "new_revision"})
+
+    def test_admission_reconciled_requires_explicit_terminal_outcome(self):
+        base = dict(
+            record_id=RECORD_1,
+            schema_version=1,
+            record_kind=ConsistencyRecordKind.ADMISSION_RECONCILED,
+            operation_id="read:admission-1",
+            occurred_at=NOW,
+            admission_id="admission-1",
+            generation=1,
+            receipt_id="terminal-receipt-1",
+        )
+        with self.assertRaises(ContractError):
+            ConsistencyTransition(**base)
+        completed = ConsistencyTransition(
+            **base, admission_terminal_status=ReadAdmissionStatus.COMPLETED
+        )
+        self.assertEqual(
+            completed.admission_terminal_status, ReadAdmissionStatus.COMPLETED
+        )
+        with self.assertRaises(ContractError):
+            ConsistencyTransition(
+                **base, admission_terminal_status=ReadAdmissionStatus.ACTIVE
+            )
+
+
     def test_fake_journal_appends_with_compare_and_swap_position(self):
         journal = InMemoryConsistencyJournalFake()
         first = journal.append_transition(position(0), read_admitted())
