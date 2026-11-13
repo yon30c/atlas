@@ -45,6 +45,7 @@ class ForgetClosure:
     target: ForgetTarget
     generation: int
     affected_admission_ids: frozenset[str]
+    unresolved_admission_ids: frozenset[str]
     delivery_route_ids: frozenset[str]
     status: ForgetClosureStatus
 
@@ -55,15 +56,22 @@ class ForgetClosure:
         if not isinstance(self.target, ForgetTarget):
             raise ContractError("target debe ser ForgetTarget")
         _positive_int(self.generation, "generation")
-        for field in ("affected_admission_ids", "delivery_route_ids"):
+        for field in (
+            "affected_admission_ids",
+            "unresolved_admission_ids",
+            "delivery_route_ids",
+        ):
             values = getattr(self, field)
             if not isinstance(values, frozenset):
                 raise ContractError(f"{field} debe ser frozenset")
             for value in values:
                 _required(value, field)
+        if not self.unresolved_admission_ids.issubset(self.affected_admission_ids):
+            raise ContractError("unresolved_admission_ids debe ser subconjunto de affected_admission_ids")
         if not isinstance(self.status, ForgetClosureStatus):
             raise ContractError("status debe ser ForgetClosureStatus")
-        if self.status is ForgetClosureStatus.SUPPRESSED and self.affected_admission_ids:
-            raise ContractError(
-                "SUPPRESSED requiere que las admisiones previas estén reconciliadas"
-            )
+        if (
+            self.status is ForgetClosureStatus.SUPPRESSED
+            and self.unresolved_admission_ids
+        ):
+            raise ContractError("SUPPRESSED requiere reconciliar todas las admisiones previas")
