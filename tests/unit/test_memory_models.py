@@ -74,7 +74,7 @@ class MemoryModelTests(unittest.TestCase):
         for invalid_number in (0, -1, True, 1.0):
             with self.subTest(number=invalid_number), self.assertRaises(ContractError):
                 version(version_number=invalid_number)
-        for content in ("", "  \\n"):
+        for content in ("", "  \n"):
             with self.subTest(content=content), self.assertRaises(ContractError):
                 version(content=content)
         with self.assertRaises(ContractError):
