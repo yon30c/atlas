@@ -182,22 +182,16 @@ Semántica:
 - `reconcile` nunca convierte timeout o ausencia de heartbeat en cancelación.
 - Si la autoridad no está disponible, no se admiten lecturas ni se confirma supresión.
 
-Los nombres y firmas son contratos conceptuales para especificación; su representación Python final queda pendiente de revisión de tipos y dependencias.
+Los nombres y firmas definen contratos tipados. El estado de las implementaciones Python parciales y sus límites se registra en §§12–14.
 
 ## 5. Contrato de lectura condicional de contenido
 
-El puerto actual:
+El puerto anterior `MemoryVersionContentPort.get_version_content(memory_id, version_id)` fue retirado: solo identificaba por IDs y no probaba que la lectura perteneciera a una admisión vigente.
+
+**Interfaz implementada:**
 
 ```python
-get_version_content(memory_id, version_id) -> MemoryVersion | None
-```
-
-no ofrece garantías suficientes: solo identifica por IDs y no prueba que la lectura pertenezca a una admisión vigente.
-
-**Contrato propuesto:**
-
-```python
-class MemoryVersionContentPort(Protocol):
+class ProtectedMemoryContentPort(Protocol):
     def read_version_if_admitted(
         self,
         snapshot: AuthorizationSnapshot,
