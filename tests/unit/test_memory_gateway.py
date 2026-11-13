@@ -240,18 +240,15 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         self.assertEqual(self.egress.finishes, [])
 
 
-    def test_protected_read_rejects_admission_target_different_from_snapshot(self):
-        other_target = ReadTarget(
-            "018bcfe5-7b3a-7cc2-98c4-dc0c0c073a13",
-            VERSION_ID, self.snapshot.owner_id, self.snapshot.scope
-        )
-        mismatched_admission = replace(self.admission, target=other_target)
-        mismatched_handle = FakeHandle(mismatched_admission)
+    def test_public_read_capability_contains_only_an_opaque_identifier(self):
+        capability = ProtectedMemoryRead("opaque-test-capability")
+        self.assertEqual(capability.read_id, "opaque-test-capability")
+        for attribute in ("snapshot", "admission", "handle", "operation_id"):
+            self.assertFalse(hasattr(capability, attribute))
+
+    def test_empty_read_capability_is_rejected(self):
         with self.assertRaises(ContractError):
-            ProtectedMemoryRead(
-                self.snapshot, mismatched_admission, mismatched_handle,
-                f"read:{mismatched_admission.admission_id}"
-            )
+            ProtectedMemoryRead("")
 
 
     def test_snapshot_for_another_actor_is_rejected_before_admission(self):
@@ -317,8 +314,10 @@ class MemoryGatewayServiceTests(unittest.TestCase):
 
         self.assertIsInstance(result, ProtectedMemoryRead)
         self.assertNotIsInstance(result, MemoryVersion)
-        self.assertEqual(result.operation_id, "read:admission-1")
-        self.assertIs(result.handle, self.handle)
+        self.assertFalse(hasattr(result, "snapshot"))
+        self.assertFalse(hasattr(result, "admission"))
+        self.assertFalse(hasattr(result, "handle"))
+        self.assertFalse(hasattr(result, "operation_id"))
         self.assertEqual(len(self.authority.admit_calls), 1)
         self.assertEqual(len(self.content.calls), 1)
 
@@ -398,6 +397,19 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         self.assertIsNone(result)
         self.assertEqual(len(self.egress.finishes), len(ROUTES))
         self.assertEqual(len(self.authority.acks), len(ROUTES))
+
+    def test_forged_or_unknown_capability_cannot_emit_finish_or_reconcile(self):
+        forged = ProtectedMemoryRead("not-issued-by-this-gateway")
+        self.assertIsNone(
+            self.gateway.emit_version(forged, "assistant-response", "forged", 1)
+        )
+        self.assertFalse(
+            self.gateway.finish_version(forged, "assistant-response", 0)
+        )
+        self.assertIsNone(self.gateway.reconcile_version(forged))
+        self.assertEqual(self.egress.emissions, [])
+        self.assertEqual(self.egress.finishes, [])
+        self.assertEqual(self.authority.reconciliations, [])
 
     def test_emit_requires_registered_endpoint_and_returns_egress_receipt(self):
         read = self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
