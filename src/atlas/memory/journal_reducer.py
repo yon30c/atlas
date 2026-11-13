@@ -156,6 +156,10 @@ class ConsistencyJournalReducer:
                     revision = self._revision_for(transition.revisions, authority_kind)
                     if revision is not None and revision.authority_id == authority_id:
                         self._require(
+                            latest["reconciled"],
+                            "READ_ADMITTED antes de reconciliar la invalidación aplicable",
+                        )
+                        self._require(
                             revision.revision >= latest["new_revision"]
                             and transition.generation >= latest["generation"],
                             "READ_ADMITTED utiliza revisión o generación invalidada",
@@ -349,6 +353,18 @@ class ConsistencyJournalReducer:
                     )
                 }
                 expected_ids = frozenset(related)
+                self._require(
+                    not any(
+                        not invalidation["reconciled"]
+                        and (
+                            invalidation["authority_kind"] is AuthorityKind.MEMORY
+                            and invalidation["authority_id"] == memory_id
+                            or bool(expected_ids.intersection(invalidation["affected_admission_ids"]))
+                        )
+                        for invalidation in invalidations.values()
+                    ),
+                    "FORGET_CLOSED se solapa con una invalidación pendiente",
+                )
                 expected_routes = frozenset(
                     route for item in related.values() for route in item["route_ids"]
                 )
@@ -404,6 +420,13 @@ class ConsistencyJournalReducer:
 
             if kind is ConsistencyRecordKind.INVALIDATION_CLOSED:
                 key = (transition.authority_kind, transition.authority_id)
+                self._require(
+                    not (
+                        transition.authority_kind is AuthorityKind.MEMORY
+                        and transition.authority_id in forgotten_memories
+                    ),
+                    "INVALIDATION_CLOSED no puede reabrir una memoria con Forget cerrado",
+                )
                 previous = latest_invalidation.get(key)
                 self._require(
                     previous is None or previous["reconciled"],
@@ -429,6 +452,18 @@ class ConsistencyJournalReducer:
                     ):
                         related[admission_id] = item
                 expected_ids = frozenset(related)
+                self._require(
+                    not any(
+                        bool(expected_ids.intersection(closure["affected_admission_ids"]))
+                        for closure in forgets.values()
+                    )
+                    and not any(
+                        not other["reconciled"]
+                        and bool(expected_ids.intersection(other["affected_admission_ids"]))
+                        for other in invalidations.values()
+                    ),
+                    "INVALIDATION_CLOSED se solapa con otro cierre pendiente",
+                )
                 expected_routes = frozenset(
                     route for item in related.values() for route in item["route_ids"]
                 )
