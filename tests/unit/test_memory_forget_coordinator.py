@@ -478,6 +478,39 @@ class ForgetCoordinatorReducerTests(unittest.TestCase):
 
 
 
+
+    def test_d35_unknown_attempt_reconciliation_is_idempotent(self):
+        reducer, operation = begin_purging()
+        operation = reducer.record_deletion_attempt(
+            operation,
+            ForgetDeletionAttempt(
+                operation.closure.operation_id, "primary-store", 1, "attempt-unknown",
+                ForgetDeletionOutcome.UNKNOWN,
+            ),
+        )
+        operation = reducer.reconcile_unknown_attempt(
+            operation, "attempt-unknown", ForgetDeletionOutcome.ACKNOWLEDGED,
+            "reconciled-receipt",
+        )
+        self.assertIs(
+            reducer.reconcile_unknown_attempt(
+                operation, "attempt-unknown", ForgetDeletionOutcome.ACKNOWLEDGED,
+                "reconciled-receipt",
+            ),
+            operation,
+        )
+
+    def test_d36_inventory_request_is_idempotent(self):
+        reducer, operation = suppressed_operation()
+        operation = reducer.request_inventory(operation)
+        self.assertIs(reducer.request_inventory(operation), operation)
+
+    def test_d37_begin_verification_is_idempotent(self):
+        reducer, operation = begin_purging()
+        operation = delete_all(reducer, operation)
+        operation = reducer.begin_verification(operation)
+        self.assertIs(reducer.begin_verification(operation), operation)
+
     def test_d34_unknown_attempt_must_be_reconciled_before_inventory_refresh(self):
         reducer, operation = begin_purging()
         operation = reducer.record_deletion_attempt(
