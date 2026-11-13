@@ -93,8 +93,12 @@ class Grant:
     issued_at: datetime
     expires_at: datetime
     revoked_at: datetime | None = None
+    revision: int = 1
 
     def __post_init__(self) -> None:
+        if isinstance(self.revision, bool) or not isinstance(self.revision, int) or self.revision < 1:
+            raise ContractError("revision debe ser un entero positivo")
+
         required_fields = (
             "grant_id",
             "owner_user_id",
