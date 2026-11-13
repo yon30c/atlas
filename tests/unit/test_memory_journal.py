@@ -149,6 +149,16 @@ class InMemoryConsistencyJournalFake:
     def commit_checkpoint(self, checkpoint, expected_position):
         if not isinstance(checkpoint, ConsistencyCheckpoint):
             return None
+        existing = self.record_ids.get(checkpoint.checkpoint_id)
+        if existing is not None:
+            transition = existing.transition
+            if (
+                transition.record_kind is ConsistencyRecordKind.CHECKPOINT_COMMITTED
+                and transition.checkpoint_reference == checkpoint.state_reference
+                and self.checkpoint == checkpoint
+            ):
+                return JournalCommit(existing.position, checkpoint.checkpoint_id, True)
+            return None
         if expected_position != self._position() or checkpoint.position != expected_position:
             return None
         if (
@@ -156,8 +166,21 @@ class InMemoryConsistencyJournalFake:
             or checkpoint.position.authority_epoch != self.epoch
         ):
             return None
+        transition = ConsistencyTransition(
+            record_id=checkpoint.checkpoint_id,
+            schema_version=1,
+            record_kind=ConsistencyRecordKind.CHECKPOINT_COMMITTED,
+            operation_id=f"checkpoint:{checkpoint.checkpoint_id}",
+            occurred_at=checkpoint.created_at,
+            checkpoint_reference=checkpoint.state_reference,
+        )
+        self.sequence += 1
+        position = self._position()
+        entry = JournalEntry(position, transition)
+        self.entries.append(entry)
+        self.record_ids[checkpoint.checkpoint_id] = entry
         self.checkpoint = checkpoint
-        return JournalCommit(checkpoint.position, checkpoint.checkpoint_id, False)
+        return JournalCommit(position, checkpoint.checkpoint_id, False)
 
 
 class ConsistencyJournalModelTests(unittest.TestCase):
@@ -217,7 +240,8 @@ class ConsistencyJournalModelTests(unittest.TestCase):
             integrity_reference="fake-integrity-reference",
             created_at=NOW,
         )
-        self.assertIsNotNone(journal.commit_checkpoint(checkpoint, first.position))
+        checkpoint_commit = journal.commit_checkpoint(checkpoint, first.position)
+        self.assertEqual(checkpoint_commit.position.sequence, 2)
         second_transition = ConsistencyTransition(
             record_id=RECORD_2,
             schema_version=1,
@@ -227,12 +251,14 @@ class ConsistencyJournalModelTests(unittest.TestCase):
             admission_id="admission-1",
             generation=1,
         )
-        journal.append_transition(first.position, second_transition)
+        journal.append_transition(checkpoint_commit.position, second_transition)
         state = journal.load_recovery_state(DOMAIN)
         self.assertEqual(state.checkpoint, checkpoint)
-        self.assertEqual(len(state.entries), 1)
+        self.assertEqual(len(state.entries), 2)
+        self.assertEqual(state.entries[0].transition.record_kind, ConsistencyRecordKind.CHECKPOINT_COMMITTED)
         self.assertEqual(state.entries[0].position.sequence, 2)
-        self.assertEqual(state.head_sequence, 2)
+        self.assertEqual(state.entries[1].position.sequence, 3)
+        self.assertEqual(state.head_sequence, 3)
 
     def test_fake_journal_rejects_checkpoint_behind_current_head(self):
         journal = InMemoryConsistencyJournalFake()
