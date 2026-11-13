@@ -441,3 +441,28 @@ Cada etapa debe contar con pruebas verificables antes de avanzar a la siguiente.
 **Aprobación:** CT-07 aprobado por el usuario para su publicación documental.
 
 **Límite de alcance:** esta aprobación valida el contrato y sus decisiones de diseño. No implica que Proactivity esté implementado ni desplegado.
+
+## 18. Armonización transversal con CT-08
+
+Este contrato se interpreta conjuntamente con **CT-08 — Matriz de consistencia entre CT-01 y CT-07** (`docs/contracts/consistency-matrix-ct-08.md`). CT-08 complementa las reglas de integración de Proactivity; no sustituye CT-07 ni amplía sus permisos.
+
+Reglas aplicables:
+
+- **CT-08 R08-01:** Watchers obtienen señales de fuentes autorizadas; Event Collector registra eventos conforme a CT-04; Analysis Engine realiza análisis general; Proactivity mantiene su ciclo especializado de Observation, Finding, ProactiveProposal y FollowUpRecord; Assistant es el único destinatario funcional de propuestas. Son fronteras lógicas, no una exigencia de despliegue separado.
+- **CT-08 R08-02:** toda identidad observadora, incluida WATCHER, está sujeta a CT-01 y CAM. SUSPENDED impide nuevas observaciones y reevaluaciones y exige detención cooperativa de tareas activas; REVOKED impide continuar operaciones dependientes y no permite reactivar la misma identidad. Se preservan registros históricos sin que ello autorice nuevas lecturas. Cada reevaluación vuelve a verificar identidad y autorización.
+- **CT-08 R08-03:** toda reevaluación automática en segundo plano se somete a admisión y coordinación de Scheduler. Scheduler no sustituye autorización CAM; Proactivity no crea rutas paralelas de ejecución.
+- **CT-08 R08-04:** las lecturas de solo lectura utilizan RLM cuando la política del recurso lo exige. Un lock no concede autorización y la ausencia de requisito de lock no elimina CAM, Scheduler, clasificación ni scope.
+- **CT-08 R08-05:** se mantienen separados el actor de OperationContext, user_id, origin, actor y source del evento, fuente de Observation e identidad observadora. Los eventos conservan el contexto de la operación que los produce y la correlación correspondiente.
+- **CT-08 R08-06:** clasificación de seguridad, severidad, relevancia y confianza son dimensiones distintas. La evidencia derivada no puede rebajar restricciones; una referencia no concede acceso. Si no puede verificarse que el destinatario puede recibir contenido protegido, se omite ese contenido o se bloquea la entrega hasta resolver la autorización.
+- **CT-08 R08-07:** Observation es una señal; Finding es una conclusión analítica; ProactiveProposal es una propuesta a Assistant; FollowUpRecord es un registro interno de seguimiento. Ninguno se convierte automáticamente en evento o incidencia. Los estados de seguimiento no se equiparan a los estados de incidencia.
+- **CT-08 R08-08:** las propuestas se entregan únicamente a Assistant. Proactivity no notifica directamente ni ejecuta acciones. La entrega no equivale a aceptación, aprobación, admisión o autorización; el protocolo técnico y sus garantías permanecen pendientes.
+- **CT-08 R08-09:** se utiliza el catálogo de CT-03. Fuente no disponible, lectura denegada, conflicto de concurrencia o reevaluación interrumpida no prueban que la condición haya desaparecido ni habilitan una ruta alternativa o reintento sin nuevas verificaciones.
+- **CT-08 R08-10:** toda lectura protegida de memoria pasa por MemoryGateway y CAM, respetando PRIVATE/PROJECT, `project_id` y recurso concreto. Proactivity no aprueba, rechaza, versiona, suprime ni olvida memorias.
+- **CT-08 R08-11:** los eventos inmutables de CT-04 y los registros propios de Proactivity ofrecen trazabilidad funcional, pero no sustituyen SecurityAudit.
+- **CT-08 R08-12:** el MVP observa únicamente fuentes internas habilitadas. Las fuentes externas requieren política explícita independiente; instalar una Skill no las habilita. El contenido externo y de Skills es dato no confiable.
+
+Los criterios transversales aplicables incluyen **C08-AC-01 a C08-AC-20**, según la responsabilidad y el flujo evaluados. Estos criterios complementan PRO-01 a PRO-42; no los reemplazan.
+
+Los límites y parámetros técnicos pendientes de CT-08 §6 permanecen pendientes también para CT-07: catálogo y registro de fuentes, identificadores y formatos, frecuencia y concurrencia, persistencia, protocolo de entrega, reintentos, clasificación derivada, correlación, estados, expiración, locks según política, tratamiento de contenido malicioso e integración técnica. Esta sección no decide esos mecanismos.
+
+La presente armonización tampoco altera la regla de CT-07 que permite a Proactivity crear y actualizar únicamente sus propios registros internos de observación, análisis y seguimiento. Esa capacidad no autoriza modificar recursos observados, datos protegidos ni recursos externos.
