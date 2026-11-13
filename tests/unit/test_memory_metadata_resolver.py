@@ -136,6 +136,7 @@ class MemoryMetadataResolverTests(unittest.TestCase):
             status=MemoryVersionStatus.APPROVED,
             classification=MemoryClassification.CONFIDENTIAL,
             parent_version_id=None,
+            revision=1,
         )
         self.assertIsNone(self.resolver.resolve_version(MEMORY_ID, VERSION_ID))
 
