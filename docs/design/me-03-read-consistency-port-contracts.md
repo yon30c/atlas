@@ -4,7 +4,7 @@
 **Rama:** `implementation/me-01-to-me-04-memory-engine`  
 **Dependencias:** ME-01, ME-02, ME-03 §§4.8–4.11, DM-01, CT-01 y CT-05.  
 **Alcance:** contratos lógicos de snapshots CAM, revisiones, admisiones, supresión, invalidaciones y entrega protegida.  
-**Fuera de alcance:** adaptadores reales, almacenamiento físico, transporte, colas, locks, proveedor criptográfico, topología, despliegue y ejecución de Forget.
+**Fuera de alcance:** adaptadores reales, almacenamiento físico, transporte, colas, locks, proveedor criptográfico, topología, despliegue y eliminación física/verificación final de Forget.
 
 Este documento traduce las garantías aceptadas en contratos tipados y responsabilidades de puertos. El estado real de las interfaces y de la integración Python se registra en §§12–14; las propuestas y firmas conceptuales no deben confundirse con adaptadores de runtime.
 
