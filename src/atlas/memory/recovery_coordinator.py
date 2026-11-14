@@ -8,13 +8,14 @@ not terminalize admissions or reconcile the recovery operation.
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Callable
+from typing import Callable, Protocol
 
 from atlas.core.errors import ContractError
 from atlas.memory.journal import (
     ConsistencyPosition,
     ConsistencyRecordKind,
     ConsistencyTransition,
+    JournalCommit,
 )
 from atlas.memory.journal_reducer import (
     ConsistencyJournalReducer,
@@ -32,8 +33,28 @@ from atlas.memory.recovery import (
     build_recovery_fence_plan,
     execute_recovery_fencing,
 )
-from atlas.ports.consistency_journal import ConsistencyJournalPort
 from atlas.ports.recovery_gate import RecoveryGatePort
+
+
+class RecoveryJournalWritePort(Protocol):
+    """Minimal journal capability required to append recovery transitions."""
+
+    def append_transition(
+        self,
+        expected_position: ConsistencyPosition,
+        append_id: str,
+        transition: ConsistencyTransition,
+    ) -> JournalCommit | None:
+        ...
+
+
+class VerifiedRecoveryStatePort(Protocol):
+    """Independent trust boundary for operational recovery reads."""
+
+    def load_verified_recovery_state(
+        self, domain_id: str
+    ) -> ConsistencyRecoveryVerificationResult:
+        ...
 
 
 class RecoveryCoordinatorStatus(str, Enum):
@@ -56,20 +77,21 @@ class RecoveryJournalCoordinator:
 
     def __init__(
         self,
-        journal: ConsistencyJournalPort,
+        journal: RecoveryJournalWritePort,
         recovery_gate: RecoveryGatePort,
         fencer: object,
         verifier: object,
         *,
         trust_context_factory: object,
+        verified_recovery: VerifiedRecoveryStatePort,
         domain_id: str,
         id_factory: Callable[[], str],
         clock: Callable[[], datetime],
     ) -> None:
-        if not callable(getattr(journal, "load_verified_recovery_state", None)) or not callable(
-            getattr(journal, "append_transition", None)
-        ):
-            raise ContractError("journal debe implementar ConsistencyJournalPort")
+        if not callable(getattr(journal, "append_transition", None)):
+            raise ContractError("journal debe implementar append_transition")
+        if not callable(getattr(verified_recovery, "load_verified_recovery_state", None)):
+            raise ContractError("verified_recovery debe implementar load_verified_recovery_state")
         if not callable(getattr(verifier, "verify_terminal_receipt_with_context", None)):
             raise ContractError("verifier debe implementar TerminalReceiptVerifierPort trust-aware")
         if not callable(getattr(trust_context_factory, "for_terminal_receipt", None)):
@@ -84,6 +106,7 @@ class RecoveryJournalCoordinator:
         ):
             raise ContractError("recovery_gate debe implementar RecoveryGatePort completo")
         self._journal = journal
+        self._verified_recovery = verified_recovery
         self._recovery_gate = recovery_gate
         self._fencer = fencer
         self._verifier = verifier
@@ -95,7 +118,7 @@ class RecoveryJournalCoordinator:
 
     def _load(self) -> tuple[object, ConsistencyProjection] | None:
         try:
-            result = self._journal.load_verified_recovery_state(self._domain_id)
+            result = self._verified_recovery.load_verified_recovery_state(self._domain_id)
             if (
                 not isinstance(result, ConsistencyRecoveryVerificationResult)
                 or result.status is not ConsistencyRecoveryVerificationStatus.VERIFIED
