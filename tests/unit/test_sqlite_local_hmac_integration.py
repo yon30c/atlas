@@ -32,7 +32,7 @@ class SQLiteLocalHmacIntegrationTests(unittest.TestCase):
         self.addCleanup(self.temp_dir.cleanup)
         self.database = SQLiteDatabase(Path(self.temp_dir.name) / "atlas.sqlite")
         self.database.apply_migrations(SQLITE_MIGRATIONS)
-        self.key = b"\\x6d" * 32
+        self.key = bytes.fromhex("6d" * 32)
 
     def _journal(self, key_reference="local-key-v1", active_key_reference=None):
         active_reference = active_key_reference or key_reference
