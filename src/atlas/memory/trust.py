@@ -8,7 +8,11 @@ from datetime import datetime, timedelta
 from enum import Enum
 
 from atlas.core.errors import ContractError
-from atlas.memory.journal import ConsistencyPosition, ConsistencyRecoveryState
+from atlas.memory.journal import (
+    ConsistencyCheckpoint,
+    ConsistencyPosition,
+    ConsistencyRecoveryState,
+)
 
 
 def _required(value: object, field: str) -> None:
@@ -114,6 +118,7 @@ class ConsistencyCheckpointVerificationRequest:
     expected_domain_id: str
     expected_authority_epoch: int
     expected_position: ConsistencyPosition
+    checkpoint: ConsistencyCheckpoint
     anchor: ConsistencyTrustAnchor
     envelope: AuthenticatedConsistencyEnvelope
     trust_policy_version: str
@@ -126,6 +131,8 @@ class ConsistencyCheckpointVerificationRequest:
         _utc(self.verification_time, "verification_time")
         if not isinstance(self.expected_position, ConsistencyPosition):
             raise ContractError("expected_position debe ser ConsistencyPosition")
+        if not isinstance(self.checkpoint, ConsistencyCheckpoint):
+            raise ContractError("checkpoint debe ser ConsistencyCheckpoint")
         if not isinstance(self.anchor, ConsistencyTrustAnchor):
             raise ContractError("anchor debe ser ConsistencyTrustAnchor")
         if not isinstance(self.envelope, AuthenticatedConsistencyEnvelope):
@@ -133,6 +140,8 @@ class ConsistencyCheckpointVerificationRequest:
         if (
             self.expected_position.consistency_domain_id != self.expected_domain_id
             or self.expected_position.authority_epoch != self.expected_authority_epoch
+            or self.checkpoint.position != self.expected_position
+            or self.envelope.object_id != self.checkpoint.checkpoint_id
             or self.anchor.consistency_domain_id != self.expected_domain_id
             or self.anchor.authority_epoch != self.expected_authority_epoch
         ):
@@ -159,6 +168,63 @@ class ConsistencyCheckpointVerificationRequest:
             and self.envelope.object_commitment != self.anchor.authenticated_state_commitment
         ):
             raise ContractError("checkpoint no coincide con el commitment del ancla")
+
+
+class CheckpointVerificationStatus(str, Enum):
+    VERIFIED = "verified"
+    REJECTED = "rejected"
+    UNAVAILABLE = "unavailable"
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedConsistencyCheckpoint:
+    checkpoint: ConsistencyCheckpoint
+    anchor: ConsistencyTrustAnchor
+    authenticated_state_commitment: str
+    verification_id: str
+    verifier_id: str
+    trust_policy_version: str
+    verified_at: datetime
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.checkpoint, ConsistencyCheckpoint):
+            raise ContractError("checkpoint debe ser ConsistencyCheckpoint")
+        if not isinstance(self.anchor, ConsistencyTrustAnchor):
+            raise ContractError("anchor debe ser ConsistencyTrustAnchor")
+        for field in (
+            "authenticated_state_commitment", "verification_id",
+            "verifier_id", "trust_policy_version",
+        ):
+            _required(getattr(self, field), field)
+        if (
+            self.checkpoint.position.consistency_domain_id != self.anchor.consistency_domain_id
+            or self.checkpoint.position.authority_epoch != self.anchor.authority_epoch
+            or self.checkpoint.position.sequence < self.anchor.maximum_committed_sequence
+        ):
+            raise ContractError("checkpoint no satisface la posición del ancla")
+        if (
+            self.checkpoint.position.sequence == self.anchor.maximum_committed_sequence
+            and self.authenticated_state_commitment != self.anchor.authenticated_state_commitment
+        ):
+            raise ContractError("checkpoint commitment no coincide con el ancla")
+        if self.trust_policy_version != self.anchor.trust_policy_version:
+            raise ContractError("trust policy no coincide con el ancla")
+        _utc(self.verified_at, "verified_at")
+
+
+@dataclass(frozen=True, slots=True)
+class CheckpointVerificationResult:
+    status: CheckpointVerificationStatus
+    verified_checkpoint: VerifiedConsistencyCheckpoint | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.status, CheckpointVerificationStatus):
+            raise ContractError("status debe ser CheckpointVerificationStatus")
+        if self.status is CheckpointVerificationStatus.VERIFIED:
+            if not isinstance(self.verified_checkpoint, VerifiedConsistencyCheckpoint):
+                raise ContractError("VERIFIED requiere VerifiedConsistencyCheckpoint")
+        elif self.verified_checkpoint is not None:
+            raise ContractError("REJECTED/UNAVAILABLE no pueden incluir checkpoint verificado")
 
 
 @dataclass(frozen=True, slots=True)
