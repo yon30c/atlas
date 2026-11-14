@@ -270,7 +270,16 @@ class VerifiedConsistencyCheckpoint:
             raise ContractError("checkpoint no satisface la posición del ancla")
         if self.trust_policy_version != self.anchor.trust_policy_version:
             raise ContractError("trust policy no coincide con el ancla")
+        if (
+            self.checkpoint.position.sequence == self.anchor.maximum_committed_sequence
+            and self.checkpoint_commitment != self.anchor.authenticated_state_commitment
+        ):
+            raise ContractError("checkpoint en head debe coincidir con commitment del ancla")
         _utc(self.verified_at, "verified_at")
+        if self.verified_at < self.anchor.issued_at:
+            raise ContractError("verified_at no puede preceder la emisión del ancla")
+        if self.anchor.valid_until is not None and self.verified_at >= self.anchor.valid_until:
+            raise ContractError("ancla expirada al verificar checkpoint")
 
 
 @dataclass(frozen=True, slots=True)
