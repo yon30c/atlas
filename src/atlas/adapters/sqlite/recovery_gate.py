@@ -5,7 +5,6 @@ ProtectedMemoryRecoveryAuthorityPort and does not serialize read admission or
 protected egress until those operations share this same transaction boundary.
 """
 from datetime import datetime, timezone
-import sqlite3
 
 from atlas.adapters.sqlite.consistency_journal import SQLiteConsistencyJournal
 from atlas.core.errors import ContractError
@@ -66,6 +65,7 @@ class LocalSQLiteRecoveryGateAdapter(RecoveryGatePort):
             or verified.consistency_domain_id != domain_id
             or verified.authority_epoch != state.authority_epoch
             or verified.head_sequence != state.head_sequence
+            or projection is None
             or projection.domain_id != domain_id
             or projection.authority_epoch != state.authority_epoch
             or projection.head_sequence != state.head_sequence
@@ -145,15 +145,6 @@ class LocalSQLiteRecoveryGateAdapter(RecoveryGatePort):
         )
         return updated.rowcount == 1
 
-    @staticmethod
-    def _same_recovery_transition(transition, closure) -> bool:
-        return bool(
-            transition.operation_id == closure.operation_id
-            and transition.generation == closure.generation
-            and transition.affected_admission_ids == closure.affected_admission_ids
-            and transition.route_ids == closure.route_ids
-        )
-
     def close_recovery_gate(
         self,
         expected_position: ConsistencyPosition,
@@ -178,60 +169,48 @@ class LocalSQLiteRecoveryGateAdapter(RecoveryGatePort):
             return None
 
         active = self._active_closures(projection)
-        if len(active) > 1:
+        # An existing closure must be restored through ensure_recovery_gate_closed.
+        if active:
             return None
-        existing = active[0] if active else None
-        if existing is not None:
-            if not self._same_recovery_transition(transition, existing):
-                return None
-        else:
-            pending_admissions = tuple(
-                item for item in projection.admissions
-                if item.status.value not in ("completed", "cancelled")
+        pending_admissions = tuple(
+            item for item in projection.admissions
+            if item.status.value not in ("completed", "cancelled")
+        )
+        expected_admissions = frozenset(item.admission_id for item in pending_admissions)
+        expected_routes = frozenset(
+            route_id for item in pending_admissions for route_id in item.route_ids
+        )
+        prior_generations = (
+            [item.generation for item in projection.admissions]
+            + [item.generation for item in projection.forget_closures]
+            + [item.generation for item in projection.invalidations]
+            + [item.generation for item in projection.recovery_closures]
+        )
+        forget_admission_ids = frozenset(
+            admission_id
+            for closure in projection.forget_closures
+            for admission_id in closure.affected_admission_ids
+        )
+        terminal_admission_ids = frozenset(
+            item.admission_id for item in projection.admissions
+            if item.status.value in ("completed", "cancelled")
+        )
+        if (
+            not expected_admissions
+            or not expected_routes
+            or transition.operation_id != (
+                f"recovery:{domain_id}:{state.authority_epoch}:{transition.generation}"
             )
-            expected_admissions = frozenset(item.admission_id for item in pending_admissions)
-            expected_routes = frozenset(
-                route_id for item in pending_admissions for route_id in item.route_ids
+            or transition.affected_admission_ids != expected_admissions
+            or transition.route_ids != expected_routes
+            or (
+                prior_generations
+                and transition.generation <= max(prior_generations)
             )
-            prior_generations = (
-                [item.generation for item in projection.admissions]
-                + [item.generation for item in projection.forget_closures]
-                + [item.generation for item in projection.invalidations]
-                + [item.generation for item in projection.recovery_closures]
-            )
-            if (
-                not expected_admissions
-                or transition.operation_id != (
-                    f"recovery:{domain_id}:{state.authority_epoch}:{transition.generation}"
-                )
-                or transition.affected_admission_ids != expected_admissions
-                or transition.route_ids != expected_routes
-                or (
-                    prior_generations
-                    and transition.generation <= max(prior_generations)
-                )
-                or any(not item.reconciled for item in projection.invalidations)
-                or any(
-                    admission_id not in {
-                        item.admission_id for item in projection.admissions
-                    }
-                    for closure in projection.forget_closures
-                    for admission_id in closure.affected_admission_ids
-                )
-            ):
-                return None
-            if any(
-                admission.status.value not in ("completed", "cancelled")
-                for closure in projection.forget_closures
-                for admission in projection.admissions
-                if admission.admission_id in closure.affected_admission_ids
-            ):
-                return None
-            if any(
-                not item.reconciled
-                for item in projection.forget_closures
-            ):
-                return None
+            or any(not item.reconciled for item in projection.invalidations)
+            or not forget_admission_ids.issubset(terminal_admission_ids)
+        ):
+            return None
 
         commit = None
         try:
@@ -243,14 +222,9 @@ class LocalSQLiteRecoveryGateAdapter(RecoveryGatePort):
                 ).fetchone()
                 if not self._domain_row_matches(row, state):
                     raise _AbortGateTransaction()
-                if existing is None and (
+                if (
                     row["active_recovery_operation_id"] is not None
                     or row["active_recovery_generation"] is not None
-                ):
-                    raise _AbortGateTransaction()
-                if existing is not None and (
-                    row["active_recovery_operation_id"] not in (None, existing.operation_id)
-                    or row["active_recovery_generation"] not in (None, existing.generation)
                 ):
                     raise _AbortGateTransaction()
 
