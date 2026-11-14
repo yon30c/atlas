@@ -181,7 +181,7 @@ __all__ = [
     "ForgetOperationState",
     "ForgetVerificationOutcome",
     "ForgetVerificationReceipt",
-    "authenticate_envelope",\n    "canonical_json_bytes",\n    "object_commitment",\n    "verify_envelope",\n    "ConsistencyRecoveryProfile",
+    "ConsistencyRecoveryProfile",
     "ConsistencyRecoveryVerificationResult",
     "ConsistencyRecoveryVerificationStatus",
     "VerifiedLocalConsistencyRecoveryState",
