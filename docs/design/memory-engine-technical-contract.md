@@ -448,3 +448,10 @@ El documento `docs/design/domain-model-specification-dm-01.md`, en su revisión 
 
 Estas resoluciones no seleccionan proveedor de autenticación, almacenamiento, adaptadores, retención física de backups ni inventario de destinos. Cuando DM-01 deja esos elementos como pendientes operativos, este contrato no los da por resueltos. El contrato normativo principal y CT-01 a CT-08 mantienen precedencia.
 
+
+
+## 15. Decisión de arquitectura — Trust Anchor opcional y postergado
+
+**APROBADO — 13 de noviembre de 2026.** Trust Anchor externo es opcional y su implementación real queda postergada hasta la etapa final de Atlas. Las etapas actuales utilizan el perfil local en un único servidor. El perfil local valida la integridad y continuidad interna disponible, pero no demuestra anti-rollback frente a una restauración coherente del conjunto local ni que el head recuperado sea el último estado existente.
+
+La garantía MEM-14 de no reaparición sigue siendo normativa. Por tanto, una restauración que pueda reintroducir datos anteriores a un Forget no puede habilitarse sin una fuente independiente de supresión/continuidad o reconciliación explícita aprobada. Esta limitación no se resuelve con una comprobación de integridad local. La decisión no implementa ni activa Trust Anchor, Forget físico, lecturas protegidas o restauraciones productivas.
