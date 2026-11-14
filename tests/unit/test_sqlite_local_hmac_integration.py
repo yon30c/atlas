@@ -1,5 +1,5 @@
 """End-to-end SQLite append tests using the real local HMAC signer."""
-from datetime import datetime
+from datetime import datetime, timezone
 import tempfile
 import unittest
 from pathlib import Path
@@ -442,14 +442,7 @@ class SQLiteLocalHmacIntegrationTests(unittest.TestCase):
             position=first.position,
             state_reference="checkpoint-state-reference",
             integrity_reference="checkpoint-integrity-reference",
-            created_at=datetime.now().astimezone().astimezone(datetime.now().astimezone().tzinfo),
-        )
-        checkpoint = ConsistencyCheckpoint(
-            checkpoint_id=checkpoint.checkpoint_id,
-            position=checkpoint.position,
-            state_reference=checkpoint.state_reference,
-            integrity_reference=checkpoint.integrity_reference,
-            created_at=datetime.now().replace(tzinfo=__import__("datetime").timezone.utc),
+            created_at=datetime.now(timezone.utc),
         )
         unsigned_checkpoint = AuthenticatedConsistencyEnvelope(
             object_kind="checkpoint",
