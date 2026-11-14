@@ -68,6 +68,7 @@ def verify_terminal_admission_projection(
             kind = TerminalReceiptKind.ENDPOINT_COMPLETED
             previous_generation = None
             final_sequence = endpoint.final_sequence
+            fenced_through_sequence = None
         elif endpoint.status is EndpointProjectionStatus.FENCED:
             if (
                 endpoint.final_sequence is not None
@@ -77,6 +78,7 @@ def verify_terminal_admission_projection(
             kind = TerminalReceiptKind.ENDPOINT_FENCED
             previous_generation = admission.generation
             final_sequence = None
+            fenced_through_sequence = endpoint.last_emission_sequence
         else:
             return None
         request = TerminalReceiptVerificationRequest(
@@ -90,6 +92,7 @@ def verify_terminal_admission_projection(
             endpoint_id=endpoint.endpoint_id,
             previous_generation=previous_generation,
             final_sequence=final_sequence,
+            fenced_through_sequence=fenced_through_sequence,
         )
         try:
             result = verifier.verify_terminal_receipt(request)
