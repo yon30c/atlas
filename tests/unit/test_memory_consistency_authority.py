@@ -208,7 +208,7 @@ class FakeReadConsistencyAndEgress:
         with restored._lock:
             for closure in projection.forget_closures:
                 restored.suppressed_memories.add(closure.memory_id)
-                restored.generation = max(restored.generation, recovery_closure.generation)
+                restored.generation = max(restored.generation, closure.generation)
             for invalidation in projection.invalidations:
                 restored.revisions[
                     (invalidation.authority_kind, invalidation.authority_id)
@@ -219,7 +219,7 @@ class FakeReadConsistencyAndEgress:
             )
             if unresolved:
                 restored.recovery_pending = True
-                restored.generation = max(restored.generation, closure.generation)
+                restored.generation = max(restored.generation, recovery_closure.generation)
                 restored.operations[recovery_closure.operation_id] = {
                     "affected": recovery_closure.affected_admission_ids,
                     "pending": True,
