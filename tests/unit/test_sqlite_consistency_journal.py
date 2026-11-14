@@ -10,6 +10,7 @@ from atlas.adapters.sqlite.database import SQLiteDatabase
 from atlas.adapters.sqlite.migrations import SQLITE_MIGRATIONS
 from atlas.memory.journal import (
     ConsistencyPosition,
+    ConsistencyRecoveryLoadStatus,
     JournalOperationResolutionStatus,
 )
 from atlas.memory.local_auth import object_commitment
@@ -368,6 +369,77 @@ class SQLiteConsistencyJournalTests(unittest.TestCase):
             )
 
         self.assertIsNone(self.journal.load_recovery_state("domain-a"))
+
+
+    def test_typed_recovery_load_distinguishes_loaded_and_unavailable(self):
+        transition = read_admitted(record_id=RECORD_1)
+        self.assertIsNotNone(
+            self.journal.append_transition(self.position(0), "typed-load", transition)
+        )
+        loaded = self.journal.load_recovery_state_result("domain-a")
+        absent = self.journal.load_recovery_state_result("missing-domain")
+
+        self.assertIs(loaded.status, ConsistencyRecoveryLoadStatus.LOADED)
+        self.assertIsNotNone(loaded.state)
+        self.assertIs(absent.status, ConsistencyRecoveryLoadStatus.UNAVAILABLE)
+        self.assertIsNone(absent.state)
+
+    def test_typed_recovery_load_rejects_noncanonical_transition_bytes(self):
+        transition = read_admitted(record_id=RECORD_1)
+        self.assertIsNotNone(
+            self.journal.append_transition(self.position(0), "noncanonical", transition)
+        )
+        with self.database.write_transaction() as connection:
+            raw = bytes(connection.execute(
+                "SELECT transition_canonical FROM journal_entries "
+                "WHERE domain_id='domain-a' AND sequence=1"
+            ).fetchone()[0])
+            import json
+            noncanonical = json.dumps(
+                json.loads(raw.decode("utf-8")), ensure_ascii=False, indent=2
+            ).encode("utf-8")
+            connection.execute(
+                "UPDATE journal_entries SET transition_canonical=? "
+                "WHERE domain_id='domain-a' AND sequence=1",
+                (noncanonical,),
+            )
+
+        result = self.journal.load_recovery_state_result("domain-a")
+        self.assertIs(result.status, ConsistencyRecoveryLoadStatus.REJECTED)
+        self.assertIsNone(result.state)
+
+    def test_typed_recovery_load_rejects_multiple_operation_rows_for_one_entry(self):
+        transition = read_admitted(record_id=RECORD_1)
+        self.assertIsNotNone(
+            self.journal.append_transition(self.position(0), "one-operation", transition)
+        )
+        with self.database.write_transaction() as connection:
+            row = connection.execute(
+                "SELECT * FROM journal_operations WHERE domain_id='domain-a'"
+            ).fetchone()
+            connection.execute(
+                """
+                INSERT INTO journal_operations (
+                    domain_id, authority_epoch, append_id, operation_id, idempotency_key,
+                    request_canonical, request_digest, sequence, record_id, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row["domain_id"], row["authority_epoch"], "duplicate-operation-row",
+                    row["operation_id"], None, row["request_canonical"],
+                    row["request_digest"], row["sequence"], row["record_id"],
+                    row["created_at"],
+                ),
+            )
+
+        result = self.journal.load_recovery_state_result("domain-a")
+        self.assertIs(result.status, ConsistencyRecoveryLoadStatus.REJECTED)
+        self.assertIsNone(result.state)
+
+    def test_verified_recovery_read_is_unavailable_without_explicit_verifier(self):
+        result = self.journal.load_verified_recovery_state("domain-a")
+        from atlas.memory.trust import ConsistencyRecoveryVerificationStatus
+        self.assertIs(result.status, ConsistencyRecoveryVerificationStatus.UNAVAILABLE)
 
 
 if __name__ == "__main__":
