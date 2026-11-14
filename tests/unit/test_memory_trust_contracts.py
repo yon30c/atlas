@@ -119,13 +119,13 @@ class ConsistencyTrustContractTests(unittest.TestCase):
         verified = VerifiedConsistencyCheckpoint(
             checkpoint=self.checkpoint,
             anchor=self.anchor,
-            checkpoint_commitment="checkpoint-control-commitment",
+            checkpoint_commitment="control-state-commitment",
             verification_id="checkpoint-verification-1",
             verifier_id="independent-verifier",
             trust_policy_version="policy-v2",
             verified_at=self.now,
         )
-        self.assertEqual(verified.checkpoint_commitment, "checkpoint-control-commitment")
+        self.assertEqual(verified.checkpoint_commitment, "control-state-commitment")
 
     def test_verified_checkpoint_at_anchor_head_requires_anchor_commitment(self):
         with self.assertRaises(ContractError):
