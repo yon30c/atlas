@@ -198,7 +198,7 @@ Add focused tests for:
 12. A subsequent `load_recovery_state_result()` reconstructs the checkpoint and suffix; the existing independent recovery verifier and reducer path can consume the result.
 13. No schema migration is needed, or a separately approved minimal migration is fully tested.
 
-The feature-branch writer tests currently cover successful persistence and read-back, exact replay, changed-reference conflict, stale position, mismatched head commitment, second-signature failure, and an injected marker-insert failure that must roll back the checkpoint row. The independent projection coordinator and full recovery-verifier integration remain pending.
+The feature-branch writer tests currently cover successful persistence and read-back, exact replay, changed-reference conflict, stale position, mismatched head commitment, second-signature failure, an injected marker-insert failure that must roll back the checkpoint row, and a real HMAC-signer integration test for both root and marker envelopes. The independent projection coordinator and full recovery-verifier integration remain pending.
 
 All tests are owner-run on Debian. Do not run tests/builds in GitHub or deploy as part of this work.
 
