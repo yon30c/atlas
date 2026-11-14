@@ -110,7 +110,9 @@ class AtomicRecoveryGate(CoordinatorRecoveryGateFake):
             or expected_position.sequence != self.journal.state.head_sequence
         ):
             return None
-        commit = self.journal.append_transition(expected_position, transition)
+        commit = self.journal.append_transition(
+            expected_position, f"append:{transition.record_id}", transition
+        )
         if commit is None:
             return None
         self.closed = False

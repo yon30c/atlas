@@ -239,7 +239,9 @@ class RecoveryAdmissionFinalizationCoordinator:
             state.domain_id, state.authority_epoch, state.head_sequence
         )
         try:
-            commit = self._journal.append_transition(expected, transition)
+            commit = self._journal.append_transition(
+                expected, f"append:{transition.record_id}", transition
+            )
             if commit is not None and (
                 commit.record_id != transition.record_id
                 or commit.position.consistency_domain_id != state.domain_id

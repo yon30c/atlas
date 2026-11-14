@@ -114,7 +114,9 @@ class RecoveryJournalCoordinator:
             state.domain_id, state.authority_epoch, state.head_sequence
         )
         try:
-            commit = self._journal.append_transition(expected, transition)
+            commit = self._journal.append_transition(
+                expected, f"append:{transition.record_id}", transition
+            )
             if (
                 commit is None
                 or commit.record_id != transition.record_id

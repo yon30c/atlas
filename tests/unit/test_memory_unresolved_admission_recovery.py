@@ -623,7 +623,7 @@ class CoordinatorJournalFake:
             verified_local_state=verified,
         )
 
-    def append_transition(self, expected_position, transition):
+    def append_transition(self, expected_position, append_id, transition):
         if (
             expected_position.consistency_domain_id != self.state.domain_id
             or expected_position.authority_epoch != self.state.authority_epoch
@@ -677,7 +677,9 @@ class CoordinatorRecoveryGateFake:
     def close_recovery_gate(self, expected_position, transition):
         if self.closed or transition.record_kind is not ConsistencyRecordKind.RECOVERY_CLOSED:
             return None
-        commit = self.journal.append_transition(expected_position, transition)
+        commit = self.journal.append_transition(
+            expected_position, f"append:{transition.record_id}", transition
+        )
         if commit is not None:
             self.closed = True
         return commit
