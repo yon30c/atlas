@@ -591,6 +591,29 @@ class ConsistencyCheckpoint:
                 raise ContractError("envelope no corresponde al checkpoint exacto")
 
 
+class ConsistencyRecoveryLoadStatus(str, Enum):
+    LOADED = "loaded"
+    REJECTED = "rejected"
+    UNAVAILABLE = "unavailable"
+
+
+@dataclass(frozen=True, slots=True)
+class ConsistencyRecoveryLoadResult:
+    """Typed structural-read outcome; it carries no trust verification."""
+
+    status: ConsistencyRecoveryLoadStatus
+    state: "ConsistencyRecoveryState | None" = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.status, ConsistencyRecoveryLoadStatus):
+            raise ContractError("status debe ser ConsistencyRecoveryLoadStatus")
+        if self.status is ConsistencyRecoveryLoadStatus.LOADED:
+            if not isinstance(self.state, ConsistencyRecoveryState):
+                raise ContractError("LOADED requiere ConsistencyRecoveryState")
+        elif self.state is not None:
+            raise ContractError("REJECTED/UNAVAILABLE no pueden incluir state")
+
+
 @dataclass(frozen=True, slots=True)
 class ConsistencyRecoveryState:
     """Estado estructural sin autenticación; no debe alimentar el reducer operativo.
