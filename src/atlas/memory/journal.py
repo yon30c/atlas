@@ -472,7 +472,7 @@ class ConsistencyCheckpoint:
 
 @dataclass(frozen=True, slots=True)
 class ConsistencyRecoveryState:
-    """Estado reconstruible y verificado; estados no verificables se representan como None."""
+    """Estado estructuralmente consistente, pero NO autenticado ni anti-rollback verificado.\n\n    No debe alimentar el reducer en recuperación operativa. El flujo operativo\n    requiere VerifiedConsistencyRecoveryState producido por la frontera confiable.\n    """
 
     domain_id: str
     authority_epoch: int
