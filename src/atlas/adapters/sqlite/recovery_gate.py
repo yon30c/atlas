@@ -72,6 +72,7 @@ class LocalSQLiteRecoveryGateAdapter(RecoveryGatePort):
             or verified.consistency_domain_id != domain_id
             or verified.authority_epoch != state.authority_epoch
             or verified.head_sequence != state.head_sequence
+            or verified.trust_policy_version != self._journal.trust_policy_version
             or projection is None
             or projection.domain_id != domain_id
             or projection.authority_epoch != state.authority_epoch
