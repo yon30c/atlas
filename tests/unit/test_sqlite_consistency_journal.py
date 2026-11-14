@@ -315,5 +315,60 @@ class SQLiteConsistencyJournalTests(unittest.TestCase):
         self.assertEqual(result.current_position.sequence, 0)
 
 
+    def test_load_recovery_state_reconstructs_durable_entries_and_envelopes(self):
+        first = read_admitted(record_id=RECORD_1)
+        second = replace(first, record_id=RECORD_2, snapshot_id="snapshot-two")
+        self.assertIsNotNone(
+            self.journal.append_transition(self.position(0), "read-append-one", first)
+        )
+        self.assertIsNotNone(
+            self.journal.append_transition(self.position(1), "read-append-two", second)
+        )
+
+        state = self.journal.load_recovery_state("domain-a")
+
+        self.assertIsNotNone(state)
+        self.assertEqual(state.domain_id, "domain-a")
+        self.assertEqual(state.authority_epoch, 1)
+        self.assertEqual(state.head_sequence, 2)
+        self.assertEqual(len(state.entries), 2)
+        self.assertEqual(state.entries[0].transition, first)
+        self.assertEqual(state.entries[1].transition, second)
+        self.assertEqual(state.entries[0].envelope.sequence, 1)
+        self.assertEqual(state.entries[1].envelope.sequence, 2)
+        self.assertEqual(
+            state.continuity_reference,
+            state.entries[-1].envelope.object_commitment,
+        )
+
+    def test_load_recovery_state_returns_none_for_empty_domain(self):
+        self.assertIsNone(self.journal.load_recovery_state("domain-a"))
+
+    def test_load_recovery_state_fails_closed_when_head_disagrees_with_rows(self):
+        transition = read_admitted(record_id=RECORD_1)
+        self.assertIsNotNone(
+            self.journal.append_transition(self.position(0), "read-append", transition)
+        )
+        with self.database.write_transaction() as connection:
+            connection.execute(
+                "UPDATE consistency_domains SET head_sequence=2 WHERE domain_id='domain-a'"
+            )
+
+        self.assertIsNone(self.journal.load_recovery_state("domain-a"))
+
+    def test_load_recovery_state_fails_closed_on_transition_metadata_mismatch(self):
+        transition = read_admitted(record_id=RECORD_1)
+        self.assertIsNotNone(
+            self.journal.append_transition(self.position(0), "read-append", transition)
+        )
+        with self.database.write_transaction() as connection:
+            connection.execute(
+                "UPDATE journal_entries SET record_kind='endpoint_fenced' "
+                "WHERE domain_id='domain-a' AND sequence=1"
+            )
+
+        self.assertIsNone(self.journal.load_recovery_state("domain-a"))
+
+
 if __name__ == "__main__":
     unittest.main()
