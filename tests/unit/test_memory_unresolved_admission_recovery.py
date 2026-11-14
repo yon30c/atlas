@@ -354,6 +354,7 @@ class UnresolvedAdmissionRecoveryTests(unittest.TestCase):
             generation=plan.generation,
             endpoint_id=requests[0].endpoint_id,
             previous_generation=requests[0].previous_generation,
+            fenced_through_sequence=requests[0].last_committed_sequence,
         )
         with self.assertRaises(ContractError):
             from atlas.memory.recovery import VerifiedRecoveryFenceBatch
