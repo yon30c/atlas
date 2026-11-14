@@ -1,5 +1,16 @@
 """Modelos y validación pura de memoria; el acceso pasa por MemoryGateway."""
 from atlas.memory.authorization import MemoryAuthorizationDecision, MemoryAuthorizationResult
+from atlas.memory.route_registry import (
+    DeliveryRouteDescriptor,
+    DeliveryRouteRegistryPort,
+    RouteRegistryResult,
+    RouteRegistryStatus,
+)
+from atlas.memory.revision_validation import (
+    RevisionValidationPort,
+    RevisionValidationResult,
+    RevisionValidationStatus,
+)
 from atlas.memory.context import MemoryRequestContext
 from atlas.memory.metadata import (
     EnvironmentMetadata,
@@ -156,6 +167,13 @@ from atlas.memory.validation import (
 )
 
 __all__ = [
+    "DeliveryRouteDescriptor",
+    "DeliveryRouteRegistryPort",
+    "RouteRegistryResult",
+    "RouteRegistryStatus",
+    "RevisionValidationPort",
+    "RevisionValidationResult",
+    "RevisionValidationStatus",
     "MemoryAuthorizationDecision",
     "MemoryAuthorizationResult",
     "MemoryRequestContext",
