@@ -162,7 +162,7 @@ class CheckpointProjectionCodecTests(unittest.TestCase):
 
         artifacts = build_checkpoint_projection_artifacts(
             self.projection,
-            checkpoint_id="checkpoint-1",
+            checkpoint_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074501",
             schema_version=1,
             reducer_version="reducer-v1",
             trust_policy_version="local-policy-v1",
@@ -175,7 +175,7 @@ class CheckpointProjectionCodecTests(unittest.TestCase):
     def test_manifest_round_trip_is_canonical(self):
         artifacts = build_checkpoint_projection_artifacts(
             self.projection,
-            checkpoint_id="checkpoint-1",
+            checkpoint_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074501",
             schema_version=1,
             reducer_version="reducer-v1",
             trust_policy_version="local-policy-v1",
@@ -186,7 +186,7 @@ class CheckpointProjectionCodecTests(unittest.TestCase):
     def test_artifacts_bind_projection_and_manifest_separately(self):
         artifacts = build_checkpoint_projection_artifacts(
             self.projection,
-            checkpoint_id="checkpoint-1",
+            checkpoint_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074501",
             schema_version=1,
             reducer_version="reducer-v1",
             trust_policy_version="local-policy-v1",
@@ -207,7 +207,7 @@ class CheckpointProjectionCodecTests(unittest.TestCase):
     def test_artifact_decoder_rejects_wrong_checkpoint_references(self):
         artifacts = build_checkpoint_projection_artifacts(
             self.projection,
-            checkpoint_id="checkpoint-1",
+            checkpoint_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074501",
             schema_version=1,
             reducer_version="reducer-v1",
             trust_policy_version="local-policy-v1",
@@ -230,7 +230,7 @@ class CheckpointProjectionCodecTests(unittest.TestCase):
     def test_artifact_decoder_rejects_state_tampering(self):
         artifacts = build_checkpoint_projection_artifacts(
             self.projection,
-            checkpoint_id="checkpoint-1",
+            checkpoint_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074501",
             schema_version=1,
             reducer_version="reducer-v1",
             trust_policy_version="local-policy-v1",
@@ -255,7 +255,7 @@ class CheckpointProjectionCodecTests(unittest.TestCase):
     def test_artifact_decoder_rejects_manifest_tampering(self):
         artifacts = build_checkpoint_projection_artifacts(
             self.projection,
-            checkpoint_id="checkpoint-1",
+            checkpoint_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074501",
             schema_version=1,
             reducer_version="reducer-v1",
             trust_policy_version="local-policy-v1",
