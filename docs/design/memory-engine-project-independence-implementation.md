@@ -205,3 +205,20 @@ Por tanto, **no es seguro implementar la autoridad mediante composición de llam
 Diseñar la API concreta de unidad de trabajo y el refactor mínimo de `SQLiteConsistencyJournal` para que sus operaciones internas puedan reutilizar una conexión transaccional sin perder firma, canonicalización, CAS, idempotencia ni semántica de errores. Solo después de revisar ese diseño se implementará la autoridad SQLite. No se modifica todavía el esquema, no se añaden migraciones y no se activa ningún runtime.
 
 **Validación:** no se ejecutaron pruebas ni build, de acuerdo con la instrucción vigente del propietario.
+
+
+
+## ME-D4J — diseño de unidad de trabajo SQLite compartida
+
+**Estado: diseño documentado; implementación pendiente.**
+
+- Se documentó la API conceptual `SQLiteUnitOfWork`, propiedad de una única instancia `SQLiteDatabase`, con conexión configurada, `BEGIN IMMEDIATE`, validación de propietario y ciclo de vida limitado al contexto.
+- El journal conservará sus métodos públicos compatibles, pero las mutaciones compuestas deberán delegar en operaciones internas que reciban la misma unidad de trabajo y no abran ni confirmen transacciones propias.
+- La mutación del Recovery Gate, la transición autenticada, la idempotencia y el head del journal deberán confirmarse o revertirse en un solo commit.
+- El diseño conserva canonicalización, envelopes, firma, CAS, idempotencia, reducer y DTO persistidos. No requiere alterar las migraciones V1–V3 salvo que el análisis posterior identifique datos realmente ausentes.
+- Se mantiene explícito el límite distribuido: SQLite no hace atómica la aceptación remota de egress. El fencing requiere un protocolo verificable e idempotente en el receptor.
+- Se documentaron pruebas pendientes de rollback, ownership, compatibilidad, fallos inyectados, concurrencia multiproceso, reinicio y reconciliación exacta.
+- No se implementó código, no se modificó el esquema, no se ejecutaron pruebas ni build y no se activó ningún runtime.
+
+Documento de diseño: [ME-D4J — unidad de trabajo SQLite compartida](ME-D4J-sqlite-unit-of-work.md).
+Guía de configuración local: [Memory Engine README](../memory-engine/README.md).
