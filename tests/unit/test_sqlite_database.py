@@ -66,6 +66,56 @@ class SQLiteDatabaseTests(unittest.TestCase):
             ).fetchone()
         self.assertIsNone(row)
 
+
+    def test_unit_of_work_commits_and_exposes_only_its_owned_connection(self):
+        self.database.initialize()
+        with self.database.unit_of_work() as unit:
+            connection = unit._connection_for(self.database)
+            self.assertTrue(connection.in_transaction)
+            connection.execute("CREATE TABLE unit_commit (value TEXT NOT NULL)")
+            connection.execute("INSERT INTO unit_commit(value) VALUES ('committed')")
+        with self.database.connection() as connection:
+            row = connection.execute("SELECT value FROM unit_commit").fetchone()
+        self.assertEqual(row["value"], "committed")
+        with self.assertRaises(ContractError):
+            unit._connection_for(self.database)
+
+    def test_unit_of_work_rolls_back_on_error(self):
+        self.database.initialize()
+        with self.assertRaises(RuntimeError):
+            with self.database.unit_of_work() as unit:
+                unit._connection_for(self.database).execute(
+                    "CREATE TABLE unit_rollback (value TEXT)"
+                )
+                raise RuntimeError("injected unit-of-work failure")
+        with self.database.connection() as connection:
+            row = connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='unit_rollback'"
+            ).fetchone()
+        self.assertIsNone(row)
+
+    def test_unit_of_work_rejects_another_database_owner(self):
+        other_database = SQLiteDatabase(self.database_path, busy_timeout_ms=1200)
+        with self.database.unit_of_work() as unit:
+            with self.assertRaises(ContractError):
+                unit._connection_for(other_database)
+
+    def test_unit_of_work_rejects_nesting_on_same_thread(self):
+        with self.database.unit_of_work() as outer:
+            with self.assertRaises(ContractError):
+                with self.database.unit_of_work():
+                    self.fail("la unidad anidada no debe abrirse")
+            self.assertTrue(outer._connection_for(self.database).in_transaction)
+
+    def test_legacy_write_transaction_remains_compatible(self):
+        self.database.initialize()
+        with self.database.write_transaction() as connection:
+            connection.execute("CREATE TABLE legacy_compat (value TEXT NOT NULL)")
+            connection.execute("INSERT INTO legacy_compat(value) VALUES ('legacy')")
+        with self.database.connection() as connection:
+            row = connection.execute("SELECT value FROM legacy_compat").fetchone()
+        self.assertEqual(row["value"], "legacy")
+
     def test_applies_ordered_migrations_and_is_idempotent(self):
         migrations = (
             SQLiteMigration(1, "initial", "CREATE TABLE first_table (id INTEGER PRIMARY KEY);"),
