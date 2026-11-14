@@ -14,6 +14,7 @@ from atlas.memory.journal import (
     ConsistencyPosition,
     ConsistencyRecoveryState,
 )
+from atlas.memory.journal_reducer import ConsistencyProjection
 
 
 def _required(value: object, field: str) -> None:
@@ -329,6 +330,7 @@ class VerifiedLocalConsistencyRecoveryState:
     verified_at: datetime
     profile: ConsistencyRecoveryProfile = ConsistencyRecoveryProfile.LOCAL
     external_anti_rollback_protected: bool = False
+    projection: ConsistencyProjection | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.state, ConsistencyRecoveryState):
@@ -351,6 +353,16 @@ class VerifiedLocalConsistencyRecoveryState:
             raise ContractError("VerifiedLocalConsistencyRecoveryState requiere perfil local")
         if self.external_anti_rollback_protected is not False:
             raise ContractError("el perfil local no puede afirmar anti-rollback externo")
+        if self.projection is not None:
+            if not isinstance(self.projection, ConsistencyProjection):
+                raise ContractError("projection debe ser ConsistencyProjection")
+            if (
+                self.projection.domain_id != self.consistency_domain_id
+                or self.projection.authority_epoch != self.authority_epoch
+                or self.projection.head_sequence != self.head_sequence
+                or self.projection.replay_metadata_version != 1
+            ):
+                raise ContractError("projection no coincide con la evidencia local verificada")
         _utc(self.verified_at, "verified_at")
 
 
