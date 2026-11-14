@@ -1,4 +1,5 @@
 """Integration tests for the verified local checkpoint coordinator."""
+from dataclasses import replace
 from datetime import datetime, timezone
 import tempfile
 import unittest
@@ -227,14 +228,10 @@ class LocalCheckpointCoordinatorTests(unittest.TestCase):
         class RacingPublisher:
             def publish_checkpoint_projection(inner_self, artifacts):
                 self.store.publish_checkpoint_projection(artifacts)
-                raced = ConsistencyTransition(
-                    record_id=RECORD_2,
-                    schema_version=1,
-                    record_kind=ConsistencyRecordKind.READ_ACTIVATED,
-                    operation_id="activate:admission-1",
-                    occurred_at=NOW,
-                    admission_id="admission-1",
-                    generation=1,
+                raced = replace(
+                    read_admitted(record_id=RECORD_2),
+                    operation_id="read:admission-2",
+                    admission_id="admission-2",
                 )
                 commit = self.journal.append_transition(
                     ConsistencyPosition("atlas-local", 1, 1),
@@ -258,6 +255,10 @@ class LocalCheckpointCoordinatorTests(unittest.TestCase):
         self.assertIs(result.status, CheckpointCommitStatus.CONFLICT)
         self.assertEqual(self._checkpoint_count(), 0)
         self.assertEqual(self._head(), 2)
+        recovered = self.journal.load_verified_recovery_state("atlas-local")
+        self.assertIs(
+            recovered.status, ConsistencyRecoveryVerificationStatus.VERIFIED
+        )
 
     def test_projection_readback_unavailable_prevents_sqlite_mutation(self):
         self.store.unavailable = True
