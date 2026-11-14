@@ -128,6 +128,7 @@ class RecoveryEndpointFenceReceipt:
     generation: int
     receipt_id: str
     confirmed: bool
+    fenced_through_sequence: int
 
     def __post_init__(self) -> None:
         for field in ("operation_id", "admission_id", "endpoint_id", "receipt_id"):
@@ -138,6 +139,12 @@ class RecoveryEndpointFenceReceipt:
             raise ContractError("receipt de fencing no avanza generación")
         if not isinstance(self.confirmed, bool):
             raise ContractError("confirmed debe ser bool")
+        if (
+            isinstance(self.fenced_through_sequence, bool)
+            or not isinstance(self.fenced_through_sequence, int)
+            or self.fenced_through_sequence < 0
+        ):
+            raise ContractError("fenced_through_sequence debe ser entero no negativo")
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,6 +190,7 @@ class VerifiedRecoveryFenceBatch:
                 or receipt.endpoint_id != request.endpoint_id
                 or receipt.previous_generation != request.previous_generation
                 or receipt.generation != request.generation
+                or receipt.fenced_through_sequence != request.last_committed_sequence
             ):
                 raise ContractError("recibo no corresponde exactamente al recovery request")
 
@@ -311,6 +319,7 @@ def execute_recovery_fencing(
             generation=request.generation,
             endpoint_id=request.endpoint_id,
             previous_generation=request.previous_generation,
+            fenced_through_sequence=request.last_committed_sequence,
         )
         try:
             verification_result = verifier.verify_terminal_receipt(verification_request)
