@@ -537,7 +537,22 @@ class SQLiteConsistencyJournal:
                     (domain_id, epoch),
                 ).fetchall()
                 if head == 0:
-                    if checkpoint_rows or domain["head_commitment"] is not None:
+                    entry_count = connection.execute(
+                        "SELECT COUNT(*) FROM journal_entries "
+                        "WHERE domain_id=? AND authority_epoch=?",
+                        (domain_id, epoch),
+                    ).fetchone()[0]
+                    operation_count = connection.execute(
+                        "SELECT COUNT(*) FROM journal_operations "
+                        "WHERE domain_id=? AND authority_epoch=?",
+                        (domain_id, epoch),
+                    ).fetchone()[0]
+                    if (
+                        checkpoint_rows
+                        or domain["head_commitment"] is not None
+                        or entry_count != 0
+                        or operation_count != 0
+                    ):
                         return rejected
                     return unavailable
                 if (
