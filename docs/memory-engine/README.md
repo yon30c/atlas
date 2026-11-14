@@ -141,3 +141,21 @@ SQLite no puede incluir la aceptación irrevocable de un endpoint remoto dentro 
 Esta guía refleja el código y esquema inspeccionados. No se ejecutaron pruebas ni build durante ME-D4I/ME-D4J. Siguen pendientes la autoridad SQLite concreta, las pruebas multiproceso, la atomicidad de admisión/egress y la apertura segura del Recovery Gate.
 
 Referencias: [contrato de memoria](../contracts/memory.md) · [registro de implementación](../design/memory-engine-project-independence-implementation.md).
+
+
+## ME-D4K — unidad de trabajo SQLite disponible (sin integración en journal)
+
+La infraestructura ahora expone `SQLiteUnitOfWork` y `SQLiteDatabase.unit_of_work()`:
+
+```python
+with database.unit_of_work() as unit:
+    connection = unit._connection_for(database)  # uso interno de adaptadores
+    connection.execute("INSERT INTO tabla_local(valor) VALUES (?)", ("dato",))
+# commit al salir; rollback si se propaga una excepción
+```
+
+La unidad está ligada a la instancia exacta de `SQLiteDatabase`, solo permanece activa durante su contexto y rechaza anidamiento en el mismo hilo. La API `write_transaction()` sigue disponible y conserva el acceso legacy a la conexión.
+
+**Límite de esta fase:** `SQLiteConsistencyJournal` todavía utiliza `write_transaction()` por su cuenta. No existe aún un método journal que acepte esta unidad de trabajo, y la autoridad del Recovery Gate no está implementada. Por tanto, no es posible realizar todavía una operación atómica compuesta entre gate y journal. La API nueva no debe utilizarse para simular esa integración.
+
+La implementación se añadió, pero no se ejecutaron pruebas ni build. Los tests unitarios nuevos cubren commit, rollback, ownership, anidamiento y compatibilidad; quedan pendientes de ejecución por el propietario.
