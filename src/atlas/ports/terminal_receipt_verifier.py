@@ -38,4 +38,10 @@ class TrustAwareTerminalReceiptVerifierPort(TerminalReceiptVerifierPort, Protoco
         request: TerminalReceiptVerificationRequest,
         trust_context: "ReceiptTrustContext",
     ) -> ReceiptVerificationResult:
-        """Verify canonical request binding under the supplied trust policy/time."""
+        """Verify only if trust_context.binds_terminal_request(request) is true.
+
+        Resolve canonical_request_reference to the immutable canonical request,
+        compare every semantic field, then validate issuer authorization, key
+        status, authenticity, validity interval, revocation and replay. The
+        caller-supplied context is not itself proof of authenticity.
+        """
