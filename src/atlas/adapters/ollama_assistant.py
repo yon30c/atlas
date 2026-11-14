@@ -1,5 +1,7 @@
 """Puente entre solicitudes conversacionales y el proveedor local Ollama."""
 
+from typing import Callable
+
 from atlas.adapters.ollama import OllamaError
 from atlas.assistant.models import AssistantRequest, AssistantResponseKind
 from atlas.core.errors import ContractError
@@ -28,7 +30,7 @@ class OllamaResponseGenerator:
     def __init__(
         self,
         provider: LLMProvider,
-        model: str,
+        model: str = "gemma4:e2b",
         *,
         system_prompt: str = ATLAS_SYSTEM_PROMPT,
         temperature: float | None = 0.2,
@@ -40,22 +42,16 @@ class OllamaResponseGenerator:
             raise ContractError("model debe ser una cadena no vacía")
         if not isinstance(system_prompt, str) or not system_prompt.strip():
             raise ContractError("system_prompt debe ser una cadena no vacía")
-
         self._provider = provider
         self._model = model.strip()
         self._system_prompt = system_prompt
         self._temperature = temperature
         self._max_tokens = max_tokens
 
-    def generate(
-        self,
-        request: AssistantRequest,
-    ) -> tuple[AssistantResponseKind, str]:
-        """Genera texto local sin exponer herramientas ni autoridad operativa."""
+    def _build_request(self, request: AssistantRequest) -> LLMRequest:
         if not isinstance(request, AssistantRequest):
             raise ContractError("request debe ser AssistantRequest")
-
-        llm_request = LLMRequest(
+        return LLMRequest(
             model=self._model,
             messages=(
                 LLMMessage(LLMMessageRole.SYSTEM, self._system_prompt),
@@ -65,17 +61,52 @@ class OllamaResponseGenerator:
             max_tokens=self._max_tokens,
         )
 
+    def generate(
+        self,
+        request: AssistantRequest,
+    ) -> tuple[AssistantResponseKind, str]:
+        """Genera texto local sin exponer herramientas ni autoridad operativa."""
+        llm_request = self._build_request(request)
         try:
             response = self._provider.generate(llm_request)
         except OllamaError:
-            return (
-                AssistantResponseKind.ERROR,
-                "No pude obtener una respuesta del modelo local. Comprueba "
-                "que Ollama esté disponible y que el modelo configurado "
-                "esté instalado.",
-            )
+            return self._provider_error()
+        return self._map_response(response)
 
+    def generate_streaming(
+        self,
+        request: AssistantRequest,
+        on_token: Callable[[str], None],
+    ) -> tuple[AssistantResponseKind, str]:
+        """Genera texto progresivamente cuando el proveedor soporta streaming."""
+        if not callable(on_token):
+            raise ContractError("on_token debe ser invocable")
+        llm_request = self._build_request(request)
+        try:
+            stream_method = getattr(self._provider, "generate_stream", None)
+            if callable(stream_method):
+                response = stream_method(llm_request, on_token)
+            else:
+                response = self._provider.generate(llm_request)
+                if isinstance(response, LLMResponse):
+                    on_token(response.content)
+        except OllamaError:
+            return self._provider_error()
+        return self._map_response(response)
+
+    @staticmethod
+    def _provider_error() -> tuple[AssistantResponseKind, str]:
+        return (
+            AssistantResponseKind.ERROR,
+            "No pude obtener una respuesta del modelo local. Comprueba "
+            "que Ollama esté disponible y que el modelo configurado "
+            "esté instalado.",
+        )
+
+    @staticmethod
+    def _map_response(
+        response: object,
+    ) -> tuple[AssistantResponseKind, str]:
         if not isinstance(response, LLMResponse):
             raise ContractError("provider debe devolver una LLMResponse")
-
         return AssistantResponseKind.INFORMATIONAL, response.content
