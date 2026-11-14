@@ -1,8 +1,8 @@
 # ME-03K — Durable SQLite checkpoint write contract
 
-**Status:** writer implementation added on the feature branch; coordinator and owner validation remain pending.  
+**Status:** SQLite writer and local checkpoint coordinator implemented on the feature branch; owner validation pending.  
 **Target branch:** `feature/me-03k-local-profile`.  
-**Scope:** atomically persist an authenticated checkpoint and its matching journal marker, preserving the read contract in `me-03k-sqlite-checkpoint-read-contract.md`. The current implementation is the low-level SQLite writer; it does not yet orchestrate independent projection publication or verification.  
+**Scope:** atomically persist an authenticated checkpoint and its matching journal marker, preserving the read contract in `me-03k-sqlite-checkpoint-read-contract.md`. The implementation includes a low-level SQLite writer and an orchestration layer for independent projection publication, read-back verification and atomic checkpoint commit.  
 **Non-goals:** schema migration unless implementation proves the existing schema insufficient; external Trust Anchor; anti-rollback guarantees; production activation; Broker changes.
 
 ## 1. Purpose and invariants
@@ -115,7 +115,7 @@ The checkpoint envelope is an independent root (`previous_commitment = null`). T
 
 The writer returns typed `COMMITTED`, `REPLAYED`, `CONFLICT`, `UNAVAILABLE` or `UNKNOWN` results. An exact retry resolves from the persisted checkpoint and marker without signing or writing again. Changed references, timestamp, position, transition, operation identity or envelope policy metadata conflict. A transaction exception is reported as `UNKNOWN` so the caller can retry with the same checkpoint identity.
 
-This low-level method deliberately does not accept an arbitrary projection as proof. The future coordinator must call it only after publishing the projection independently and resolving the exact request as `VerifiedCheckpointProjection`. No projection-store call occurs while the SQLite writer lock is held.
+This low-level method deliberately does not accept an arbitrary projection as proof. `LocalCheckpointCoordinator` calls it only after publishing the projection independently and resolving the exact request through `require_verified_checkpoint_projection()`. No projection-store call occurs while the SQLite writer lock is held.
 ## 5. Idempotency and uncertain outcomes
 
 The checkpoint identity is stable across retries. The marker operation identity remains `checkpoint:<checkpoint_id>`; its journal `append_id` is a distinct append-attempt identifier, consistent with K01's separation of append identity and semantic operation identity.
@@ -198,7 +198,7 @@ Add focused tests for:
 12. A subsequent `load_recovery_state_result()` reconstructs the checkpoint and suffix; the existing independent recovery verifier and reducer path can consume the result.
 13. No schema migration is needed, or a separately approved minimal migration is fully tested.
 
-The feature-branch writer tests currently cover successful persistence and read-back, exact replay, changed-reference conflict, stale position, mismatched head commitment, second-signature failure, an injected marker-insert failure that must roll back the checkpoint row, and a real HMAC-signer integration test for both root and marker envelopes. The independent projection coordinator and full recovery-verifier integration remain pending.
+The feature-branch writer tests cover successful persistence and read-back, exact replay, changed-reference conflict, stale position, mismatched head commitment, second-signature failure, an injected marker-insert failure that must roll back the checkpoint row, and a real HMAC-signer integration test for both root and marker envelopes. Coordinator tests cover successful publication/verification/commit and verified recovery, exact retry, changed timestamp conflict, a concurrent append that makes the projection stale, unavailable read-back, and publication failure.
 
 All tests are owner-run on Debian. Do not run tests/builds in GitHub or deploy as part of this work.
 
@@ -213,3 +213,36 @@ This checkpoint writer will provide atomic local persistence and a verified proj
 - production readiness without owner-run tests and operational review.
 
 Trust Anchor remains a separate later phase.
+
+
+## 12. Local checkpoint coordinator
+
+`LocalCheckpointCoordinator` composes the existing verified recovery reader, the independent projection publisher/resolver and `SQLiteConsistencyJournal.commit_checkpoint()`. It does not add a second trust model or a new verified-evidence type.
+
+The public operation is:
+
+```python
+coordinator.commit_checkpoint(
+    checkpoint_id,
+    expected_position,
+    created_at,
+)
+```
+
+The three arguments form the stable operation identity and MUST be reused unchanged after `UNKNOWN`. The coordinator performs these steps:
+
+1. Calls `load_verified_recovery_state()` and accepts only `VERIFIED` local-profile evidence with a projection.
+2. If the same checkpoint ID is already the latest verified checkpoint, checks its represented position, creation time and marker, then returns `REPLAYED` without writing.
+3. Otherwise requires the verified head and projection to match `expected_position` exactly, and confirms that the current journal issuer/role is authorized for checkpoint envelopes under the supplied trust policy.
+4. Builds canonical projection and manifest artifacts using schema version 1, the configured reducer version and the configured policy version.
+5. Publishes the immutable state and manifest through the independent publisher.
+6. Resolves the exact checkpoint request through the configured resolver and passes the result through `require_verified_checkpoint_projection()`.
+7. Calls the SQLite writer with the exact expected position and verified local head commitment.
+
+The journal's own `LocalConsistencyRecoveryVerifier` MUST be configured with the same independent projection resolver used by the coordinator. This is necessary so subsequent operational recovery can resolve the committed checkpoint. The resolver and publisher must address storage independent from the SQLite database.
+
+A concurrent append after projection verification is detected by the writer's `BEGIN IMMEDIATE` head check and returns `CONFLICT`. A failed publication or unavailable read-back returns `UNAVAILABLE`; rejected or mismatched evidence returns `CONFLICT`. A caller must not infer success from either outcome.
+
+When retrying after an uncertain response, the caller supplies the same checkpoint ID, expected position and creation time. If the checkpoint committed and remains the latest checkpoint, the coordinator verifies the recovered state and returns `REPLAYED`. If the expected head has changed without that checkpoint being present as the latest checkpoint, it returns `CONFLICT` rather than silently moving the operation to a new head.
+
+The coordinator remains local-profile only. It does not detect restoration of an older coherent SQLite backup and does not add external anti-rollback protection.
