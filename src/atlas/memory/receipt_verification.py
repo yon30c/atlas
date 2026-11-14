@@ -56,6 +56,7 @@ class TerminalReceiptVerificationRequest:
     endpoint_id: str | None = None
     previous_generation: int | None = None
     final_sequence: int | None = None
+    fenced_through_sequence: int | None = None
 
     def __post_init__(self) -> None:
         for field in (
@@ -86,6 +87,10 @@ class TerminalReceiptVerificationRequest:
             _non_negative(self.final_sequence, "final_sequence")
         elif self.final_sequence is not None:
             raise ContractError("final_sequence solo aplica a endpoint completion")
+        if self.kind is TerminalReceiptKind.ENDPOINT_FENCED:
+            _non_negative(self.fenced_through_sequence, "fenced_through_sequence")
+        elif self.fenced_through_sequence is not None:
+            raise ContractError("fenced_through_sequence solo aplica a endpoint fencing")
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,6 +110,7 @@ class VerifiedTerminalReceipt:
     endpoint_id: str | None = None
     previous_generation: int | None = None
     final_sequence: int | None = None
+    fenced_through_sequence: int | None = None
 
     def __post_init__(self) -> None:
         _required(self.verification_id, "verification_id")
@@ -122,6 +128,7 @@ class VerifiedTerminalReceipt:
             endpoint_id=self.endpoint_id,
             previous_generation=self.previous_generation,
             final_sequence=self.final_sequence,
+            fenced_through_sequence=self.fenced_through_sequence,
         )
 
     def matches(self, request: TerminalReceiptVerificationRequest) -> bool:
@@ -131,6 +138,7 @@ class VerifiedTerminalReceipt:
                 "consistency_domain_id", "authority_epoch", "operation_id",
                 "admission_id", "receipt_id", "kind", "generation",
                 "endpoint_id", "previous_generation", "final_sequence",
+                "fenced_through_sequence",
             )
         )
 
