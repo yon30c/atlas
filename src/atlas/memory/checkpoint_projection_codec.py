@@ -13,6 +13,7 @@ from typing import Any, Union, get_args, get_origin, get_type_hints
 
 from atlas.core.errors import ContractError
 from atlas.memory.journal_reducer import ConsistencyProjection
+from atlas.memory.identifiers import validate_atlas_id
 from atlas.memory.local_auth import CANONICALIZATION_VERSION, canonical_json_bytes
 
 
@@ -51,6 +52,7 @@ class CheckpointProjectionManifest:
             value = getattr(self, name)
             if not isinstance(value, str) or not value.strip():
                 raise ContractError(f"{name} debe ser una cadena no vacía")
+        validate_atlas_id(self.checkpoint_id, "checkpoint_id")
         for name in (
             "manifest_version", "projection_format_version",
             "canonicalization_version",
