@@ -35,7 +35,7 @@ from atlas.memory.receipt_verification import (
 )
 from atlas.memory.recovery_coordinator import (
     RecoveryCoordinatorStatus,
-    RecoveryJournalCoordinator,
+    RecoveryJournalCoordinator as _RecoveryJournalCoordinator,
 )
 from atlas.memory.trust import (
     ConsistencyRecoveryVerificationResult,
@@ -48,8 +48,10 @@ from atlas.memory.recovery import (
     RecoveryFencePlan,
     build_recovery_fence_plan,
     build_recovery_fence_requests,
-    execute_recovery_fencing,
+    execute_recovery_fencing as _execute_recovery_fencing,
 )
+
+from tests.fakes.receipt_trust import FakeReceiptTrustContextFactory
 
 NOW = datetime(2026, 11, 13, 18, 0, tzinfo=timezone.utc)
 MEMORY = "018bcfe5-7b3a-7cc2-98c4-dc0c0c074501"
@@ -183,6 +185,23 @@ class FakeTerminalVerifier:
             ReceiptVerificationStatus.VERIFIED,
             VerifiedTerminalReceipt(**values),
         )
+
+    def verify_terminal_receipt_with_context(self, request, trust_context):
+        if not trust_context.binds_terminal_request(request):
+            return ReceiptVerificationResult(ReceiptVerificationStatus.REJECTED)
+        return self.verify_terminal_receipt(request)
+
+
+def execute_recovery_fencing(plan, fencer, verifier):
+    return _execute_recovery_fencing(
+        plan, fencer, verifier, FakeReceiptTrustContextFactory(), NOW
+    )
+
+
+class RecoveryJournalCoordinator(_RecoveryJournalCoordinator):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("trust_context_factory", FakeReceiptTrustContextFactory())
+        super().__init__(*args, **kwargs)
 
 
 class UnresolvedAdmissionRecoveryTests(unittest.TestCase):
