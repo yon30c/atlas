@@ -234,7 +234,7 @@ El adaptador deberá demostrar con pruebas K01–K07 y fallos inyectados:
 - revocación/rotación de claves y validación de recibos históricos;
 - duplicación/replay de recibos y binding incorrecto;
 - caída en cada frontera de cierre, fencing, finalización y apertura;
-- recuperación multiproceso/multinodo sin reactivar emisores antiguos;
+- recuperación multiproceso en el servidor único inicial sin reactivar emisores antiguos; las pruebas multinodo quedan fuera del baseline y se evaluarán si Atlas adopta una segunda máquina o topología distribuida.
 - compactación conservando tombstones y operaciones no terminales.
 
 Los resultados de fakes son evidencia unitaria únicamente. La aprobación requiere adaptadores reales y la topología objetivo.
@@ -249,7 +249,7 @@ Siguen pendientes y no se infieren aquí:
 - protocolo de consenso/elección de autoridad y handoff;
 - política de retención, backup, restore y custodia de anclas;
 - objetivos de disponibilidad, RPO/RTO y procedimiento de recuperación manual;
-- topología, límites de dominio y despliegue.
+- límites de dominio y detalles de despliegue; la topología inicial de un único servidor está aprobada. Una futura expansión multinodo requiere decisión y validación separadas.
 
 Estas decisiones se evaluarán cuando corresponda. La implementación del Trust Anchor externo queda expresamente postergada hasta la etapa final de Atlas; su proveedor, custodia y despliegue no son dependencias de las etapas actuales.
 
