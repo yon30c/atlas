@@ -84,10 +84,10 @@ class SQLiteCoreSchemaTests(unittest.TestCase):
                 connection.execute(
                     """
                     INSERT INTO journal_operations (
-                        domain_id, authority_epoch, operation_id, request_canonical,
-                        request_digest, sequence, record_id, created_at
-                    ) VALUES ('domain-a', 1, 'operation-a', X'7B7D', ?, 1, 'missing',
-                              '2026-11-14T00:00:00+00:00')
+                        domain_id, authority_epoch, append_id, operation_id,
+                        request_canonical, request_digest, sequence, record_id, created_at
+                    ) VALUES ('domain-a', 1, 'append-missing', 'operation-a',
+                              X'7B7D', ?, 1, 'missing', '2026-11-14T00:00:00+00:00')
                     """,
                     ("a" * 64,),
                 )
@@ -114,10 +114,10 @@ class SQLiteCoreSchemaTests(unittest.TestCase):
                 connection.execute(
                     """
                     INSERT INTO journal_operations (
-                        domain_id, authority_epoch, operation_id, idempotency_key,
+                        domain_id, authority_epoch, append_id, operation_id, idempotency_key,
                         request_canonical, request_digest, sequence, record_id, created_at
-                    ) VALUES ('domain-a', 1, 'operation-b', 'idem-1', X'7B7D', ?, 2,
-                              'record-b', '2026-11-14T00:00:00+00:00')
+                    ) VALUES ('domain-a', 1, 'append-b', 'operation-b', 'idem-1',
+                              X'7B7D', ?, 2, 'record-b', '2026-11-14T00:00:00+00:00')
                     """,
                     ("b" * 64,),
                 )
@@ -130,10 +130,10 @@ class SQLiteCoreSchemaTests(unittest.TestCase):
                 connection.execute(
                     """
                     INSERT INTO journal_operations (
-                        domain_id, authority_epoch, operation_id, request_canonical,
-                        request_digest, sequence, record_id, created_at
-                    ) VALUES ('domain-a', 1, 'operation-b', X'7B7D', ?, 1, 'record-a',
-                              '2026-11-14T00:00:00+00:00')
+                        domain_id, authority_epoch, append_id, operation_id,
+                        request_canonical, request_digest, sequence, record_id, created_at
+                    ) VALUES ('domain-a', 1, 'append-b', 'operation-b', X'7B7D', ?,
+                              1, 'record-a', '2026-11-14T00:00:00+00:00')
                     """,
                     ("a" * 64,),
                 )
@@ -181,7 +181,7 @@ class SQLiteCoreSchemaTests(unittest.TestCase):
         legacy.apply_migrations(SQLITE_MIGRATIONS)
         with legacy.connection() as connection:
             operation = connection.execute(
-                "SELECT operation_id, idempotency_key, sequence, record_id "
+                "SELECT append_id, operation_id, idempotency_key, sequence, record_id "
                 "FROM journal_operations"
             ).fetchone()
             versions = connection.execute(
@@ -191,10 +191,11 @@ class SQLiteCoreSchemaTests(unittest.TestCase):
                 "PRAGMA foreign_key_list(journal_operations)"
             ).fetchall()
         self.assertEqual(
-            tuple(operation),
+            tuple(operation)[1:],
             ("legacy-operation", "legacy-key", 1, "legacy-record"),
         )
-        self.assertEqual([row[0] for row in versions], [1, 2])
+        self.assertTrue(operation["append_id"].startswith("legacy-v2:"))
+        self.assertEqual([row[0] for row in versions], [1, 2, 3])
         self.assertEqual(
             {row["from"] for row in foreign_keys},
             {"domain_id", "authority_epoch", "sequence", "record_id", "operation_id"},
@@ -260,6 +261,62 @@ class SQLiteCoreSchemaTests(unittest.TestCase):
         self.assertEqual([row[0] for row in versions], [1])
         self.assertEqual(operation["operation_id"], "different-operation")
         self.assertIsNone(v2_table)
+
+
+    def test_v3_allows_multiple_appends_for_one_business_operation(self):
+        self._insert_domain()
+        self._insert_journal_entry(record_id="record-a", operation_id="read:admission-1", sequence=1)
+        self._insert_journal_entry(record_id="record-b", operation_id="read:admission-1", sequence=2)
+        with self.database.connection() as connection:
+            for append_id, sequence, record_id in (
+                ("append-a", 1, "record-a"),
+                ("append-b", 2, "record-b"),
+            ):
+                connection.execute(
+                    """
+                    INSERT INTO journal_operations (
+                        domain_id, authority_epoch, append_id, operation_id,
+                        request_canonical, request_digest, sequence, record_id, created_at
+                    ) VALUES ('domain-a', 1, ?, 'read:admission-1', X'7B7D', ?,
+                              ?, ?, '2026-11-14T00:00:00+00:00')
+                    """,
+                    (append_id, "a" * 64, sequence, record_id),
+                )
+            rows = connection.execute(
+                "SELECT append_id, operation_id FROM journal_operations "
+                "ORDER BY append_id"
+            ).fetchall()
+        self.assertEqual(
+            [tuple(row) for row in rows],
+            [("append-a", "read:admission-1"), ("append-b", "read:admission-1")],
+        )
+
+    def test_v3_append_id_is_unique_within_domain_and_epoch(self):
+        self._insert_domain()
+        self._insert_journal_entry()
+        with self.database.connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO journal_operations (
+                    domain_id, authority_epoch, append_id, operation_id,
+                    request_canonical, request_digest, sequence, record_id, created_at
+                ) VALUES ('domain-a', 1, 'append-1', 'operation-a', X'7B7D', ?,
+                          1, 'record-a', '2026-11-14T00:00:00+00:00')
+                """,
+                ("a" * 64,),
+            )
+        with self.assertRaises(sqlite3.IntegrityError):
+            with self.database.connection() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO journal_operations (
+                        domain_id, authority_epoch, append_id, operation_id,
+                        request_canonical, request_digest, sequence, record_id, created_at
+                    ) VALUES ('domain-a', 1, 'append-1', 'operation-a', X'7B7D', ?,
+                              1, 'record-a', '2026-11-14T00:00:00+00:00')
+                    """,
+                    ("a" * 64,),
+                )
 
     def test_checkpoint_projection_requires_existing_checkpoint(self):
         self._insert_domain()
