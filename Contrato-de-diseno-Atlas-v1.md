@@ -2534,6 +2534,7 @@ El aislamiento entre proyectos, el control de acceso mediante CAM y el proceso d
 - Plazos de retención y propagación de supresión en respaldos, réplicas e índices.
 - Implementación y validación de autorización granular por recurso en CAM.
 - Estrategia de reconciliación de supresión durante restauraciones e importaciones.
+- Trust Anchor externo: capacidad opcional aprobada y postergada hasta la etapa final de Atlas; su proveedor, custodia, autenticación y pruebas anti-rollback quedan para esa etapa. El perfil local no demuestra que un backup restaurado sea el último estado confirmado.
 
 ### 17.4 Eventos y auditoría
 
