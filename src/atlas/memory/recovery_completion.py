@@ -21,7 +21,10 @@ from atlas.memory.receipt_verification import (
     TerminalReceiptKind,
     TerminalReceiptVerificationRequest,
     VerifiedTerminalReceipt,
-    match_verified_receipt,
+)
+from atlas.memory.receipt_trust import (
+    verify_recovery_completion_with_context,
+    verify_terminal_receipt_with_context,
 )
 from atlas.ports.consistency_journal import ConsistencyJournalPort
 from atlas.ports.recovery_completion import RecoveryCompletionFinalizerPort
@@ -167,6 +170,7 @@ class RecoveryCompletionCoordinator:
         verifier: RecoveryCompletionVerifierPort,
         terminal_verifier: object,
         *,
+        trust_context_factory: object,
         domain_id: str,
         id_factory: Callable[[], str],
         clock: Callable[[], datetime],
@@ -179,10 +183,15 @@ class RecoveryCompletionCoordinator:
             raise ContractError("recovery_gate debe implementar restauración del gate abierto")
         if not callable(getattr(finalizer, "finalize_recovery", None)):
             raise ContractError("finalizer debe implementar RecoveryCompletionFinalizerPort")
-        if not callable(getattr(verifier, "verify_recovery_completion", None)):
-            raise ContractError("verifier debe implementar RecoveryCompletionVerifierPort")
-        if not callable(getattr(terminal_verifier, "verify_terminal_receipt", None)):
-            raise ContractError("terminal_verifier debe implementar TerminalReceiptVerifierPort")
+        if not callable(getattr(verifier, "verify_recovery_completion_with_context", None)):
+            raise ContractError("verifier debe implementar RecoveryCompletionVerifierPort trust-aware")
+        if not callable(getattr(terminal_verifier, "verify_terminal_receipt_with_context", None)):
+            raise ContractError("terminal_verifier debe implementar TerminalReceiptVerifierPort trust-aware")
+        if (
+            not callable(getattr(trust_context_factory, "for_terminal_receipt", None))
+            or not callable(getattr(trust_context_factory, "for_recovery_completion", None))
+        ):
+            raise ContractError("trust_context_factory debe implementar ReceiptTrustContextFactoryPort completo")
         if not callable(id_factory) or not callable(clock):
             raise ContractError("id_factory y clock deben ser invocables")
         _required(domain_id, "domain_id")
@@ -191,6 +200,7 @@ class RecoveryCompletionCoordinator:
         self._finalizer = finalizer
         self._verifier = verifier
         self._terminal_verifier = terminal_verifier
+        self._trust_context_factory = trust_context_factory
         self._domain_id = domain_id
         self._id_factory = id_factory
         self._clock = clock
@@ -245,10 +255,15 @@ class RecoveryCompletionCoordinator:
                 generation=closure.generation,
             )
             try:
-                result = self._terminal_verifier.verify_terminal_receipt(request)
+                receipt = verify_terminal_receipt_with_context(
+                    self._terminal_verifier,
+                    self._trust_context_factory,
+                    request,
+                    purpose="recovery-global-admission-receipt",
+                    verification_time=self._clock(),
+                )
             except Exception:
                 return None, None
-            receipt = match_verified_receipt(request, result)
             if receipt is None:
                 return None, None
             verified.append(receipt)
@@ -308,7 +323,14 @@ class RecoveryCompletionCoordinator:
                 RecoveryCompletionStatus.PENDING, closure.operation_id, closure.generation, None
             )
         try:
-            verified = self._verifier.verify_recovery_completion(request, receipt)
+            verified = verify_recovery_completion_with_context(
+                self._verifier,
+                self._trust_context_factory,
+                request,
+                receipt,
+                purpose="recovery-global-completion",
+                verification_time=self._clock(),
+            )
         except Exception:
             verified = None
         if not isinstance(verified, VerifiedRecoveryCompletionReceipt) or (
