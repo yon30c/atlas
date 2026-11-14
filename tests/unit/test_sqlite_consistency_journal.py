@@ -554,11 +554,17 @@ class SQLiteConsistencyJournalTests(unittest.TestCase):
         self.assertEqual(result.state.entries[1].position.sequence, 3)
 
     def test_typed_recovery_load_rejects_checkpoint_marker_reference_mismatch(self):
-        self._seed_checkpoint()
+        checkpoint, _ = self._seed_checkpoint()
+        changed = replace(checkpoint, state_reference="different-state-reference")
         with self.database.write_transaction() as connection:
             connection.execute(
-                "UPDATE checkpoints SET state_reference=? WHERE checkpoint_id=?",
-                ("different-state-reference", CHECKPOINT_ID),
+                "UPDATE checkpoints SET state_reference=?, object_commitment=? "
+                "WHERE checkpoint_id=?",
+                (
+                    changed.state_reference,
+                    object_commitment(checkpoint_payload(changed)),
+                    CHECKPOINT_ID,
+                ),
             )
 
         result = self.journal.load_recovery_state_result("domain-a")
