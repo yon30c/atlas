@@ -683,6 +683,11 @@ class SQLiteConsistencyJournal:
                     not entries
                     or entries[0].transition.record_kind
                         is not ConsistencyRecordKind.CHECKPOINT_COMMITTED
+                    or any(
+                        entry.transition.record_kind
+                            is ConsistencyRecordKind.CHECKPOINT_COMMITTED
+                        for entry in entries[1:]
+                    )
                 ):
                     return rejected
                 if (
