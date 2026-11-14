@@ -42,7 +42,9 @@ def main(
         response_generator = LocalModeResponseGenerator()
     else:
         selected_model = (
-            model if model is not None else os.environ.get("ATLAS_MODEL", DEFAULT_MODEL)
+            model
+            if model is not None
+            else (os.environ.get("ATLAS_MODEL") or DEFAULT_MODEL)
         )
         selected_url = (
             ollama_url
