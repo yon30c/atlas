@@ -280,3 +280,10 @@ Se exportaron los modelos desde `atlas.memory` y se añadieron 37 métodos de pr
 En el commit `49244706a3f93f09ec7b1f2b7e350124b2715216`, GitHub Actions ejecutó la suite completa: Python 3.10, 3.11, 3.12 y 3.13 finalizaron correctamente. Python 3.11 reportó `Ran 360 tests`, `OK`. Workflow: [Atlas CI #43526491006](https://github.com/yon30c/atlas/actions/runs/43526491006).
 
 **Alcance de esa validación:** modelos, reducer puro y fakes. No demuestra inventario real, retención/backups aprobados, eliminación física, verificación contra almacenes reales, transacciones durables, recuperación distribuida ni Forget completado. No se han añadido adaptadores ni se ha marcado ninguna memoria/version como forgotten.
+
+
+## Decisión posterior — Trust Anchor opcional y límite de restauración
+
+**APROBADO — 13 de noviembre de 2026.** El Trust Anchor externo es opcional y su implementación queda postergada hasta la etapa final de Atlas. El perfil local no puede demostrar que un backup restaurado sea posterior a un Forget ya completado ni que su registro local de supresión sea el más reciente.
+
+Por tanto, la regla de conservar una marca mínima que impida la reaparición requiere una fuente de supresión/continuidad independiente del backup restaurado o una reconciliación explícita aprobada. Si esa fuente no está disponible, una restauración que pueda contener datos anteriores al Forget no puede exponerse ni declararse segura. La opcionalidad de Trust Anchor no autoriza a relajar el requisito de no reintroducir memorias olvidadas; la garantía permanece pendiente/bloqueante para ese escenario hasta contar con un mecanismo verificable.
