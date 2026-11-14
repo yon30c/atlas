@@ -24,6 +24,7 @@ from atlas.memory.journal import (
     ConsistencyRecoveryState,
     ConsistencyTransition,
     JournalEntry,
+    JournalCommit,
 )
 from atlas.memory.journal_reducer import ConsistencyJournalReducer
 from atlas.memory.receipt_verification import (
@@ -31,6 +32,10 @@ from atlas.memory.receipt_verification import (
     ReceiptVerificationStatus,
     TerminalReceiptKind,
     VerifiedTerminalReceipt,
+)
+from atlas.memory.recovery_coordinator import (
+    RecoveryCoordinatorStatus,
+    RecoveryJournalCoordinator,
 )
 from atlas.memory.recovery import (
     RecoveryEndpointFenceReceipt,
@@ -562,6 +567,157 @@ class RecoveryJournalReducerTests(unittest.TestCase):
             ConsistencyJournalReducer().reduce(replace(
                 journal, entries=entries, head_sequence=len(entries)
             ))
+
+
+
+class CoordinatorJournalFake:
+    def __init__(self, state):
+        self.state = state
+        self.appended = []
+
+    def load_recovery_state(self, domain_id):
+        return self.state if domain_id == self.state.domain_id else None
+
+    def append_transition(self, expected_position, transition):
+        if (
+            expected_position.consistency_domain_id != self.state.domain_id
+            or expected_position.authority_epoch != self.state.authority_epoch
+            or expected_position.sequence != self.state.head_sequence
+        ):
+            return None
+        position = ConsistencyPosition(
+            self.state.domain_id, self.state.authority_epoch,
+            self.state.head_sequence + 1,
+        )
+        entry = JournalEntry(position, transition)
+        candidate = replace(
+            self.state,
+            entries=self.state.entries + (entry,),
+            head_sequence=position.sequence,
+        )
+        try:
+            ConsistencyJournalReducer().reduce(candidate)
+        except ContractError:
+            return None
+        self.state = candidate
+        self.appended.append(transition)
+        return JournalCommit(position, transition.record_id, False)
+
+
+class CoordinatorRecoveryGateFake:
+    def __init__(self, journal):
+        self.journal = journal
+        self.closed = False
+
+    def close_recovery_gate(self, expected_position, transition):
+        if self.closed or transition.record_kind is not ConsistencyRecordKind.RECOVERY_CLOSED:
+            return None
+        commit = self.journal.append_transition(expected_position, transition)
+        if commit is not None:
+            self.closed = True
+        return commit
+
+
+class GateAwareEndpointFencer:
+    def __init__(self, gate, fail_once_endpoint=None):
+        self.gate = gate
+        self.fail_once_endpoint = fail_once_endpoint
+        self.failed = False
+        self.calls = []
+
+    def fence_endpoint(self, request):
+        self.calls.append((request.admission_id, request.endpoint_id))
+        if not self.gate.closed:
+            raise AssertionError("endpoint contact before durable gate closure")
+        if request.endpoint_id == self.fail_once_endpoint and not self.failed:
+            self.failed = True
+            return None
+        return RecoveryEndpointFenceReceipt(
+            operation_id=request.operation_id,
+            admission_id=request.admission_id,
+            endpoint_id=request.endpoint_id,
+            previous_generation=request.previous_generation,
+            generation=request.generation,
+            receipt_id=f"coordinator-fence:{request.admission_id}:{request.endpoint_id}",
+            confirmed=True,
+            fenced_through_sequence=request.last_committed_sequence,
+        )
+
+
+class RecoveryJournalCoordinatorTests(unittest.TestCase):
+    def setUp(self):
+        base = make_recovery_journal(include_reconcile=False)
+        initial = replace(
+            base,
+            entries=base.entries[:1],
+            head_sequence=1,
+        )
+        self.journal = CoordinatorJournalFake(initial)
+        self.gate = CoordinatorRecoveryGateFake(self.journal)
+        self.fencer = GateAwareEndpointFencer(self.gate)
+        self.verifier = FakeTerminalVerifier()
+        self.ids = iter(
+            f"018bcfe5-7b3a-7cc2-98c4-dc0c0c0746{index:02x}"
+            for index in range(20)
+        )
+        self.coordinator = RecoveryJournalCoordinator(
+            self.journal,
+            self.gate,
+            self.fencer,
+            self.verifier,
+            domain_id="consistency-domain",
+            id_factory=lambda: next(self.ids),
+            clock=lambda: NOW,
+        )
+
+    def test_durable_gate_closes_before_any_endpoint_is_contacted(self):
+        result = self.coordinator.run()
+        self.assertIs(result.status, RecoveryCoordinatorStatus.FENCING_RECORDED)
+        self.assertTrue(self.gate.closed)
+        kinds = [item.record_kind for item in self.journal.appended]
+        self.assertEqual(kinds[0], ConsistencyRecordKind.RECOVERY_CLOSED)
+        self.assertEqual(
+            kinds.count(ConsistencyRecordKind.ENDPOINT_FENCED), 2
+        )
+        self.assertEqual(len(self.fencer.calls), 2)
+
+    def test_partial_fencing_is_journaled_and_resumes_without_reclosing(self):
+        self.fencer.fail_once_endpoint = "api-response"
+        first = self.coordinator.run()
+        self.assertIs(first.status, RecoveryCoordinatorStatus.PENDING)
+        self.assertTrue(self.gate.closed)
+        self.assertEqual(
+            sum(item.record_kind is ConsistencyRecordKind.RECOVERY_CLOSED
+                for item in self.journal.appended),
+            1,
+        )
+        second = self.coordinator.run()
+        self.assertIs(second.status, RecoveryCoordinatorStatus.FENCING_RECORDED)
+        self.assertEqual(
+            sum(item.record_kind is ConsistencyRecordKind.RECOVERY_CLOSED
+                for item in self.journal.appended),
+            1,
+        )
+        self.assertEqual(
+            sum(item.record_kind is ConsistencyRecordKind.ENDPOINT_FENCED
+                for item in self.journal.appended),
+            2,
+        )
+        self.assertEqual(
+            self.fencer.calls.count(("journal-recovery-admission", "assistant-response")),
+            1,
+        )
+        self.assertEqual(
+            self.fencer.calls.count(("journal-recovery-admission", "api-response")),
+            2,
+        )
+
+    def test_unverifiable_journal_blocks_before_closure_or_endpoint_contact(self):
+        self.journal.load_recovery_state = lambda domain_id: None
+        result = self.coordinator.run()
+        self.assertIs(result.status, RecoveryCoordinatorStatus.BLOCKED)
+        self.assertFalse(self.gate.closed)
+        self.assertEqual(self.fencer.calls, [])
 
 if __name__ == "__main__":
     unittest.main()
