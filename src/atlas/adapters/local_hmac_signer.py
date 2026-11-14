@@ -1,5 +1,6 @@
 """Production HMAC signer using an explicitly configured active-key provider."""
 from atlas.core.errors import ContractError
+from atlas.memory.envelope import AuthenticatedConsistencyEnvelope
 from atlas.memory.local_auth import authenticate_envelope
 from atlas.memory.local_keys import ActiveLocalConsistencyKey
 from atlas.ports.active_local_consistency_keys import ActiveLocalConsistencyKeyProvider
@@ -17,6 +18,8 @@ class HmacLocalConsistencySigner(LocalConsistencySignerPort):
         self._active_key_provider = active_key_provider
 
     def sign_envelope(self, envelope, object_value):
+        if not isinstance(envelope, AuthenticatedConsistencyEnvelope):
+            raise ContractError("envelope debe ser AuthenticatedConsistencyEnvelope")
         active_key = self._active_key_provider.load_active_key()
         if active_key is None:
             raise OSError("clave HMAC activa no disponible")
