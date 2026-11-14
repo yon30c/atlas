@@ -55,7 +55,7 @@ El compromiso protege únicamente el estado de control del journal/checkpoint. N
 El proveedor debe ofrecer operaciones equivalentes a:
 
 - `load_current_anchor(domain_id) -> TrustAnchorReadResult`;
-- `advance_anchor(expected_anchor_revision, expected_position, new_authenticated_commitment) -> TrustAnchorUpdateResult`.
+- `advance_anchor(TrustAnchorAdvanceRequest) -> TrustAnchorUpdateStatus`, donde la solicitud contiene el ancla previa completa y la nueva ancla autenticada. La revisión debe avanzar exactamente una unidad; dentro de una época la secuencia nunca retrocede y el commitment no cambia sin avanzar secuencia. El cambio de época solo puede ser +1, empezar en secuencia cero y aportar referencia explícita de handoff autenticado.
 
 Los resultados de lectura y actualización deben distinguir al menos FOUND/UPDATED, NOT_FOUND, CONFLICT y UNKNOWN. NOT_FOUND no autoriza crear un ancla automáticamente durante una recuperación.
 
@@ -197,7 +197,7 @@ Los siguientes contratos deben alinearse antes de declarar ME-03K-B cerrado:
 1. `ConsistencyJournalPort.load_verified_recovery_state` entrega `ConsistencyRecoveryVerificationResult`; solo VERIFIED contiene `VerifiedConsistencyRecoveryState`. `load_recovery_state` queda limitado a diagnóstico/migración y está prohibido en recuperación operativa.
 2. `ConsistencyCheckpoint` debe referenciar el envelope autenticado, versión de reducer/proyección y ancla externa usada; no debe tratar `integrity_reference` como prueba suficiente.
 3. `ConsistencyRecoveryState` es únicamente estructural. `VerifiedConsistencyRecoveryState` envuelve el estado junto con el ancla exacta y exige coincidencia de dominio, época, secuencia y commitment; el reducer nunca crea esa confianza.
-4. `TerminalReceiptVerifierPort` y `RecoveryCompletionVerifierPort` deben compartir el modelo de contexto de confianza, manteniendo resultados tipados y separados por propósito.
+4. `TerminalReceiptVerifierPort` y `RecoveryCompletionVerifierPort` disponen de variantes trust-aware que reciben `ReceiptTrustContext`. El contexto fija tipo de recibo, dominio, época, operación, ID esperado, claims de endpoint/admisión o inventarios globales, referencia canónica, política y tiempo UTC. La variante legacy se conserva solo para dobles de prueba/migración; no satisface conformidad de adaptador durable.
 5. `ProtectedMemoryRecoveryAuthorityPort` sigue siendo una única implementación concreta compartida por Gateway y coordinadores. La verificación no crea una segunda autoridad de orden.
 6. `reconcile_and_open_recovery_gate` debe consumir una evidencia verificada vinculada al cierre exacto y confirmar evento + apertura en una sola operación linealizable.
 7. Los resultados ambiguos de cualquier operación atómica deben poder consultarse con identidad canónica exacta bajo esa misma autoridad.
@@ -226,13 +226,20 @@ Cada elección futura debe demostrar conformidad con estos contratos y K01–K07
 
 ## 11. Estado de alineación en código
 
-Se añadieron `src/atlas/memory/trust.py` y `src/atlas/ports/consistency_trust.py` con modelos tipados para ancla externa, envelope autenticado, solicitud de verificación, resultado de recuperación verificada, contexto de confianza y puertos provider-agnostic. `ConsistencyJournalPort` ahora define `load_verified_recovery_state`; la carga estructural desnuda queda marcada solo para diagnóstico/migración. Los coordinadores de recuperación, finalización de admisiones y finalización global consumen exclusivamente el resultado VERIFIED y se bloquean ante REJECTED, UNAVAILABLE, excepción o resultado mal tipado. Los fakes de integración crean atestaciones de prueba explícitas; no simulan criptografía real.
+Se añadieron `src/atlas/memory/trust.py` y `src/atlas/ports/consistency_trust.py` con modelos tipados para ancla externa, resultados de lectura, CAS monotónico, envelope autenticado, solicitud y resultado de verificación de checkpoint, resultado de recuperación verificada y puertos provider-agnostic. El checkpoint base puede ser anterior al head externo, pero la verificación debe recorrer la cadena completa hasta la posición anclada. `ConsistencyJournalPort` ahora define `load_verified_recovery_state`; la carga estructural desnuda queda marcada solo para diagnóstico/migración. Los coordinadores de recuperación, finalización de admisiones y finalización global consumen exclusivamente el resultado VERIFIED y se bloquean ante REJECTED, UNAVAILABLE, excepción o resultado mal tipado. Los fakes de integración crean atestaciones de prueba explícitas; no simulan criptografía real.
 
-Pruebas de contrato añadidas en `tests/unit/test_memory_trust_contracts.py` para bindings de dominio/época/política, rollback, commitment y resultados tipados. Estas pruebas y las suites de coordinadores requieren ejecución/CI antes de declarar validada esta alineación. El puerto de verificación de recibos aún no recibe el contexto de confianza común en todos los coordinadores; esa integración queda pendiente.
+Pruebas de contrato añadidas en `tests/unit/test_memory_trust_contracts.py` para bindings de dominio/época/política, rollback, expiración, checkpoint base/head, CAS del ancla, commitment y contexto de recibos terminales/globales. `JournalOperationResolution` ahora incluye la transición esperada y la transición persistida; COMMITTED_EXACT exige igualdad semántica exacta. Se añadió `tests/unit/test_memory_journal_operation_resolution.py` para cubrir resultados ambiguos y conflictos. Estas pruebas y las suites de coordinadores requieren ejecución/CI antes de declarar validada esta alineación. Se añadieron `TrustAwareTerminalReceiptVerifierPort` y `TrustAwareRecoveryCompletionVerifierPort`. Los coordinadores actuales siguen invocando la interfaz legacy, por lo que la propagación de `ReceiptTrustContext` hasta la verificación en los flujos de coordinación queda pendiente antes de declarar conformidad integral.
 
 La construcción de `VerifiedConsistencyRecoveryState` es una garantía de tipo dentro del proceso, no una barrera criptográfica frente a código arbitrario del mismo proceso. La procedencia auténtica depende de que solo el adaptador/verificador confiable produzca ese objeto y de que la composición de dependencias no permita inyección de un verificador no confiable.
 
-## 12. Criterio de cierre
+## 12. Alineación pendiente para cierre integral
+
+1. Propagar `ReceiptTrustContext` desde los coordinadores hasta ambos verificadores trust-aware y exigir estas interfaces en composición durable.
+2. Añadir pruebas negativas de emisor/clave desconocidos, firma inválida, revocación histórica, replay, timeout y canonicalización incompatible en el verificador de referencia/fakes.
+3. Ejecutar las suites focalizadas y CI de Python 3.10–3.13; los modelos tipados por sí solos no prueban autenticidad.
+4. Verificar que la autoridad durable consulta ancla, journal y estado idempotente bajo un mismo orden linealizable y no reabre el gate ante resultados ambiguos.
+
+## 13. Criterio de cierre
 
 ME-03K-C queda cerrado en diseño cuando:
 
