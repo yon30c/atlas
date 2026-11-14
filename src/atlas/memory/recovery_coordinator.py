@@ -61,6 +61,7 @@ class RecoveryJournalCoordinator:
         fencer: object,
         verifier: object,
         *,
+        trust_context_factory: object,
         domain_id: str,
         id_factory: Callable[[], str],
         clock: Callable[[], datetime],
@@ -69,6 +70,10 @@ class RecoveryJournalCoordinator:
             getattr(journal, "append_transition", None)
         ):
             raise ContractError("journal debe implementar ConsistencyJournalPort")
+        if not callable(getattr(verifier, "verify_terminal_receipt_with_context", None)):
+            raise ContractError("verifier debe implementar TerminalReceiptVerifierPort trust-aware")
+        if not callable(getattr(trust_context_factory, "for_terminal_receipt", None)):
+            raise ContractError("trust_context_factory debe implementar ReceiptTrustContextFactoryPort")
         if not callable(id_factory) or not callable(clock):
             raise ContractError("id_factory y clock deben ser invocables")
         if not isinstance(domain_id, str) or not domain_id.strip():
@@ -82,6 +87,7 @@ class RecoveryJournalCoordinator:
         self._recovery_gate = recovery_gate
         self._fencer = fencer
         self._verifier = verifier
+        self._trust_context_factory = trust_context_factory
         self._domain_id = domain_id
         self._id_factory = id_factory
         self._clock = clock
@@ -304,9 +310,17 @@ class RecoveryJournalCoordinator:
                     generation=plan.generation,
                     admissions=(single,),
                 )
-                batch = execute_recovery_fencing(
-                    single_plan, self._fencer, self._verifier
-                )
+                try:
+                    verification_time = self._clock()
+                    batch = execute_recovery_fencing(
+                        single_plan,
+                        self._fencer,
+                        self._verifier,
+                        self._trust_context_factory,
+                        verification_time,
+                    )
+                except Exception:
+                    batch = None
                 if batch is None:
                     pending.append(key)
                     continue
