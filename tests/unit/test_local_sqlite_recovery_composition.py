@@ -4,6 +4,7 @@ import unittest
 from atlas.adapters.sqlite.consistency_journal import SQLiteConsistencyJournal
 from atlas.adapters.sqlite.local_journal_composition import (
     compose_local_sqlite_recovery_coordinator,
+    compose_local_sqlite_recovery_gate_coordinator,
 )
 from atlas.core.errors import ContractError
 
@@ -48,6 +49,7 @@ class LocalSQLiteRecoveryCompositionTests(unittest.TestCase):
         # Composition-only test double: no SQLite operations are invoked.
         journal = SQLiteConsistencyJournal.__new__(SQLiteConsistencyJournal)
         journal._recovery_trust_policy = object()
+        journal._database = object()
         return journal
 
     def compose(self, journal, authority):
@@ -84,6 +86,31 @@ class LocalSQLiteRecoveryCompositionTests(unittest.TestCase):
 
         with self.assertRaises(ContractError):
             self.compose(journal, authority)
+
+    def test_gate_only_composition_uses_exact_journal_and_gate(self):
+        journal = self.make_journal()
+        composition = compose_local_sqlite_recovery_gate_coordinator(
+            journal=journal,
+            fencer=object(),
+            verifier=FakeVerifier(),
+            trust_context_factory=FakeTrustContextFactory(),
+            domain_id="domain-test",
+            id_factory=lambda: "record-test",
+            clock=lambda: None,
+        )
+        self.assertIs(composition.recovery_gate.consistency_journal, journal)
+        self.assertIs(
+            composition.journal_ports.persistence._journal,
+            composition.recovery_gate.consistency_journal,
+        )
+        self.assertIs(
+            composition.coordinator._recovery_gate,
+            composition.recovery_gate,
+        )
+        self.assertIs(
+            composition.coordinator._verified_recovery,
+            composition.journal_ports.verified_recovery,
+        )
 
     def test_incomplete_authority_is_rejected(self):
         journal = self.make_journal()
