@@ -1,6 +1,6 @@
 # ME-D4O-B — Diseño de admisión durable de lectura
 
-**Estado:** diseño técnico de implementación; código y pruebas pendientes.  
+**Estado:** contratos neutrales implementados; adaptadores y coordinador de admisión pendientes. Pruebas contractuales añadidas, ejecución pendiente.  
 **Rama objetivo:** `feature/atlas-functional-f1`.  
 **Perfil:** LOCAL. No requiere Trust Anchor externo.  
 **Dependencias:** ME-D4K, ME-D4L, ME-D4M y ME-D4N.
@@ -146,7 +146,28 @@ La validación de revisiones no debe asumir que una lectura de varios repositori
 
 No se ejecutan pruebas/build/CI en esta etapa, según lo acordado.
 
-## 10. Criterio de salida
+## 10. Implementación contractual — 14 de noviembre de 2026
+
+Se añadieron en la rama los siguientes contratos neutrales:
+
+- `atlas.memory.route_registry`:
+  - `DeliveryRouteDescriptor` representa ID, revisión, estado habilitado y capacidad de fencing.
+  - `RouteRegistryResult` exige resolución completa y exacta del conjunto solicitado; no admite resultados parciales.
+  - `REJECTED` y `UNAVAILABLE` no pueden devolver rutas.
+  - Una ruta deshabilitada o sin fencing no es utilizable para entrega protegida.
+- `atlas.memory.revision_validation`:
+  - `RevisionValidationResult` queda ligado al `snapshot_id` y al vector exacto de revisiones esperado.
+  - Distingue `CURRENT`, `STALE`, `REJECTED` y `UNAVAILABLE`.
+  - `CURRENT` exige igualdad completa; `STALE` exige un vector autoritativo diferente.
+  - Expiración/revocación o estado no elegible se representa como `REJECTED`; evidencia incompleta o inaccesible como `UNAVAILABLE`.
+- Ambos contratos se exportan desde `atlas.memory`.
+- Se añadió `tests/unit/test_memory_authority_validation_ports.py` con 11 pruebas contractuales de resultados exactos, rutas parciales/duplicadas, fencing, revisiones y timestamps UTC.
+
+**Límite deliberado:** estos cambios no implementan un registro real de rutas ni un adaptador de revisiones. La inspección actual no demuestra que los repositorios canónicos de Memory, Identity, Project, Environment y Grant compartan una transacción ni que todos sus caminos de mutación emitan primero invalidación durable. Una lectura puntual de revisiones, un lock de proceso o notificaciones eventuales no cierran esa carrera. El contrato de revisión exige invalidación-first y orden compartido; cualquier adaptador incapaz de demostrarlo debe responder `UNAVAILABLE`.
+
+No se ha implementado `admit_read`, no se ha abierto el Recovery Gate y no se ha habilitado runtime protegido. No se ejecutaron pruebas/build/CI desde el entorno de GitHub: el repositorio no está montado en este entorno de ejecución. La autorización del usuario para probar queda vigente; las pruebas se ejecutarán al disponer del checkout de la rama, antes de avanzar a adaptadores.
+
+## 11. Criterio de salida
 
 D4O-B solo se considera implementado cuando la admisión durable está ligada al snapshot CAM exacto, se serializa con cierres e invalidaciones en la misma autoridad SQLite, es idempotente, se recupera sin restaurar capacidades y falla cerrado ante cualquier evidencia incompleta.
 
