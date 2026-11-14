@@ -113,6 +113,8 @@ class ConsistencyProjection:
     idempotency_records: tuple[IdempotencyProjection, ...]
     receipt_ids: frozenset[str]
     recovery_closures: tuple[RecoveryProjection, ...] = ()
+    emission_ids: frozenset[str] = frozenset()
+    replay_metadata_version: int = 0
 
 
 def reconstruct_read_target(admission: AdmissionProjection) -> ReadTarget | None:
@@ -177,12 +179,50 @@ class ConsistencyJournalReducer:
             raise ContractError(message)
 
     def reduce(self, recovery: ConsistencyRecoveryState) -> ConsistencyProjection:
+        """Replay a complete journal only when no checkpoint truncates its history."""
+        return self._reduce(recovery, base_projection=None)
+
+    def reduce_from_projection(
+        self,
+        recovery: ConsistencyRecoveryState,
+        base_projection: ConsistencyProjection,
+    ) -> ConsistencyProjection:
+        """Continue replay from a complete, independently verified checkpoint projection.
+
+        This method validates structural binding and replay metadata, but does not
+        authenticate checkpoint storage or prove the caller obtained the projection
+        from a trusted port. Only the recovery verifier may call it operationally.
+        """
+        return self._reduce(recovery, base_projection=base_projection)
+
+    def _reduce(
+        self,
+        recovery: ConsistencyRecoveryState,
+        base_projection: ConsistencyProjection | None,
+    ) -> ConsistencyProjection:
         if not isinstance(recovery, ConsistencyRecoveryState):
             raise ContractError("recovery debe ser ConsistencyRecoveryState")
-        if recovery.checkpoint is not None:
-            raise ContractError(
-                "checkpoint sin proyección base validada: recuperación fail-closed"
-            )
+        if recovery.checkpoint is None:
+            if base_projection is not None:
+                raise ContractError("proyección base no aplica sin checkpoint")
+        else:
+            if not isinstance(base_projection, ConsistencyProjection):
+                raise ContractError(
+                    "checkpoint sin proyección base validada: recuperación fail-closed"
+                )
+            checkpoint = recovery.checkpoint
+            if (
+                base_projection.domain_id != recovery.domain_id
+                or base_projection.authority_epoch != recovery.authority_epoch
+                or base_projection.head_sequence != checkpoint.position.sequence
+                or checkpoint.position.consistency_domain_id != recovery.domain_id
+                or checkpoint.position.authority_epoch != recovery.authority_epoch
+            ):
+                raise ContractError("proyección base no coincide exactamente con checkpoint")
+            if base_projection.replay_metadata_version != 1:
+                raise ContractError("versión de metadatos de replay no soportada")
+            if not isinstance(base_projection.emission_ids, frozenset):
+                raise ContractError("emission_ids de proyección base no es frozenset")
 
         admissions = {}
         forgets = {}
@@ -196,6 +236,87 @@ class ConsistencyJournalReducer:
         recoveries = {}
         active_recovery = None
         latest_recovery_generation = 0
+
+        if base_projection is not None:
+            for item in base_projection.admissions:
+                endpoints = {
+                    endpoint.endpoint_id: {
+                        "last_sequence": endpoint.last_emission_sequence,
+                        "status": endpoint.status,
+                        "receipt_ids": set(endpoint.receipt_ids),
+                        "terminal_receipt_id": endpoint.terminal_receipt_id,
+                        "terminal_operation_id": endpoint.terminal_operation_id,
+                        "terminal_generation": endpoint.terminal_generation,
+                        "final_sequence": endpoint.final_sequence,
+                    }
+                    for endpoint in item.endpoints
+                }
+                admissions[item.admission_id] = {
+                    "operation_id": item.operation_id,
+                    "memory_id": item.memory_id,
+                    "version_id": item.version_id,
+                    "snapshot_id": item.snapshot_id,
+                    "owner_id": item.owner_id,
+                    "scope_kind": item.scope_kind,
+                    "scope_project_id": item.scope_project_id,
+                    "admitted_at": item.admitted_at,
+                    "recoverable": item.recoverable,
+                    "generation": item.generation,
+                    "revisions": item.revisions,
+                    "route_ids": item.route_ids,
+                    "status": item.status,
+                    "terminal_receipt_id": item.terminal_receipt_id,
+                    "terminal_operation_id": item.terminal_operation_id,
+                    "terminal_generation": item.terminal_generation,
+                    "endpoints": endpoints,
+                }
+            for item in base_projection.forget_closures:
+                forgets[item.operation_id] = {
+                    "memory_id": item.memory_id,
+                    "generation": item.generation,
+                    "affected_admission_ids": item.affected_admission_ids,
+                    "route_ids": item.route_ids,
+                    "suppressed": item.suppressed,
+                }
+                forgotten_memories.add(item.memory_id)
+            for item in base_projection.invalidations:
+                invalidations[item.operation_id] = {
+                    "authority_kind": item.authority_kind,
+                    "authority_id": item.authority_id,
+                    "generation": item.generation,
+                    "previous_revision": item.previous_revision,
+                    "new_revision": item.new_revision,
+                    "affected_admission_ids": item.affected_admission_ids,
+                    "route_ids": item.route_ids,
+                    "reconciled": item.reconciled,
+                }
+                invalidated_admissions.update(item.affected_admission_ids)
+                key = (item.authority_kind, item.authority_id)
+                previous = latest_invalidation.get(key)
+                if previous is None or item.new_revision > previous["new_revision"]:
+                    latest_invalidation[key] = invalidations[item.operation_id]
+            for item in base_projection.recovery_closures:
+                recoveries[item.operation_id] = {
+                    "generation": item.generation,
+                    "affected_admission_ids": item.affected_admission_ids,
+                    "route_ids": item.route_ids,
+                    "reconciled": item.reconciled,
+                    "terminal_receipt_id": item.terminal_receipt_id,
+                }
+                if item.reconciled:
+                    latest_recovery_generation = max(
+                        latest_recovery_generation, item.generation
+                    )
+                elif active_recovery is None:
+                    active_recovery = item.operation_id
+                else:
+                    raise ContractError("proyección base contiene múltiples recovery activos")
+            receipts.update(base_projection.receipt_ids)
+            emission_ids.update(base_projection.emission_ids)
+            idempotency_records.update({
+                item.idempotency_key: (item.operation_id, item.record_id)
+                for item in base_projection.idempotency_records
+            })
 
         def admission_for(transition: ConsistencyTransition):
             item = admissions.get(transition.admission_id)
@@ -879,4 +1000,6 @@ class ConsistencyJournalReducer:
             ),
             receipt_ids=frozenset(receipts),
             recovery_closures=recovery_projection,
+            emission_ids=frozenset(emission_ids),
+            replay_metadata_version=1,
         )
