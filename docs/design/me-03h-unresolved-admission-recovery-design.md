@@ -118,3 +118,18 @@ Tests:
 - ME-03G terminal receipt tests updated for fenced-through sequence binding.
 
 **Important boundary:** this is still a pure/model and fake-verifier stage. The reducer can replay recovery closure and reconciliation records, but no durable authority currently commits `RECOVERY_CLOSED` before endpoint contact, and no production coordinator appends the endpoint/admission receipts. The next integration slice must connect the verified batch to an atomic journal/authority workflow and prove that the journal receipt IDs, verifier evidence and authority acknowledgements are committed together before the recovery gate opens. No production admission is marked CANCELLED by this implementation.
+
+
+## 10. ME-03I — Coordinador journal-first
+
+El coordinador `RecoveryJournalCoordinator` ahora exige que el cierre del gate y el registro `RECOVERY_CLOSED` se realicen mediante `RecoveryGatePort.close_recovery_gate`, una única operación lógica serializada con admisión y egress. En una reanudación, `ensure_recovery_gate_closed` debe restaurar y confirmar el cierre exacto antes de contactar endpoints.
+
+Cada recibo de endpoint verificado se registra inmediatamente como `ENDPOINT_FENCED`. Si el proceso cae, la proyección permite omitir los endpoints ya registrados y continuar con los pendientes. Si un endpoint fue cercado pero el append no llegó a confirmarse, el adaptador debe soportar repetición idempotente de la misma solicitud.
+
+La prueba de reinicio usa fakes y confirma que el gate se restaura antes de contactar el endpoint pendiente. El coordinador nunca marca las admisiones como CANCELLED ni abre el gate: incluso cuando todos los fences están registrados, el resultado es solo `FENCING_RECORDED`.
+
+Ver diseño: `docs/design/me-03i-journal-first-recovery-coordinator-design.md`.
+
+CI de pruebas de coordinación: [Atlas CI #43533291237](https://github.com/yon30c/atlas/actions/runs/43533291237), Python 3.10–3.13: éxito.
+
+**Límite:** todavía no hay adaptadores durables ni una implementación real de `RecoveryGatePort`. El gate y journal coordinados se validan únicamente con fakes de proceso único.
