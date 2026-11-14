@@ -61,6 +61,11 @@ class LocalConsistencyRecoveryVerifier:
         """Expose the immutable policy identity for explicit composition checks."""
         return self._trust_policy
 
+    @property
+    def checkpoint_projection_port(self) -> LocalConsistencyCheckpointProjectionPort | None:
+        """Expose the exact resolver instance used by operational recovery."""
+        return self._checkpoint_projection_port
+
     @staticmethod
     def _result(
         status: ConsistencyRecoveryVerificationStatus,
