@@ -254,3 +254,17 @@ Guía de configuración local: [Memory Engine README](../memory-engine/README.md
 - Checkpoint, marcador autenticado, registro idempotente y head CAS usan una sola conexión transaccional. Los errores de persistencia se propagan desde la ruta interna.
 - Añadidas pruebas de éxito en UoW externa y rollback compuesto ante fallo de inserción del marcador; **pendientes de ejecución**.
 - Recovery Gate, autoridad SQLite concreta y egress protegido siguen pendientes.
+
+## ME-D4N — adaptador SQLite del Recovery Gate
+
+- Implementado LocalSQLiteRecoveryGateAdapter, vinculado al SQLiteConsistencyJournal exacto y a su SQLiteDatabase.
+- close_recovery_gate confirma RECOVERY_CLOSED y proyección cerrada en una única SQLiteUnitOfWork.
+- reconcile_and_open_recovery_gate valida VerifiedRecoveryCompletionReceipt y confirma RECOVERY_RECONCILED más proyección abierta en el mismo commit.
+- ensure_recovery_gate_closed/open restauran únicamente el cierre más reciente que demuestra la proyección local verificada.
+- Añadida composición gate-only con RecoveryJournalCoordinator; no es la autoridad completa ProtectedMemoryRecoveryAuthorityPort.
+- Añadidas pruebas de éxito, rollback, recibo/inventario exacto, restauración y concurrencia. Pendientes de ejecución.
+- Sin cambios de esquema: los campos de gate ya existen desde V1.
+- No se implementaron todavía admisión, Forget/invalidation ni egress protegido sobre la misma UoW. No se afirma linealizabilidad global.
+- El perfil local no tiene anti-rollback externo. No se activó runtime ni producción.
+
+Diseño: [ME-D4N — Recovery Gate SQLite](ME-D4N-sqlite-recovery-gate.md).
