@@ -60,6 +60,7 @@ La autenticación de la referencia del checkpoint depende de la cadena autentica
 ## 5. Seguridad y límites
 
 - La raíz debe provisionarse y protegerse fuera de SQLite. El adaptador exige que exista y no sea un symlink; no cambia propietarios, permisos ni ACLs del host.
+- Los subdirectorios `state/` e `integrity/` deben tener permisos efectivos `0700`; el adaptador comprueba también los directorios preexistentes y los rechaza si conceden acceso a grupo/otros o carecen de permisos completos para el propietario. No corrige permisos silenciosamente.
 - Los archivos temporales se crean con permisos restrictivos del sistema y se publican sin sobrescritura.
 - La protección local del directorio no equivale a almacenamiento remoto ni a una autoridad monotónica independiente.
 - Una restauración coherente y antigua del almacén junto con el journal sigue fuera de la capacidad de detección del perfil local.
@@ -75,7 +76,7 @@ Pruebas previstas para el propietario:
 - Objeto ausente y objeto corrupto.
 - Colisión sin sobrescritura.
 - Política y versiones incompatibles.
-- Raíz inválida.
+- Raíz inválida y subdirectorios preexistentes con permisos demasiado abiertos.
 - Después de las pruebas unitarias, suite completa.
 
 No ejecutar despliegues, crear directorios operativos ni seleccionar una ruta persistente de producción como parte de esta fase.
