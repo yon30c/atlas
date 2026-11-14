@@ -113,7 +113,7 @@ Implemented:
 The ME-03G receipt contract was strengthened so an `ENDPOINT_FENCED` receipt must bind `fenced_through_sequence`. This prevents accepting a fence that advances generation but does not attest the last sequence already committed by the endpoint.
 
 Tests:
-- 18 focused tests in `tests/unit/test_memory_unresolved_admission_recovery.py`;
+- 19 focused tests in `tests/unit/test_memory_unresolved_admission_recovery.py`;
 - ME-03G terminal receipt tests updated for fenced-through sequence binding.
 
 **Important boundary:** this is the pure planning and endpoint-fencing orchestration slice only. The current journal schema still has no explicit `RECOVERY_CLOSED` event, and there is no durable authority operation that commits the new generation before endpoint contact. No admission is marked CANCELLED by this slice. The next integration slice must add the recovery closure/reconciliation journal events and fake-authority stale-emitter tests before journal-level recovery can be claimed.
