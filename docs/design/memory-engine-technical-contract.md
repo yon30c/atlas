@@ -1,5 +1,7 @@
 # Memory Engine — contrato técnico e invariantes
 
+**Decisión de arquitectura — 13 de noviembre de 2026:** Trust Anchor externo es opcional y su implementación queda postergada hasta la etapa final de Atlas. El perfil local no demuestra anti-rollback frente a una restauración coherente del conjunto local. Por tanto, la garantía MEM-14 de no reaparición sigue siendo normativa, pero una restauración que pueda reintroducir datos anteriores a un Forget no puede habilitarse sin una fuente independiente de supresión/continuidad o reconciliación explícita aprobada.
+
 **Estado:** diseño técnico consolidado; decisiones de dominio detalladas en DM-01 (`docs/design/domain-model-specification-dm-01.md`). Parámetros de infraestructura, autenticación y operación de supresión permanecen pendientes.  
 **Base normativa:** `Contrato-de-diseno-Atlas-v1.md`, revisión 2, especialmente §§ 3, 9, 14.5 y 15.  
 **Alcance:** especificación de dominio y fronteras para la Fase 1.  
@@ -399,8 +401,6 @@ Las decisiones de esta sección fueron confirmadas por el propietario y compleme
 4. El registro de supresión conserva solo los datos mínimos necesarios para impedir la reintroducción. Usa identificadores opacos; no conserva el contenido original ni hashes de contenido que puedan facilitar ataques de diccionario.
 5. La supresión se aplica a los almacenes activos y a los índices derivados tan pronto como sea posible. Las copias de respaldo inmutables quedan sujetas a un plazo de retención definido. Mientras una copia física retenida siga existiendo, el proceso no puede declararse completamente finalizado.
 6. La supresión lógica debe impedir inmediatamente que la memoria sea consultada, recuperada o expuesta, aunque la purga física de una copia retenida esté pendiente.
-
-**Decisión de arquitectura — 13 de noviembre de 2026:** Trust Anchor externo es opcional y su implementación queda postergada hasta la etapa final de Atlas. El perfil local no demuestra anti-rollback frente a una restauración coherente del conjunto local. Por tanto, la garantía MEM-14 de no reaparición sigue siendo normativa, pero una restauración que pueda reintroducir datos anteriores a un Forget no puede habilitarse sin una fuente independiente de supresión/continuidad o reconciliación explícita aprobada.
 7. Toda restauración, reindexación o importación debe consultar y aplicar el registro de supresión antes de hacer datos disponibles. Una memoria suprimida no puede reaparecer por restauración, reindexación, importación ni reconstrucción de índices.
 8. Si un almacén, índice, réplica o respaldo no responde, o la eliminación es parcial, no se declara el olvido completado ni se comunica éxito al propietario. La memoria permanece bloqueada para recuperación y el proceso continúa pendiente de reconciliación, reintento y verificación.
 9. El estado de versión `forgotten` solo puede reflejarse como resultado completado cuando se cumplan los criterios de verificación definidos para todos los destinos aplicables. La existencia temporal de un respaldo inmutable retenido debe quedar explícita y no puede ocultarse bajo una declaración de eliminación física completa.
