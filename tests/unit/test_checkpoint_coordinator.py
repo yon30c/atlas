@@ -74,6 +74,24 @@ class VerifiedInventory:
         )
 
 
+class SwitchableProjectionStore:
+    """One shared publisher/resolver instance for journal and coordinator composition."""
+
+    def __init__(self, delegate):
+        self.delegate = delegate
+        self.unavailable = False
+
+    def publish_checkpoint_projection(self, artifacts):
+        self.delegate.publish_checkpoint_projection(artifacts)
+
+    def resolve_checkpoint_projection(self, request):
+        if self.unavailable:
+            return CheckpointProjectionResolution(
+                LocalVerificationStatus.UNAVAILABLE
+            )
+        return self.delegate.resolve_checkpoint_projection(request)
+
+
 class LocalCheckpointCoordinatorTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -84,7 +102,8 @@ class LocalCheckpointCoordinatorTests(unittest.TestCase):
 
         projection_root = Path(self.temporary.name) / "checkpoint-projections"
         projection_root.mkdir()
-        self.store = FilesystemCheckpointProjectionStore(projection_root)
+        self.filesystem_store = FilesystemCheckpointProjectionStore(projection_root)
+        self.store = SwitchableProjectionStore(self.filesystem_store)
 
         self.policy = LocalConsistencyTrustPolicy(
             policy_version=POLICY_VERSION,
@@ -241,21 +260,9 @@ class LocalCheckpointCoordinatorTests(unittest.TestCase):
         self.assertEqual(self._head(), 2)
 
     def test_projection_readback_unavailable_prevents_sqlite_mutation(self):
-        class UnavailableResolver:
-            def resolve_checkpoint_projection(inner_self, request):
-                return CheckpointProjectionResolution(
-                    LocalVerificationStatus.UNAVAILABLE
-                )
+        self.store.unavailable = True
 
-        coordinator = LocalCheckpointCoordinator(
-            self.journal,
-            self.store,
-            UnavailableResolver(),
-            self.policy,
-            reducer_version=REDUCER_VERSION,
-        )
-
-        result = coordinator.commit_checkpoint(
+        result = self.coordinator.commit_checkpoint(
             CHECKPOINT_ID, self.first_commit.position, NOW
         )
 
