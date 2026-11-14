@@ -7,7 +7,10 @@ provide storage adapters or external anti-rollback protection.
 from atlas.core.errors import ContractError
 from atlas.memory.journal import ConsistencyRecoveryState
 from atlas.memory.journal_reducer import ConsistencyJournalReducer
-from atlas.memory.local_auth import verify_recovery_chain_with_policy
+from atlas.memory.local_auth import (
+    RecoveryChainVerificationStatus,
+    verify_recovery_chain_with_policy,
+)
 from atlas.memory.local_trust_policy import LocalConsistencyTrustPolicy
 from atlas.memory.trust import (
     ConsistencyRecoveryTrustContext,
@@ -77,10 +80,21 @@ class LocalConsistencyRecoveryVerifier:
         ):
             return self._result(ConsistencyRecoveryVerificationStatus.REJECTED)
 
-        if not verify_recovery_chain_with_policy(
-            state, self._key_port, self._trust_policy
-        ):
-            return self._result(ConsistencyRecoveryVerificationStatus.REJECTED)
+        chain_result = verify_recovery_chain_with_policy(
+            state,
+            self._key_port,
+            self._trust_policy,
+        )
+
+        if chain_result.status is RecoveryChainVerificationStatus.UNAVAILABLE:
+            return self._result(
+                ConsistencyRecoveryVerificationStatus.UNAVAILABLE
+            )
+
+        if chain_result.status is RecoveryChainVerificationStatus.REJECTED:
+            return self._result(
+                ConsistencyRecoveryVerificationStatus.REJECTED
+            )
 
         base_projection = None
         if state.checkpoint is not None:
