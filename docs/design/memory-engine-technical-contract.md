@@ -543,3 +543,14 @@ Atlas conserva su contrato histórico `AuthenticatedUserSubject`/`IdentitySubjec
 La vinculación de identidad no es una autorización: solo acredita la relación actor-sujeto desde una fuente confiable. La política debe seguir verificando el propietario canónico y todos los atributos de scope y recurso. Fallos, binding ausente, actor inactivo, identidad discordante o revisión discordante deben denegar.
 
 ME-D2 no termina la independencia. La resolución de metadatos de proyecto/entorno y la política CAM siguen siendo Atlas; aún faltan pruebas de conformidad, persistencia de contenido y un segundo consumidor real. No se ejecutaron pruebas ni builds.
+
+
+### 16.2 ME-D3 — resolución neutral de metadatos
+
+**Implementado en la rama funcional; pendiente de pruebas.** Los contratos `MemoryMetadataPort`, `ProjectMetadataPort` y `EnvironmentMetadataPort` se encuentran ahora en `atlas.memory.ports.metadata`. Cada consumidor debe implementar estos puertos contra su fuente canónica; los puertos no conceden permisos ni devuelven contenido.
+
+`MemoryMetadataResolver` se trasladó a `atlas.memory.metadata_resolver`. Comprueba identificadores exactos y tipos de respuesta para memoria, versión, proyecto y entorno. Excepciones, ausencia de datos, respuestas de tipo incorrecto o identificadores discordantes producen ausencia; no hay fallback a valores del contexto del solicitante. El resolver no recupera contenido, fragmentos ni embeddings.
+
+Los snapshots de metadatos usan el error de contrato propio de Memory Engine y validan UUIDv7 canónico para IDs de memoria/versiones sin depender del error ni del validador de Atlas. Se conservaron los módulos históricos de puertos y resolver como reexportaciones de compatibilidad. `MemoryAuthorizationService` consume el resolver desde el paquete de memoria.
+
+Esta extracción no mueve CAM, Grants, evaluación PROJECT ni snapshots de autorización fuera de Atlas. Tampoco completa el desacoplamiento de todos los modelos/validadores: permanecen dependencias históricas de `atlas.core` en otros componentes. No se ejecutaron pruebas ni builds.
