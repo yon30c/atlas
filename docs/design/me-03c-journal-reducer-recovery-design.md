@@ -64,7 +64,7 @@ Cualquier transición desconocida, fuera de orden, duplicada contradictoriamente
 
 La validación estructural de un checkpoint y sus entradas no prueba autenticidad, anti-rollback ni que la fuente haya entregado el último estado confirmado. `continuity_reference` es una referencia opaca, no una prueba criptográfica por sí misma. Como `ConsistencyRecoveryState` aún no incluye una proyección base decodificada/verificada del checkpoint, el reducer rechaza cualquier recuperación con checkpoint en lugar de reproducir únicamente las entradas posteriores como si el historial anterior estuviera vacío.
 
-La autoridad solo puede reabrir el dominio después de validar el resultado del reducer y obtener una verificación de continuidad/anti-rollback desde una fuente confiable definida por la futura implementación. ME-03C no inventa ni implementa esa fuente.
+La autoridad solo puede reabrir el dominio después de validar el resultado del reducer y obtener la verificación correspondiente al perfil declarado. En el perfil local se exige integridad y continuidad interna disponible, pero no se afirma anti-rollback externo ni que el head recuperado sea el último existente antes de una restauración. En el perfil anclado, opcional y postergado hasta la etapa final, se exige además verificación contra Trust Anchor externo. ME-03C no implementa ninguno de esos verificadores.
 
 ## 3. Matriz cerrada de campos por transición
 
@@ -204,3 +204,8 @@ Los 78 métodos de prueba de journal/reducer quedaron incluidos en esa suite. La
 ## 11. Validación cruzada posterior
 
 Los escenarios C65–C87 se ejecutaron dentro de la suite completa del repositorio en el commit `49244706a3f93f09ec7b1f2b7e350124b2715216`: 360 tests, Python 3.10–3.13, todos exitosos ([Atlas CI #43526491006](https://github.com/yon30c/atlas/actions/runs/43526491006)). La validación sigue siendo de modelos, reducer y fakes; no demuestra journal durable, checkpoint base autenticado ni anti-rollback.
+
+
+## Decisión posterior — Trust Anchor opcional
+
+**APROBADO — 13 de noviembre de 2026.** El Trust Anchor externo no es una dependencia obligatoria de las etapas actuales. El baseline utiliza perfil local; por ello, la validación de checkpoint/journal no puede declarar demostrada la ausencia de rollback de un backup coherente. El perfil anclado queda reservado para la etapa final. Las limitaciones de restauración de memorias olvidadas se rigen por ME-03K-B y el Contrato de diseño Atlas v1 §20.6.
