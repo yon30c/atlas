@@ -649,6 +649,16 @@ class CoordinatorJournalFake:
         return JournalCommit(position, transition.record_id, False)
 
 
+class CoordinatorVerifiedRecoveryFake:
+    """Independent read port backed by the same fake durable journal."""
+
+    def __init__(self, journal):
+        self.journal = journal
+
+    def load_verified_recovery_state(self, domain_id):
+        return self.journal.load_verified_recovery_state(domain_id)
+
+
 class CoordinatorRecoveryGateFake:
     def __init__(self, journal):
         self.journal = journal
@@ -720,6 +730,7 @@ class RecoveryJournalCoordinatorTests(unittest.TestCase):
             head_sequence=1,
         )
         self.journal = CoordinatorJournalFake(initial)
+        self.verified_recovery = CoordinatorVerifiedRecoveryFake(self.journal)
         self.gate = CoordinatorRecoveryGateFake(self.journal)
         self.fencer = GateAwareEndpointFencer(self.gate)
         self.verifier = FakeTerminalVerifier()
@@ -735,6 +746,7 @@ class RecoveryJournalCoordinatorTests(unittest.TestCase):
             domain_id="consistency-domain",
             id_factory=lambda: next(self.ids),
             clock=lambda: NOW,
+            verified_recovery=self.verified_recovery,
         )
 
     def test_durable_gate_closes_before_any_endpoint_is_contacted(self):
@@ -794,6 +806,7 @@ class RecoveryJournalCoordinatorTests(unittest.TestCase):
             domain_id="consistency-domain",
             id_factory=lambda: next(self.ids),
             clock=lambda: NOW,
+            verified_recovery=self.verified_recovery,
         )
         result = restarted.run()
         self.assertIs(result.status, RecoveryCoordinatorStatus.FENCING_RECORDED)
