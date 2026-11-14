@@ -14,6 +14,7 @@ from atlas.memory.journal import (
     JournalEntry,
     JournalOperationResolution,
 )
+from atlas.memory.trust import ConsistencyRecoveryVerificationResult
 
 
 class ConsistencyJournalPort(Protocol):
@@ -54,19 +55,31 @@ class ConsistencyJournalPort(Protocol):
         transporte ni timestamps/IDs regenerados por el caller.
         """
 
+    def load_verified_recovery_state(
+        self,
+        domain_id: str,
+    ) -> ConsistencyRecoveryVerificationResult:
+        """Carga estado solo si autenticidad y anti-rollback fueron verificadas.
+
+        VERIFIED es la única salida que permite entregar el estado al reducer.
+        REJECTED representa corrupción, rollback, fork, replay, clave/política
+        inválida o discrepancia de ancla. UNAVAILABLE incluye ausencia de ancla,
+        timeout o imposibilidad de demostrar continuidad. Ningún resultado
+        distinto de VERIFIED permite reconstrucción operativa ni apertura del gate.
+        La implementación valida tombstones, claves idempotentes y operaciones
+        no terminales además de la cadena y checkpoint.
+        """
+
     def load_recovery_state(
         self,
         domain_id: str,
     ) -> ConsistencyRecoveryState | None:
-        """Devuelve estado solo después de verificar autenticidad y anti-rollback.
+        """Carga estructural sin atestación de confianza; solo diagnóstico/migración.
 
-        Debe validar la cadena desde un ancla confiable externa al conjunto
-        restaurable, dominio/época/posición monotónica, esquema, checkpoint,
-        continuidad, idempotency tombstones y operaciones no terminales.
-        Ausencia, corrupción, truncamiento, rollback, época desconocida, ancla
-        indisponible o procedencia no verificable => None; gate cerrado.
-        El reducer recibe exclusivamente estado cuya autenticidad/continuidad
-        ya haya sido verificada por el adaptador.
+        Este método no puede usarse para alimentar el reducer en recuperación
+        operativa, admitir lecturas, emitir contenido ni abrir el recovery gate.
+        Los flujos operativos deben usar exclusivamente
+        load_verified_recovery_state().
         """
 
     def load_endpoint_receipts(
