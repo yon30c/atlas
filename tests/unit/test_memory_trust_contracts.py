@@ -144,6 +144,7 @@ class ConsistencyTrustContractTests(unittest.TestCase):
                 expected_domain_id="atlas-main",
                 expected_authority_epoch=4,
                 expected_position=ConsistencyPosition("atlas-main", 4, 3),
+                checkpoint=self.checkpoint,
                 anchor=expired,
                 envelope=self.envelope,
                 trust_policy_version="policy-v2",
@@ -160,6 +161,7 @@ class ConsistencyTrustContractTests(unittest.TestCase):
                 expected_domain_id="atlas-main",
                 expected_authority_epoch=4,
                 expected_position=ConsistencyPosition("atlas-main", 4, 3),
+                checkpoint=self.checkpoint,
                 anchor=self.anchor,
                 envelope=future,
                 trust_policy_version="policy-v2",
@@ -172,6 +174,7 @@ class ConsistencyTrustContractTests(unittest.TestCase):
                 expected_domain_id="atlas-main",
                 expected_authority_epoch=4,
                 expected_position=ConsistencyPosition("atlas-main", 4, 3),
+                checkpoint=self.checkpoint,
                 anchor=self.anchor,
                 envelope=self.envelope,
                 trust_policy_version="policy-v3",
@@ -229,14 +232,7 @@ class ConsistencyTrustContractTests(unittest.TestCase):
             )
 
     def test_rejected_result_cannot_carry_verified_state(self):
-        state = ConsistencyRecoveryState(
-            domain_id="atlas-main",
-            authority_epoch=4,
-            checkpoint=None,
-            entries=(),
-            head_sequence=3,
-            continuity_reference="structural-reference",
-        )
+        state = self._state(3)
         verified = VerifiedConsistencyRecoveryState(
             state=state,
             anchor=self.anchor,
