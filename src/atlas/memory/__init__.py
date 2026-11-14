@@ -70,6 +70,16 @@ from atlas.memory.journal_reducer import (
     InvalidationProjection,
     IdempotencyProjection,
 )
+from atlas.memory.recovery import (
+    RecoveryEndpointFenceReceipt,
+    RecoveryEndpointFenceRequest,
+    RecoveryFencePlan,
+    UnresolvedAdmissionRecovery,
+    VerifiedRecoveryFenceBatch,
+    build_recovery_fence_plan,
+    build_recovery_fence_requests,
+    execute_recovery_fencing,
+)
 from atlas.memory.receipt_verification import (
     ReceiptVerificationResult,
     ReceiptVerificationStatus,
@@ -87,6 +97,14 @@ from atlas.memory.validation import (
 )
 
 __all__ = [
+    "RecoveryEndpointFenceReceipt",
+    "RecoveryEndpointFenceRequest",
+    "RecoveryFencePlan",
+    "UnresolvedAdmissionRecovery",
+    "VerifiedRecoveryFenceBatch",
+    "build_recovery_fence_plan",
+    "build_recovery_fence_requests",
+    "execute_recovery_fencing",
     "ReceiptVerificationResult",
     "ReceiptVerificationStatus",
     "TerminalReceiptKind",
