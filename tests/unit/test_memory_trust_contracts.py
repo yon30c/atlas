@@ -120,6 +120,38 @@ class ConsistencyTrustContractTests(unittest.TestCase):
                 verification_time=self.now,
             )
 
+    def test_expired_anchor_is_rejected(self):
+        expired = replace(
+            self.anchor,
+            valid_until=datetime(2026, 11, 13, 11, 59, tzinfo=timezone.utc),
+        )
+        with self.assertRaises(ContractError):
+            ConsistencyCheckpointVerificationRequest(
+                expected_domain_id="atlas-main",
+                expected_authority_epoch=4,
+                expected_position=ConsistencyPosition("atlas-main", 4, 3),
+                anchor=expired,
+                envelope=self.envelope,
+                trust_policy_version="policy-v2",
+                verification_time=self.now,
+            )
+
+    def test_future_dated_envelope_is_rejected(self):
+        future = replace(
+            self.envelope,
+            issued_at=datetime(2026, 11, 13, 12, 1, tzinfo=timezone.utc),
+        )
+        with self.assertRaises(ContractError):
+            ConsistencyCheckpointVerificationRequest(
+                expected_domain_id="atlas-main",
+                expected_authority_epoch=4,
+                expected_position=ConsistencyPosition("atlas-main", 4, 3),
+                anchor=self.anchor,
+                envelope=future,
+                trust_policy_version="policy-v2",
+                verification_time=self.now,
+            )
+
     def test_wrong_trust_policy_is_rejected(self):
         with self.assertRaises(ContractError):
             ConsistencyCheckpointVerificationRequest(
