@@ -1,6 +1,6 @@
 # ME-03K — Custodia local de claves y firmante HMAC
 
-**Estado:** diseño de implementación para el perfil local; no provisiona secretos ni modifica systemd.  
+**Estado:** implementación de código publicada; pruebas Debian pendientes. No provisiona secretos ni modifica systemd.  
 **Rama:** `feature/me-03k-local-profile`.  
 **Dependencia:** decisión del propietario de usar systemd credentials con clave de host (`--with-key=host`) aprobada previamente.
 
@@ -134,6 +134,19 @@ Pruebas de integración posteriores:
 - Trust Anchor externo y anti-rollback.
 - Apertura del Recovery Gate o activación de lecturas protegidas.
 
-## 7. Criterio de salida
+## 7. Implementación publicada
+
+Código añadido en la rama de trabajo:
+
+- `src/atlas/memory/local_keys.py`: DTO con bytes de clave ocultos en `repr`.
+- `src/atlas/ports/active_local_consistency_keys.py`: puerto de selección de clave activa.
+- `src/atlas/adapters/systemd_credentials.py`: resolución histórica desde el directorio de credenciales, mapa de referencias inmutable y selección activa explícita.
+- `src/atlas/adapters/local_hmac_signer.py`: firmante HMAC que exige coincidencia exacta de `key_reference` y usa el canonicalizador/autenticador existente.
+- `tests/unit/test_systemd_credentials.py`: pruebas de carga, ausencia, tamaño, symlink, traversal y selección activa.
+- `tests/unit/test_local_hmac_signer.py`: pruebas de firma, verificación, referencia y fallos del proveedor.
+
+## 8. Criterio de salida
 
 La subetapa de código termina cuando los puertos, proveedores y firmante pasan pruebas unitarias y el adaptador SQLite puede usar el firmante real mediante inyección. La activación en Debian requiere una tarea separada, revisión de permisos, provisionamiento explícito por el propietario y verificación operativa sin exponer bytes de clave.
+
+La suite todavía debe ejecutarse en Debian. No se ha ejecutado `systemd-creds setup`, no se han generado ni cifrado claves y no se ha modificado ninguna unidad systemd.
