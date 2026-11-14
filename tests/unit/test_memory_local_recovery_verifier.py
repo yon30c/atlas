@@ -10,13 +10,16 @@ from atlas.memory.consistency import (
 )
 from atlas.memory.envelope import AuthenticatedConsistencyEnvelope
 from atlas.memory.journal import (
+    ConsistencyCheckpoint,
     ConsistencyPosition,
     ConsistencyRecordKind,
     ConsistencyRecoveryState,
     ConsistencyTransition,
     JournalEntry,
 )
-from atlas.memory.local_auth import authenticate_envelope, journal_entry_payload
+from atlas.memory.local_auth import (
+    authenticate_envelope, checkpoint_payload, journal_entry_payload,
+)
 from atlas.memory.local_recovery_verifier import LocalConsistencyRecoveryVerifier
 from atlas.memory.local_trust_policy import (
     LocalConsistencyTrustPolicy,
@@ -131,7 +134,10 @@ class LocalConsistencyRecoveryVerifierTests(unittest.TestCase):
             issuer_authorizations=frozenset({
                 LocalIssuerAuthorization(
                     "journal_entry", "local-journal", "consistency-journal"
-                )
+                ),
+                LocalIssuerAuthorization(
+                    "checkpoint", "local-checkpoint", "consistency-checkpoint"
+                ),
             }),
             allowed_key_references=frozenset({"local-key-1"}),
             allowed_envelope_versions=frozenset({1}),
@@ -218,6 +224,124 @@ class LocalConsistencyRecoveryVerifierTests(unittest.TestCase):
         wrong = replace(self.context, trust_policy_version="other-policy")
         result = self.verifier.verify_recovery_state(state, wrong)
         self.assertIs(result.status, ConsistencyRecoveryVerificationStatus.REJECTED)
+
+
+    def test_verifies_checkpoint_projection_before_replaying_tail(self):
+        from atlas.memory.journal_reducer import ConsistencyJournalReducer
+        from atlas.ports.local_consistency_recovery import (
+            CheckpointProjectionResolution,
+            LocalVerificationStatus,
+            VerifiedCheckpointProjection,
+        )
+
+        prefix_state = build_recovery_state()
+        base_projection = ConsistencyJournalReducer().reduce(prefix_state)
+        checkpoint = ConsistencyCheckpoint(
+            checkpoint_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074705",
+            position=ConsistencyPosition(DOMAIN, 1, 1),
+            state_reference="checkpoint-state",
+            integrity_reference="checkpoint-integrity",
+            created_at=NOW,
+        )
+        unsigned = AuthenticatedConsistencyEnvelope(
+            object_kind="checkpoint",
+            envelope_version=1,
+            consistency_domain_id=DOMAIN,
+            authority_epoch=1,
+            sequence=1,
+            object_id=checkpoint.checkpoint_id,
+            schema_version=1,
+            reducer_version="reducer-v1",
+            previous_commitment=None,
+            object_commitment="0" * 64,
+            issuer_id="local-checkpoint",
+            issuer_role="consistency-checkpoint",
+            key_reference="local-key-1",
+            trust_policy_version="local-policy-v1",
+            issued_at=NOW,
+            authentication_evidence="pending",
+        )
+        signed = authenticate_envelope(unsigned, checkpoint_payload(checkpoint), KEY)
+        checkpoint = replace(checkpoint, envelope=signed)
+        state = ConsistencyRecoveryState(
+            domain_id=DOMAIN,
+            authority_epoch=1,
+            checkpoint=checkpoint,
+            entries=(),
+            head_sequence=1,
+            continuity_reference=signed.object_commitment,
+        )
+
+        class Checkpoints:
+            def resolve_checkpoint_projection(inner_self, request):
+                evidence = VerifiedCheckpointProjection(
+                    checkpoint_id=checkpoint.checkpoint_id,
+                    consistency_domain_id=DOMAIN,
+                    authority_epoch=1,
+                    sequence=1,
+                    state_reference=checkpoint.state_reference,
+                    integrity_reference=checkpoint.integrity_reference,
+                    state_commitment="checkpoint-state-commitment",
+                    integrity_commitment="checkpoint-integrity-commitment",
+                    schema_version=1,
+                    reducer_version="reducer-v1",
+                    trust_policy_version="local-policy-v1",
+                    projection=base_projection,
+                    verification_id="checkpoint-verification",
+                )
+                return CheckpointProjectionResolution(
+                    LocalVerificationStatus.VERIFIED, evidence
+                )
+
+        verifier = LocalConsistencyRecoveryVerifier(
+            trust_policy=self.policy,
+            key_port=self.keys,
+            inventory_verifier=self.inventory,
+            checkpoint_projection_port=Checkpoints(),
+            verifier_id="local-recovery-verifier",
+        )
+        result = verifier.verify_recovery_state(state, self.context)
+        self.assertIs(result.status, ConsistencyRecoveryVerificationStatus.VERIFIED)
+
+    def test_checkpoint_without_resolver_is_unavailable(self):
+        from atlas.memory.local_auth import checkpoint_payload
+
+        checkpoint = ConsistencyCheckpoint(
+            checkpoint_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074706",
+            position=ConsistencyPosition(DOMAIN, 1, 1),
+            state_reference="checkpoint-state",
+            integrity_reference="checkpoint-integrity",
+            created_at=NOW,
+        )
+        unsigned = AuthenticatedConsistencyEnvelope(
+            object_kind="checkpoint",
+            envelope_version=1,
+            consistency_domain_id=DOMAIN,
+            authority_epoch=1,
+            sequence=1,
+            object_id=checkpoint.checkpoint_id,
+            schema_version=1,
+            reducer_version="reducer-v1",
+            previous_commitment=None,
+            object_commitment="0" * 64,
+            issuer_id="local-checkpoint",
+            issuer_role="consistency-checkpoint",
+            key_reference="local-key-1",
+            trust_policy_version="local-policy-v1",
+            issued_at=NOW,
+            authentication_evidence="pending",
+        )
+        signed = authenticate_envelope(unsigned, checkpoint_payload(checkpoint), KEY)
+        state = ConsistencyRecoveryState(
+            domain_id=DOMAIN,
+            authority_epoch=1,
+            checkpoint=replace(checkpoint, envelope=signed),
+            entries=(),
+            head_sequence=1,
+            continuity_reference=signed.object_commitment,
+        )
+        result = self.verifier.verify_recovery_state(state, self.context)
+        self.assertIs(result.status, ConsistencyRecoveryVerificationStatus.UNAVAILABLE)
 
 
 if __name__ == "__main__":
