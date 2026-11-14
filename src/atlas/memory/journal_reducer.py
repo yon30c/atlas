@@ -219,10 +219,32 @@ class ConsistencyJournalReducer:
                 or checkpoint.position.authority_epoch != recovery.authority_epoch
             ):
                 raise ContractError("proyección base no coincide exactamente con checkpoint")
-            if base_projection.replay_metadata_version != 1:
+            if (
+                isinstance(base_projection.replay_metadata_version, bool)
+                or not isinstance(base_projection.replay_metadata_version, int)
+                or base_projection.replay_metadata_version != 1
+            ):
                 raise ContractError("versión de metadatos de replay no soportada")
-            if not isinstance(base_projection.emission_ids, frozenset):
-                raise ContractError("emission_ids de proyección base no es frozenset")
+            tuple_fields = (
+                ("admissions", AdmissionProjection),
+                ("forget_closures", ForgetProjection),
+                ("invalidations", InvalidationProjection),
+                ("idempotency_records", IdempotencyProjection),
+                ("recovery_closures", RecoveryProjection),
+            )
+            for field, expected_type in tuple_fields:
+                values = getattr(base_projection, field)
+                if not isinstance(values, tuple) or any(
+                    not isinstance(item, expected_type) for item in values
+                ):
+                    raise ContractError(f"{field} de proyección base no es válido")
+            for field in ("receipt_ids", "emission_ids"):
+                values = getattr(base_projection, field)
+                if (
+                    not isinstance(values, frozenset)
+                    or any(not isinstance(value, str) or not value.strip() for value in values)
+                ):
+                    raise ContractError(f"{field} de proyección base no es válido")
 
         admissions = {}
         forgets = {}
