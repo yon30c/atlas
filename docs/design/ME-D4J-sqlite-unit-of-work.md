@@ -149,3 +149,15 @@ Esta entrega no modifica `SQLiteConsistencyJournal`: sus métodos siguen abriend
 - El método público `append_transition(...)` conserva su firma y resultado histórico, envolviendo la operación interna en una UoW propia y devolviendo `None` ante errores ordinarios.
 - Se añadieron pruebas para append dentro de una UoW externa y rollback conjunto cuando falla el signer después de una mutación acompañante. Las pruebas no se ejecutaron.
 - No se adaptaron `commit_checkpoint`, `create_local_domain` ni otros métodos. No hay todavía autoridad SQLite del Recovery Gate y no se declara atomicidad gate+journal completa.
+
+
+## ME-D4M — integración de commit_checkpoint
+
+**Estado: implementación añadida; validación pendiente.**
+
+- Se añadió SQLiteConsistencyJournal.commit_checkpoint_in(unit_of_work, expected_position, expected_head_commitment, checkpoint).
+- La operación interna valida la UoW exacta y activa y reutiliza su conexión para leer el dominio y los registros previos, verificar replay/conflicto, firmar checkpoint y marcador, insertar checkpoint/journal/operación idempotente y actualizar el head mediante CAS.
+- No abre ni confirma transacciones. Los errores inesperados de persistencia se propagan para que el dueño de la UoW revierta todas las mutaciones compuestas.
+- commit_checkpoint(...) conserva la API pública y delega en una UoW propia. Ante una excepción transaccional devuelve UNKNOWN; los estados de conflicto y signer no disponible siguen siendo resultados explícitos.
+- Se añadieron pruebas de éxito dentro de UoW externa y rollback de una mutación acompañante junto con checkpoint/marker/operation/head ante fallo inyectado del marcador. No se ejecutaron.
+- La operación de checkpoint ahora comparte la frontera transaccional local cuando se invoca explícitamente con una UoW. No hay todavía autoridad SQLite concreta para Recovery Gate, ni integración de gate/egress.
