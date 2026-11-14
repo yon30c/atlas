@@ -236,3 +236,12 @@ Guía de configuración local: [Memory Engine README](../memory-engine/README.md
 - Tests nuevos cubren commit, rollback, propietario diferente, anidamiento y compatibilidad. No ejecutados.
 
 **Fuera de alcance:** journal todavía no acepta una unidad de trabajo externa; Recovery Gate authority SQLite sigue sin implementación. No se ha demostrado atomicidad compuesta gate+journal. No hubo cambios de esquema, migraciones ni runtime. No se ejecutaron pruebas ni build.
+
+
+## ME-D4L — append del journal con unidad de trabajo externa
+
+- Implementado `SQLiteConsistencyJournal.append_transition_in(...)` para reutilizar una `SQLiteUnitOfWork` activa y de la misma base de datos.
+- `append_transition(...)` mantiene su API pública y crea una UoW propia; la operación interna propaga fallos para permitir rollback de la composición.
+- Se conservan canonicalización, firma/envelope, idempotencia, CAS y DTO persistidos.
+- Se añadieron pruebas de reutilización y rollback ante fallo del signer; **pendientes de ejecución**.
+- Alcance limitado a append de transiciones. Checkpoint, bootstrap del dominio y autoridad Recovery Gate no están integrados en esta frontera.
