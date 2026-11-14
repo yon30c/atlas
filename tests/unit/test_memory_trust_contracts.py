@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime, timezone
 import unittest
 
@@ -73,12 +74,7 @@ class ConsistencyTrustContractTests(unittest.TestCase):
             )
 
     def test_envelope_wrong_domain_is_rejected(self):
-        wrong = AuthenticatedConsistencyEnvelope(
-            **{
-                **self.envelope.__dict__,
-                "consistency_domain_id": "other-domain",
-            }
-        )
+        wrong = replace(self.envelope, consistency_domain_id="other-domain")
         with self.assertRaises(ContractError):
             ConsistencyCheckpointVerificationRequest(
                 expected_domain_id="atlas-main",
@@ -91,24 +87,16 @@ class ConsistencyTrustContractTests(unittest.TestCase):
             )
 
     def test_envelope_wrong_epoch_is_rejected(self):
+        wrong = replace(self.envelope, authority_epoch=3)
         with self.assertRaises(ContractError):
-            AuthenticatedConsistencyEnvelope(
-                object_kind="checkpoint",
-                envelope_version=1,
-                consistency_domain_id="atlas-main",
-                authority_epoch=3,
-                sequence=3,
-                object_id="checkpoint-3",
-                schema_version=2,
-                reducer_version="reducer-v1",
-                previous_commitment="previous",
-                object_commitment="commitment",
-                issuer_id="journal-authority",
-                issuer_role="consistency-journal",
-                key_reference="journal-key-2",
+            ConsistencyCheckpointVerificationRequest(
+                expected_domain_id="atlas-main",
+                expected_authority_epoch=4,
+                expected_position=ConsistencyPosition("atlas-main", 4, 3),
+                anchor=self.anchor,
+                envelope=wrong,
                 trust_policy_version="policy-v2",
-                issued_at=self.now,
-                authentication_evidence="opaque",
+                verification_time=self.now,
             )
 
     def test_wrong_trust_policy_is_rejected(self):
