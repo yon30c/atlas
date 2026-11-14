@@ -327,3 +327,10 @@ Pruebas añadidas a `tests/unit/test_memory_unresolved_admission_recovery.py`:
 CI [#43533291237](https://github.com/yon30c/atlas/actions/runs/43533291237): Python 3.10–3.13, todos exitosos.
 
 **Límite:** los tests usan fakes de proceso único. No hay adaptador durable, gate de runtime, fencing real, recibo terminal de admisión ni reapertura del gate. La implementación no marca admisiones CANCELLED y no emite `RECOVERY_RECONCILED`. Se requiere una etapa posterior de finalización terminal independiente y atómica antes de poder abrir el gate.
+
+
+## Decisión posterior — Trust Anchor opcional
+
+**APROBADO — 13 de noviembre de 2026.** Las etapas actuales de ME-03E se ejecutan bajo el perfil local en un único servidor. Trust Anchor externo y la demostración de anti-rollback frente a backups restaurados quedan postergados hasta la etapa final de Atlas. Las pruebas de fakes y de proceso único no deben presentarse como evidencia de anti-rollback.
+
+ME-03E debe seguir validando de forma independiente autenticidad disponible, orden, idempotencia, fencing, inventarios, supresión, recibos, atomicidad y recuperación de resultados ambiguos. Cualquier escenario de restauración que pueda reintroducir una memoria olvidada permanece bloqueado hasta reconciliar el estado de supresión con una fuente independiente aprobada.
