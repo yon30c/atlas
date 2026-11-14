@@ -1,6 +1,7 @@
 """Typed authenticated envelope shared by journal models and trust contracts."""
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+
 from atlas.core.errors import ContractError
 
 
@@ -15,13 +16,12 @@ def _positive(value: object, field: str) -> None:
 
 
 def _utc(value: object, field: str) -> None:
-    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() != timedelta(0):
+    if (
+        not isinstance(value, datetime)
+        or value.tzinfo is None
+        or value.utcoffset() != timedelta(0)
+    ):
         raise ContractError(f"{field} debe ser datetime UTC")
-
-
-from dataclasses import dataclass
-from datetime import datetime, timedelta
-from atlas.core.errors import ContractError
 
 
 @dataclass(frozen=True, slots=True)
