@@ -12,7 +12,7 @@ El perfil SQLite local ofrece:
 - Journal de consistencia con append autenticado, idempotencia, resolución de operaciones y checkpoints.
 - Separación entre lectura estructural y recuperación verificada.
 
-El esquema reserva campos para el Recovery Gate, pero todavía no existe una implementación SQLite de `ProtectedMemoryRecoveryAuthorityPort`. No abras ni actives el gate manualmente.
+El esquema reserva campos para el Recovery Gate y ya existe un adaptador SQLite gate-only, pero todavía no existe una implementación completa de `ProtectedMemoryRecoveryAuthorityPort` que comparta autoridad con admisión y egress. No abras ni actives el gate manualmente.
 
 ## Requisitos
 
