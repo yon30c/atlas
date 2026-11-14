@@ -7,6 +7,7 @@ from atlas.adapters.console import run_console
 from atlas.adapters.ollama import OllamaProvider
 from atlas.adapters.ollama_assistant import OllamaResponseGenerator
 from atlas.adapters.system_clock import SystemClock
+from atlas.application import AtlasCore
 from atlas.assistant.local_console import (
     LocalConsoleRequestFactory,
     LocalModeResponseGenerator,
@@ -59,9 +60,13 @@ def main(
             model=selected_model,
         )
 
-    assistant = AssistantService(
+    assistant_service = AssistantService(
         response_generator=response_generator,
         clock=clock,
+    )
+    atlas_core = AtlasCore(
+        request_factory=request_factory,
+        assistant=assistant_service,
     )
     console_options = {
         "input_fn": input_fn,
@@ -69,4 +74,4 @@ def main(
     }
     if write_fn is not None:
         console_options["write_fn"] = write_fn
-    run_console(assistant, request_factory, **console_options)
+    run_console(atlas_core, **console_options)
