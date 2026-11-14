@@ -198,7 +198,7 @@ Add focused tests for:
 12. A subsequent `load_recovery_state_result()` reconstructs the checkpoint and suffix; the existing independent recovery verifier and reducer path can consume the result.
 13. No schema migration is needed, or a separately approved minimal migration is fully tested.
 
-The feature-branch writer tests cover successful persistence and read-back, exact replay, changed-reference conflict, stale position, mismatched head commitment, second-signature failure, an injected marker-insert failure that must roll back the checkpoint row, and a real HMAC-signer integration test for both root and marker envelopes. Coordinator tests cover successful publication/verification/commit and verified recovery, exact retry, changed timestamp conflict, a concurrent append that makes the projection stale, unavailable read-back, and publication failure.
+The feature-branch writer tests cover successful persistence and read-back, exact replay, changed-reference conflict, stale position, mismatched head commitment, second-signature failure, an injected marker-insert failure that must roll back the checkpoint row, and a real HMAC-signer integration test for both root and marker envelopes. Coordinator tests cover successful publication/verification/commit and verified recovery, exact retry, changed timestamp conflict, a concurrent append that makes the projection stale, unavailable read-back, publication failure, and a simulated lost response after SQLite has durably committed (the first call returns `UNKNOWN`; retrying the exact identity returns `REPLAYED` without a duplicate marker).
 
 All tests are owner-run on Debian. Do not run tests/builds in GitHub or deploy as part of this work.
 
