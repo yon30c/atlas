@@ -43,6 +43,7 @@ class ConsistencyTrustContractTests(unittest.TestCase):
             issuer_id="trust-authority",
             key_reference="key-ref-7",
             trust_policy_version="policy-v2",
+            authentication_evidence="opaque-anchor-auth-evidence",
             anchor_revision=9,
             issued_at=self.now,
         )
