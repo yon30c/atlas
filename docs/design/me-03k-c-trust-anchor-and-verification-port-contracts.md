@@ -428,3 +428,29 @@ Se añadieron pruebas para:
 `reduce_from_projection` valida estructura y semántica, pero **no autentica el almacenamiento del checkpoint ni demuestra que la proyección provenga del puerto confiable**. La función no debe ser llamada como puerta de recuperación desde código no confiable. La composición del futuro `LocalConsistencyRecoveryVerifier` debe invocarla únicamente después de que `LocalConsistencyCheckpointProjectionPort` devuelva `VERIFIED`, valide el binding completo de la respuesta contra la solicitud exacta y la política independiente autorice versiones y referencias.
 
 Esta entrega no implementa todavía adaptadores de almacenamiento, verificación de inventarios, autenticidad de recibos/tombstones ni el verificador integrado. El recovery gate permanece cerrado.
+
+
+## 21. Binding exacto de las respuestas de los puertos locales
+
+**Estado: IMPLEMENTADO EN RAMA FEATURE — requiere validación del propietario en Debian.**
+
+Se añaden dos validadores de frontera para evitar que un resultado `VERIFIED` se reutilice con una solicitud o un estado distintos:
+
+### 21.1 Resolución de proyección del checkpoint
+
+`require_verified_checkpoint_projection(request, resolution)` solo devuelve la proyección si:
+- el resultado tiene estado `VERIFIED`;
+- checkpoint, dominio, época y secuencia coinciden con la solicitud;
+- `state_reference` e `integrity_reference` son exactamente los solicitados;
+- versión de política, esquema y reducer están permitidos por la solicitud;
+- la proyección contiene metadatos de replay versión 1.
+
+El DTO de evidencia ahora conserva las referencias exactas y la versión de política junto con los commitments comprobados. Esto permite verificar el binding después de que el puerto responda.
+
+### 21.2 Atestación de inventarios
+
+`require_verified_local_inventories(request, result)` exige estado `VERIFIED` y coincidencia exacta de dominio, época, head, `continuity_reference` y versión de política. No convierte por sí mismo los conjuntos de IDs en prueba de completitud: esa prueba sigue siendo responsabilidad del adaptador autoritativo del inventario.
+
+Ambos validadores rechazan `REJECTED`, `UNAVAILABLE`, tipos incorrectos o evidencia ligada a otro contexto. Se añadieron pruebas negativas para referencias/políticas/versiones incompatibles y para head/continuidad/dominio distintos.
+
+Estos validadores son controles de binding, no adaptadores de almacenamiento ni autenticadores autónomos. La autoridad de un resultado `VERIFIED` depende de la implementación confiable del puerto y de la composición del verificador. El recovery gate permanece cerrado hasta integrar y validar los adaptadores reales y el verificador completo.
