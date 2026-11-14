@@ -56,6 +56,11 @@ class LocalConsistencyRecoveryVerifier:
         self._verifier_id = verifier_id
         self._reducer = reducer or ConsistencyJournalReducer()
 
+    @property
+    def trust_policy(self) -> LocalConsistencyTrustPolicy:
+        """Expose the immutable policy identity for explicit composition checks."""
+        return self._trust_policy
+
     @staticmethod
     def _result(
         status: ConsistencyRecoveryVerificationStatus,
