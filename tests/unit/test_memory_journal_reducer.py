@@ -538,5 +538,115 @@ class ConsistencyJournalReducerTests(unittest.TestCase):
             self.reducer.reduce(recovery([admission, closure, wrong_fence]))
 
 
+    def test_reducer_continues_from_checkpoint_projection_and_matches_full_replay(self):
+        from atlas.memory.journal import ConsistencyCheckpoint
+
+        admitted = read_admitted(routes=frozenset({"assistant-response"}))
+        base = self.reducer.reduce(recovery([admitted]))
+        tail = egress(RECORDS[1], 1, receipt_id="checkpoint-tail-receipt")
+        checkpoint = ConsistencyCheckpoint(
+            checkpoint_id=RECORDS[10],
+            position=ConsistencyPosition(DOMAIN, 1, 1),
+            state_reference="state-ref",
+            integrity_reference="integrity-ref",
+            created_at=NOW,
+        )
+        recovered = ConsistencyRecoveryState(
+            domain_id=DOMAIN,
+            authority_epoch=1,
+            checkpoint=checkpoint,
+            entries=(
+                JournalEntry(ConsistencyPosition(DOMAIN, 1, 2), tail),
+            ),
+            head_sequence=2,
+            continuity_reference="opaque-head",
+        )
+
+        continued = self.reducer.reduce_from_projection(recovered, base)
+        complete = self.reducer.reduce(recovery([admitted, tail]))
+        self.assertEqual(continued, complete)
+        self.assertEqual(continued.replay_metadata_version, 1)
+        self.assertEqual(continued.emission_ids, frozenset({"emission-1"}))
+
+    def test_reducer_rejects_checkpoint_without_base_projection(self):
+        from atlas.memory.journal import ConsistencyCheckpoint
+
+        checkpoint = ConsistencyCheckpoint(
+            checkpoint_id=RECORDS[10],
+            position=ConsistencyPosition(DOMAIN, 1, 1),
+            state_reference="state-ref",
+            integrity_reference="integrity-ref",
+            created_at=NOW,
+        )
+        recovered = ConsistencyRecoveryState(
+            domain_id=DOMAIN,
+            authority_epoch=1,
+            checkpoint=checkpoint,
+            entries=(),
+            head_sequence=1,
+            continuity_reference="opaque-head",
+        )
+        with self.assertRaises(ContractError):
+            self.reducer.reduce(recovered)
+
+    def test_reducer_rejects_base_projection_without_replay_metadata_version(self):
+        from atlas.memory.journal import ConsistencyCheckpoint
+
+        base = self.reducer.reduce(recovery([read_admitted()]))
+        legacy_base = replace(base, replay_metadata_version=0)
+        checkpoint = ConsistencyCheckpoint(
+            checkpoint_id=RECORDS[10],
+            position=ConsistencyPosition(DOMAIN, 1, 1),
+            state_reference="state-ref",
+            integrity_reference="integrity-ref",
+            created_at=NOW,
+        )
+        recovered = ConsistencyRecoveryState(
+            domain_id=DOMAIN,
+            authority_epoch=1,
+            checkpoint=checkpoint,
+            entries=(),
+            head_sequence=1,
+            continuity_reference="opaque-head",
+        )
+        with self.assertRaises(ContractError):
+            self.reducer.reduce_from_projection(recovered, legacy_base)
+
+    def test_reducer_preserves_emission_id_uniqueness_across_checkpoint(self):
+        from atlas.memory.journal import ConsistencyCheckpoint
+
+        prefix = [
+            read_admitted(routes=frozenset({"assistant-response"})),
+            egress(
+                RECORDS[1], 1, emission_id="shared-emission",
+                receipt_id="prefix-receipt",
+            ),
+        ]
+        base = self.reducer.reduce(recovery(prefix))
+        repeated = egress(
+            RECORDS[2], 2, emission_id="shared-emission",
+            receipt_id="tail-receipt",
+        )
+        checkpoint = ConsistencyCheckpoint(
+            checkpoint_id=RECORDS[11],
+            position=ConsistencyPosition(DOMAIN, 1, 2),
+            state_reference="state-ref",
+            integrity_reference="integrity-ref",
+            created_at=NOW,
+        )
+        recovered = ConsistencyRecoveryState(
+            domain_id=DOMAIN,
+            authority_epoch=1,
+            checkpoint=checkpoint,
+            entries=(
+                JournalEntry(ConsistencyPosition(DOMAIN, 1, 3), repeated),
+            ),
+            head_sequence=3,
+            continuity_reference="opaque-head",
+        )
+        with self.assertRaises(ContractError):
+            self.reducer.reduce_from_projection(recovered, base)
+
+
 if __name__ == "__main__":
     unittest.main()
