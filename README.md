@@ -1,17 +1,45 @@
 # Atlas
 
-Atlas es un asistente modular en Python. Esta etapa establece contratos y modelos del núcleo; todavía no conecta servicios ni infraestructura.
+Atlas es un entorno personal de automatización y gestión de proyectos diseñado alrededor de seguridad por defecto, aislamiento, mínimo privilegio, trazabilidad y recuperabilidad.
 
-## Etapa 0
+## Estado actual: F1 funcional
 
-- La identidad y el contexto de operación son explícitos.
-- Todo acceso a memoria pasa por `MemoryGateway`; los módulos Assistant y Proactivity solo dependen de su puerto.
-- Autorización, persistencia de eventos y reloj son puertos, sin adaptadores concretos.
-- Los modelos son inmutables cuando representan datos de dominio.
-- No se incluyen base de datos, API, framework web, LLM, Cognee, Telegram ni Broker.
+La rama `feature/atlas-functional-f1` incorpora una primera experiencia conversacional local:
 
-La versión mínima declarada (`Python >=3.10`) es provisional mientras el proyecto confirma su política de runtimes. No se usa una librería externa de validación en esta etapa; los contratos aplican comprobaciones básicas de la biblioteca estándar.
+- Modelos inmutables `AssistantRequest` y `AssistantResponse`.
+- Servicio de aplicación que correlaciona solicitudes y respuestas.
+- Adaptador de consola desacoplado de la lógica de aplicación.
+- Identidad inicial derivada de la cuenta local del sistema.
+- Contexto explícito por solicitud y marcas de tiempo UTC.
+- Inicio mediante `python -m atlas` o el comando `atlas` tras instalar el paquete.
 
-## Desarrollo
+Esta etapa **todavía no conecta un LLM, memoria, herramientas, agentes ni Atlas Broker**. La respuesta actual es deliberadamente informativa y declara esa limitación; no simula comprensión generativa ni ejecución de tareas.
 
-Instala el proyecto en modo editable con `python -m pip install -e .` y ejecuta las pruebas con `python -m unittest discover -s tests -v`.
+## Ejecución local
+
+Desde la raíz del repositorio:
+
+```bash
+PYTHONPATH=src python -m atlas
+```
+
+Para instalar el comando de consola en el entorno activo:
+
+```bash
+python -m pip install -e .
+atlas
+```
+
+## Pruebas
+
+```bash
+PYTHONPATH=src python -m unittest \
+  tests.unit.test_assistant_conversation_models \
+  tests.unit.test_assistant_service \
+  tests.unit.test_assistant_console \
+  tests.unit.test_local_console_composition -v
+```
+
+## Próximas etapas
+
+Avanzar incrementalmente: validar la composición local, definir el proveedor de modelo detrás de una interfaz neutral y, posteriormente, integrar memoria y herramientas bajo autorización explícita. Ninguna de estas capacidades futuras debe considerarse implementada hasta contar con código y pruebas verificadas.
