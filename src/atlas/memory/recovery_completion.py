@@ -49,8 +49,10 @@ class RecoveryCompletionRequest:
             raise ContractError("generation debe ser positiva")
         if not isinstance(self.affected_admission_ids, frozenset) or not self.affected_admission_ids:
             raise ContractError("affected_admission_ids debe ser frozenset no vacío")
-        if not isinstance(self.route_ids, frozenset):
-            raise ContractError("route_ids debe ser frozenset")
+        if not isinstance(self.route_ids, frozenset) or not self.route_ids:
+            raise ContractError("route_ids debe ser frozenset no vacío")
+        for route_id in self.route_ids:
+            _required(route_id, "route_ids")
         if not isinstance(self.admission_receipts, tuple) or not self.admission_receipts:
             raise ContractError("admission_receipts debe ser tupla no vacía")
         admission_ids = set()
@@ -243,7 +245,7 @@ class RecoveryCompletionCoordinator:
             reconciled = tuple(item for item in projection.recovery_closures if item.reconciled)
             if not reconciled:
                 return RecoveryCompletionResult(RecoveryCompletionStatus.BLOCKED, None, None, None)
-            closure = reconciled[-1]
+            closure = max(reconciled, key=lambda item: item.generation)
             try:
                 opened = self._gate.ensure_recovery_gate_open(
                     closure.operation_id, closure.generation, closure.terminal_receipt_id
