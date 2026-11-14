@@ -417,9 +417,14 @@ class JournalOperationResolution:
                 != self.expected_position.consistency_domain_id
                 or self.commit.position.authority_epoch
                 != self.expected_position.authority_epoch
-                or self.commit.position.sequence <= self.expected_position.sequence
+                or self.commit.position.sequence != self.expected_position.sequence + 1
+                or self.current_position.consistency_domain_id
+                != self.expected_position.consistency_domain_id
+                or self.current_position.authority_epoch
+                != self.expected_position.authority_epoch
+                or self.current_position.sequence < self.commit.position.sequence
             ):
-                raise ContractError("commit no corresponde al dominio/época/orden esperado")
+                raise ContractError("commit/posición actual no corresponden al dominio, época y secuencia esperados")
         elif self.commit is not None:
             raise ContractError("solo COMMITTED_EXACT puede incluir commit")
         if self.status is JournalOperationResolutionStatus.NOT_COMMITTED:
@@ -430,8 +435,9 @@ class JournalOperationResolution:
                 != self.expected_position.consistency_domain_id
                 or self.current_position.authority_epoch
                 != self.expected_position.authority_epoch
+                or self.current_position.sequence < self.expected_position.sequence
             ):
-                raise ContractError("NOT_COMMITTED requiere misma autoridad y época")
+                raise ContractError("NOT_COMMITTED requiere misma autoridad, época y posición no regresiva")
         if self.status is JournalOperationResolutionStatus.UNKNOWN and self.commit is not None:
             raise ContractError("UNKNOWN no puede afirmar un commit")
 
