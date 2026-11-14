@@ -51,7 +51,10 @@ class LocalSQLiteRecoveryGateAdapter(RecoveryGatePort):
         return self._journal
 
     def _verified_snapshot(self, domain_id: str):
-        result = self._journal.load_verified_recovery_state(domain_id)
+        try:
+            result = self._journal.load_verified_recovery_state(domain_id)
+        except Exception:
+            return None
         if (
             result.status is not ConsistencyRecoveryVerificationStatus.VERIFIED
             or result.verified_local_state is None
@@ -104,6 +107,15 @@ class LocalSQLiteRecoveryGateAdapter(RecoveryGatePort):
         if not projection.recovery_closures:
             return None
         return max(projection.recovery_closures, key=lambda item: item.generation)
+
+    @staticmethod
+    def _same_recovery_transition(transition, closure) -> bool:
+        return bool(
+            transition.operation_id == closure.operation_id
+            and transition.generation == closure.generation
+            and transition.affected_admission_ids == closure.affected_admission_ids
+            and transition.route_ids == closure.route_ids
+        )
 
     @staticmethod
     def _update_projection(
