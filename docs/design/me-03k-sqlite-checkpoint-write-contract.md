@@ -1,6 +1,6 @@
 # ME-03K — Durable SQLite checkpoint write contract
 
-**Status:** SQLite writer and local checkpoint coordinator implemented on the feature branch; owner validation pending.  
+**Status:** SQLite writer, filesystem projection store and local checkpoint coordinator implemented; owner validation passed on Debian (59 focused tests and 660 tests in the complete suite, 2026-11-14).  
 **Target branch:** `feature/me-03k-local-profile`.  
 **Scope:** atomically persist an authenticated checkpoint and its matching journal marker, preserving the read contract in `me-03k-sqlite-checkpoint-read-contract.md`. The implementation includes a low-level SQLite writer and an orchestration layer for independent projection publication, read-back verification and atomic checkpoint commit.  
 **Non-goals:** schema migration unless implementation proves the existing schema insufficient; external Trust Anchor; anti-rollback guarantees; production activation; Broker changes.
@@ -246,3 +246,16 @@ A concurrent append after projection verification is detected by the writer's `B
 When retrying after an uncertain response, the caller supplies the same checkpoint ID, expected position and creation time. If the checkpoint committed and remains the latest checkpoint, the coordinator verifies the recovered state and returns `REPLAYED`. If the expected head has changed without that checkpoint being present as the latest checkpoint, it returns `CONFLICT` rather than silently moving the operation to a new head.
 
 The coordinator remains local-profile only. It does not detect restoration of an older coherent SQLite backup and does not add external anti-rollback protection.
+
+
+## 13. Owner validation record
+
+The owner synchronized the feature branch and ran the following validation on Debian:
+
+- Focused checkpoint validation: **59 tests passed**. The run covered the checkpoint coordinator, filesystem projection store, SQLite consistency journal and local HMAC integration.
+- Complete test suite: **660 tests passed**.
+- No test failures were reported.
+
+This is evidence for the tested code on the owner's Debian environment. It is not a production deployment or an adversarial host-security assessment. In particular, it does not demonstrate detection of a coherent restoration of an older SQLite database and projection-store backup, external anti-rollback, cross-host fencing, or atomicity across SQLite and the filesystem store.
+
+The validation results do not authorize deployment, service changes, Trust Anchor activation, or changes to the Broker.
