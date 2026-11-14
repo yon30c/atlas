@@ -12,7 +12,7 @@ from atlas.core.errors import ContractError
 from atlas.memory.envelope import AuthenticatedConsistencyEnvelope
 from atlas.memory.journal import (
     ConsistencyCheckpoint, ConsistencyPosition, ConsistencyRecordKind,
-    ConsistencyTransition, JournalEntry,
+    ConsistencyTransition, JournalEntry, CheckpointCommitStatus,
 )
 from atlas.memory.journal_reducer import ConsistencyJournalReducer
 from atlas.memory.local_auth import (
@@ -32,7 +32,7 @@ from atlas.ports.local_consistency_recovery import (
     VerifiedCheckpointProjection,
     VerifiedLocalConsistencyInventories,
 )
-from unit.test_memory_journal import RECORD_1, read_admitted
+from unit.test_memory_journal import CHECKPOINT_ID, NOW, RECORD_1, read_admitted
 
 
 class FakeActiveKeyProvider:
@@ -616,6 +616,54 @@ class SQLiteLocalHmacIntegrationTests(unittest.TestCase):
             result.status, ConsistencyRecoveryVerificationStatus.UNAVAILABLE
         )
         self.assertIsNone(result.verified_local_state)
+
+
+    def test_checkpoint_writer_uses_real_hmac_for_root_and_marker(self):
+        journal = self._journal()
+        first = journal.append_transition(
+            ConsistencyPosition("atlas-local", 1, 0),
+            "append-before-hmac-checkpoint",
+            read_admitted(record_id=RECORD_1),
+        )
+        self.assertIsNotNone(first)
+        with self.database.connection() as connection:
+            head_commitment = connection.execute(
+                "SELECT head_commitment FROM consistency_domains WHERE domain_id='atlas-local'"
+            ).fetchone()[0]
+        checkpoint = ConsistencyCheckpoint(
+            checkpoint_id=CHECKPOINT_ID,
+            position=first.position,
+            state_reference="sha256:" + "a" * 64,
+            integrity_reference="sha256:" + "b" * 64,
+            created_at=NOW,
+        )
+
+        result = journal.commit_checkpoint(
+            first.position, head_commitment, checkpoint
+        )
+
+        self.assertIs(result.status, CheckpointCommitStatus.COMMITTED)
+        self.assertTrue(
+            verify_envelope(
+                result.checkpoint.envelope,
+                checkpoint_payload(result.checkpoint),
+                self.key,
+            )
+        )
+        loaded = journal.load_recovery_state_result("atlas-local")
+        self.assertIsNotNone(loaded.state)
+        marker = loaded.state.entries[0]
+        self.assertEqual(
+            marker.envelope.previous_commitment,
+            result.checkpoint.envelope.object_commitment,
+        )
+        self.assertTrue(
+            verify_envelope(
+                marker.envelope,
+                journal_entry_payload(marker),
+                self.key,
+            )
+        )
 
 
 if __name__ == "__main__":
