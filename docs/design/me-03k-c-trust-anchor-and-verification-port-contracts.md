@@ -288,3 +288,21 @@ El cierre de diseño no equivale a implementación ni a conformidad operativa. N
 7. Cualquier garantía que dependa de probar el último estado confirmado fuera del conjunto restaurable —en particular, impedir la reaparición de memorias olvidadas tras restaurar backups antiguos— no se considera cubierta por el perfil local. La restauración afectada debe permanecer bloqueada o someterse a reconciliación explícita con una fuente independiente aprobada.
 
 La decisión no autoriza lecturas protegidas, Forget físico, recuperación productiva ni restauraciones de memoria no reconciliadas.
+
+
+## 15. Decisión del propietario — HMAC local y canonicalización
+
+**Estado: APROBADO — 13 de noviembre de 2026.**
+
+Para la autenticación local de envelopes se adopta:
+
+1. **Algoritmo:** HMAC-SHA-256.
+2. **Clave:** 256 bits (32 bytes), resuelta por una referencia opaca mediante `LocalConsistencyKeyPort`. La clave debe permanecer separada del journal y de los respaldos ordinarios. La ausencia de clave produce fallo cerrado.
+3. **Canonicalización v1:** JSON UTF-8, claves de objetos ordenadas, separadores compactos, fechas UTC normalizadas a ISO-8601 con microsegundos y sufijo `Z`, conjuntos ordenados por su representación JSON canónica. No se admiten números decimales ni tipos ambiguos/no soportados.
+4. **Compromiso del objeto:** SHA-256 hexadecimal minúsculo sobre los bytes canónicos.
+5. **Autenticación del envelope:** HMAC sobre un payload con separación de dominio, versión de canonicalización, algoritmo, compromiso del objeto y todos los metadatos del envelope excepto la propia evidencia HMAC. La comparación de MAC debe ser en tiempo constante.
+6. **Versionado:** la versión de canonicalización y la versión del envelope se validan explícitamente. No se permite reinterpretar silenciosamente evidencia antigua con una canonicalización nueva.
+
+El código inicial añade primitivas puras de canonicalización, commitment, autenticación/verificación HMAC y un puerto de resolución de claves. No implementa almacenamiento físico de claves, rotación/revocación, autorización de emisores, persistencia de envelopes ni un verificador completo de recuperación. Tampoco conecta todavía estos envelopes a cada JournalEntry/ConsistencyCheckpoint ni recorre la cadena, inventarios, tombstones y operaciones pendientes. Por tanto, estas primitivas **no equivalen a una recuperación local verificada** y no autorizan lecturas protegidas, Forget físico ni restauraciones operativas.
+
+La implementación concreta del puerto de claves, su ubicación, permisos, política de backup/recuperación y retención histórica quedan pendientes de diseño. La clave no debe guardarse junto al journal ni incluirse en sus respaldos ordinarios. El perfil local continúa sin protección anti-rollback externo.
