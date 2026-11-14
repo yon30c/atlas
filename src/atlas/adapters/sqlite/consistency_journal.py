@@ -524,9 +524,7 @@ class SQLiteConsistencyJournal:
                 epoch = domain["authority_epoch"]
                 head = domain["head_sequence"]
                 if (
-                    isinstance(head, bool) or not isinstance(head, int) or head < 1
-                    or not isinstance(domain["head_commitment"], str)
-                    or not domain["head_commitment"]
+                    isinstance(head, bool) or not isinstance(head, int) or head < 0
                 ):
                     return rejected
 
@@ -538,6 +536,15 @@ class SQLiteConsistencyJournal:
                     """,
                     (domain_id, epoch),
                 ).fetchall()
+                if head == 0:
+                    if checkpoint_rows or domain["head_commitment"] is not None:
+                        return rejected
+                    return unavailable
+                if (
+                    not isinstance(domain["head_commitment"], str)
+                    or not domain["head_commitment"]
+                ):
+                    return rejected
                 if any(
                     isinstance(row["sequence"], bool)
                     or not isinstance(row["sequence"], int)
