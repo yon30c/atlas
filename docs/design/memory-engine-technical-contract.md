@@ -532,3 +532,14 @@ El contexto neutral transporta atributos y **no es una prueba de autenticación*
 El adaptador Atlas conserva temporalmente la integración CAM existente. La independencia completa no está terminada: permanecen acoplamientos en modelos/validadores, metadatos, consistencia/recuperación local y autorización; tampoco existe aún persistencia del contenido de memoria. El alcance y las fases pendientes se registran en `docs/design/memory-engine-project-independence-implementation.md`.
 
 Esta anotación describe código incorporado, no una validación de pruebas. No se ejecutaron pruebas en esta etapa.
+
+
+### 16.1 ME-D2 — contrato neutral de identidad
+
+**Implementado en la rama funcional; pendiente de pruebas.** Se añadió `atlas.memory.identity.MemoryIdentityBinding`, junto con `MemoryIdentityBindingPort` y `resolve_authenticated_memory_binding`. El contrato expresa una vinculación actor-sujeto verificada, activa y versionada, sin depender de `OperationContext`, `Identity` ni de los tipos de autorización de Atlas.
+
+Atlas conserva su contrato histórico `AuthenticatedUserSubject`/`IdentitySubjectBindingPort`. `AtlasIdentityBindingAdapter` lo traduce al contrato neutral, y `MemoryAuthorizationService` consume el resultado neutral. La política CAM de Atlas, sus Grants y su evaluación PROJECT permanecen en el adaptador/servicio Atlas; esta fase no convierte al consumidor en autoridad de acceso ni altera las reglas PRIVATE/PROJECT.
+
+La vinculación de identidad no es una autorización: solo acredita la relación actor-sujeto desde una fuente confiable. La política debe seguir verificando el propietario canónico y todos los atributos de scope y recurso. Fallos, binding ausente, actor inactivo, identidad discordante o revisión discordante deben denegar.
+
+ME-D2 no termina la independencia. La resolución de metadatos de proyecto/entorno y la política CAM siguen siendo Atlas; aún faltan pruebas de conformidad, persistencia de contenido y un segundo consumidor real. No se ejecutaron pruebas ni builds.
