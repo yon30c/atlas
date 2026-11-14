@@ -59,18 +59,18 @@ class LocalCheckpointProjectionAdapter:
         try:
             local_evidence = require_local_checkpoint_projection(local_request, result)
             neutral_evidence = VerifiedCheckpointProjection(
-            checkpoint_id=local_evidence.checkpoint_id,
-            consistency_domain_id=local_evidence.consistency_domain_id,
-            authority_epoch=local_evidence.authority_epoch,
-            sequence=local_evidence.sequence,
-            state_reference=local_evidence.state_reference,
-            integrity_reference=local_evidence.integrity_reference,
-            state_commitment=local_evidence.state_commitment,
-            integrity_commitment=local_evidence.integrity_commitment,
-            schema_version=local_evidence.schema_version,
-            reducer_version=local_evidence.reducer_version,
-            trust_policy_version=local_evidence.trust_policy_version,
-            projection=local_evidence.projection,
+                checkpoint_id=local_evidence.checkpoint_id,
+                consistency_domain_id=local_evidence.consistency_domain_id,
+                authority_epoch=local_evidence.authority_epoch,
+                sequence=local_evidence.sequence,
+                state_reference=local_evidence.state_reference,
+                integrity_reference=local_evidence.integrity_reference,
+                state_commitment=local_evidence.state_commitment,
+                integrity_commitment=local_evidence.integrity_commitment,
+                schema_version=local_evidence.schema_version,
+                reducer_version=local_evidence.reducer_version,
+                trust_policy_version=local_evidence.trust_policy_version,
+                projection=local_evidence.projection,
                 verification_id=local_evidence.verification_id,
             )
             neutral_result = CheckpointProjectionResult(
@@ -110,15 +110,15 @@ class LocalRecoveryInventoryAdapter:
         try:
             local_evidence = require_verified_local_inventories(local_request, result)
             neutral_evidence = VerifiedRecoveryInventories(
-            consistency_domain_id=local_evidence.consistency_domain_id,
-            authority_epoch=local_evidence.authority_epoch,
-            head_sequence=local_evidence.head_sequence,
-            continuity_reference=local_evidence.continuity_reference,
-            trust_policy_version=local_evidence.trust_policy_version,
-            inventory_commitment=local_evidence.inventory_commitment,
-            verified_receipt_ids=local_evidence.verified_receipt_ids,
-            verified_tombstone_ids=local_evidence.verified_tombstone_ids,
-            verified_reference_ids=local_evidence.verified_reference_ids,
+                consistency_domain_id=local_evidence.consistency_domain_id,
+                authority_epoch=local_evidence.authority_epoch,
+                head_sequence=local_evidence.head_sequence,
+                continuity_reference=local_evidence.continuity_reference,
+                trust_policy_version=local_evidence.trust_policy_version,
+                inventory_commitment=local_evidence.inventory_commitment,
+                verified_receipt_ids=local_evidence.verified_receipt_ids,
+                verified_tombstone_ids=local_evidence.verified_tombstone_ids,
+                verified_reference_ids=local_evidence.verified_reference_ids,
                 verification_id=local_evidence.verification_id,
             )
             neutral_result = RecoveryInventoryResult(
