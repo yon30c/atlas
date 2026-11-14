@@ -8,13 +8,19 @@ from pathlib import Path
 from atlas.adapters.sqlite.consistency_journal import SQLiteConsistencyJournal
 from atlas.adapters.sqlite.database import SQLiteDatabase
 from atlas.adapters.sqlite.migrations import SQLITE_MIGRATIONS
+from atlas.memory.envelope import AuthenticatedConsistencyEnvelope
 from atlas.memory.journal import (
+    ConsistencyCheckpoint,
     ConsistencyPosition,
+    ConsistencyRecordKind,
     ConsistencyRecoveryLoadStatus,
+    ConsistencyTransition,
     JournalOperationResolutionStatus,
 )
-from atlas.memory.local_auth import object_commitment
-from unit.test_memory_journal import NOW, RECORD_1, RECORD_2, read_admitted
+from atlas.memory.local_auth import checkpoint_payload, object_commitment
+from unit.test_memory_journal import (
+    CHECKPOINT_ID, NOW, RECORD_1, RECORD_2, read_admitted,
+)
 
 
 class FakeSigner:
@@ -48,6 +54,84 @@ class SQLiteConsistencyJournalTests(unittest.TestCase):
     @staticmethod
     def position(sequence):
         return ConsistencyPosition("domain-a", 1, sequence)
+
+    def _seed_checkpoint(self):
+        first = read_admitted(record_id=RECORD_1)
+        first_commit = self.journal.append_transition(
+            self.position(0), "append-before-checkpoint", first
+        )
+        self.assertIsNotNone(first_commit)
+        checkpoint = ConsistencyCheckpoint(
+            checkpoint_id=CHECKPOINT_ID,
+            position=first_commit.position,
+            state_reference="state-reference-checkpoint",
+            integrity_reference="integrity-reference-checkpoint",
+            created_at=NOW,
+        )
+        unsigned = AuthenticatedConsistencyEnvelope(
+            object_kind="checkpoint",
+            envelope_version=1,
+            consistency_domain_id="domain-a",
+            authority_epoch=1,
+            sequence=first_commit.position.sequence,
+            object_id=CHECKPOINT_ID,
+            schema_version=1,
+            reducer_version="reducer-v1",
+            previous_commitment=None,
+            object_commitment="pending",
+            issuer_id="issuer-test",
+            issuer_role="service",
+            key_reference="key-test",
+            trust_policy_version="policy-v1",
+            issued_at=NOW,
+            authentication_evidence="pending",
+        )
+        signed = FakeSigner().sign_envelope(unsigned, checkpoint_payload(checkpoint))
+        checkpoint = replace(checkpoint, envelope=signed)
+        with self.database.write_transaction() as connection:
+            connection.execute(
+                """
+                INSERT INTO checkpoints (
+                    checkpoint_id, domain_id, authority_epoch, sequence,
+                    state_reference, integrity_reference, created_at,
+                    envelope_version, schema_version, reducer_version,
+                    previous_commitment, object_commitment, issuer_id, issuer_role,
+                    key_reference, trust_policy_version, issued_at,
+                    authentication_evidence
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    checkpoint.checkpoint_id, "domain-a", 1,
+                    checkpoint.position.sequence, checkpoint.state_reference,
+                    checkpoint.integrity_reference,
+                    checkpoint.created_at.isoformat(timespec="microseconds"),
+                    signed.envelope_version, signed.schema_version,
+                    signed.reducer_version, signed.previous_commitment,
+                    signed.object_commitment, signed.issuer_id, signed.issuer_role,
+                    signed.key_reference, signed.trust_policy_version,
+                    signed.issued_at.isoformat(timespec="microseconds"),
+                    signed.authentication_evidence,
+                ),
+            )
+            connection.execute(
+                "UPDATE consistency_domains SET head_commitment=? WHERE domain_id='domain-a'",
+                (signed.object_commitment,),
+            )
+        marker = ConsistencyTransition(
+            record_id=CHECKPOINT_ID,
+            schema_version=1,
+            record_kind=ConsistencyRecordKind.CHECKPOINT_COMMITTED,
+            operation_id=f"checkpoint:{CHECKPOINT_ID}",
+            occurred_at=NOW,
+            checkpoint_reference=checkpoint.state_reference,
+        )
+        marker_commit = self.journal.append_transition(
+            self.position(first_commit.position.sequence),
+            "append-checkpoint-marker",
+            marker,
+        )
+        self.assertIsNotNone(marker_commit)
+        return checkpoint, marker
 
     def test_semantic_replay_with_new_append_and_record_ids_returns_original_commit(self):
         original = read_admitted(record_id=RECORD_1, idempotency_key="semantic-key")
@@ -440,6 +524,78 @@ class SQLiteConsistencyJournalTests(unittest.TestCase):
             )
 
         result = self.journal.load_recovery_state_result("domain-a")
+        self.assertIs(result.status, ConsistencyRecoveryLoadStatus.REJECTED)
+        self.assertIsNone(result.state)
+
+    def test_typed_recovery_load_reconstructs_checkpoint_and_only_its_suffix(self):
+        checkpoint, marker = self._seed_checkpoint()
+        later = replace(
+            read_admitted(record_id=RECORD_2),
+            snapshot_id="snapshot-after-checkpoint",
+            admission_id="admission-after-checkpoint",
+            operation_id="read:admission-after-checkpoint",
+        )
+        self.assertIsNotNone(
+            self.journal.append_transition(self.position(2), "append-after-checkpoint", later)
+        )
+
+        result = self.journal.load_recovery_state_result("domain-a")
+
+        self.assertIs(result.status, ConsistencyRecoveryLoadStatus.LOADED)
+        self.assertEqual(result.state.checkpoint, checkpoint)
+        self.assertEqual(result.state.head_sequence, 3)
+        self.assertEqual(len(result.state.entries), 2)
+        self.assertEqual(
+            result.state.entries[0].transition.record_kind,
+            ConsistencyRecordKind.CHECKPOINT_COMMITTED,
+        )
+        self.assertEqual(result.state.entries[0].transition, marker)
+        self.assertEqual(result.state.entries[0].position.sequence, 2)
+        self.assertEqual(result.state.entries[1].position.sequence, 3)
+
+    def test_typed_recovery_load_rejects_checkpoint_marker_reference_mismatch(self):
+        self._seed_checkpoint()
+        with self.database.write_transaction() as connection:
+            connection.execute(
+                "UPDATE checkpoints SET state_reference=? WHERE checkpoint_id=?",
+                ("different-state-reference", CHECKPOINT_ID),
+            )
+
+        result = self.journal.load_recovery_state_result("domain-a")
+
+        self.assertIs(result.status, ConsistencyRecoveryLoadStatus.REJECTED)
+        self.assertIsNone(result.state)
+
+    def test_typed_recovery_load_rejects_checkpoint_without_commit_marker(self):
+        self._seed_checkpoint()
+        with self.database.write_transaction() as connection:
+            connection.execute(
+                "DELETE FROM journal_operations WHERE domain_id='domain-a' AND sequence=2"
+            )
+            connection.execute(
+                "DELETE FROM journal_entries WHERE domain_id='domain-a' AND sequence=2"
+            )
+
+        result = self.journal.load_recovery_state_result("domain-a")
+
+        self.assertIs(result.status, ConsistencyRecoveryLoadStatus.REJECTED)
+        self.assertIsNone(result.state)
+
+    def test_typed_recovery_load_rejects_checkpoint_marker_without_checkpoint_row(self):
+        marker = ConsistencyTransition(
+            record_id=CHECKPOINT_ID,
+            schema_version=1,
+            record_kind=ConsistencyRecordKind.CHECKPOINT_COMMITTED,
+            operation_id=f"checkpoint:{CHECKPOINT_ID}",
+            occurred_at=NOW,
+            checkpoint_reference="orphan-state-reference",
+        )
+        self.assertIsNotNone(
+            self.journal.append_transition(self.position(0), "orphan-marker", marker)
+        )
+
+        result = self.journal.load_recovery_state_result("domain-a")
+
         self.assertIs(result.status, ConsistencyRecoveryLoadStatus.REJECTED)
         self.assertIsNone(result.state)
 
