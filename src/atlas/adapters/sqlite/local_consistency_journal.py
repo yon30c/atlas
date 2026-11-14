@@ -8,11 +8,13 @@ from atlas.adapters.sqlite.consistency_journal import SQLiteConsistencyJournal
 from atlas.core.errors import ContractError
 from atlas.memory.journal import (
     CheckpointCommitResult,
+    CheckpointCommitStatus,
     ConsistencyCheckpoint,
     ConsistencyPosition,
     ConsistencyRecoveryState,
     ConsistencyTransition,
     JournalCommit,
+    JournalEntry,
     JournalOperationResolution,
 )
 from atlas.memory.ports.journal import ConsistencyJournalPort
@@ -69,7 +71,7 @@ class LocalSQLiteConsistencyJournalAdapter:
     @staticmethod
     def load_endpoint_receipts(
         admission_id: str,
-    ) -> tuple[()] | None:
+    ) -> tuple[JournalEntry, ...] | None:
         """Fail closed until a complete durable receipt inventory is supported."""
         if not isinstance(admission_id, str) or not admission_id.strip():
             return None
@@ -88,11 +90,7 @@ class LocalSQLiteConsistencyJournalAdapter:
             or not isinstance(expected_continuity_reference, str)
             or not expected_continuity_reference.strip()
         ):
-            return CheckpointCommitResult(
-                status=__import__(
-                    "atlas.memory.journal", fromlist=["CheckpointCommitStatus"]
-                ).CheckpointCommitStatus.CONFLICT
-            )
+            return CheckpointCommitResult(CheckpointCommitStatus.CONFLICT)
         return self._journal.commit_checkpoint(
             expected_position,
             expected_continuity_reference,
