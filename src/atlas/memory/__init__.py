@@ -90,6 +90,13 @@ from atlas.memory.receipt_verification import (
     match_verified_receipt,
 )
 from atlas.memory.terminal_recovery import verify_terminal_admission_projection
+from atlas.memory.recovery_finalization import (
+    RecoveryAdmissionFinalizationCoordinator,
+    RecoveryAdmissionFinalizationRequest,
+    RecoveryAdmissionFinalizationResult,
+    RecoveryAdmissionFinalizationStatus,
+    RecoveryAdmissionTerminalReceipt,
+)
 from atlas.memory.validation import (
     validate_memory_aggregate,
     validate_proposal_links,
@@ -113,6 +120,11 @@ __all__ = [
     "VerifiedTerminalReceipt",
     "match_verified_receipt",
     "verify_terminal_admission_projection",
+    "RecoveryAdmissionFinalizationCoordinator",
+    "RecoveryAdmissionFinalizationRequest",
+    "RecoveryAdmissionFinalizationResult",
+    "RecoveryAdmissionFinalizationStatus",
+    "RecoveryAdmissionTerminalReceipt",
     "ForgetClosure",
     "ForgetClosureStatus",
     "ForgetRecoverySnapshot",
