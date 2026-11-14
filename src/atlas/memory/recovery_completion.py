@@ -212,10 +212,10 @@ class RecoveryCompletionCoordinator:
             if (
                 not isinstance(result, ConsistencyRecoveryVerificationResult)
                 or result.status is not ConsistencyRecoveryVerificationStatus.VERIFIED
-                or result.verified_state is None
+                or result.state is None
             ):
                 return None
-            state = result.verified_state.state
+            state = result.state
             if state.domain_id != self._domain_id:
                 return None
             return state, self._reducer.reduce(state)

@@ -339,6 +339,51 @@ class VerifiedConsistencyRecoveryState:
             raise ContractError("ancla expirada al verificar el estado")
 
 
+class ConsistencyRecoveryProfile(str, Enum):
+    LOCAL = "local"
+    ANCHORED = "anchored"
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedLocalConsistencyRecoveryState:
+    """Local-profile evidence; explicitly makes no external anti-rollback claim."""
+
+    state: ConsistencyRecoveryState
+    consistency_domain_id: str
+    authority_epoch: int
+    head_sequence: int
+    local_state_commitment: str
+    verification_id: str
+    verifier_id: str
+    trust_policy_version: str
+    verified_at: datetime
+    profile: ConsistencyRecoveryProfile = ConsistencyRecoveryProfile.LOCAL
+    external_anti_rollback_protected: bool = False
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.state, ConsistencyRecoveryState):
+            raise ContractError("state debe ser ConsistencyRecoveryState")
+        for field in (
+            "consistency_domain_id", "local_state_commitment",
+            "verification_id", "verifier_id", "trust_policy_version",
+        ):
+            _required(getattr(self, field), field)
+        _positive(self.authority_epoch, "authority_epoch")
+        _non_negative(self.head_sequence, "head_sequence")
+        if (
+            self.state.domain_id != self.consistency_domain_id
+            or self.state.authority_epoch != self.authority_epoch
+            or self.state.head_sequence != self.head_sequence
+            or self.state.continuity_reference != self.local_state_commitment
+        ):
+            raise ContractError("evidencia local no coincide con dominio/época/head/commitment")
+        if self.profile is not ConsistencyRecoveryProfile.LOCAL:
+            raise ContractError("VerifiedLocalConsistencyRecoveryState requiere perfil local")
+        if self.external_anti_rollback_protected is not False:
+            raise ContractError("el perfil local no puede afirmar anti-rollback externo")
+        _utc(self.verified_at, "verified_at")
+
+
 class ConsistencyRecoveryVerificationStatus(str, Enum):
     VERIFIED = "verified"
     REJECTED = "rejected"
@@ -349,15 +394,40 @@ class ConsistencyRecoveryVerificationStatus(str, Enum):
 class ConsistencyRecoveryVerificationResult:
     status: ConsistencyRecoveryVerificationStatus
     verified_state: VerifiedConsistencyRecoveryState | None = None
+    verified_local_state: VerifiedLocalConsistencyRecoveryState | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.status, ConsistencyRecoveryVerificationStatus):
             raise ContractError("status debe ser ConsistencyRecoveryVerificationStatus")
+        if self.verified_state is not None and not isinstance(
+            self.verified_state, VerifiedConsistencyRecoveryState
+        ):
+            raise ContractError("verified_state debe ser evidencia anclada válida")
+        if self.verified_local_state is not None and not isinstance(
+            self.verified_local_state, VerifiedLocalConsistencyRecoveryState
+        ):
+            raise ContractError("verified_local_state debe ser evidencia local válida")
         if self.status is ConsistencyRecoveryVerificationStatus.VERIFIED:
-            if not isinstance(self.verified_state, VerifiedConsistencyRecoveryState):
-                raise ContractError("VERIFIED requiere VerifiedConsistencyRecoveryState")
-        elif self.verified_state is not None:
+            if (self.verified_state is None) == (self.verified_local_state is None):
+                raise ContractError("VERIFIED requiere exactamente una evidencia local o anclada")
+        elif self.verified_state is not None or self.verified_local_state is not None:
             raise ContractError("REJECTED/UNAVAILABLE no pueden incluir estado verificado")
+
+    @property
+    def state(self) -> ConsistencyRecoveryState | None:
+        if self.verified_state is not None:
+            return self.verified_state.state
+        if self.verified_local_state is not None:
+            return self.verified_local_state.state
+        return None
+
+    @property
+    def profile(self) -> ConsistencyRecoveryProfile | None:
+        if self.verified_state is not None:
+            return ConsistencyRecoveryProfile.ANCHORED
+        if self.verified_local_state is not None:
+            return ConsistencyRecoveryProfile.LOCAL
+        return None
 
 
 @dataclass(frozen=True, slots=True)

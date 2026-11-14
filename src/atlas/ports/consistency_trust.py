@@ -39,7 +39,7 @@ class ConsistencyCheckpointVerifierPort(Protocol):
 
 
 class ConsistencyRecoveryVerifierPort(Protocol):
-    """Verifies complete recovery state before the reducer can consume it."""
+    """Verifier for the anchored profile; requires an external monotonic anchor."""
 
     def verify_recovery_state(
         self,
@@ -48,3 +48,19 @@ class ConsistencyRecoveryVerifierPort(Protocol):
         trust_context: ConsistencyRecoveryTrustContext,
     ) -> ConsistencyRecoveryVerificationResult:
         """Reject rollback, forks, gaps, missing tombstones and unresolved continuity."""
+
+
+class LocalConsistencyRecoveryVerifierPort(Protocol):
+    """Verifier for the single-server local profile; it never requires an anchor."""
+
+    def verify_recovery_state(
+        self,
+        state: ConsistencyRecoveryState,
+        trust_context: ConsistencyRecoveryTrustContext,
+    ) -> ConsistencyRecoveryVerificationResult:
+        """Verify available authenticity, structure, sequence and local continuity.
+
+        The returned evidence must be VerifiedLocalConsistencyRecoveryState.
+        It must not claim external anti-rollback or accept a structural state
+        whose authentication, inventories, tombstones or continuity are unknown.
+        """

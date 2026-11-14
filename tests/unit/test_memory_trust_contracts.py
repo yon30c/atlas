@@ -20,6 +20,8 @@ from atlas.memory.trust import (
     ConsistencyRecoveryVerificationResult,
     ConsistencyRecoveryVerificationStatus,
     ConsistencyTrustAnchor,
+    ConsistencyRecoveryProfile,
+    VerifiedLocalConsistencyRecoveryState,
     VerifiedConsistencyCheckpoint,
     TrustAnchorAdvanceRequest,
     TrustAnchorReadResult,
@@ -442,6 +444,93 @@ class ConsistencyTrustContractTests(unittest.TestCase):
         self.assertEqual(context.purpose, "terminal-admission-reconciliation")
         self.assertTrue(context.binds_terminal_request(request))
         self.assertFalse(context.binds_terminal_request(replace(request, receipt_id="receipt-2")))
+
+
+    def test_local_recovery_evidence_is_explicit_and_has_no_external_anchor(self):
+        state = self._state(3)
+        verified = VerifiedLocalConsistencyRecoveryState(
+            state=state,
+            consistency_domain_id=state.domain_id,
+            authority_epoch=state.authority_epoch,
+            head_sequence=state.head_sequence,
+            local_state_commitment=state.continuity_reference,
+            verification_id="local-verification-1",
+            verifier_id="local-verifier-1",
+            trust_policy_version="local-policy-v1",
+            verified_at=self.now,
+        )
+        result = ConsistencyRecoveryVerificationResult(
+            ConsistencyRecoveryVerificationStatus.VERIFIED,
+            verified_local_state=verified,
+        )
+        self.assertIs(result.profile, ConsistencyRecoveryProfile.LOCAL)
+        self.assertIs(result.state, state)
+        self.assertFalse(verified.external_anti_rollback_protected)
+
+    def test_local_recovery_evidence_rejects_mismatched_head_or_commitment(self):
+        state = self._state(3)
+        with self.assertRaises(ContractError):
+            VerifiedLocalConsistencyRecoveryState(
+                state=state,
+                consistency_domain_id=state.domain_id,
+                authority_epoch=state.authority_epoch,
+                head_sequence=2,
+                local_state_commitment=state.continuity_reference,
+                verification_id="local-verification-2",
+                verifier_id="local-verifier-1",
+                trust_policy_version="local-policy-v1",
+                verified_at=self.now,
+            )
+        with self.assertRaises(ContractError):
+            VerifiedLocalConsistencyRecoveryState(
+                state=state,
+                consistency_domain_id=state.domain_id,
+                authority_epoch=state.authority_epoch,
+                head_sequence=state.head_sequence,
+                local_state_commitment="different-commitment",
+                verification_id="local-verification-3",
+                verifier_id="local-verifier-1",
+                trust_policy_version="local-policy-v1",
+                verified_at=self.now,
+            )
+
+    def test_verified_result_requires_exactly_one_profile_evidence(self):
+        with self.assertRaises(ContractError):
+            ConsistencyRecoveryVerificationResult(
+                ConsistencyRecoveryVerificationStatus.VERIFIED
+            )
+        state = self._state(3)
+        local = VerifiedLocalConsistencyRecoveryState(
+            state=state,
+            consistency_domain_id=state.domain_id,
+            authority_epoch=state.authority_epoch,
+            head_sequence=state.head_sequence,
+            local_state_commitment=state.continuity_reference,
+            verification_id="local-verification-5",
+            verifier_id="local-verifier-1",
+            trust_policy_version="local-policy-v1",
+            verified_at=self.now,
+        )
+        anchored = VerifiedConsistencyRecoveryState(
+            state=state,
+            anchor=self.anchor,
+            authenticated_state_commitment=self.anchor.authenticated_state_commitment,
+            verification_id="anchored-verification-1",
+            verifier_id="anchored-verifier-1",
+            trust_policy_version="policy-v2",
+            verified_at=self.now,
+        )
+        with self.assertRaises(ContractError):
+            ConsistencyRecoveryVerificationResult(
+                ConsistencyRecoveryVerificationStatus.VERIFIED,
+                verified_state=anchored,
+                verified_local_state=local,
+            )
+        with self.assertRaises(ContractError):
+            ConsistencyRecoveryVerificationResult(
+                ConsistencyRecoveryVerificationStatus.VERIFIED,
+                verified_local_state=object(),
+            )
 
 
 if __name__ == "__main__":

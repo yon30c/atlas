@@ -107,6 +107,12 @@ from atlas.memory.recovery_completion import (
     RecoveryCompletionStatus,
     VerifiedRecoveryCompletionReceipt,
 )
+from atlas.memory.trust import (
+    ConsistencyRecoveryProfile,
+    ConsistencyRecoveryVerificationResult,
+    ConsistencyRecoveryVerificationStatus,
+    VerifiedLocalConsistencyRecoveryState,
+)
 from atlas.memory.validation import (
     validate_memory_aggregate,
     validate_proposal_links,
@@ -157,6 +163,10 @@ __all__ = [
     "ForgetOperationState",
     "ForgetVerificationOutcome",
     "ForgetVerificationReceipt",
+    "ConsistencyRecoveryProfile",
+    "ConsistencyRecoveryVerificationResult",
+    "ConsistencyRecoveryVerificationStatus",
+    "VerifiedLocalConsistencyRecoveryState",
     "ConsistencyCheckpoint",
     "ConsistencyPosition",
     "ConsistencyRecordKind",

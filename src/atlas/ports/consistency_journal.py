@@ -59,15 +59,16 @@ class ConsistencyJournalPort(Protocol):
         self,
         domain_id: str,
     ) -> ConsistencyRecoveryVerificationResult:
-        """Carga estado solo si autenticidad y anti-rollback fueron verificadas.
+        """Carga estado autenticado y continuo según el perfil explícitamente configurado.
 
-        VERIFIED es la única salida que permite entregar el estado al reducer.
-        REJECTED representa corrupción, rollback, fork, replay, clave/política
-        inválida o discrepancia de ancla. UNAVAILABLE incluye ausencia de ancla,
-        timeout o imposibilidad de demostrar continuidad. Ningún resultado
-        distinto de VERIFIED permite reconstrucción operativa ni apertura del gate.
-        La implementación valida tombstones, claves idempotentes y operaciones
-        no terminales además de la cadena y checkpoint.
+        VERIFIED puede contener VerifiedLocalConsistencyRecoveryState o
+        VerifiedConsistencyRecoveryState. El resultado identifica el perfil.
+        El perfil local valida autenticidad disponible, estructura, secuencias,
+        referencias, inventarios, tombstones y operaciones no terminales, pero
+        no afirma anti-rollback externo. El perfil anclado exige un Trust Anchor
+        vigente y no puede degradarse silenciosamente al perfil local.
+        REJECTED/UNAVAILABLE nunca permiten entregar estado al reducer ni abrir
+        el gate. La carga estructural desnuda queda limitada a diagnóstico.
         """
 
     def load_recovery_state(

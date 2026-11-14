@@ -40,8 +40,7 @@ from atlas.memory.recovery_coordinator import (
 from atlas.memory.trust import (
     ConsistencyRecoveryVerificationResult,
     ConsistencyRecoveryVerificationStatus,
-    ConsistencyTrustAnchor,
-    VerifiedConsistencyRecoveryState,
+    VerifiedLocalConsistencyRecoveryState,
 )
 from atlas.memory.recovery import (
     RecoveryEndpointFenceReceipt,
@@ -608,31 +607,20 @@ class CoordinatorJournalFake:
             return ConsistencyRecoveryVerificationResult(
                 ConsistencyRecoveryVerificationStatus.UNAVAILABLE
             )
-        anchor = ConsistencyTrustAnchor(
-            anchor_id=f"test-anchor:{self.state.head_sequence}",
+        verified = VerifiedLocalConsistencyRecoveryState(
+            state=self.state,
             consistency_domain_id=self.state.domain_id,
             authority_epoch=self.state.authority_epoch,
-            maximum_committed_sequence=self.state.head_sequence,
-            authenticated_state_commitment=self.state.continuity_reference,
-            issuer_id="test-trust-authority",
-            key_reference="test-key",
-            trust_policy_version="test-policy-v1",
-            authentication_evidence="test-anchor-auth-evidence",
-            anchor_revision=max(1, self.state.head_sequence + 1),
-            issued_at=NOW,
-        )
-        verified = VerifiedConsistencyRecoveryState(
-            state=self.state,
-            anchor=anchor,
-            authenticated_state_commitment=anchor.authenticated_state_commitment,
-            verification_id=f"test-verification:{self.state.head_sequence}",
-            verifier_id="test-verifier",
-            trust_policy_version="test-policy-v1",
+            head_sequence=self.state.head_sequence,
+            local_state_commitment=self.state.continuity_reference,
+            verification_id=f"test-local-verification:{self.state.head_sequence}",
+            verifier_id="test-local-verifier",
+            trust_policy_version="test-local-policy-v1",
             verified_at=NOW,
         )
         return ConsistencyRecoveryVerificationResult(
             ConsistencyRecoveryVerificationStatus.VERIFIED,
-            verified,
+            verified_local_state=verified,
         )
 
     def append_transition(self, expected_position, transition):
