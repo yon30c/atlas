@@ -185,6 +185,7 @@ class LocalConsistencyRecoveryVerifier:
             verifier_id=self._verifier_id,
             trust_policy_version=self._trust_policy.policy_version,
             verified_at=trust_context.verification_time,
+            projection=projection,
         )
         return ConsistencyRecoveryVerificationResult(
             status=ConsistencyRecoveryVerificationStatus.VERIFIED,
