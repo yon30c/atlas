@@ -151,10 +151,11 @@ class ConsistencyCheckpointVerificationRequest:
             or self.envelope.authority_epoch != self.expected_authority_epoch
             or self.envelope.sequence != self.expected_position.sequence
             or self.envelope.trust_policy_version != self.trust_policy_version
+            or self.envelope.object_kind != "checkpoint"
         ):
             raise ContractError("envelope no coincide con la solicitud exacta")
-        if self.expected_position.sequence < self.anchor.maximum_committed_sequence:
-            raise ContractError("checkpoint anterior al ancla externa vigente")
+        if self.expected_position.sequence != self.anchor.maximum_committed_sequence:
+            raise ContractError("checkpoint debe coincidir con la secuencia máxima del ancla")
         if self.anchor.trust_policy_version != self.trust_policy_version:
             raise ContractError("política de confianza no coincide con el ancla")
         if self.anchor.issued_at > self.verification_time:
@@ -199,7 +200,7 @@ class VerifiedConsistencyCheckpoint:
         if (
             self.checkpoint.position.consistency_domain_id != self.anchor.consistency_domain_id
             or self.checkpoint.position.authority_epoch != self.anchor.authority_epoch
-            or self.checkpoint.position.sequence < self.anchor.maximum_committed_sequence
+            or self.checkpoint.position.sequence != self.anchor.maximum_committed_sequence
         ):
             raise ContractError("checkpoint no satisface la posición del ancla")
         if (
@@ -259,7 +260,13 @@ class VerifiedConsistencyRecoveryState:
             raise ContractError("commitment no coincide con el ancla")
         if self.state.continuity_reference != self.authenticated_state_commitment:
             raise ContractError("continuity_reference no coincide con el commitment verificado")
+        if self.trust_policy_version != self.anchor.trust_policy_version:
+            raise ContractError("trust policy no coincide con el ancla")
         _utc(self.verified_at, "verified_at")
+        if self.verified_at < self.anchor.issued_at:
+            raise ContractError("verified_at no puede preceder la emisión del ancla")
+        if self.anchor.valid_until is not None and self.verified_at >= self.anchor.valid_until:
+            raise ContractError("ancla expirada al verificar el estado")
 
 
 class ConsistencyRecoveryVerificationStatus(str, Enum):
