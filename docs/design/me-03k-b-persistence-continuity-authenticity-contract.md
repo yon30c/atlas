@@ -77,7 +77,7 @@ Cada unidad autenticada debe vincular como mínimo:
 - identidad/rol del emisor autorizado y material de confianza aplicable;
 - versión del formato de autenticación.
 
-El mecanismo puede ser firma, MAC, hash-chain autenticada u otro mecanismo equivalente, pero debe resistir falsificación, sustitución, truncamiento y reordenamiento dentro del modelo de amenazas declarado. Un hash sin autenticación no prueba quién emitió el registro.
+El mecanismo puede ser firma, MAC, hash-chain autenticada u otro mecanismo equivalente, pero debe resistir falsificación, sustitución y reordenamiento, y detectar truncamientos dentro de las capacidades del perfil declarado. En perfil local no puede demostrarse la ausencia de un truncamiento coherente que produzca una cadena anterior pero internamente válida; esa garantía requiere el perfil anclado. Un hash sin autenticación no prueba quién emitió el registro.
 
 En el perfil anclado, el verificador debe validar la cadena completa hasta un Trust Anchor externo vigente; validar solo el último registro o una referencia declarada por el mismo conjunto restaurable no basta. En el perfil local, debe validar la autenticidad disponible, la cadena, el orden y la continuidad interna desde la raíz/checkpoint conservado. Esta verificación local no demuestra que el head recuperado sea el último que existió antes de una restauración y no ofrece protección anti-rollback externa.
 
