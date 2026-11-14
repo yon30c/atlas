@@ -14,6 +14,10 @@ from atlas.memory.trust import (
     ConsistencyRecoveryVerificationResult,
     ConsistencyRecoveryVerificationStatus,
     ConsistencyTrustAnchor,
+    TrustAnchorAdvanceRequest,
+    TrustAnchorReadResult,
+    TrustAnchorReadStatus,
+    TrustAnchorUpdateStatus,
     ReceiptTrustContext,
     VerifiedConsistencyRecoveryState,
 )
@@ -89,6 +93,73 @@ class ConsistencyTrustContractTests(unittest.TestCase):
             verification_time=self.now,
         )
         self.assertEqual(request.expected_position.sequence, 3)
+
+    def test_checkpoint_may_be_older_than_anchor_when_head_is_anchored(self):
+        older_checkpoint = replace(
+            self.checkpoint,
+            position=ConsistencyPosition("atlas-main", 4, 2),
+        )
+        older_envelope = replace(self.envelope, sequence=2)
+        request = ConsistencyCheckpointVerificationRequest(
+            expected_domain_id="atlas-main",
+            expected_authority_epoch=4,
+            expected_position=ConsistencyPosition("atlas-main", 4, 3),
+            checkpoint=older_checkpoint,
+            anchor=self.anchor,
+            envelope=older_envelope,
+            trust_policy_version="policy-v2",
+            verification_time=self.now,
+        )
+        self.assertEqual(request.checkpoint.position.sequence, 2)
+        self.assertEqual(request.anchor.maximum_committed_sequence, 3)
+
+    def test_anchor_read_result_enforces_status_and_value_pairing(self):
+        found = TrustAnchorReadResult(TrustAnchorReadStatus.FOUND, self.anchor)
+        self.assertIs(found.anchor, self.anchor)
+        with self.assertRaises(ContractError):
+            TrustAnchorReadResult(TrustAnchorReadStatus.FOUND, None)
+        with self.assertRaises(ContractError):
+            TrustAnchorReadResult(TrustAnchorReadStatus.UNKNOWN, self.anchor)
+
+    def test_anchor_cas_requires_exact_monotonic_revision(self):
+        new_anchor = replace(
+            self.anchor,
+            anchor_id="anchor-2",
+            anchor_revision=10,
+            maximum_committed_sequence=4,
+            authenticated_state_commitment="next-control-state",
+            issued_at=datetime(2026, 11, 13, 12, 1, tzinfo=timezone.utc),
+        )
+        request = TrustAnchorAdvanceRequest(self.anchor, new_anchor)
+        self.assertEqual(request.new_anchor.anchor_revision, 10)
+
+    def test_anchor_cas_rejects_sequence_rollback(self):
+        old = replace(self.anchor, maximum_committed_sequence=4)
+        new = replace(
+            old,
+            anchor_id="anchor-2",
+            anchor_revision=10,
+            maximum_committed_sequence=3,
+        )
+        with self.assertRaises(ContractError):
+            TrustAnchorAdvanceRequest(old, new)
+
+    def test_anchor_epoch_change_requires_explicit_handoff_and_zero_sequence(self):
+        new = replace(
+            self.anchor,
+            anchor_id="anchor-epoch-5",
+            anchor_revision=10,
+            authority_epoch=5,
+            maximum_committed_sequence=0,
+        )
+        with self.assertRaises(ContractError):
+            TrustAnchorAdvanceRequest(self.anchor, new)
+        accepted = TrustAnchorAdvanceRequest(
+            self.anchor,
+            new,
+            epoch_handoff_reference="verified-handoff-proof",
+        )
+        self.assertEqual(accepted.new_anchor.authority_epoch, 5)
 
     def test_checkpoint_behind_external_anchor_is_rejected(self):
         with self.assertRaises(ContractError):
