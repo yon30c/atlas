@@ -1,6 +1,6 @@
 # ME-03K — Almacén local de proyecciones de checkpoint
 
-**Estado:** primer adaptador implementado en la rama de trabajo; pendiente de validación del propietario.  
+**Estado:** adaptador integrado con el coordinador y el escritor SQLite; validado por el propietario en Debian (59 pruebas dirigidas y 660 pruebas de suite completa, 2026-11-14).  
 **Perfil:** local, un solo host.  
 **No incluye:** Trust Anchor externo, anti-rollback, integración con el escritor SQLite ni cambios de esquema.
 
@@ -65,19 +65,17 @@ La autenticación de la referencia del checkpoint depende de la cadena autentica
 - La protección local del directorio no equivale a almacenamiento remoto ni a una autoridad monotónica independiente.
 - Una restauración coherente y antigua del almacén junto con el journal sigue fuera de la capacidad de detección del perfil local.
 - No se declara resistencia a manipulación por un atacante con control del usuario/host que ejecuta Atlas.
-- No se ha integrado aún el publisher con un coordinador de checkpoint ni con la transacción SQLite.
+- El publisher/resolver ya está integrado con LocalCheckpointCoordinator; el coordinador verifica la lectura independiente antes de invocar la transacción SQLite.
 
-## 6. Validación pendiente
+## 6. Validación del propietario
 
-Pruebas previstas para el propietario:
+El propietario ejecutó en Debian:
 
-- Publicación y resolución exactas.
-- Reintento idempotente.
-- Objeto ausente y objeto corrupto.
-- Colisión sin sobrescritura.
-- Política y versiones incompatibles.
-- Raíz inválida y subdirectorios preexistentes con permisos demasiado abiertos.
-- Después de las pruebas unitarias, suite completa.
+- Pruebas dirigidas del coordinador, almacén filesystem, journal SQLite e integración HMAC: **59 OK**.
+- Suite completa: **660 OK**.
+- Las pruebas incluyen directorios preexistentes con permisos inseguros y la resolución de un commit confirmado cuya respuesta se perdió.
+
+No se reportaron fallos. Esta evidencia corresponde al entorno Debian del propietario; no equivale a una prueba de despliegue ni a una evaluación adversarial del host.
 
 No ejecutar despliegues, crear directorios operativos ni seleccionar una ruta persistente de producción como parte de esta fase.
 
@@ -98,3 +96,12 @@ SQLite antes de insertar el nuevo checkpoint.
 
 La proyección adjunta no añade anti-rollback externo ni convierte el almacén
 filesystem en autoridad de confianza.
+
+
+## 8. Registro de validación y límites
+
+La validación del 2026-11-14 confirma que el adaptador filesystem funciona junto con el coordinador y el escritor SQLite en la suite del repositorio. El chequeo de permisos rechaza subdirectorios preexistentes que no tengan el modo requerido, sin cambiar sus permisos silenciosamente.
+
+La prueba de respuesta perdida confirma el flujo de recuperación del coordinador: cuando SQLite ya confirmó el commit pero la respuesta no llega al llamador, el primer resultado es UNKNOWN; un reintento con el mismo identificador y los mismos parámetros resuelve el checkpoint como REPLAYED, sin crear un segundo marcador.
+
+El almacén sigue siendo local y depende de la seguridad del host. No detecta por sí mismo la restauración coherente de una copia antigua del almacén y del journal; tampoco ofrece una autoridad monotónica externa ni atomicidad distribuida entre filesystem y SQLite.
