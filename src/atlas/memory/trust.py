@@ -75,6 +75,68 @@ class ConsistencyTrustAnchor:
                 raise ContractError("valid_until debe ser posterior a issued_at")
 
 
+class TrustAnchorReadStatus(str, Enum):
+    FOUND = "found"
+    NOT_FOUND = "not_found"
+    UNKNOWN = "unknown"
+
+
+class TrustAnchorUpdateStatus(str, Enum):
+    UPDATED = "updated"
+    REPLAYED = "replayed"
+    CONFLICT = "conflict"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True, slots=True)
+class TrustAnchorReadResult:
+    status: TrustAnchorReadStatus
+    anchor: ConsistencyTrustAnchor | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.status, TrustAnchorReadStatus):
+            raise ContractError("status debe ser TrustAnchorReadStatus")
+        if self.status is TrustAnchorReadStatus.FOUND:
+            if not isinstance(self.anchor, ConsistencyTrustAnchor):
+                raise ContractError("FOUND requiere ancla")
+        elif self.anchor is not None:
+            raise ContractError("NOT_FOUND/UNKNOWN no pueden incluir ancla")
+
+
+@dataclass(frozen=True, slots=True)
+class TrustAnchorAdvanceRequest:
+    expected_anchor: ConsistencyTrustAnchor
+    new_anchor: ConsistencyTrustAnchor
+    epoch_handoff_reference: str | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.expected_anchor, ConsistencyTrustAnchor):
+            raise ContractError("expected_anchor debe ser ConsistencyTrustAnchor")
+        if not isinstance(self.new_anchor, ConsistencyTrustAnchor):
+            raise ContractError("new_anchor debe ser ConsistencyTrustAnchor")
+        old = self.expected_anchor
+        new = self.new_anchor
+        if new.consistency_domain_id != old.consistency_domain_id:
+            raise ContractError("no se puede cambiar el dominio del ancla")
+        if new.anchor_revision != old.anchor_revision + 1:
+            raise ContractError("anchor_revision debe avanzar exactamente una unidad")
+        if new.issued_at < old.issued_at:
+            raise ContractError("issued_at del ancla no puede retroceder")
+        if new.anchor_id == old.anchor_id:
+            raise ContractError("cada revisión requiere un anchor_id distinto")
+        if new.authority_epoch == old.authority_epoch:
+            if new.maximum_committed_sequence < old.maximum_committed_sequence:
+                raise ContractError("la secuencia del ancla no puede retroceder")
+            if self.epoch_handoff_reference is not None:
+                raise ContractError("handoff no aplica dentro de la misma época")
+        elif new.authority_epoch == old.authority_epoch + 1:
+            _required(self.epoch_handoff_reference, "epoch_handoff_reference")
+            if new.maximum_committed_sequence != 0:
+                raise ContractError("una época nueva comienza en secuencia cero")
+        else:
+            raise ContractError("cambio de época debe ser exactamente +1")
+
+
 @dataclass(frozen=True, slots=True)
 class AuthenticatedConsistencyEnvelope:
     """Opaque authentication envelope bound to one exact journal/checkpoint object."""
