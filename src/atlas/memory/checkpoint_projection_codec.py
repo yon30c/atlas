@@ -51,6 +51,13 @@ class CheckpointProjectionManifest:
             value = getattr(self, name)
             if not isinstance(value, str) or not value.strip():
                 raise ContractError(f"{name} debe ser una cadena no vacía")
+        for name in (
+            "manifest_version", "projection_format_version",
+            "canonicalization_version",
+        ):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ContractError(f"{name} debe ser un entero")
         if self.manifest_format != PROJECTION_MANIFEST_FORMAT:
             raise ContractError("formato de manifiesto no admitido")
         if self.manifest_version != PROJECTION_MANIFEST_VERSION:
