@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Protocol, TYPE_CHECKING
 
+from atlas.memory.trust import ReceiptTrustContext
+
 if TYPE_CHECKING:
     from atlas.memory.recovery_completion import (
         RecoveryCompletionReceipt,
@@ -18,3 +20,16 @@ class RecoveryCompletionVerifierPort(Protocol):
         receipt: RecoveryCompletionReceipt,
     ) -> VerifiedRecoveryCompletionReceipt | None:
         """Valida emisor y binding exacto de dominio, época, operación e inventarios."""
+
+
+
+class TrustAwareRecoveryCompletionVerifierPort(RecoveryCompletionVerifierPort, Protocol):
+    """Required verifier boundary for durable ME-03K adapters."""
+
+    def verify_recovery_completion_with_context(
+        self,
+        request: RecoveryCompletionRequest,
+        receipt: RecoveryCompletionReceipt,
+        trust_context: ReceiptTrustContext,
+    ) -> VerifiedRecoveryCompletionReceipt | None:
+        """Verify the exact global receipt and inventories under trusted policy/time."""
