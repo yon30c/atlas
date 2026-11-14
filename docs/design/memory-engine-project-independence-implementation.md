@@ -245,3 +245,12 @@ Guía de configuración local: [Memory Engine README](../memory-engine/README.md
 - Se conservan canonicalización, firma/envelope, idempotencia, CAS y DTO persistidos.
 - Se añadieron pruebas de reutilización y rollback ante fallo del signer; **pendientes de ejecución**.
 - Alcance limitado a append de transiciones. Checkpoint, bootstrap del dominio y autoridad Recovery Gate no están integrados en esta frontera.
+
+
+## ME-D4M — checkpoint con unidad de trabajo externa
+
+- Implementado SQLiteConsistencyJournal.commit_checkpoint_in(...) para usar la UoW activa de la misma SQLiteDatabase.
+- El wrapper commit_checkpoint(...) conserva su interfaz y estados públicos, delegando en una UoW propia.
+- Checkpoint, marcador autenticado, registro idempotente y head CAS usan una sola conexión transaccional. Los errores de persistencia se propagan desde la ruta interna.
+- Añadidas pruebas de éxito en UoW externa y rollback compuesto ante fallo de inserción del marcador; **pendientes de ejecución**.
+- Recovery Gate, autoridad SQLite concreta y egress protegido siguen pendientes.
