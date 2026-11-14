@@ -528,6 +528,20 @@ class SQLiteLocalHmacIntegrationTests(unittest.TestCase):
             result.verified_local_state.external_anti_rollback_protected
         )
 
+        with self.database.write_transaction() as connection:
+            connection.execute(
+                "UPDATE checkpoints SET authentication_evidence=? WHERE checkpoint_id=?",
+                ("0" * 64, checkpoint.checkpoint_id),
+            )
+        tampered = journal.load_verified_recovery_state("atlas-local")
+        self.assertIs(
+            tampered.status, ConsistencyRecoveryVerificationStatus.REJECTED
+        )
+        self.assertEqual(
+            projection_port.calls, 1,
+            "checkpoint projection must not be resolved before HMAC verification",
+        )
+
     def test_verified_read_preserves_missing_historical_key_as_unavailable(self):
         policy = LocalConsistencyTrustPolicy(
             policy_version="local-policy-v1",
