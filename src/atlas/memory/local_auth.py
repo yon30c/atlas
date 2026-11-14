@@ -101,6 +101,8 @@ def authenticate_envelope(
     if not isinstance(envelope, AuthenticatedConsistencyEnvelope):
         raise ContractError("envelope debe ser AuthenticatedConsistencyEnvelope")
     _validate_key(key)
+    if envelope.envelope_version != ENVELOPE_VERSION:
+        raise ContractError("versión de envelope no soportada")
     unsigned = replace(
         envelope, object_commitment=object_commitment(object_value),
         authentication_evidence="pending",
