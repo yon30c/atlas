@@ -3,11 +3,11 @@ from atlas.core.errors import ContractError
 from atlas.memory.envelope import AuthenticatedConsistencyEnvelope
 from atlas.memory.local_auth import authenticate_envelope
 from atlas.memory.local_keys import ActiveLocalConsistencyKey
+from atlas.memory.ports.consistency_signing import MemoryConsistencySignerPort
 from atlas.ports.active_local_consistency_keys import ActiveLocalConsistencyKeyProvider
-from atlas.ports.local_consistency_signer import LocalConsistencySignerPort
 
 
-class HmacLocalConsistencySigner(LocalConsistencySignerPort):
+class HmacLocalConsistencySigner(MemoryConsistencySignerPort):
     """Sign exact envelope/object pairs without exposing key custody to the journal."""
 
     def __init__(self, active_key_provider: ActiveLocalConsistencyKeyProvider) -> None:
