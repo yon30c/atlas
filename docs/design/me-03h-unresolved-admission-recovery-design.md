@@ -30,7 +30,7 @@ The pure plan binds:
 - every unresolved admission and its old generation;
 - exact endpoint route inventory and last committed sequence.
 
-For each endpoint, the fencer receives an exact request binding domain/epoch, operation, admission, endpoint, old generation, new generation, and last committed sequence. The request contains no content or capability.
+For each endpoint, the fencer receives an exact request binding domain/epoch, operation, admission, endpoint, old generation, new generation, and last committed sequence. The endpoint receipt and independent verifier must bind the exact last committed sequence covered by the fence. The request contains no content or capability.
 
 The plan is metadata only. It does not mark any admission terminal and does not open the gate.
 
@@ -96,3 +96,24 @@ The consistency domain remains closed in all such cases.
 ## 8. Limits and next integration work
 
 A deterministic fencer/verifier validates only the orchestration contract. Real endpoint identity, trust, process termination/fencing, durable idempotency, journal append, anti-rollback, atomic domain closure, crash recovery and egress enforcement remain unproven. No production read or Forget operation may rely on this stage alone.
+
+
+## 9. Initial pure implementation and validation
+
+Implemented:
+- metadata-only recovery plan that includes every nonterminal admission, including legacy v1 projections;
+- exact v2 `ReadTarget` reconstruction where available, while v1 target remains `None` and is never inferred;
+- exact per-admission endpoint inventory and last committed sequence;
+- strictly newer recovery generation check against all admission and prior closure/invalidation generations;
+- endpoint fence requests bound to domain, epoch, recovery operation, admission, endpoint, old/new generation and last committed sequence;
+- raw endpoint receipt validation followed by independent ME-03G verification;
+- all-or-nothing `VerifiedRecoveryFenceBatch`; missing, mismatched, rejected, unavailable, timed-out or partial results produce no batch;
+- no read capability, content handle, admission terminalization or gate-opening action is created.
+
+The ME-03G receipt contract was strengthened so an `ENDPOINT_FENCED` receipt must bind `fenced_through_sequence`. This prevents accepting a fence that advances generation but does not attest the last sequence already committed by the endpoint.
+
+Tests:
+- 18 focused tests in `tests/unit/test_memory_unresolved_admission_recovery.py`;
+- ME-03G terminal receipt tests updated for fenced-through sequence binding.
+
+**Important boundary:** this is the pure planning and endpoint-fencing orchestration slice only. The current journal schema still has no explicit `RECOVERY_CLOSED` event, and there is no durable authority operation that commits the new generation before endpoint contact. No admission is marked CANCELLED by this slice. The next integration slice must add the recovery closure/reconciliation journal events and fake-authority stale-emitter tests before journal-level recovery can be claimed.
