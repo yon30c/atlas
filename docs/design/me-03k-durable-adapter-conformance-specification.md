@@ -80,14 +80,15 @@ Los dobles de prueba sirven para pruebas unitarias, no como evidencia de conform
 - Reinicio con evento global pero sin prueba fiable de apertura: gate cerrado hasta restaurar estado atómico.
 - Solicitud antigua de apertura no puede abrir un cierre posterior ni una generación distinta.
 
-### K06 — Checkpoints, anti-rollback y continuidad
+### K06 — Checkpoints y continuidad local; anti-rollback externo opcional
 
 - Checkpoint sin baseline autenticado: rechazo.
 - Checkpoint antiguo reproducido después de una generación nueva: rechazo.
 - Truncamiento, huecos de secuencia, época desconocida o hash-chain rota: rechazo.
 - Restauración de backup anterior al último cierre: no abre el gate.
 - Claves idempotentes/tombstones activas sobreviven compactación.
-- Checkpoint y journal deben permitir demostrar continuidad desde un ancla confiable externa al conjunto restaurable.
+- En perfil local, checkpoint y journal deben permitir verificar autenticidad disponible, estructura y continuidad interna, declarando que no se demuestra el último estado fuera del conjunto restaurable.
+- En perfil anclado, opcional y postergado hasta la etapa final, checkpoint y journal deben permitir demostrar continuidad desde un Trust Anchor externo.
 
 ### K07 — Concurrencia y aislamiento
 
@@ -117,10 +118,15 @@ Esta especificación no elige motor de base de datos, mecanismo de consenso/coor
 
 La especificación es normativa para la siguiente etapa de adaptadores. Aún no existen adaptadores durables ni pruebas K01–K07 ejecutadas contra infraestructura real. Los tests ME-03J existentes son fakes y no deben presentarse como conformidad distribuida.
 
-Siguiente trabajo: revisar cada puerto contra esta matriz, identificar operaciones faltantes para consultar resultados ambiguos y verificar anclas/checkpoints, y solo entonces diseñar la interfaz de adaptador durable sin escoger tecnología.
+Siguiente trabajo: revisar cada puerto contra esta matriz, identificar operaciones faltantes para consultar resultados ambiguos y verificar checkpoints según el perfil local. El proveedor de Trust Anchor y las pruebas anti-rollback externas quedan postergados hasta la etapa final.
 
 ## 8. Contrato complementario de persistencia y autenticidad
 
-La especificación de conformidad se complementa con `me-03k-b-persistence-continuity-authenticity-contract.md`. Ese contrato fija la identidad de dominio/época/secuencia, canonicalización e idempotencia, resolución de resultados ambiguos, autenticidad de journal, ancla externa anti-rollback, checkpoints, recibos autenticados, atomicidad y comportamiento fail-closed.
+La especificación de conformidad se complementa con `me-03k-b-persistence-continuity-authenticity-contract.md`. Ese contrato fija la identidad de dominio/época/secuencia, canonicalización e idempotencia, resolución de resultados ambiguos, autenticidad de journal, perfiles local y anclado, checkpoints, recibos autenticados, atomicidad y comportamiento fail-closed.
 
-K01–K07 deben interpretarse junto con esos requisitos. En particular, un adaptador no puede declararse conforme por validar estructura y secuencias si no verifica autenticidad y continuidad desde un ancla confiable externa al conjunto restaurable.
+K01–K07 deben interpretarse junto con esos requisitos. Un adaptador de perfil local no puede afirmar anti-rollback externo: debe validar autenticidad disponible y continuidad interna, e informar su perfil. La conformidad del perfil anclado exige además autenticidad y continuidad desde un Trust Anchor externo vigente; esta parte queda postergada hasta la etapa final de Atlas.
+
+
+## 9. Decisión del propietario — Trust Anchor opcional
+
+**APROBADO — 13 de noviembre de 2026.** El perfil local es el baseline de desarrollo actual en un único servidor. Trust Anchor externo es opcional y no se implementará hasta la etapa final de Atlas. K06 se divide conceptualmente en validación local y anti-rollback externo: la primera puede desarrollarse en las etapas actuales; la segunda no es criterio de salida de las etapas actuales y no puede declararse satisfecha por fakes. La ausencia del ancla no puede convertirse en un fallback silencioso cuando se haya seleccionado explícitamente el perfil anclado.
