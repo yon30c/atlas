@@ -191,6 +191,8 @@ class VerifiedConsistencyRecoveryState:
             raise ContractError("head_sequence no coincide con la posición máxima del ancla")
         if self.anchor.authenticated_state_commitment != self.authenticated_state_commitment:
             raise ContractError("commitment no coincide con el ancla")
+        if self.state.continuity_reference != self.authenticated_state_commitment:
+            raise ContractError("continuity_reference no coincide con el commitment verificado")
         _utc(self.verified_at, "verified_at")
 
 
