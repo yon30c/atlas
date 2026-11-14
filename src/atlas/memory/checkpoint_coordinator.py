@@ -30,11 +30,11 @@ from atlas.memory.trust import (
 from atlas.ports.checkpoint_projection_store import (
     LocalCheckpointProjectionPublisherPort,
 )
-from atlas.ports.local_consistency_recovery import (
-    CheckpointProjectionResolution,
-    LocalCheckpointProjectionRequest,
-    LocalConsistencyCheckpointProjectionPort,
-    LocalVerificationStatus,
+from atlas.memory.ports.recovery import (
+    CheckpointProjectionPort,
+    CheckpointProjectionRequest,
+    CheckpointProjectionResult,
+    RecoveryVerificationStatus,
     require_verified_checkpoint_projection,
 )
 
@@ -51,7 +51,7 @@ class LocalCheckpointCoordinator:
         self,
         journal: Any,
         projection_publisher: LocalCheckpointProjectionPublisherPort,
-        projection_resolver: LocalConsistencyCheckpointProjectionPort,
+        projection_resolver: CheckpointProjectionPort,
         trust_policy: LocalConsistencyTrustPolicy,
         *,
         reducer_version: str,
@@ -257,7 +257,7 @@ class LocalCheckpointCoordinator:
                 integrity_reference=artifacts.integrity_reference,
                 created_at=created_at,
             )
-            request = LocalCheckpointProjectionRequest(
+            request = CheckpointProjectionRequest(
                 checkpoint=checkpoint,
                 consistency_domain_id=expected_position.consistency_domain_id,
                 authority_epoch=expected_position.authority_epoch,
@@ -269,11 +269,11 @@ class LocalCheckpointCoordinator:
         except Exception:
             return self._unavailable()
 
-        if not isinstance(resolution, CheckpointProjectionResolution):
+        if not isinstance(resolution, CheckpointProjectionResult):
             return self._conflict()
-        if resolution.status is LocalVerificationStatus.UNAVAILABLE:
+        if resolution.status is RecoveryVerificationStatus.UNAVAILABLE:
             return self._unavailable()
-        if resolution.status is not LocalVerificationStatus.VERIFIED:
+        if resolution.status is not RecoveryVerificationStatus.VERIFIED:
             return self._conflict()
 
         try:
