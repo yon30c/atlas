@@ -931,6 +931,63 @@ class FakeHandle:
         self.classification = MemoryClassification.CONFIDENTIAL
 
 
+def unresolved_recovery_projection():
+    admission_id = "restart-pending-admission"
+    operation_id = "recovery:memory-domain-restart:1:5"
+    revisions = AuthorizationRevisionSet(
+        memory_revision=AuthorityRevision(AuthorityKind.MEMORY, MEMORY_ID, 1),
+        version_revision=AuthorityRevision(AuthorityKind.MEMORY_VERSION, VERSION_ID, 1),
+        identity_revision=AuthorityRevision(AuthorityKind.IDENTITY, "identity-1", 1),
+    )
+    transitions = (
+        ConsistencyTransition(
+            record_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c073a31",
+            schema_version=2,
+            record_kind=ConsistencyRecordKind.READ_ADMITTED,
+            operation_id=f"read:{admission_id}",
+            occurred_at=NOW,
+            request_id="restart-request",
+            actor_identity_id="identity-1",
+            subject_user_id="owner-1",
+            owner_id="owner-1",
+            memory_id=MEMORY_ID,
+            version_id=VERSION_ID,
+            snapshot_id="restart-snapshot",
+            revisions=revisions,
+            admission_id=admission_id,
+            generation=2,
+            route_ids=ROUTES,
+            scope_kind=MemoryScopeKind.PRIVATE,
+        ),
+        ConsistencyTransition(
+            record_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c073a32",
+            schema_version=1,
+            record_kind=ConsistencyRecordKind.RECOVERY_CLOSED,
+            operation_id=operation_id,
+            occurred_at=NOW,
+            generation=5,
+            affected_admission_ids=frozenset({admission_id}),
+            route_ids=ROUTES,
+        ),
+    )
+    entries = tuple(
+        JournalEntry(
+            ConsistencyPosition("memory-domain-restart", 1, sequence),
+            transition,
+        )
+        for sequence, transition in enumerate(transitions, start=1)
+    )
+    recovery = ConsistencyRecoveryState(
+        domain_id="memory-domain-restart",
+        authority_epoch=1,
+        checkpoint=None,
+        entries=entries,
+        head_sequence=len(entries),
+        continuity_reference="restart-continuity",
+    )
+    return ConsistencyJournalReducer().reduce(recovery)
+
+
 class MemoryConsistencyAuthorityTests(unittest.TestCase):
 
     def test_disjoint_invalidations_keep_independent_fencing_generations_and_receipts(self):
@@ -1150,6 +1207,64 @@ class MemoryConsistencyAuthorityTests(unittest.TestCase):
         self.assertIsNone(
             restored.admit_read(snapshot, DeliveryRouteSet(route_ids))
         )
+
+    def test_restart_recovery_blocks_old_emitter_until_all_endpoints_fenced(self):
+        projection = unresolved_recovery_projection()
+        restored = FakeReadConsistencyAndEgress.restore_from_journal_projection(
+            projection
+        )
+        self.assertIsNotNone(restored)
+        self.assertTrue(restored.recovery_pending)
+        admission_projection = projection.admissions[0]
+        old_admission = ReadAdmission(
+            admission_id=admission_projection.admission_id,
+            snapshot_id=admission_projection.snapshot_id,
+            target=ReadTarget(
+                MEMORY_ID, VERSION_ID, "owner-1",
+                MemoryScope(MemoryScopeKind.PRIVATE),
+            ),
+            generation=admission_projection.generation,
+            route_ids=admission_projection.route_ids,
+            status=ReadAdmissionStatus.ACTIVE,
+            admitted_at=admission_projection.admitted_at,
+        )
+        self.assertIsNone(
+            restored.commit_and_emit(
+                old_admission, FakeHandle(old_admission),
+                "assistant-response", "stale-after-restart", 1, NOW
+            )
+        )
+        self.assertIsNone(
+            restored.admit_read(private_snapshot(), DeliveryRouteSet(ROUTES))
+        )
+
+        operation_id = projection.recovery_closures[0].operation_id
+        for endpoint_id in sorted(ROUTES):
+            receipt = EndpointFenceReceipt(
+                operation_id=operation_id,
+                admission_id=old_admission.admission_id,
+                endpoint_id=endpoint_id,
+                generation=5,
+                fenced_at=NOW,
+                confirmed=True,
+            )
+            self.assertTrue(restored.record_endpoint_ack(receipt))
+        result = restored.reconcile(operation_id)
+        self.assertEqual(
+            result.resolved_admission_ids,
+            frozenset({old_admission.admission_id}),
+        )
+        self.assertFalse(restored.recovery_pending)
+        self.assertIs(
+            restored.admissions[old_admission.admission_id].status,
+            ReadAdmissionStatus.CANCELLED,
+        )
+        new_admission = restored.admit_read(
+            private_snapshot(snapshot_id="fresh-after-restart"),
+            DeliveryRouteSet(ROUTES),
+        )
+        self.assertIsNotNone(new_admission)
+        self.assertEqual(new_admission.generation, 5)
 
     def test_journal_projection_refuses_to_drop_nonterminal_admissions(self):
         admission_id = "recovered-unresolved-admission"
