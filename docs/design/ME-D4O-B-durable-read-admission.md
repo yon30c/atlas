@@ -153,19 +153,21 @@ Se añadieron en la rama los siguientes contratos neutrales:
 - `atlas.memory.route_registry`:
   - `DeliveryRouteDescriptor` representa ID, revisión, estado habilitado y capacidad de fencing.
   - `RouteRegistryResult` exige resolución completa y exacta del conjunto solicitado; no admite resultados parciales.
+  - Toda resolución disponible queda vinculada a una `ConsistencyPosition` exacta; `UNAVAILABLE` no puede afirmar una posición.
   - `REJECTED` y `UNAVAILABLE` no pueden devolver rutas.
   - Una ruta deshabilitada o sin fencing no es utilizable para entrega protegida.
 - `atlas.memory.revision_validation`:
-  - `RevisionValidationResult` queda ligado al `snapshot_id` y al vector exacto de revisiones esperado.
+  - `RevisionValidationResult` queda ligado al `snapshot_id`, al vector exacto de revisiones esperado y a una `ConsistencyPosition`.
   - Distingue `CURRENT`, `STALE`, `REJECTED` y `UNAVAILABLE`.
   - `CURRENT` exige igualdad completa; `STALE` exige un vector autoritativo diferente.
   - Expiración/revocación o estado no elegible se representa como `REJECTED`; evidencia incompleta o inaccesible como `UNAVAILABLE`.
+  - `CURRENT`, `STALE` y `REJECTED` deben devolver la posición observada; el coordinador debe revalidarla contra el head dentro de la misma UoW antes del append.
 - Ambos contratos se exportan desde `atlas.memory`.
 - Se añadió `tests/unit/test_memory_authority_validation_ports.py` con 11 pruebas contractuales de resultados exactos, rutas parciales/duplicadas, fencing, revisiones y timestamps UTC.
 
-**Límite deliberado:** estos cambios no implementan un registro real de rutas ni un adaptador de revisiones. La inspección actual no demuestra que los repositorios canónicos de Memory, Identity, Project, Environment y Grant compartan una transacción ni que todos sus caminos de mutación emitan primero invalidación durable. Una lectura puntual de revisiones, un lock de proceso o notificaciones eventuales no cierran esa carrera. El contrato de revisión exige invalidación-first y orden compartido; cualquier adaptador incapaz de demostrarlo debe responder `UNAVAILABLE`.
+**Límite deliberado:** estos cambios no implementan un registro real de rutas ni un adaptador de revisiones. La inspección actual no demuestra que los repositorios canónicos de Memory, Identity, Project, Environment y Grant compartan una transacción ni que todos sus caminos de mutación emitan primero invalidación durable. Una lectura puntual de revisiones, un lock de proceso o notificaciones eventuales no cierran esa carrera. Los dos nuevos puertos reciben la posición verificada esperada; el resultado debe referirse a esa misma posición y el coordinador volverá a comparar el head dentro de la UoW. Toda mutación de revisiones o rutas debe publicar primero su invalidación durable en la misma autoridad; si una fuente no puede demostrar ese orden, responderá `UNAVAILABLE`. El contrato de revisión exige invalidación-first y orden compartido; cualquier adaptador incapaz de demostrarlo debe responder `UNAVAILABLE`.
 
-No se ha implementado `admit_read`, no se ha abierto el Recovery Gate y no se ha habilitado runtime protegido. No se ejecutaron pruebas/build/CI desde el entorno de GitHub: el repositorio no está montado en este entorno de ejecución. La autorización del usuario para probar queda vigente; las pruebas se ejecutarán al disponer del checkout de la rama, antes de avanzar a adaptadores.
+No se ha implementado `admit_read`, no se ha abierto el Recovery Gate y no se ha habilitado runtime protegido. Las 11 pruebas contractuales están añadidas, pero no se ejecutaron: el repositorio no está montado en este entorno de ejecución. La autorización del usuario para probar queda vigente; se ejecutarán desde el checkout de esta rama antes de avanzar a adaptadores.
 
 ## 11. Criterio de salida
 
