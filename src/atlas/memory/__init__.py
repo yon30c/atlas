@@ -107,7 +107,7 @@ from atlas.memory.recovery_completion import (
     RecoveryCompletionStatus,
     VerifiedRecoveryCompletionReceipt,
 )
-from atlas.memory.trust import (
+from atlas.memory.local_auth import (\n    authenticate_envelope,\n    canonical_json_bytes,\n    object_commitment,\n    verify_envelope,\n)\nfrom atlas.memory.trust import (
     ConsistencyRecoveryProfile,
     ConsistencyRecoveryVerificationResult,
     ConsistencyRecoveryVerificationStatus,
@@ -163,7 +163,7 @@ __all__ = [
     "ForgetOperationState",
     "ForgetVerificationOutcome",
     "ForgetVerificationReceipt",
-    "ConsistencyRecoveryProfile",
+    "authenticate_envelope",\n    "canonical_json_bytes",\n    "object_commitment",\n    "verify_envelope",\n    "ConsistencyRecoveryProfile",
     "ConsistencyRecoveryVerificationResult",
     "ConsistencyRecoveryVerificationStatus",
     "VerifiedLocalConsistencyRecoveryState",
