@@ -137,3 +137,15 @@ La fase ME-D4K añadió en `src/atlas/adapters/sqlite/database.py`:
 Se añadieron tests unitarios para commit, rollback, propietario incorrecto, anidamiento y compatibilidad legacy. **No se ejecutaron**.
 
 Esta entrega no modifica `SQLiteConsistencyJournal`: sus métodos siguen abriendo sus propias transacciones a través de `write_transaction()`. La unidad de trabajo es infraestructura disponible, no integración atómica gate+journal. La siguiente etapa deberá extraer un método interno de journal que reciba la unidad de trabajo exacta y demuestre que no abre ni confirma una transacción adicional.
+
+
+## ME-D4L — integración de append_transition
+
+**Estado: implementación añadida; validación pendiente.**
+
+- Se añadió `SQLiteConsistencyJournal.append_transition_in(unit_of_work, expected_position, append_id, transition)`. La operación valida que la UoW esté activa y pertenezca a la misma instancia `SQLiteDatabase`, y utiliza exclusivamente su conexión.
+- La ruta interna conserva validación del dominio y época, detección de replay por append/idempotency key, comparación de solicitud canónica, firma y validación del envelope, inserciones de journal/operación y compare-and-swap del head.
+- La ruta interna no captura errores inesperados ni controla el ciclo de vida transaccional. Los propaga al dueño de la UoW para que el contexto revierta la operación compuesta.
+- El método público `append_transition(...)` conserva su firma y resultado histórico, envolviendo la operación interna en una UoW propia y devolviendo `None` ante errores ordinarios.
+- Se añadieron pruebas para append dentro de una UoW externa y rollback conjunto cuando falla el signer después de una mutación acompañante. Las pruebas no se ejecutaron.
+- No se adaptaron `commit_checkpoint`, `create_local_domain` ni otros métodos. No hay todavía autoridad SQLite del Recovery Gate y no se declara atomicidad gate+journal completa.
