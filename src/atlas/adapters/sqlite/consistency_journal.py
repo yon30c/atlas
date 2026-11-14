@@ -135,6 +135,21 @@ class SQLiteConsistencyJournal:
         return self._reducer_version
 
     @property
+    def issuer_id(self) -> str:
+        """Configured issuer identity used by new journal and checkpoint envelopes."""
+        return self._issuer_id
+
+    @property
+    def issuer_role(self) -> str:
+        """Configured issuer role used by new journal and checkpoint envelopes."""
+        return self._issuer_role
+
+    @property
+    def key_reference(self) -> str:
+        """Configured active key reference used by new envelopes."""
+        return self._key_reference
+
+    @property
     def trust_policy_version(self) -> str:
         """Configured local trust-policy version."""
         return self._trust_policy_version
