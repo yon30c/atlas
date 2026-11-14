@@ -25,6 +25,8 @@ class FakeAuthority:
     def reconcile_endpoint(self, *args): pass
     def close_recovery_gate(self, *args): pass
     def ensure_recovery_gate_closed(self, *args): pass
+    def reconcile_and_open_recovery_gate(self, *args): pass
+    def ensure_recovery_gate_open(self, *args): pass
 
 
 class IncompleteAuthority:
