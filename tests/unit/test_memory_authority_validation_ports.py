@@ -8,6 +8,7 @@ from atlas.memory.consistency import (
     AuthorizationRevisionSet,
     AuthorizationSnapshot,
     DeliveryRouteSet,
+    ConsistencyPosition,
 )
 from atlas.memory.models import (
     MemoryClassification,
@@ -27,6 +28,7 @@ from atlas.memory.route_registry import (
 
 
 NOW = datetime(2026, 11, 14, 12, 0, tzinfo=timezone.utc)
+POSITION = ConsistencyPosition("memory-domain", 1, 7)
 MEMORY_ID = "018bcfe5-7b3a-7cc2-98c4-dc0c0c073a11"
 VERSION_ID = "018bcfe5-7b3a-7cc2-98c4-dc0c0c073a12"
 
@@ -62,7 +64,7 @@ class RouteRegistryContractTests(unittest.TestCase):
             DeliveryRouteDescriptor("assistant-response", 1, True, True),
             DeliveryRouteDescriptor("api-response", 4, True, True),
         )
-        result = RouteRegistryResult(requested, RouteRegistryStatus.RESOLVED, routes)
+        result = RouteRegistryResult(requested, RouteRegistryStatus.RESOLVED, routes, POSITION)
         self.assertTrue(result.usable_for_protected_delivery)
 
     def test_partial_unknown_or_duplicate_routes_are_rejected(self):
@@ -72,6 +74,7 @@ class RouteRegistryContractTests(unittest.TestCase):
                 requested,
                 RouteRegistryStatus.RESOLVED,
                 (DeliveryRouteDescriptor("assistant-response", 1, True, True),),
+                POSITION,
             )
         with self.assertRaises(ContractError):
             RouteRegistryResult(
@@ -81,6 +84,7 @@ class RouteRegistryContractTests(unittest.TestCase):
                     DeliveryRouteDescriptor("assistant-response", 1, True, True),
                     DeliveryRouteDescriptor("assistant-response", 2, True, True),
                 ),
+                POSITION,
             )
 
     def test_unavailable_and_rejected_results_cannot_return_partial_routes(self):
@@ -88,7 +92,7 @@ class RouteRegistryContractTests(unittest.TestCase):
         route = DeliveryRouteDescriptor("assistant-response", 1, True, True)
         for status in (RouteRegistryStatus.UNAVAILABLE, RouteRegistryStatus.REJECTED):
             with self.assertRaises(ContractError):
-                RouteRegistryResult(requested, status, (route,))
+                RouteRegistryResult(requested, status, (route,), POSITION)
         self.assertFalse(
             RouteRegistryResult(requested, RouteRegistryStatus.UNAVAILABLE).usable_for_protected_delivery
         )
@@ -99,11 +103,13 @@ class RouteRegistryContractTests(unittest.TestCase):
             requested,
             RouteRegistryStatus.RESOLVED,
             (DeliveryRouteDescriptor("assistant-response", 1, False, True),),
+            POSITION,
         )
         unfenceable = RouteRegistryResult(
             requested,
             RouteRegistryStatus.RESOLVED,
             (DeliveryRouteDescriptor("assistant-response", 1, True, False),),
+            POSITION,
         )
         self.assertFalse(disabled.usable_for_protected_delivery)
         self.assertFalse(unfenceable.usable_for_protected_delivery)
@@ -118,10 +124,11 @@ class RouteRegistryContractTests(unittest.TestCase):
 class RevisionValidationContractTests(unittest.TestCase):
     def test_current_result_is_bound_to_exact_snapshot_and_revisions(self):
         snapshot = private_snapshot()
-        result = RevisionValidationResult.current(snapshot, NOW)
+        result = RevisionValidationResult.current(snapshot, NOW, POSITION)
         self.assertEqual(result.snapshot_id, snapshot.snapshot_id)
         self.assertEqual(result.status, RevisionValidationStatus.CURRENT)
         self.assertEqual(result.current_revisions, snapshot.revisions)
+        self.assertEqual(result.validated_position, POSITION)
 
     def test_stale_result_requires_different_authoritative_revision_vector(self):
         snapshot = private_snapshot()
@@ -136,6 +143,7 @@ class RevisionValidationContractTests(unittest.TestCase):
             status=RevisionValidationStatus.STALE,
             checked_at=NOW,
             current_revisions=current,
+            validated_position=POSITION,
         )
         self.assertNotEqual(result.current_revisions, result.expected_revisions)
 
@@ -148,6 +156,7 @@ class RevisionValidationContractTests(unittest.TestCase):
                 status=RevisionValidationStatus.STALE,
                 checked_at=NOW,
                 current_revisions=snapshot.revisions,
+                validated_position=POSITION,
             )
 
     def test_current_cannot_claim_different_revision_vector(self):
@@ -164,6 +173,7 @@ class RevisionValidationContractTests(unittest.TestCase):
                 status=RevisionValidationStatus.CURRENT,
                 checked_at=NOW,
                 current_revisions=different,
+                validated_position=POSITION,
             )
 
     def test_rejected_and_unavailable_do_not_expose_revision_data(self):
@@ -189,7 +199,7 @@ class RevisionValidationContractTests(unittest.TestCase):
         snapshot = private_snapshot()
         with self.assertRaises(ContractError):
             RevisionValidationResult.current(
-                snapshot, NOW.astimezone(timezone(timedelta(hours=-4)))
+                snapshot, NOW.astimezone(timezone(timedelta(hours=-4))), POSITION
             )
 
 
