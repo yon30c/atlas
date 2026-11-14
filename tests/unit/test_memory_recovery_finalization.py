@@ -82,7 +82,7 @@ class RecoveryAdmissionFinalizationTests(unittest.TestCase):
 
     def test_finalizes_only_after_every_endpoint_receipt_is_verified(self):
         result = self.coordinator.run()
-        self.assertIs(result.status, RecoveryAdmissionFinalizationStatus.COMPLETE)
+        self.assertIs(result.status, RecoveryAdmissionFinalizationStatus.ADMISSIONS_TERMINAL)
         self.assertEqual(result.reconciled_admission_ids, ("journal-recovery-admission",))
         self.assertEqual(len(self.finalizer.requests), 1)
         request = self.finalizer.requests[0]
@@ -105,8 +105,8 @@ class RecoveryAdmissionFinalizationTests(unittest.TestCase):
     def test_retries_are_idempotent_and_do_not_reconcile_twice(self):
         first = self.coordinator.run()
         second = self.coordinator.run()
-        self.assertIs(first.status, RecoveryAdmissionFinalizationStatus.COMPLETE)
-        self.assertIs(second.status, RecoveryAdmissionFinalizationStatus.COMPLETE)
+        self.assertIs(first.status, RecoveryAdmissionFinalizationStatus.ADMISSIONS_TERMINAL)
+        self.assertIs(second.status, RecoveryAdmissionFinalizationStatus.ADMISSIONS_TERMINAL)
         self.assertEqual(len(self.finalizer.requests), 1)
         self.assertEqual(
             [item.record_kind for item in self.journal.appended].count(
@@ -145,7 +145,7 @@ class RecoveryAdmissionFinalizationTests(unittest.TestCase):
 
     def test_recovery_gate_remains_closed_after_admission_finalization(self):
         result = self.coordinator.run()
-        self.assertIs(result.status, RecoveryAdmissionFinalizationStatus.COMPLETE)
+        self.assertIs(result.status, RecoveryAdmissionFinalizationStatus.ADMISSIONS_TERMINAL)
         self.assertTrue(self.gate.closed)
         self.assertFalse(any(
             item.record_kind is ConsistencyRecordKind.RECOVERY_RECONCILED
