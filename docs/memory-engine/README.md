@@ -138,7 +138,7 @@ SQLite no puede incluir la aceptación irrevocable de un endpoint remoto dentro 
 
 ## Validación y pendientes
 
-Esta guía refleja el código y esquema inspeccionados. No se ejecutaron pruebas ni build durante ME-D4I/ME-D4J. Siguen pendientes la autoridad SQLite concreta, las pruebas multiproceso, la atomicidad de admisión/egress y la apertura segura del Recovery Gate.
+Esta guía refleja el código y esquema inspeccionados. No se ejecutaron pruebas ni build durante ME-D4I/ME-D4J. ME-D4N aporta un adaptador SQLite gate-only con pruebas añadidas pero aún no ejecutadas. Siguen pendientes la autoridad común para admisión/egress, la validación multiproceso y el anti-rollback externo.
 
 Referencias: [contrato de memoria](../contracts/memory.md) · [registro de implementación](../design/memory-engine-project-independence-implementation.md).
 
@@ -156,9 +156,9 @@ with database.unit_of_work() as unit:
 
 La unidad está ligada a la instancia exacta de `SQLiteDatabase`, solo permanece activa durante su contexto y rechaza anidamiento en el mismo hilo. La API `write_transaction()` sigue disponible y conserva el acceso legacy a la conexión.
 
-**Límite de esta fase:** `SQLiteConsistencyJournal` todavía utiliza `write_transaction()` por su cuenta. No existe aún un método journal que acepte esta unidad de trabajo, y la autoridad del Recovery Gate no está implementada. Por tanto, no es posible realizar todavía una operación atómica compuesta entre gate y journal. La API nueva no debe utilizarse para simular esa integración.
+**Límite original de ME-D4K, actualizado por ME-D4L/M/N:** el journal ya dispone de `append_transition_in(...)` y `commit_checkpoint_in(...)`. ME-D4N añade un adaptador gate-only que comparte la UoW con el append. Todavía no existe una autoridad completa que haga compartir esa misma frontera a admisión y egress.
 
-La implementación se añadió, pero no se ejecutaron pruebas ni build. Los tests unitarios nuevos cubren commit, rollback, ownership, anidamiento y compatibilidad; quedan pendientes de ejecución por el propietario.
+La implementación base se añadió; las pruebas de la UoW y sus integraciones posteriores siguen pendientes de ejecución por el propietario.
 
 
 ## ME-D4L — append del journal dentro de SQLiteUnitOfWork
@@ -179,3 +179,22 @@ La implementación se añadió, pero no se ejecutaron pruebas ni build. Los test
 - commit_checkpoint(...) conserva su firma pública y abre una UoW propia; ante errores transaccionales ambiguos devuelve UNKNOWN, manteniendo la reconciliación por identificador estable.
 - Se añadieron pruebas para commit dentro de una UoW externa y rollback de mutaciones acompañantes cuando falla la inserción del marcador. **No ejecutadas**.
 - Esto no implementa la autoridad Recovery Gate ni demuestra todavía atomicidad de admisión/gate/egress.
+
+## ME-D4N — adaptador SQLite del Recovery Gate
+
+Se implementó LocalSQLiteRecoveryGateAdapter, vinculado a una instancia exacta de SQLiteConsistencyJournal, con las cuatro operaciones de RecoveryGatePort:
+
+- close_recovery_gate: append RECOVERY_CLOSED y cierre materializado dentro de una misma SQLiteUnitOfWork.
+- ensure_recovery_gate_closed: restaura únicamente la operación/generación activa demostrada por recuperación local verificada.
+- reconcile_and_open_recovery_gate: valida el recibo terminal global, persiste RECOVERY_RECONCILED y abre el gate en el mismo commit.
+- ensure_recovery_gate_open: restaura apertura solo para el cierre reconciliado más reciente y su recibo exacto.
+
+La composición compose_local_sqlite_recovery_gate_coordinator(...) conecta este gate con RecoveryJournalCoordinator. Es una composición gate-only, distinta de la autoridad completa que requiere MemoryGateway.
+
+No se añadió migración: los campos de proyección del gate ya existían en consistency_domains desde V1.
+
+Límite crítico: no se implementaron todavía admit_read, Forget/invalidation ni commit_and_emit sobre esta misma UoW. Por eso no se afirma atomicidad global con lecturas o egress. El perfil local tampoco dispone de anti-rollback externo.
+
+Se añadieron pruebas de cierre, reapertura, rollback, recibo exacto, restauración y concurrencia. No ejecutadas; no se ejecutaron build ni CI.
+
+Diseño y límites: [ME-D4N — Recovery Gate SQLite](../design/ME-D4N-sqlite-recovery-gate.md).
