@@ -107,7 +107,17 @@ from atlas.memory.recovery_completion import (
     RecoveryCompletionStatus,
     VerifiedRecoveryCompletionReceipt,
 )
-from atlas.memory.local_auth import (\n    authenticate_envelope,\n    canonical_json_bytes,\n    object_commitment,\n    verify_envelope,\n)\nfrom atlas.memory.trust import (
+from atlas.memory.envelope import AuthenticatedConsistencyEnvelope
+from atlas.memory.local_auth import (
+    authenticate_envelope,
+    canonical_json_bytes,
+    checkpoint_payload,
+    journal_entry_payload,
+    object_commitment,
+    verify_envelope,
+    verify_recovery_chain,
+)
+from atlas.memory.trust import (
     ConsistencyRecoveryProfile,
     ConsistencyRecoveryVerificationResult,
     ConsistencyRecoveryVerificationStatus,
@@ -120,6 +130,14 @@ from atlas.memory.validation import (
 )
 
 __all__ = [
+    "AuthenticatedConsistencyEnvelope",
+    "authenticate_envelope",
+    "canonical_json_bytes",
+    "checkpoint_payload",
+    "journal_entry_payload",
+    "object_commitment",
+    "verify_envelope",
+    "verify_recovery_chain",
     "RecoveryEndpointFenceReceipt",
     "RecoveryEndpointFenceRequest",
     "RecoveryFencePlan",
