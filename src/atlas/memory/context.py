@@ -7,12 +7,12 @@ El motor vuelve a delegar la decisión de acceso en su puerto de autorización.
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from atlas.core.errors import ContractError
+from atlas.memory.errors import MemoryMemoryContractError
 
 
 def _required(value: object, field: str) -> None:
     if not isinstance(value, str) or not value.strip():
-        raise ContractError(f"{field} debe ser una cadena no vacía")
+        raise MemoryContractError(f"{field} debe ser una cadena no vacía")
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,7 +41,7 @@ class MemoryRequestContext:
         ):
             _required(getattr(self, field), field)
         if isinstance(self.actor_revision, bool) or not isinstance(self.actor_revision, int) or self.actor_revision < 1:
-            raise ContractError("actor_revision debe ser un entero positivo")
+            raise MemoryContractError("actor_revision debe ser un entero positivo")
         for field in ("delegation", "project_id", "environment"):
             value = getattr(self, field)
             if value is not None:
@@ -51,4 +51,4 @@ class MemoryRequestContext:
             or self.created_at.tzinfo is None
             or self.created_at.utcoffset() != timedelta(0)
         ):
-            raise ContractError("created_at debe ser un datetime UTC")
+            raise MemoryContractError("created_at debe ser un datetime UTC")
