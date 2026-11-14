@@ -115,7 +115,7 @@ class JournalOperationResolutionTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             self._result(
                 JournalOperationResolutionStatus.UNKNOWN,
-                append_id="append-other",
+                append_id="",
             )
         with self.assertRaises(ContractError):
             self._result(
