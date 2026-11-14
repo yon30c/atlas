@@ -18,6 +18,7 @@ from atlas.ports.local_consistency_recovery import (
     VerifiedCheckpointProjection,
     VerifiedLocalConsistencyInventories,
     require_verified_checkpoint_projection,
+    require_verified_local_inventories,
 )
 
 
@@ -248,6 +249,79 @@ class LocalRecoveryPortContractTests(unittest.TestCase):
             require_verified_checkpoint_projection(
                 request,
                 CheckpointProjectionResolution(LocalVerificationStatus.UNAVAILABLE),
+            )
+
+
+    def test_inventory_attestation_binding_requires_exact_recovered_head(self):
+        request = LocalConsistencyInventoryVerificationRequest(
+            state=self.state,
+            projection=self.projection,
+            trust_policy_version="local-policy-v1",
+        )
+        evidence = VerifiedLocalConsistencyInventories(
+            consistency_domain_id=self.state.domain_id,
+            authority_epoch=self.state.authority_epoch,
+            head_sequence=self.state.head_sequence,
+            continuity_reference=self.state.continuity_reference,
+            trust_policy_version="local-policy-v1",
+            inventory_commitment="inventory-commitment",
+            verified_receipt_ids=frozenset(),
+            verified_tombstone_ids=frozenset(),
+            verified_reference_ids=frozenset(),
+            verification_id="inventory-verification-exact",
+        )
+        result = LocalConsistencyInventoryVerificationResult(
+            LocalVerificationStatus.VERIFIED, evidence
+        )
+        self.assertIs(require_verified_local_inventories(request, result), evidence)
+
+    def test_inventory_attestation_binding_rejects_wrong_head_or_policy(self):
+        from dataclasses import replace
+
+        request = LocalConsistencyInventoryVerificationRequest(
+            state=self.state,
+            projection=self.projection,
+            trust_policy_version="local-policy-v1",
+        )
+        evidence = VerifiedLocalConsistencyInventories(
+            consistency_domain_id=self.state.domain_id,
+            authority_epoch=self.state.authority_epoch,
+            head_sequence=self.state.head_sequence,
+            continuity_reference=self.state.continuity_reference,
+            trust_policy_version="local-policy-v1",
+            inventory_commitment="inventory-commitment",
+            verified_receipt_ids=frozenset(),
+            verified_tombstone_ids=frozenset(),
+            verified_reference_ids=frozenset(),
+            verification_id="inventory-verification-mismatch",
+        )
+        for wrong in (
+            replace(evidence, head_sequence=6),
+            replace(evidence, continuity_reference="other-head"),
+            replace(evidence, trust_policy_version="other-policy"),
+            replace(evidence, consistency_domain_id="other-domain"),
+        ):
+            with self.subTest(wrong=wrong):
+                with self.assertRaises(ContractError):
+                    require_verified_local_inventories(
+                        request,
+                        LocalConsistencyInventoryVerificationResult(
+                            LocalVerificationStatus.VERIFIED, wrong
+                        ),
+                    )
+
+    def test_inventory_binding_rejects_unavailable_result(self):
+        request = LocalConsistencyInventoryVerificationRequest(
+            state=self.state,
+            projection=self.projection,
+            trust_policy_version="local-policy-v1",
+        )
+        with self.assertRaises(ContractError):
+            require_verified_local_inventories(
+                request,
+                LocalConsistencyInventoryVerificationResult(
+                    LocalVerificationStatus.UNAVAILABLE
+                ),
             )
 
 
