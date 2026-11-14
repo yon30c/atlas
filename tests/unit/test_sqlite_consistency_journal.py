@@ -428,6 +428,9 @@ class SQLiteConsistencyJournalTests(unittest.TestCase):
 
     def test_load_recovery_state_returns_none_for_empty_domain(self):
         self.assertIsNone(self.journal.load_recovery_state("domain-a"))
+        result = self.journal.load_recovery_state_result("domain-a")
+        self.assertIs(result.status, ConsistencyRecoveryLoadStatus.UNAVAILABLE)
+        self.assertIsNone(result.state)
 
     def test_load_recovery_state_fails_closed_when_head_disagrees_with_rows(self):
         transition = read_admitted(record_id=RECORD_1)
