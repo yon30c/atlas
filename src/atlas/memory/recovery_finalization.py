@@ -374,7 +374,10 @@ class RecoveryAdmissionFinalizationCoordinator:
             all_terminal = bool(
                 current_closure is not None
                 and all(
-                    item.status in (ReadAdmissionStatus.COMPLETED, ReadAdmissionStatus.CANCELLED)
+                    item.status is ReadAdmissionStatus.CANCELLED
+                    and item.terminal_operation_id == closure.operation_id
+                    and item.terminal_generation == closure.generation
+                    and item.terminal_receipt_id is not None
                     for item in projection.admissions
                     if item.admission_id in closure.affected_admission_ids
                 )
