@@ -223,6 +223,30 @@ class LocalConsistencyInventoryVerificationResult:
             raise ContractError("REJECTED/UNAVAILABLE no pueden incluir inventarios")
 
 
+def require_verified_local_inventories(
+    request: LocalConsistencyInventoryVerificationRequest,
+    result: LocalConsistencyInventoryVerificationResult,
+) -> VerifiedLocalConsistencyInventories:
+    """Return inventory evidence only when bound to the exact recovered head."""
+    if not isinstance(request, LocalConsistencyInventoryVerificationRequest):
+        raise ContractError("request debe ser LocalConsistencyInventoryVerificationRequest")
+    if not isinstance(result, LocalConsistencyInventoryVerificationResult):
+        raise ContractError("result debe ser LocalConsistencyInventoryVerificationResult")
+    if result.status is not LocalVerificationStatus.VERIFIED:
+        raise ContractError("inventarios locales no están VERIFIED")
+    evidence = result.verified_inventories
+    state = request.state
+    if (
+        evidence.consistency_domain_id != state.domain_id
+        or evidence.authority_epoch != state.authority_epoch
+        or evidence.head_sequence != state.head_sequence
+        or evidence.continuity_reference != state.continuity_reference
+        or evidence.trust_policy_version != request.trust_policy_version
+    ):
+        raise ContractError("atestación de inventarios no corresponde al estado exacto")
+    return evidence
+
+
 class LocalConsistencyInventoryVerifierPort(Protocol):
     """Verify completeness and authenticity of every external recovery inventory."""
 
