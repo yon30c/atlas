@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from atlas.adapters.sqlite import SQLiteDatabase, SQLITE_MIGRATIONS
+from atlas.adapters.sqlite import SQLiteDatabase, SQLITE_MIGRATIONS, CORE_SCHEMA_V1
 
 
 class SQLiteCoreSchemaTests(unittest.TestCase):
@@ -121,6 +121,88 @@ class SQLiteCoreSchemaTests(unittest.TestCase):
                     """,
                     ("b" * 64,),
                 )
+
+    def test_operation_must_reference_matching_journal_operation_id(self):
+        self._insert_domain()
+        self._insert_journal_entry(operation_id="operation-a")
+        with self.assertRaises(sqlite3.IntegrityError):
+            with self.database.connection() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO journal_operations (
+                        domain_id, authority_epoch, operation_id, request_canonical,
+                        request_digest, sequence, record_id, created_at
+                    ) VALUES ('domain-a', 1, 'operation-b', X'7B7D', ?, 1, 'record-a',
+                              '2026-11-14T00:00:00+00:00')
+                    """,
+                    ("a" * 64,),
+                )
+
+    def test_v2_upgrade_preserves_v1_operation_rows_and_adds_exact_fk(self):
+        legacy_path = Path(self.temp_dir.name) / "legacy.sqlite"
+        legacy = SQLiteDatabase(legacy_path)
+        legacy.apply_migrations((CORE_SCHEMA_V1,))
+        with legacy.connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO consistency_domains (
+                    domain_id, authority_epoch, head_sequence, profile,
+                    trust_policy_version, created_at, updated_at
+                ) VALUES ('legacy-domain', 1, 1, 'local', 'policy-v1',
+                          '2026-11-14T00:00:00+00:00', '2026-11-14T00:00:00+00:00')
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO journal_entries (
+                    domain_id, authority_epoch, sequence, record_id, operation_id,
+                    record_kind, schema_version, transition_canonical,
+                    envelope_version, reducer_version, object_commitment,
+                    issuer_id, issuer_role, key_reference, trust_policy_version,
+                    issued_at, authentication_evidence
+                ) VALUES ('legacy-domain', 1, 1, 'legacy-record', 'legacy-operation',
+                          'read_admitted', 1, X'7B7D', 1, 'reducer-v1', 'commitment',
+                          'issuer', 'service', 'key-v1', 'policy-v1',
+                          '2026-11-14T00:00:00+00:00', 'mac')
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO journal_operations (
+                    domain_id, authority_epoch, operation_id, idempotency_key,
+                    request_canonical, request_digest, sequence, record_id, created_at
+                ) VALUES ('legacy-domain', 1, 'legacy-operation', 'legacy-key',
+                          X'7B7D', ?, 1, 'legacy-record',
+                          '2026-11-14T00:00:00+00:00')
+                """,
+                ("b" * 64,),
+            )
+
+        legacy.apply_migrations(SQLITE_MIGRATIONS)
+        with legacy.connection() as connection:
+            operation = connection.execute(
+                "SELECT operation_id, idempotency_key, sequence, record_id "
+                "FROM journal_operations"
+            ).fetchone()
+            versions = connection.execute(
+                "SELECT version FROM schema_migrations ORDER BY version"
+            ).fetchall()
+            foreign_keys = connection.execute(
+                "PRAGMA foreign_key_list(journal_operations)"
+            ).fetchall()
+        self.assertEqual(
+            tuple(operation),
+            ("legacy-operation", "legacy-key", 1, "legacy-record"),
+        )
+        self.assertEqual([row[0] for row in versions], [1, 2])
+        self.assertEqual(
+            {row["from"] for row in foreign_keys},
+            {"domain_id", "authority_epoch", "sequence", "record_id", "operation_id"},
+        )
+        self.assertEqual(
+            {row["to"] for row in foreign_keys},
+            {"domain_id", "authority_epoch", "sequence", "record_id", "operation_id"},
+        )
 
     def test_checkpoint_projection_requires_existing_checkpoint(self):
         self._insert_domain()
