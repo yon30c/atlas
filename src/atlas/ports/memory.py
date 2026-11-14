@@ -1,19 +1,19 @@
 """Única frontera permitida para leer y proponer memorias."""
 from typing import Protocol, Sequence
 
-from atlas.core.context import OperationContext
+from atlas.memory.context import MemoryRequestContext
 from atlas.memory.consistency import EgressReceipt, ReconciliationResult
 from atlas.memory.models import Memory, MemoryProposal, MemoryVersionId
 from atlas.ports.protected_memory_read import ProtectedMemoryRead
 
 
 class MemoryGateway(Protocol):
-    def list_visible(self, context: OperationContext) -> Sequence[Memory]:
+    def list_visible(self, context: MemoryRequestContext) -> Sequence[Memory]:
         """Lista memorias autorizadas para el usuario del contexto."""
 
     def get_version(
         self,
-        context: OperationContext,
+        context: MemoryRequestContext,
         memory_id: str,
         version_id: MemoryVersionId,
     ) -> ProtectedMemoryRead | None:
@@ -41,5 +41,5 @@ class MemoryGateway(Protocol):
     ) -> ReconciliationResult | None:
         """Consulta el estado terminal verificable de la lectura."""
 
-    def submit_proposal(self, context: OperationContext, proposal: MemoryProposal) -> str:
+    def submit_proposal(self, context: MemoryRequestContext, proposal: MemoryProposal) -> str:
         """Registra una propuesta pendiente y devuelve su identificador."""
