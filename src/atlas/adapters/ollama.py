@@ -328,4 +328,8 @@ class OllamaProvider:
             raise OllamaUnavailableError(
                 "Se interrumpió la conexión con Ollama local"
             ) from exc
+        if metadata.get("done") is not True:
+            raise OllamaResponseError(
+                "El streaming de Ollama terminó sin un evento final"
+            )
         return self._response(request, "".join(chunks), metadata)
