@@ -7,7 +7,11 @@ from atlas.adapters.console import run_console
 from atlas.adapters.ollama import OllamaProvider
 from atlas.adapters.ollama_assistant import OllamaResponseGenerator
 from atlas.adapters.system_clock import SystemClock
-from atlas.application import AtlasCore
+from atlas.application import (
+    AtlasCore,
+    ConversationContextProcessor,
+    InMemoryConversationHistory,
+)
 from atlas.assistant.local_console import (
     LocalConsoleRequestFactory,
     LocalModeResponseGenerator,
@@ -18,6 +22,7 @@ from atlas.ports.llm import LLMProvider
 
 DEFAULT_MODEL = "gemma4:e2b"
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
+DEFAULT_CONVERSATION_HISTORY_TURNS = 8
 
 
 def main(
@@ -30,11 +35,12 @@ def main(
     model: str | None = None,
     ollama_url: str | None = None,
 ) -> None:
-    """Inicia Atlas con Gemma local y streaming habilitado por defecto.
+    """Inicia Atlas con Gemma local, streaming e historial de sesión acotado.
 
     ATLAS_MODEL y ATLAS_OLLAMA_URL permiten cambiar el modelo o el endpoint.
     El adaptador rechaza cualquier endpoint que no sea loopback.
     ATLAS_MODE=offline conserva el modo informativo sin proveedor LLM.
+    El historial se mantiene solo en memoria y conserva hasta ocho turnos.
     """
     clock = SystemClock()
     request_factory = LocalConsoleRequestFactory(clock, user_id=user_id)
@@ -64,9 +70,15 @@ def main(
         response_generator=response_generator,
         clock=clock,
     )
+    conversation_processor = ConversationContextProcessor(
+        assistant=assistant_service,
+        history_store=InMemoryConversationHistory(
+            max_turns=DEFAULT_CONVERSATION_HISTORY_TURNS
+        ),
+    )
     atlas_core = AtlasCore(
         request_factory=request_factory,
-        assistant=assistant_service,
+        assistant=conversation_processor,
     )
     console_options = {
         "input_fn": input_fn,
