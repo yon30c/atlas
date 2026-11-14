@@ -312,6 +312,34 @@ class SQLiteConsistencyJournal:
                 transition_bytes = canonical_json_bytes(transition)
                 connection.execute(
                     """
+                    INSERT INTO checkpoints (
+                        checkpoint_id, domain_id, authority_epoch, sequence,
+                        state_reference, integrity_reference, created_at,
+                        envelope_version, schema_version, reducer_version,
+                        previous_commitment, object_commitment, issuer_id, issuer_role,
+                        key_reference, trust_policy_version, issued_at,
+                        authentication_evidence
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        checkpoint_id, domain_id, epoch, sequence,
+                        checkpoint.state_reference, checkpoint.integrity_reference,
+                        _utc_text(checkpoint.created_at),
+                        signed_checkpoint_envelope.envelope_version, 1,
+                        signed_checkpoint_envelope.reducer_version,
+                        signed_checkpoint_envelope.previous_commitment,
+                        signed_checkpoint_envelope.object_commitment,
+                        signed_checkpoint_envelope.issuer_id,
+                        signed_checkpoint_envelope.issuer_role,
+                        signed_checkpoint_envelope.key_reference,
+                        signed_checkpoint_envelope.trust_policy_version,
+                        _utc_text(signed_checkpoint_envelope.issued_at),
+                        signed_checkpoint_envelope.authentication_evidence,
+                    ),
+                )
+
+                connection.execute(
+                    """
                     INSERT INTO journal_entries (
                         domain_id, authority_epoch, sequence, record_id, operation_id,
                         record_kind, schema_version, transition_canonical,
@@ -672,34 +700,6 @@ class SQLiteConsistencyJournal:
                     created_at=checkpoint.created_at,
                     envelope=signed_checkpoint_envelope,
                 )
-                connection.execute(
-                    """
-                    INSERT INTO checkpoints (
-                        checkpoint_id, domain_id, authority_epoch, sequence,
-                        state_reference, integrity_reference, created_at,
-                        envelope_version, schema_version, reducer_version,
-                        previous_commitment, object_commitment, issuer_id, issuer_role,
-                        key_reference, trust_policy_version, issued_at,
-                        authentication_evidence
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        checkpoint_id, domain_id, epoch, sequence,
-                        checkpoint.state_reference, checkpoint.integrity_reference,
-                        _utc_text(checkpoint.created_at),
-                        signed_checkpoint_envelope.envelope_version, 1,
-                        signed_checkpoint_envelope.reducer_version,
-                        signed_checkpoint_envelope.previous_commitment,
-                        signed_checkpoint_envelope.object_commitment,
-                        signed_checkpoint_envelope.issuer_id,
-                        signed_checkpoint_envelope.issuer_role,
-                        signed_checkpoint_envelope.key_reference,
-                        signed_checkpoint_envelope.trust_policy_version,
-                        _utc_text(signed_checkpoint_envelope.issued_at),
-                        signed_checkpoint_envelope.authentication_evidence,
-                    ),
-                )
-
                 marker_position = ConsistencyPosition(
                     domain_id, epoch, marker_sequence
                 )
