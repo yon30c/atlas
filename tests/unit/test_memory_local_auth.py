@@ -7,7 +7,7 @@ from atlas.core.errors import ContractError
 from atlas.memory.local_auth import (
     authenticate_envelope, canonical_json_bytes, journal_entry_payload,
     object_commitment, verify_envelope, verify_recovery_chain,
-    verify_recovery_chain_with_policy,
+    verify_recovery_chain_with_policy, RecoveryChainVerificationStatus,
 )
 from atlas.memory.envelope import AuthenticatedConsistencyEnvelope
 
@@ -218,6 +218,53 @@ class RecoveryPolicyTests(unittest.TestCase):
 
         wrong = replace(self.policy, consistency_domain_id="other-domain")
         self.assertFalse(verify_recovery_chain_with_policy(self.state, self.keys, wrong))
+
+    def test_missing_key_is_unavailable(self):
+        class MissingKey:
+            def load_key(self, key_reference):
+                return None
+
+        result = verify_recovery_chain_with_policy(
+            self.state, MissingKey(), self.policy
+        )
+        self.assertIs(
+            result.status, RecoveryChainVerificationStatus.UNAVAILABLE
+        )
+        self.assertFalse(result)
+
+    def test_key_provider_exception_is_unavailable(self):
+        class BrokenKeyProvider:
+            def load_key(self, key_reference):
+                raise OSError("credential unavailable")
+
+        result = verify_recovery_chain_with_policy(
+            self.state, BrokenKeyProvider(), self.policy
+        )
+        self.assertIs(
+            result.status, RecoveryChainVerificationStatus.UNAVAILABLE
+        )
+
+    def test_malformed_key_is_unavailable(self):
+        class MalformedKey:
+            def load_key(self, key_reference):
+                return b"short"
+
+        result = verify_recovery_chain_with_policy(
+            self.state, MalformedKey(), self.policy
+        )
+        self.assertIs(
+            result.status, RecoveryChainVerificationStatus.UNAVAILABLE
+        )
+
+    def test_available_but_wrong_key_rejects_chain(self):
+        class WrongKey:
+            def load_key(self, key_reference):
+                return b"x" * 32
+
+        result = verify_recovery_chain_with_policy(
+            self.state, WrongKey(), self.policy
+        )
+        self.assertIs(result.status, RecoveryChainVerificationStatus.REJECTED)
 
 
 if __name__ == "__main__":
