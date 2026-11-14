@@ -117,18 +117,25 @@ class RecoveryJournalCoordinator:
             commit = self._journal.append_transition(
                 expected, f"append:{transition.record_id}", transition
             )
+            if commit is None:
+                return False
             if (
-                commit is None
-                or commit.record_id != transition.record_id
-                or commit.position.consistency_domain_id != state.domain_id
+                commit.position.consistency_domain_id != state.domain_id
                 or commit.position.authority_epoch != state.authority_epoch
-                or commit.position.sequence != state.head_sequence + 1
+                or (
+                    not commit.replayed
+                    and (
+                        commit.record_id != transition.record_id
+                        or commit.position.sequence != state.head_sequence + 1
+                    )
+                )
+                or (commit.replayed and commit.position.sequence > state.head_sequence)
             ):
                 return False
             loaded = self._load()
             return bool(
                 loaded is not None
-                and loaded[0].head_sequence == commit.position.sequence
+                and loaded[0].head_sequence >= commit.position.sequence
             )
         except Exception:
             return False

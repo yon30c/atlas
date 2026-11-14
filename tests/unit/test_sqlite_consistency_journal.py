@@ -144,6 +144,42 @@ class SQLiteConsistencyJournalTests(unittest.TestCase):
         self.assertEqual(result.commit.record_id, RECORD_1)
         self.assertEqual(result.committed_transition, original)
 
+    def test_append_id_reuse_with_different_semantics_conflicts(self):
+        original = read_admitted(record_id=RECORD_1)
+        changed = replace(
+            original,
+            record_id=RECORD_2,
+            snapshot_id="different-snapshot",
+        )
+        first = self.journal.append_transition(self.position(0), "stable-append", original)
+        conflict = self.journal.append_transition(
+            self.position(0), "stable-append", changed
+        )
+        self.assertIsNotNone(first)
+        self.assertIsNone(conflict)
+
+    def test_resolve_semantic_replay_allows_head_to_advance_after_original_commit(self):
+        original = read_admitted(record_id=RECORD_1, idempotency_key="replay-key")
+        retry = read_admitted(
+            record_id=RECORD_2,
+            idempotency_key="replay-key",
+            occurred_at=NOW + timedelta(seconds=15),
+        )
+        later = replace(
+            read_admitted(record_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c073a16"),
+            snapshot_id="later-snapshot",
+        )
+        self.journal.append_transition(self.position(0), "append-original", original)
+        self.journal.append_transition(self.position(1), "append-later", later)
+
+        result = self.journal.resolve_append(
+            "domain-a", 1, "append-retry", "replay-key", retry, self.position(0)
+        )
+
+        self.assertIs(result.status, JournalOperationResolutionStatus.COMMITTED_EXACT)
+        self.assertEqual(result.commit.record_id, RECORD_1)
+        self.assertEqual(result.current_position.sequence, 2)
+
     def test_resolve_append_rejects_two_locators_that_point_to_different_commits(self):
         first = read_admitted(record_id=RECORD_1, idempotency_key="key-one")
         second = replace(

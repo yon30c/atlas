@@ -63,9 +63,11 @@ Dentro de una única transacción `BEGIN IMMEDIATE`:
 1. `ConsistencyJournalPort.append_transition` recibe `append_id` como argumento independiente.
 2. La reconciliación se denomina `resolve_append` y el DTO `JournalOperationResolution` identifica el intento mediante `append_id`, no `operation_id`.
 3. `SQLiteConsistencyJournal` consulta por `append_id` y `idempotency_key`, inserta `append_id` en `journal_operations` y conserva el commit original en replay semántico.
-4. `operation_id` no se utiliza para lookup ni unicidad.
-5. La implementación todavía requiere pruebas de integración específicas, revisión de los consumidores del puerto y validación completa en Debian.
-6. Mantener desactivada la custodia real mediante systemd credentials.
+4. Los consumidores de recuperación pasan un identificador estable para el mismo objeto de transición (`append:<record_id>`); un nuevo intento semántico con IDs regenerados se resuelve por `idempotency_key`.
+5. Los coordinadores aceptan un commit replayed anterior al head actual, pero nunca confunden ese resultado con un append nuevo.
+6. `operation_id` no se utiliza para lookup ni unicidad.
+7. La implementación todavía requiere validación completa en Debian.
+8. Mantener desactivada la custodia real mediante systemd credentials.
 
 ## Límites
 
