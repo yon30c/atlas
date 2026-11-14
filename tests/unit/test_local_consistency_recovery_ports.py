@@ -112,10 +112,13 @@ class LocalRecoveryPortContractTests(unittest.TestCase):
                 consistency_domain_id="atlas-main",
                 authority_epoch=2,
                 sequence=6,
+                state_reference=self.checkpoint.state_reference,
+                integrity_reference=self.checkpoint.integrity_reference,
                 state_commitment="state-commitment",
                 integrity_commitment="integrity-commitment",
                 schema_version=1,
                 reducer_version="reducer-v1",
+                trust_policy_version="local-policy-v1",
                 projection=self.projection,
                 verification_id="checkpoint-verification-1",
             )
