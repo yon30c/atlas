@@ -1,5 +1,6 @@
 """Pruebas del puente conversacional con el proveedor Ollama."""
 
+from dataclasses import replace
 from datetime import datetime, timezone
 import unittest
 
@@ -8,7 +9,12 @@ from atlas.adapters.ollama_assistant import (
     ATLAS_SYSTEM_PROMPT,
     OllamaResponseGenerator,
 )
-from atlas.assistant.models import AssistantRequest, AssistantResponseKind
+from atlas.assistant.models import (
+    AssistantRequest,
+    AssistantResponseKind,
+    ConversationMessage,
+    ConversationMessageRole,
+)
 from atlas.assistant.service import AssistantService
 from atlas.core.errors import ContractError
 from atlas.ports.llm import LLMMessageRole, LLMRequest, LLMResponse
@@ -70,6 +76,42 @@ class OllamaResponseGeneratorTests(unittest.TestCase):
         self.assertEqual(llm_request.max_tokens, 512)
         self.assertIs(kind, AssistantResponseKind.INFORMATIONAL)
         self.assertEqual(content, "Hola. ¿En qué te ayudo?")
+
+    def test_maps_history_between_system_and_current_user_messages(self):
+        provider = FakeProvider()
+        generator = OllamaResponseGenerator(provider, "gemma4:e2b")
+        request = replace(
+            self.request,
+            history=(
+                ConversationMessage(ConversationMessageRole.USER, "Me llamo Ana"),
+                ConversationMessage(
+                    ConversationMessageRole.ASSISTANT,
+                    "Mucho gusto, Ana.",
+                ),
+            ),
+        )
+
+        generator.generate(request)
+
+        messages = provider.received_request.messages
+        self.assertEqual(
+            [message.role for message in messages],
+            [
+                LLMMessageRole.SYSTEM,
+                LLMMessageRole.USER,
+                LLMMessageRole.ASSISTANT,
+                LLMMessageRole.USER,
+            ],
+        )
+        self.assertEqual(
+            [message.content for message in messages],
+            [
+                ATLAS_SYSTEM_PROMPT,
+                "Me llamo Ana",
+                "Mucho gusto, Ana.",
+                "Hola, Atlas",
+            ],
+        )
 
     def test_allows_explicit_generation_configuration(self):
         provider = FakeProvider()
