@@ -74,12 +74,9 @@ class InMemoryConsistencyJournalFake:
     def _position(self):
         return ConsistencyPosition(self.domain, self.epoch, self.sequence)
 
-    @staticmethod
-    def _canonical(transition):
-        return replace(
-            transition,
-            record_id=RECORD_1,
-            occurred_at=NOW,
+    def _canonical(self, transition):
+        return consistency_transition_request_projection(
+            self.domain, self.epoch, transition
         )
 
     def append_transition(self, expected_position, transition):
@@ -721,6 +718,21 @@ class ConsistencyJournalModelTests(unittest.TestCase):
             consistency_transition_request_projection(DOMAIN, 1, original),
             consistency_transition_request_projection(DOMAIN, 1, changed),
         )
+
+    def test_resolution_rejects_different_idempotency_key(self):
+        committed = read_admitted(idempotency_key="original-key")
+        expected = replace(committed, idempotency_key="different-key")
+        with self.assertRaises(ContractError):
+            JournalOperationResolution(
+                status=JournalOperationResolutionStatus.COMMITTED_EXACT,
+                operation_id=expected.operation_id,
+                idempotency_key=expected.idempotency_key,
+                expected_position=position(0),
+                expected_transition=expected,
+                current_position=position(1),
+                commit=JournalCommit(position(1), committed.record_id, True),
+                committed_transition=committed,
+            )
 
     def test_resolution_accepts_original_commit_with_regenerated_request_metadata(self):
         committed = read_admitted(idempotency_key="same-request-key")
