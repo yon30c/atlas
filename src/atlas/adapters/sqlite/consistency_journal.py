@@ -518,11 +518,27 @@ class SQLiteConsistencyJournal:
         expected_head_commitment: str,
         checkpoint: ConsistencyCheckpoint,
     ) -> CheckpointCommitResult:
-        """Atomically persist an authenticated checkpoint and its journal marker.
+        """Commit a checkpoint and marker using an owned SQLite transaction."""
+        try:
+            with self._database.unit_of_work() as unit_of_work:
+                return self.commit_checkpoint_in(
+                    unit_of_work, expected_position, expected_head_commitment, checkpoint
+                )
+        except Exception:
+            # A commit error can be ambiguous; callers must reconcile by stable ID.
+            return CheckpointCommitResult(CheckpointCommitStatus.UNKNOWN)
 
-        The independent projection must already have been durably published and
-        resolved as VERIFIED by the caller. This method persists only its opaque
-        references; it never treats checkpoint_projections as trust authority.
+    def commit_checkpoint_in(
+        self,
+        unit_of_work: SQLiteUnitOfWork,
+        expected_position: ConsistencyPosition,
+        expected_head_commitment: str,
+        checkpoint: ConsistencyCheckpoint,
+    ) -> CheckpointCommitResult:
+        """Persist checkpoint, marker, operation and head on a caller-owned UoW.
+
+        Unexpected persistence failures propagate so the owner can roll back
+        every mutation composed in the same transaction.
         """
         unavailable = CheckpointCommitResult(CheckpointCommitStatus.UNAVAILABLE)
         unknown = CheckpointCommitResult(CheckpointCommitStatus.UNKNOWN)
@@ -553,8 +569,10 @@ class SQLiteConsistencyJournal:
         request_bytes = self._request_bytes(domain_id, epoch, marker)
         request_digest = hashlib.sha256(request_bytes).hexdigest()
 
+        if not isinstance(unit_of_work, SQLiteUnitOfWork):
+            raise ContractError("unit_of_work debe ser SQLiteUnitOfWork")
+        connection = unit_of_work._connection_for(self._database)
         try:
-            with self._database.write_transaction() as connection:
                 domain = connection.execute(
                     "SELECT * FROM consistency_domains WHERE domain_id=?",
                     (domain_id,),
@@ -566,7 +584,7 @@ class SQLiteConsistencyJournal:
                     or domain["trust_policy_version"] != self._trust_policy_version
                 ):
                     return conflict
-
+    
                 persisted_checkpoint = connection.execute(
                     "SELECT * FROM checkpoints WHERE checkpoint_id=?",
                     (checkpoint_id,),
@@ -595,7 +613,7 @@ class SQLiteConsistencyJournal:
                     """,
                     (domain_id, epoch, expected_position.sequence),
                 ).fetchone()
-
+    
                 if (
                     persisted_checkpoint is not None
                     or persisted_marker is not None
@@ -621,7 +639,7 @@ class SQLiteConsistencyJournal:
                         or checkpoint_at_position["checkpoint_id"] != checkpoint_id
                     ):
                         return conflict
-
+    
                     stored_checkpoint = self._checkpoint_from_row(
                         persisted_checkpoint, domain_id=domain_id, epoch=epoch
                     )
@@ -695,7 +713,7 @@ class SQLiteConsistencyJournal:
                             True,
                         ),
                     )
-
+    
                 if (
                     checkpoint_at_position is not None
                     or marker_record is not None
@@ -704,7 +722,7 @@ class SQLiteConsistencyJournal:
                     or domain["head_commitment"] != expected_head_commitment
                 ):
                     return conflict
-
+    
                 sequence = expected_position.sequence
                 marker_sequence = sequence + 1
                 issued_at = datetime.now(timezone.utc)
@@ -756,7 +774,7 @@ class SQLiteConsistencyJournal:
                     or not signed_checkpoint_envelope.authentication_evidence
                 ):
                     return unavailable
-
+    
                 signed_checkpoint = ConsistencyCheckpoint(
                     checkpoint_id=checkpoint_id,
                     position=expected_position,
@@ -818,7 +836,7 @@ class SQLiteConsistencyJournal:
                     or not signed_marker_envelope.authentication_evidence
                 ):
                     return unavailable
-
+    
                 connection.execute(
                     """
                     INSERT INTO checkpoints (
@@ -846,7 +864,7 @@ class SQLiteConsistencyJournal:
                         signed_checkpoint_envelope.authentication_evidence,
                     ),
                 )
-
+    
                 connection.execute(
                     """
                     INSERT INTO journal_entries (
@@ -910,8 +928,7 @@ class SQLiteConsistencyJournal:
                 JournalCommit(marker_position, checkpoint_id, False),
             )
         except Exception:
-            # A commit error can be ambiguous; callers must reconcile by stable ID.
-            return unknown
+            raise
 
 
     @staticmethod
