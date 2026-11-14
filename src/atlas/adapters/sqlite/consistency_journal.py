@@ -25,7 +25,7 @@ from atlas.memory.journal import (
 )
 from atlas.memory.local_auth import (
     CANONICALIZATION_VERSION, ENVELOPE_VERSION, canonical_json_bytes,
-    journal_entry_payload, object_commitment,
+    checkpoint_payload, journal_entry_payload, object_commitment,
 )
 from atlas.memory.models import MemoryScopeKind
 from atlas.ports.local_consistency_signer import LocalConsistencySignerPort
@@ -474,10 +474,34 @@ class SQLiteConsistencyJournal:
             authentication_evidence=row["authentication_evidence"],
         )
 
+    @staticmethod
+    def _checkpoint_from_row(
+        row: sqlite3.Row, *, domain_id: str, epoch: int,
+    ) -> ConsistencyCheckpoint:
+        checkpoint_id = row["checkpoint_id"]
+        sequence = row["sequence"]
+        envelope = SQLiteConsistencyJournal._envelope_from_row(
+            row,
+            object_kind="checkpoint",
+            object_id=checkpoint_id,
+            domain_id=domain_id,
+            epoch=epoch,
+            sequence=sequence,
+            schema_version=row["schema_version"],
+        )
+        return ConsistencyCheckpoint(
+            checkpoint_id=checkpoint_id,
+            position=ConsistencyPosition(domain_id, epoch, sequence),
+            state_reference=row["state_reference"],
+            integrity_reference=row["integrity_reference"],
+            created_at=_parse_datetime(row["created_at"]),
+            envelope=envelope,
+        )
+
     def load_recovery_state_result(
         self, domain_id: str,
     ) -> ConsistencyRecoveryLoadResult:
-        """Load and structurally validate one snapshot without authenticating it."""
+        """Load one consistent journal suffix and its latest structural checkpoint."""
         rejected = ConsistencyRecoveryLoadResult(ConsistencyRecoveryLoadStatus.REJECTED)
         unavailable = ConsistencyRecoveryLoadResult(ConsistencyRecoveryLoadStatus.UNAVAILABLE)
         if not isinstance(domain_id, str) or not domain_id.strip():
@@ -498,16 +522,7 @@ class SQLiteConsistencyJournal:
                     return rejected
 
                 epoch = domain["authority_epoch"]
-                checkpoint_count = connection.execute(
-                    "SELECT COUNT(*) FROM checkpoints WHERE domain_id=? AND authority_epoch=?",
-                    (domain_id, epoch),
-                ).fetchone()[0]
-                if checkpoint_count:
-                    return unavailable
-
                 head = domain["head_sequence"]
-                if head == 0:
-                    return unavailable
                 if (
                     isinstance(head, bool) or not isinstance(head, int) or head < 1
                     or not isinstance(domain["head_commitment"], str)
@@ -515,22 +530,59 @@ class SQLiteConsistencyJournal:
                 ):
                     return rejected
 
-                rows = connection.execute(
+                checkpoint_rows = connection.execute(
                     """
-                    SELECT * FROM journal_entries
+                    SELECT * FROM checkpoints
                     WHERE domain_id=? AND authority_epoch=?
-                    ORDER BY sequence ASC
+                    ORDER BY sequence DESC
                     """,
                     (domain_id, epoch),
                 ).fetchall()
-                operation_count = connection.execute(
+                if any(
+                    isinstance(row["sequence"], bool)
+                    or not isinstance(row["sequence"], int)
+                    or row["sequence"] < 0
+                    or row["sequence"] >= head
+                    for row in checkpoint_rows
+                ):
+                    return rejected
+
+                checkpoint = None
+                checkpoint_sequence = 0
+                previous_commitment = None
+                if checkpoint_rows:
+                    checkpoint = self._checkpoint_from_row(
+                        checkpoint_rows[0], domain_id=domain_id, epoch=epoch
+                    )
+                    checkpoint_sequence = checkpoint.position.sequence
+                    if (
+                        checkpoint.envelope is None
+                        or checkpoint.envelope.previous_commitment is not None
+                        or object_commitment(checkpoint_payload(checkpoint))
+                            != checkpoint.envelope.object_commitment
+                    ):
+                        return rejected
+                    previous_commitment = checkpoint.envelope.object_commitment
+
+                rows = connection.execute(
                     """
-                    SELECT COUNT(*) FROM journal_operations
-                    WHERE domain_id=? AND authority_epoch=?
+                    SELECT * FROM journal_entries
+                    WHERE domain_id=? AND authority_epoch=? AND sequence>?
+                    ORDER BY sequence ASC
                     """,
-                    (domain_id, epoch),
-                ).fetchone()[0]
-                if len(rows) != head or operation_count != head:
+                    (domain_id, epoch, checkpoint_sequence),
+                ).fetchall()
+                operation_rows = connection.execute(
+                    """
+                    SELECT * FROM journal_operations
+                    WHERE domain_id=? AND authority_epoch=? AND sequence>?
+                    ORDER BY sequence ASC
+                    """,
+                    (domain_id, epoch, checkpoint_sequence),
+                ).fetchall()
+
+                expected_count = head - checkpoint_sequence
+                if len(rows) != expected_count or len(operation_rows) != expected_count:
                     return rejected
 
                 unmatched = connection.execute(
@@ -543,36 +595,26 @@ class SQLiteConsistencyJournal:
                      AND o.sequence=j.sequence
                      AND o.record_id=j.record_id
                      AND o.operation_id=j.operation_id
-                    WHERE j.domain_id=? AND j.authority_epoch=?
+                    WHERE j.domain_id=? AND j.authority_epoch=? AND j.sequence>?
                     GROUP BY j.sequence
                     HAVING COUNT(o.append_id) != 1
                     LIMIT 1
                     """,
-                    (domain_id, epoch),
+                    (domain_id, epoch, checkpoint_sequence),
                 ).fetchone()
                 if unmatched is not None:
                     return rejected
-                operation_rows = connection.execute(
-                    """
-                    SELECT * FROM journal_operations
-                    WHERE domain_id=? AND authority_epoch=?
-                    ORDER BY sequence ASC
-                    """,
-                    (domain_id, epoch),
-                ).fetchall()
 
                 entries = []
-                expected_sequence = 1
-                previous_commitment = None
+                expected_sequence = checkpoint_sequence + 1
                 for row, operation in zip(rows, operation_rows, strict=True):
                     sequence = row["sequence"]
                     if (
                         operation["sequence"] != sequence
                         or operation["record_id"] != row["record_id"]
                         or operation["operation_id"] != row["operation_id"]
+                        or sequence != expected_sequence
                     ):
-                        return rejected
-                    if sequence != expected_sequence:
                         return rejected
                     raw_transition = bytes(row["transition_canonical"])
                     transition = _transition_from_bytes(raw_transition)
@@ -603,13 +645,46 @@ class SQLiteConsistencyJournal:
                         sequence=sequence,
                         schema_version=transition.schema_version,
                     )
-                    if envelope.previous_commitment != previous_commitment:
+                    entry_payload = journal_entry_payload(
+                        JournalEntry(
+                            ConsistencyPosition(domain_id, epoch, sequence),
+                            transition,
+                        )
+                    )
+                    if (
+                        envelope.previous_commitment != previous_commitment
+                        or object_commitment(entry_payload) != envelope.object_commitment
+                    ):
                         return rejected
-                    position = ConsistencyPosition(domain_id, epoch, sequence)
-                    entries.append(JournalEntry(position, transition, envelope))
+                    entry = JournalEntry(
+                        ConsistencyPosition(domain_id, epoch, sequence),
+                        transition,
+                        envelope,
+                    )
+                    if checkpoint is not None and sequence == checkpoint_sequence + 1:
+                        if (
+                            transition.record_kind is not ConsistencyRecordKind.CHECKPOINT_COMMITTED
+                            or transition.record_id != checkpoint.checkpoint_id
+                            or transition.operation_id != f"checkpoint:{checkpoint.checkpoint_id}"
+                            or transition.checkpoint_reference != checkpoint.state_reference
+                            or transition.occurred_at != checkpoint.created_at
+                        ):
+                            return rejected
+                    entries.append(entry)
                     previous_commitment = envelope.object_commitment
                     expected_sequence += 1
 
+                if checkpoint is None and any(
+                    entry.transition.record_kind is ConsistencyRecordKind.CHECKPOINT_COMMITTED
+                    for entry in entries
+                ):
+                    return rejected
+                if checkpoint is not None and (
+                    not entries
+                    or entries[0].transition.record_kind
+                        is not ConsistencyRecordKind.CHECKPOINT_COMMITTED
+                ):
+                    return rejected
                 if (
                     expected_sequence - 1 != head
                     or previous_commitment != domain["head_commitment"]
@@ -618,7 +693,7 @@ class SQLiteConsistencyJournal:
 
                 connection.commit()
                 state = ConsistencyRecoveryState(
-                    domain_id, epoch, None, tuple(entries), head,
+                    domain_id, epoch, checkpoint, tuple(entries), head,
                     domain["head_commitment"],
                 )
                 return ConsistencyRecoveryLoadResult(
