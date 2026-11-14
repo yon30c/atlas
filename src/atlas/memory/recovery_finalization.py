@@ -111,7 +111,7 @@ class RecoveryAdmissionTerminalReceipt:
 
 
 class RecoveryAdmissionFinalizationStatus(str, Enum):
-    COMPLETE = "complete"
+    ADMISSIONS_TERMINAL = "admissions_terminal"
     PENDING = "pending"
     BLOCKED = "blocked"
 
@@ -383,7 +383,7 @@ class RecoveryAdmissionFinalizationCoordinator:
                 )
             )
             status = (
-                RecoveryAdmissionFinalizationStatus.COMPLETE
+                RecoveryAdmissionFinalizationStatus.ADMISSIONS_TERMINAL
                 if all_terminal and not pending
                 else RecoveryAdmissionFinalizationStatus.PENDING
             )
