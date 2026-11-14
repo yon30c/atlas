@@ -121,3 +121,19 @@ No ejecutadas en esta fase. La futura implementación debe incluir:
 ME-D4J no se considera implementado hasta que autoridad, journal y mutación del gate participen en una sola transacción SQLite comprobable, con rollback completo y pruebas multiproceso. No activar Gateway, Recovery Coordinator ni egress protegido antes de esa validación.
 
 **No se ejecutaron pruebas ni build durante el trabajo de diseño.**
+
+
+## Implementación preparatoria ME-D4K
+
+La fase ME-D4K añadió en `src/atlas/adapters/sqlite/database.py`:
+
+- `SQLiteUnitOfWork`, con referencia al propietario exacto, conexión privada y estado activo.
+- `SQLiteDatabase.unit_of_work()`, que abre una conexión configurada, inicia `BEGIN IMMEDIATE`, confirma al salir normalmente y revierte si se propaga una excepción.
+- Rechazo de anidamiento en el mismo hilo.
+- `_connection_for(database)` comprueba identidad del propietario y que la transacción siga activa.
+- `write_transaction()` ahora delega en la unidad de trabajo y conserva su interfaz legacy de conexión SQLite.
+- `SQLiteUnitOfWork` se exporta desde `atlas.adapters.sqlite`.
+
+Se añadieron tests unitarios para commit, rollback, propietario incorrecto, anidamiento y compatibilidad legacy. **No se ejecutaron**.
+
+Esta entrega no modifica `SQLiteConsistencyJournal`: sus métodos siguen abriendo sus propias transacciones a través de `write_transaction()`. La unidad de trabajo es infraestructura disponible, no integración atómica gate+journal. La siguiente etapa deberá extraer un método interno de journal que reciba la unidad de trabajo exacta y demuestre que no abre ni confirma una transacción adicional.
