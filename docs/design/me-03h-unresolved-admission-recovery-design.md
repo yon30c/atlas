@@ -59,7 +59,7 @@ A verified batch is evidence for a later atomic journal/authority operation. The
 5. keep the domain gate closed until all unresolved admissions are reconciled and the recovery operation itself is durably finalized;
 6. reject old generation/capability emissions at the egress commit point.
 
-This stage intentionally does not implement journal append/reconciliation because the existing journal has no explicit process-recovery closure record. A later ME-03H integration slice must add that event and its reducer semantics before claiming journal-level recovery.
+The pure journal model now includes `RECOVERY_CLOSED` and `RECOVERY_RECONCILED` transitions. The reducer marks every captured admission UNRESOLVED at closure, rejects egress and new admissions while recovery is pending, accepts endpoint fencing only for the exact recovery operation/new generation, and reconciles the domain only after every affected admission is terminal. This does not implement a durable journal adapter or an atomic authority coordinator.
 
 ## 6. Fail-closed behavior
 
@@ -113,7 +113,7 @@ Implemented:
 The ME-03G receipt contract was strengthened so an `ENDPOINT_FENCED` receipt must bind `fenced_through_sequence`. This prevents accepting a fence that advances generation but does not attest the last sequence already committed by the endpoint.
 
 Tests:
-- 19 focused tests in `tests/unit/test_memory_unresolved_admission_recovery.py`;
+- 24 focused tests in `tests/unit/test_memory_unresolved_admission_recovery.py`, including journal reducer closure/reconciliation cases;
 - ME-03G terminal receipt tests updated for fenced-through sequence binding.
 
-**Important boundary:** this is the pure planning and endpoint-fencing orchestration slice only. The current journal schema still has no explicit `RECOVERY_CLOSED` event, and there is no durable authority operation that commits the new generation before endpoint contact. No admission is marked CANCELLED by this slice. The next integration slice must add the recovery closure/reconciliation journal events and fake-authority stale-emitter tests before journal-level recovery can be claimed.
+**Important boundary:** this is still a pure/model and fake-verifier stage. The reducer can replay recovery closure and reconciliation records, but no durable authority currently commits `RECOVERY_CLOSED` before endpoint contact, and no production coordinator appends the endpoint/admission receipts. The next integration slice must connect the verified batch to an atomic journal/authority workflow and prove stale-emitter rejection in the authority/egress fake. No production admission is marked CANCELLED by this implementation.
