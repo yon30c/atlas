@@ -102,10 +102,10 @@ class SQLiteCoreSchemaTests(unittest.TestCase):
             connection.execute(
                 """
                 INSERT INTO journal_operations (
-                    domain_id, authority_epoch, operation_id, idempotency_key,
+                    domain_id, authority_epoch, append_id, operation_id, idempotency_key,
                     request_canonical, request_digest, sequence, record_id, created_at
-                ) VALUES ('domain-a', 1, 'operation-a', 'idem-1', X'7B7D', ?, 1,
-                          'record-a', '2026-11-14T00:00:00+00:00')
+                ) VALUES ('domain-a', 1, 'append-a', 'operation-a', 'idem-1',
+                          X'7B7D', ?, 1, 'record-a', '2026-11-14T00:00:00+00:00')
                 """,
                 ("a" * 64,),
             )
@@ -138,7 +138,7 @@ class SQLiteCoreSchemaTests(unittest.TestCase):
                     ("a" * 64,),
                 )
 
-    def test_v2_upgrade_preserves_v1_operation_rows_and_adds_exact_fk(self):
+    def test_v3_upgrade_preserves_v1_operation_rows_and_adds_exact_fk(self):
         legacy_path = Path(self.temp_dir.name) / "legacy.sqlite"
         legacy = SQLiteDatabase(legacy_path)
         legacy.apply_migrations((CORE_SCHEMA_V1,))

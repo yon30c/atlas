@@ -1,10 +1,34 @@
-# ME-03K — SQLite K01 append y resolución de operaciones
+# ME-03K — SQLite K01 append y resolución
 
-**Estado:** contrato de implementación inicial; pendiente de validación del propietario en Debian.
+**Estado:** contrato actualizado a identidad separada; implementación del adaptador pendiente de alineación con schema v3.
 
 ## Alcance
 
-El adaptador local implementa únicamente `append_transition` y `resolve_operation`. No declara todavía conformidad completa con `ConsistencyJournalPort`: recuperación autenticada, checkpoints y recibos de endpoint permanecen fuera de alcance.
+El adaptador local implementará únicamente `append_transition` y `resolve_append`. No declarará todavía conformidad completa con `ConsistencyJournalPort`: recuperación autenticada, checkpoints y recibos de endpoint permanecen fuera de alcance.
+
+**Importante:** el primer borrador de `consistency_journal.py` fue escrito antes de aprobar `append_id`. No es compatible con schema v3 y no debe considerarse implementado ni utilizarse hasta que se actualice. Su lookup por `operation_id` queda expresamente supersedido por el contrato de identidad de append.
+
+## Identidades
+
+- `operation_id`: correlación de negocio, no única; puede repetirse en muchas entradas.
+- `append_id`: localizador estable de un intento de append, pasado separadamente al repositorio.
+- `idempotency_key`: localizador semántico para replay entre distintos append IDs.
+
+API prevista:
+
+```python
+append_transition(expected_position, append_id, transition)
+resolve_append(
+    domain_id,
+    authority_epoch,
+    append_id,
+    idempotency_key,
+    expected_transition,
+    expected_position,
+)
+```
+
+El append sin clave idempotente se resuelve exclusivamente por `append_id`. Con clave, el adaptador consulta ambos localizadores y rechaza si conducen a commits distintos.
 
 ## Firma desacoplada
 
@@ -17,20 +41,31 @@ Un firmante ausente, no disponible o que devuelva metadatos inconsistentes no pr
 Dentro de una única transacción `BEGIN IMMEDIATE`:
 
 1. Lee dominio, época, head y commitment.
-2. Comprueba que el dominio existe, usa perfil local y coincide con la época/posición esperada.
+2. Comprueba el perfil local y la autoridad esperada.
 3. Canonicaliza la proyección semántica versionada y calcula SHA-256.
-4. Busca primero la clave idempotente y luego el `operation_id`.
-5. Reutiliza el commit original únicamente si los bytes canónicos coinciden exactamente; de lo contrario devuelve conflicto (`None`).
-6. Construye el envelope enlazado al commitment anterior, solicita firma al puerto y valida que el resultado cubra el objeto exacto.
-7. Inserta entrada y resolución; actualiza el head mediante compare-and-swap dentro de la misma transacción.
-
-Los campos técnicos regenerables se excluyen solo de la proyección semántica, no de los bytes de la transición persistida. El registro original se conserva al reproducir una solicitud.
+4. Consulta por clave idempotente y por `append_id`; nunca usa `operation_id` como localizador.
+5. Compara bytes canónicos exactos; un digest coincidente no basta.
+6. En replay, devuelve el commit original sin insertar ni avanzar el head.
+7. En append nuevo, exige CAS de posición, firma el envelope e inserta journal y resolución.
+8. Actualiza el head mediante CAS dentro de la misma transacción.
 
 ## Resolución de resultado ambiguo
 
-Busca por clave idempotente y por `operation_id`. Si ambos localizadores apuntan a filas diferentes, devuelve CONFLICT. Si una fila coincide exactamente en los bytes semánticos, devuelve COMMITTED_EXACT con la transición original. Si no existe ninguna y el dominio/época/head se pueden leer coherentemente, devuelve NOT_COMMITTED. Errores de lectura o evidencia incoherente producen UNKNOWN.
+`resolve_append` busca por los localizadores permitidos y devuelve:
 
-## Límites de esta entrega
+- `COMMITTED_EXACT` cuando la proyección semántica y los localizadores son coherentes;
+- `CONFLICT` cuando el mismo localizador corresponde a otra semántica o los dos localizadores apuntan a commits diferentes;
+- `NOT_COMMITTED` solo cuando ambos localizadores están ausentes y la posición actual es coherente;
+- `UNKNOWN` ante indisponibilidad, corrupción o evidencia insuficiente.
+
+## Siguiente trabajo de implementación
+
+1. Alinear `JournalOperationResolution` y el puerto de journal para expresar `append_id`.
+2. Actualizar `SQLiteConsistencyJournal` para usar `append_id` y el schema v3.
+3. Añadir pruebas de replay con append IDs regenerados, colisiones, múltiples eventos con un mismo `operation_id`, fallos del firmante, CAS y concurrencia entre procesos.
+4. Mantener desactivada la custodia real mediante systemd credentials.
+
+## Límites
 
 - No implementa `load_verified_recovery_state`, checkpoints ni recibos.
 - No implementa una implementación productiva de `LocalConsistencySignerPort`.
