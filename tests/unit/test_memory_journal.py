@@ -20,6 +20,7 @@ from atlas.memory.journal import (
     JournalEntry,
     JournalOperationResolution,
     JournalOperationResolutionStatus,
+    REQUEST_PROJECTION_FIELDS_V1,
     consistency_transition_request_projection,
 )
 
@@ -207,6 +208,14 @@ class InMemoryConsistencyJournalFake:
 
 class ConsistencyJournalModelTests(unittest.TestCase):
 
+
+    def test_request_projection_v1_allowlist_is_immutable(self):
+        fields = REQUEST_PROJECTION_FIELDS_V1[ConsistencyRecordKind.READ_ADMITTED]
+        self.assertNotIn("record_id", fields)
+        self.assertNotIn("operation_id", fields)
+        self.assertIn("memory_id", fields)
+        with self.assertRaises(TypeError):
+            REQUEST_PROJECTION_FIELDS_V1[ConsistencyRecordKind.READ_ADMITTED] = frozenset()
 
     def test_transition_rejects_fields_not_allowed_for_record_kind(self):
         with self.assertRaises(ContractError):
