@@ -135,9 +135,8 @@ def verify_recovery_chain_with_policy(state: Any, key_port: Any, trust_policy: A
 
     if not isinstance(trust_policy, LocalConsistencyTrustPolicy):
         return False
-    if not isinstance(state, __import__(
-        "atlas.memory.journal", fromlist=["ConsistencyRecoveryState"]
-    ).ConsistencyRecoveryState):
+    from atlas.memory.journal import ConsistencyRecoveryState
+    if not isinstance(state, ConsistencyRecoveryState):
         return False
     if (
         state.domain_id != trust_policy.consistency_domain_id
