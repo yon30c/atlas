@@ -25,7 +25,10 @@ from atlas.memory.receipt_verification import (
     VerifiedTerminalReceipt,
     match_verified_receipt,
 )
-from atlas.memory.terminal_recovery import verify_terminal_admission_projection
+from atlas.memory.terminal_recovery import (
+    verify_terminal_admission_projection as _verify_terminal_admission_projection,
+)
+from tests.fakes.receipt_trust import FakeReceiptTrustContextFactory
 
 NOW = datetime(2026, 11, 13, 12, 0, tzinfo=timezone.utc)
 MEMORY = "018bcfe5-7b3a-7cc2-98c4-dc0c0c074401"
@@ -130,6 +133,22 @@ class FakeVerifier:
         return ReceiptVerificationResult(
             ReceiptVerificationStatus.VERIFIED, verified
         )
+
+    def verify_terminal_receipt_with_context(self, request, trust_context):
+        if not trust_context.binds_terminal_request(request):
+            return ReceiptVerificationResult(ReceiptVerificationStatus.REJECTED)
+        return self.verify_terminal_receipt(request)
+
+
+def verify_terminal_admission_projection(admission, consistency_domain_id, authority_epoch, verifier):
+    return _verify_terminal_admission_projection(
+        admission,
+        consistency_domain_id,
+        authority_epoch,
+        verifier,
+        trust_context_factory=FakeReceiptTrustContextFactory(),
+        verification_time=NOW,
+    )
 
 
 class TerminalReceiptVerificationTests(unittest.TestCase):
