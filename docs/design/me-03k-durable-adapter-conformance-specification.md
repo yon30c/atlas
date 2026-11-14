@@ -85,7 +85,7 @@ Los dobles de prueba sirven para pruebas unitarias, no como evidencia de conform
 - Checkpoint sin baseline autenticado: rechazo.
 - Checkpoint antiguo reproducido después de una generación nueva: rechazo.
 - Truncamiento, huecos de secuencia, época desconocida o hash-chain rota: rechazo.
-- Restauración de backup anterior al último cierre: no abre el gate.
+- Si la evidencia local disponible demuestra que falta un cierre requerido, el gate permanece cerrado. En perfil anclado, cualquier backup por debajo del ancla externa se rechaza. En perfil local no puede demostrarse la antigüedad de un backup coherente frente a un head ausente; si esa incertidumbre afecta supresión, fencing o cierres protegidos, freshness es UNKNOWN y no se abre la ruta afectada sin reconciliación independiente aprobada.
 - Claves idempotentes/tombstones activas sobreviven compactación.
 - En perfil local, checkpoint y journal deben permitir verificar autenticidad disponible, estructura y continuidad interna, declarando que no se demuestra el último estado fuera del conjunto restaurable.
 - En perfil anclado, opcional y postergado hasta la etapa final, checkpoint y journal deben permitir demostrar continuidad desde un Trust Anchor externo.
