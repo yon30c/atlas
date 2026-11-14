@@ -22,6 +22,72 @@ Definir los contratos mínimos que permitan implementar Memory Engine y Memory G
 
 Este diseño se limita al dominio y a los puertos. No selecciona base de datos, motor semántico, proveedor de modelos, transporte ni despliegue.
 
+## 1.1 Independencia respecto de los proyectos consumidores
+
+**DECISIÓN DE ARQUITECTURA — 14 de noviembre de 2026:** Memory Engine será un componente independiente y reutilizable por Atlas y por otros proyectos. Su dominio, reglas y contratos no dependerán de Wonderful Tours, LeadRD, MisFinanzas ni de ningún consumidor concreto. La integración con cada aplicación se realizará mediante puertos y adaptadores explícitos.
+
+Esta decisión establece independencia lógica y contractual; no declara que el desacoplamiento ya esté implementado.
+
+### 1.1.1 Core independiente
+
+El núcleo de Memory Engine será agnóstico respecto del proyecto consumidor. Le corresponde aplicar las reglas comunes de memoria: identidad y versionado, scope, clasificación, procedencia, propuestas y revisión, autorización en las fronteras definidas, recuperación protegida, consistencia y olvido.
+
+El Core NO debe:
+- Importar módulos, modelos de dominio ni servicios propios de AtlasCore, LeadRD, Wonderful Tours, MisFinanzas u otra aplicación consumidora.
+- Depender directamente de sus modelos de usuario, sesiones, proyectos, entornos, repositorios o mecanismos de autenticación.
+- Inferir permisos a partir del nombre del proyecto, de la aplicación que realiza la llamada o de identificadores proporcionados sin validación.
+- Conceder acceso, ampliar permisos ni convertir una integración en una autoridad de aprobación.
+
+El Core conservará las reglas normativas existentes, incluidos los scopes `PRIVATE` y `PROJECT`, la aprobación explícita del propietario, la autorización CAM, Memory Gateway, la procedencia y las garantías de Forget. Esta decisión no cambia esos contratos.
+
+### 1.1.2 Puertos, adaptadores y consumidores
+
+Las dependencias externas se expresarán mediante contratos independientes del consumidor. Según las necesidades de cada integración, podrán existir adaptadores para:
+- Identidad y autenticación del actor.
+- Autorización y evaluación de decisiones CAM.
+- Resolución y validación de proyectos y entornos.
+- Persistencia del dominio y de sus versiones.
+- Búsqueda léxica, índice semántico y embeddings.
+- Reloj, auditoría, almacenamiento de evidencia y operaciones de eliminación.
+
+Los adaptadores traducen los modelos propios de cada aplicación a los contratos de Memory Engine. No trasladan lógica de negocio del consumidor al Core ni pueden relajar sus invariantes. La ausencia, error o respuesta no verificable de una dependencia necesaria debe producir denegación o fallo seguro, según la operación.
+
+AtlasCore y las demás aplicaciones serán clientes de Memory Engine. Ningún cliente accederá directamente a sus almacenes, índices, sesiones internas o credenciales; toda operación protegida seguirá pasando por Memory Gateway y la autorización correspondiente.
+
+### 1.1.3 Aislamiento entre consumidores y proyectos
+
+La reutilización del mismo motor NO significa compartir automáticamente datos:
+- Cada operación debe identificar y validar el actor y el contexto del consumidor; cuando corresponda, también el proyecto y el entorno.
+- El aislamiento entre proyectos se mantiene incluso cuando el motor se despliegue como servicio centralizado.
+- Un consumidor no obtiene acceso a memorias de otro proyecto por conocer sus identificadores, compartir proceso, base de datos, índice, propietario declarado o instancia de servicio.
+- Las búsquedas, expansiones de grafo, referencias de evidencia, índices y cachés deben respetar el mismo ámbito y autorización que la lectura final. Los resultados derivados no conceden permisos.
+- No habrá búsqueda ni transferencia entre proyectos por defecto. Cualquier capacidad futura de intercambio requerirá una decisión explícita, autorización verificable y reglas de auditoría propias; no se introduce como parte de esta decisión.
+- La memoria `PRIVATE` conserva exactamente la semántica normativa de acceso del propietario y CAM. La existencia de varios consumidores para un mismo propietario no concede por sí sola a cada consumidor acceso general a esa memoria. La política de contexto para integraciones multi-consumidor deberá concretarse y probarse antes de habilitar acceso compartido entre aplicaciones.
+
+Los identificadores de consumidor o tenant que sean necesarios para aplicar estas fronteras pertenecen al contexto de integración y a los puertos correspondientes. Esta decisión no añade un nuevo `MemoryScope`, no modifica el modelo normativo ni autoriza a inferir un nuevo campo de dominio sin una revisión específica.
+
+### 1.1.4 Estrategia de despliegue
+
+La estrategia arquitectónica será:
+1. **Servicio centralizado como modalidad predeterminada:** varios consumidores podrán utilizar una instancia común, siempre con aislamiento lógico y autorización independiente por operación.
+2. **Instancia aislada por proyecto como modalidad opcional:** podrá utilizarse cuando los requisitos de riesgo, cumplimiento, operación o aislamiento físico lo justifiquen.
+
+La modalidad centralizada no implica una base de datos, un índice, una cuenta de servicio o un espacio de almacenamiento compartido sin controles por consumidor. La modalidad aislada tampoco elimina la necesidad de Gateway, CAM, trazabilidad y reglas del dominio.
+
+Quedan fuera de esta decisión la selección de transporte, topología concreta, tecnología de despliegue, proveedor de almacenamiento, motor de búsqueda y mecanismo de embeddings. Se decidirán por separado y no se introducirán mediante dependencias accidentales.
+
+### 1.1.5 Criterios arquitectónicos de conformidad
+
+La independencia se considerará demostrada cuando:
+- El paquete Core pueda importarse y probarse sin importar módulos de los proyectos consumidores.
+- Los contratos de integración no expongan tipos concretos de AtlasCore, LeadRD, Wonderful Tours o MisFinanzas.
+- Dos consumidores puedan utilizar el mismo servicio sin que uno pueda leer o modificar datos del otro.
+- Los adaptadores de identidad, autorización, metadatos y persistencia puedan sustituirse sin modificar las reglas del dominio.
+- Las pruebas negativas cubran identificadores conocidos, contextos incompletos, confusión de consumidor/proyecto y consultas derivadas o índices.
+- El despliegue central y el despliegue aislado respeten las mismas garantías normativas.
+
+Estos criterios son requisitos de diseño y aceptación futuros; no describen capacidades ya implementadas.
+
 ## 2. Autoridad y clasificación
 
 Se aplican las categorías del contrato vigente:
