@@ -648,5 +648,58 @@ class ConsistencyJournalReducerTests(unittest.TestCase):
             self.reducer.reduce_from_projection(recovered, base)
 
 
+    def test_reducer_rejects_base_projection_not_bound_to_checkpoint_position(self):
+        from atlas.memory.journal import ConsistencyCheckpoint
+
+        base = self.reducer.reduce(recovery([read_admitted()]))
+        checkpoint = ConsistencyCheckpoint(
+            checkpoint_id=RECORDS[12],
+            position=ConsistencyPosition(DOMAIN, 1, 1),
+            state_reference="state-ref",
+            integrity_reference="integrity-ref",
+            created_at=NOW,
+        )
+        recovered = ConsistencyRecoveryState(
+            domain_id=DOMAIN,
+            authority_epoch=1,
+            checkpoint=checkpoint,
+            entries=(),
+            head_sequence=1,
+            continuity_reference="opaque-head",
+        )
+        mismatches = (
+            replace(base, domain_id="other-domain"),
+            replace(base, authority_epoch=2),
+            replace(base, head_sequence=2),
+        )
+        for mismatch in mismatches:
+            with self.subTest(mismatch=mismatch):
+                with self.assertRaises(ContractError):
+                    self.reducer.reduce_from_projection(recovered, mismatch)
+
+    def test_reducer_rejects_boolean_replay_metadata_version(self):
+        from atlas.memory.journal import ConsistencyCheckpoint
+
+        base = self.reducer.reduce(recovery([read_admitted()]))
+        malformed = replace(base, replay_metadata_version=True)
+        checkpoint = ConsistencyCheckpoint(
+            checkpoint_id=RECORDS[13],
+            position=ConsistencyPosition(DOMAIN, 1, 1),
+            state_reference="state-ref",
+            integrity_reference="integrity-ref",
+            created_at=NOW,
+        )
+        recovered = ConsistencyRecoveryState(
+            domain_id=DOMAIN,
+            authority_epoch=1,
+            checkpoint=checkpoint,
+            entries=(),
+            head_sequence=1,
+            continuity_reference="opaque-head",
+        )
+        with self.assertRaises(ContractError):
+            self.reducer.reduce_from_projection(recovered, malformed)
+
+
 if __name__ == "__main__":
     unittest.main()
