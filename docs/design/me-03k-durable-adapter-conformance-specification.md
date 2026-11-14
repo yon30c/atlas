@@ -118,3 +118,9 @@ Esta especificación no elige motor de base de datos, mecanismo de consenso/coor
 La especificación es normativa para la siguiente etapa de adaptadores. Aún no existen adaptadores durables ni pruebas K01–K07 ejecutadas contra infraestructura real. Los tests ME-03J existentes son fakes y no deben presentarse como conformidad distribuida.
 
 Siguiente trabajo: revisar cada puerto contra esta matriz, identificar operaciones faltantes para consultar resultados ambiguos y verificar anclas/checkpoints, y solo entonces diseñar la interfaz de adaptador durable sin escoger tecnología.
+
+## 8. Contrato complementario de persistencia y autenticidad
+
+La especificación de conformidad se complementa con `me-03k-b-persistence-continuity-authenticity-contract.md`. Ese contrato fija la identidad de dominio/época/secuencia, canonicalización e idempotencia, resolución de resultados ambiguos, autenticidad de journal, ancla externa anti-rollback, checkpoints, recibos autenticados, atomicidad y comportamiento fail-closed.
+
+K01–K07 deben interpretarse junto con esos requisitos. En particular, un adaptador no puede declararse conforme por validar estructura y secuencias si no verifica autenticidad y continuidad desde un ancla confiable externa al conjunto restaurable.
