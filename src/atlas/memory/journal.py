@@ -510,6 +510,13 @@ class JournalOperationResolution:
                     self.expected_transition,
                     self.committed_transition,
                 )
+                or self.committed_transition.idempotency_key
+                    != self.expected_transition.idempotency_key
+                or (
+                    self.expected_transition.idempotency_key is None
+                    and self.committed_transition.operation_id
+                    != self.expected_transition.operation_id
+                )
                 or self.commit.record_id != self.committed_transition.record_id
             ):
                 raise ContractError("commit/transición/posición no corresponden exactamente a la solicitud")
