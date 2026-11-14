@@ -21,6 +21,7 @@ from atlas.memory.trust import (
     TrustAnchorReadStatus,
     TrustAnchorUpdateStatus,
     ReceiptTrustContext,
+    TrustedReceiptKind,
     VerifiedConsistencyRecoveryState,
 )
 
@@ -367,15 +368,21 @@ class ConsistencyTrustContractTests(unittest.TestCase):
             generation=4,
         )
         context = ReceiptTrustContext(
-            request=request,
+            consistency_domain_id="atlas-main",
+            authority_epoch=4,
+            operation_id="read:admission-1",
+            expected_receipt_kind=TrustedReceiptKind.ADMISSION_CANCELLED,
             canonical_request_reference="request-canonical-17",
             trust_policy_version="policy-v2",
             verification_time=self.now,
             purpose="terminal-admission-reconciliation",
+            expected_receipt_id="receipt-1",
+            admission_id="admission-1",
+            generation=4,
         )
         self.assertEqual(context.purpose, "terminal-admission-reconciliation")
-        self.assertTrue(context.binds(request))
-        self.assertFalse(context.binds(replace(request, receipt_id="receipt-2")))
+        self.assertTrue(context.binds_terminal_request(request))
+        self.assertFalse(context.binds_terminal_request(replace(request, receipt_id="receipt-2")))
 
 
 if __name__ == "__main__":
