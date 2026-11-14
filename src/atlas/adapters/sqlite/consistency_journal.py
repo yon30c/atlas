@@ -1,7 +1,7 @@
-"""Transactional SQLite implementation of K01 append and operation resolution.
+"""Transactional SQLite implementation of K01 append, resolution and diagnostics.
 
-This adapter intentionally implements only the write/reconciliation slice of
-ConsistencyJournalPort. It does not expose unverified recovery state.
+Structural recovery reads are diagnostic only. Operational recovery must pass
+through the independent local recovery verifier before reducer access.
 """
 from dataclasses import fields
 from datetime import datetime, timezone
