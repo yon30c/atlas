@@ -433,15 +433,40 @@ class ReceiptTrustContext:
                 raise ContractError(f"{field} debe ser frozenset")
             for value in values:
                 _required(value, field)
+        if self.expected_receipt_kind is not TrustedReceiptKind.RECOVERY_COMPLETED:
+            _positive(self.generation, "generation")
         if self.expected_receipt_kind in (
             TrustedReceiptKind.ENDPOINT_COMPLETED,
             TrustedReceiptKind.ENDPOINT_FENCED,
         ):
             _required(self.admission_id, "admission_id")
             _required(self.endpoint_id, "endpoint_id")
-            _positive(self.generation, "generation")
-        elif self.endpoint_id is not None:
-            raise ContractError("endpoint_id solo aplica a recibos de endpoint")
+        elif self.expected_receipt_kind in (
+            TrustedReceiptKind.ADMISSION_COMPLETED,
+            TrustedReceiptKind.ADMISSION_CANCELLED,
+        ):
+            _required(self.admission_id, "admission_id")
+            if self.endpoint_id is not None:
+                raise ContractError("recibo de admisión no admite endpoint_id")
+        elif self.expected_receipt_kind is TrustedReceiptKind.RECOVERY_COMPLETED:
+            if any(value is not None for value in (
+                self.admission_id, self.endpoint_id, self.previous_generation,
+                self.final_sequence, self.fenced_through_sequence,
+            )):
+                raise ContractError("recibo global no admite claims de endpoint/admisión") 
+        if self.expected_receipt_kind is TrustedReceiptKind.ENDPOINT_FENCED:
+            _positive(self.previous_generation, "previous_generation")
+            if self.generation <= self.previous_generation:
+                raise ContractError("fencing debe avanzar generación")
+            if self.final_sequence is not None:
+                raise ContractError("fencing no admite final_sequence")
+        elif self.previous_generation is not None or self.fenced_through_sequence is not None:
+            raise ContractError("claims de fencing solo aplican a ENDPOINT_FENCED")
+        if self.expected_receipt_kind is TrustedReceiptKind.ENDPOINT_COMPLETED:
+            if self.final_sequence is None:
+                raise ContractError("ENDPOINT_COMPLETED requiere final_sequence")
+        elif self.final_sequence is not None:
+            raise ContractError("final_sequence solo aplica a ENDPOINT_COMPLETED")
         if self.expected_receipt_kind is TrustedReceiptKind.RECOVERY_COMPLETED:
             _positive(self.generation, "generation")
             if not self.affected_admission_ids or not self.route_ids:
