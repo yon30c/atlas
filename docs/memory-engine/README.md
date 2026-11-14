@@ -206,6 +206,6 @@ La inspección confirmó un bloqueo previo a la admisión durable: `consistency_
 
 No se debe solucionar con UPDATE manual ni default abierto. El diseño ME-D4O divide el trabajo en: (A) contrato de bootstrap autenticado; (B) admisión durable; (C) egress durable; (D) lifecycle de admisiones/Forget/invalidation; (E) composición completa `ProtectedMemoryRecoveryAuthorityPort`.
 
-**Estado:** inspección y diseño documentados; no se añadió implementación de admisión/egress. Pruebas/build/CI siguen pendientes y no se ejecutaron.
+**Estado:** ME-D4O-A define el protocolo de bootstrap autenticado, pero sigue sin implementación porque faltan el proveedor independiente de autorización del propietario y el Trust Anchor con inicialización autenticada. No se añadió evento ni apertura del gate. Admisión/egress permanecen bloqueados. Véase [ME-D4O-A](../design/ME-D4O-A-authenticated-domain-bootstrap.md). Pruebas/build/CI siguen pendientes y no se ejecutaron.
 
 Véase [ME-D4O — bootstrap seguro e integración](../design/ME-D4O-sqlite-authority-bootstrap-and-integration.md).
