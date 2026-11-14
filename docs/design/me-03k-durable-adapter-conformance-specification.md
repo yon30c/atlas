@@ -92,10 +92,10 @@ Los dobles de prueba sirven para pruebas unitarias, no como evidencia de conform
 
 ### K07 — Concurrencia y aislamiento
 
-- Dos procesos y dos nodos ejecutan recuperación sobre el mismo dominio.
+- Dos procesos dentro del servidor único inicial ejecutan recuperación sobre el mismo dominio sin duplicar transiciones.
 - Operaciones sobre dominios distintos no comparten estado ni bloqueos lógicos.
-- Cambio de líder/lease no autoriza a un proceso antiguo a emitir.
-- Pausa larga y reanudación de un nodo viejo no evita fencing.
+- Un proceso antiguo pausado y reanudado no puede emitir tras el fencing de una generación posterior.
+- La tolerancia a fallos entre nodos, cambio de líder y leases distribuidos queda fuera del baseline de un servidor y se evaluará si se adopta una segunda máquina.
 - Lecturas y admisiones nuevas permanecen bloqueadas mientras la recuperación no esté reconciliada.
 
 ## 4. Requisitos de harness
