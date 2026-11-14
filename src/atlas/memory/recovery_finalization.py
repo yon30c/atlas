@@ -22,6 +22,10 @@ from atlas.memory.journal_reducer import (
     ConsistencyProjection,
     EndpointProjectionStatus,
 )
+from atlas.memory.trust import (
+    ConsistencyRecoveryVerificationResult,
+    ConsistencyRecoveryVerificationStatus,
+)
 from atlas.memory.receipt_verification import (
     TerminalReceiptKind,
     TerminalReceiptVerificationRequest,
@@ -138,7 +142,7 @@ class RecoveryAdmissionFinalizationCoordinator:
         id_factory: Callable[[], str],
         clock: Callable[[], datetime],
     ) -> None:
-        if not callable(getattr(journal, "load_recovery_state", None)) or not callable(
+        if not callable(getattr(journal, "load_verified_recovery_state", None)) or not callable(
             getattr(journal, "append_transition", None)
         ):
             raise ContractError("journal debe implementar ConsistencyJournalPort")
@@ -159,8 +163,15 @@ class RecoveryAdmissionFinalizationCoordinator:
 
     def _load(self) -> tuple[object, ConsistencyProjection] | None:
         try:
-            state = self._journal.load_recovery_state(self._domain_id)
-            if state is None or state.domain_id != self._domain_id:
+            result = self._journal.load_verified_recovery_state(self._domain_id)
+            if (
+                not isinstance(result, ConsistencyRecoveryVerificationResult)
+                or result.status is not ConsistencyRecoveryVerificationStatus.VERIFIED
+                or result.verified_state is None
+            ):
+                return None
+            state = result.verified_state.state
+            if state.domain_id != self._domain_id:
                 return None
             return state, self._reducer.reduce(state)
         except Exception:
