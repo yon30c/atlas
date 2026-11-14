@@ -11,6 +11,7 @@ from typing import Protocol
 
 from atlas.core.errors import ContractError
 from atlas.memory.consistency import AuthorizationRevisionSet, AuthorizationSnapshot
+from atlas.memory.journal import ConsistencyPosition
 
 
 def _required(value: object, field: str) -> None:
@@ -43,6 +44,7 @@ class RevisionValidationResult:
     status: RevisionValidationStatus
     checked_at: datetime
     current_revisions: AuthorizationRevisionSet | None = None
+    validated_position: ConsistencyPosition | None = None
 
     def __post_init__(self) -> None:
         _required(self.snapshot_id, "snapshot_id")
@@ -51,6 +53,12 @@ class RevisionValidationResult:
         if not isinstance(self.status, RevisionValidationStatus):
             raise ContractError("status debe ser RevisionValidationStatus")
         _utc(self.checked_at, "checked_at")
+
+        if self.status is RevisionValidationStatus.UNAVAILABLE:
+            if self.validated_position is not None:
+                raise ContractError("UNAVAILABLE no puede afirmar una posición validada")
+        elif not isinstance(self.validated_position, ConsistencyPosition):
+            raise ContractError("CURRENT/STALE/REJECTED requieren ConsistencyPosition")
 
         if self.status is RevisionValidationStatus.CURRENT:
             if self.current_revisions != self.expected_revisions:
@@ -68,6 +76,7 @@ class RevisionValidationResult:
         cls,
         snapshot: AuthorizationSnapshot,
         checked_at: datetime,
+        validated_position: ConsistencyPosition,
     ) -> "RevisionValidationResult":
         if not isinstance(snapshot, AuthorizationSnapshot):
             raise ContractError("snapshot debe ser AuthorizationSnapshot")
@@ -77,6 +86,7 @@ class RevisionValidationResult:
             status=RevisionValidationStatus.CURRENT,
             checked_at=checked_at,
             current_revisions=snapshot.revisions,
+            validated_position=validated_position,
         )
 
 
@@ -103,5 +113,12 @@ class RevisionValidationPort(Protocol):
         self,
         snapshot: AuthorizationSnapshot,
         now: datetime,
+        expected_position: ConsistencyPosition,
     ) -> RevisionValidationResult:
-        """Return an exact, fail-closed result for the supplied CAM snapshot."""
+        """Validate at the exact verified journal position supplied by admission.
+
+        CURRENT/STALE/REJECTED must echo expected_position. The admission
+        coordinator must compare it with the journal head again inside the
+        same SQLiteUnitOfWork before append; a mismatch aborts admission.
+        UNAVAILABLE carries no position and always denies.
+        """
