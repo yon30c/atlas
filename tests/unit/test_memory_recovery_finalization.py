@@ -37,6 +37,8 @@ class FakeAdmissionFinalizer:
         if self.raises:
             raise TimeoutError("finalizer unavailable")
         return RecoveryAdmissionTerminalReceipt(
+            consistency_domain_id=request.consistency_domain_id,
+            authority_epoch=request.authority_epoch,
             operation_id=request.operation_id,
             admission_id=("wrong-admission" if self.wrong_binding else request.admission_id),
             generation=request.generation,
