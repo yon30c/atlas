@@ -23,9 +23,6 @@ from atlas.memory.journal_reducer import (
 )
 from atlas.memory.recovery import (
     RecoveryEndpointSequence,
-)
-from atlas.memory.recovery import (
-    RecoveryEndpointSequence,
     RecoveryFencePlan,
     UnresolvedAdmissionRecovery,
     build_recovery_fence_plan,
