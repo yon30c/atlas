@@ -1,4 +1,5 @@
 """Integration tests for the verified local checkpoint coordinator."""
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime, timezone
 import tempfile
@@ -86,6 +87,25 @@ class SwitchableProjectionStore:
                 LocalVerificationStatus.UNAVAILABLE
             )
         return self.delegate.resolve_checkpoint_projection(request)
+
+
+class CommitThenLoseResponseDatabase:
+    """Delegate a real commit, then simulate losing its successful response."""
+
+    def __init__(self, database):
+        self.database = database
+        self.lose_next_response = True
+
+    def connection(self):
+        return self.database.connection()
+
+    @contextmanager
+    def write_transaction(self):
+        with self.database.write_transaction() as connection:
+            yield connection
+        if self.lose_next_response:
+            self.lose_next_response = False
+            raise OSError("simulated response loss after durable commit")
 
 
 class LocalCheckpointCoordinatorTests(unittest.TestCase):
@@ -266,6 +286,26 @@ class LocalCheckpointCoordinatorTests(unittest.TestCase):
         self.assertIs(
             recovered.status, ConsistencyRecoveryVerificationStatus.VERIFIED
         )
+
+    def test_lost_response_after_sqlite_commit_resolves_as_replayed(self):
+        self.journal._database = CommitThenLoseResponseDatabase(self.database)
+
+        uncertain = self.coordinator.commit_checkpoint(
+            CHECKPOINT_ID, self.first_commit.position, NOW
+        )
+
+        self.assertIs(uncertain.status, CheckpointCommitStatus.UNKNOWN)
+        self.assertEqual(self._checkpoint_count(), 1)
+        self.assertEqual(self._head(), 2)
+
+        retried = self.coordinator.commit_checkpoint(
+            CHECKPOINT_ID, self.first_commit.position, NOW
+        )
+
+        self.assertIs(retried.status, CheckpointCommitStatus.REPLAYED)
+        self.assertTrue(retried.marker_commit.replayed)
+        self.assertEqual(self._checkpoint_count(), 1)
+        self.assertEqual(self._head(), 2)
 
     def test_projection_readback_unavailable_prevents_sqlite_mutation(self):
         self.store.unavailable = True
