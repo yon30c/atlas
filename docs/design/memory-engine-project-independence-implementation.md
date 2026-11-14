@@ -268,3 +268,12 @@ Guía de configuración local: [Memory Engine README](../memory-engine/README.md
 - El perfil local no tiene anti-rollback externo. No se activó runtime ni producción.
 
 Diseño: [ME-D4N — Recovery Gate SQLite](ME-D4N-sqlite-recovery-gate.md).
+
+
+## ME-D4O — bloqueo de bootstrap e integración
+
+La inspección de la implementación SQLite encontró que un dominio nuevo inicia con `recovery_gate_state='closed'` por default y no existe una operación autenticada de bootstrap que pueda abrirlo. `ensure_recovery_gate_open` exige un `RECOVERY_RECONCILED` verificado; ese evento no es una prueba de bootstrap y el coordinador no genera una recuperación terminal para un dominio vacío.
+
+Se documentó el diseño ME-D4O y la secuencia A–E: bootstrap autenticado; admisión durable; egress durable; lifecycle/Forget/invalidation; composición de autoridad completa. Se detuvo la implementación de admisión/egress hasta resolver el contrato de bootstrap. No se modificó esquema ni runtime. No se ejecutaron pruebas/build/CI.
+
+Diseño: [ME-D4O — bootstrap seguro e integración](ME-D4O-sqlite-authority-bootstrap-and-integration.md).
