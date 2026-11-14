@@ -725,7 +725,7 @@ class ConsistencyJournalModelTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             JournalOperationResolution(
                 status=JournalOperationResolutionStatus.COMMITTED_EXACT,
-                operation_id=expected.operation_id,
+                append_id="append-recovery-attempt",
                 idempotency_key=expected.idempotency_key,
                 expected_position=position(0),
                 expected_transition=expected,
@@ -745,7 +745,7 @@ class ConsistencyJournalModelTests(unittest.TestCase):
         )
         result = JournalOperationResolution(
             status=JournalOperationResolutionStatus.COMMITTED_EXACT,
-            operation_id=expected.operation_id,
+            append_id="append-recovery-attempt",
             idempotency_key=expected.idempotency_key,
             expected_position=position(0),
             expected_transition=expected,
