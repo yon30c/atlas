@@ -78,6 +78,7 @@ class RecoveryAdmissionFinalizationTests(unittest.TestCase):
             self.journal,
             self.finalizer,
             self.verifier,
+            trust_context_factory=FakeReceiptTrustContextFactory(),
             domain_id="consistency-domain",
             id_factory=lambda: next(self.ids),
             clock=lambda: NOW,
