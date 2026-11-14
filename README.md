@@ -43,7 +43,7 @@ PYTHONPATH=src python -m unittest \
   tests.unit.test_assistant_console \
   tests.unit.test_local_console_composition \
   tests.unit.test_llm_contracts \
-  tests.unit.test_ollama_adapter -v
+  tests.unit.test_ollama_adapter \\\n  tests.unit.test_ollama_assistant -v
 ```
 
 ## Próximas etapas
