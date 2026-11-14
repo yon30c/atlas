@@ -144,6 +144,9 @@ Código añadido en la rama de trabajo:
 - `src/atlas/adapters/local_hmac_signer.py`: firmante HMAC que exige coincidencia exacta de `key_reference` y usa el canonicalizador/autenticador existente.
 - `tests/unit/test_systemd_credentials.py`: pruebas de carga, ausencia, tamaño, symlink, traversal y selección activa.
 - `tests/unit/test_local_hmac_signer.py`: pruebas de firma, verificación, referencia y fallos del proveedor.
+- `tests/unit/test_sqlite_local_hmac_integration.py`: integración real del firmante HMAC con el append SQLite, verificación posterior del envelope persistido y rollback ante clave ausente o referencia incorrecta.
+
+La integración no requiere credenciales reales de systemd: usa un proveedor de clave en memoria exclusivo de pruebas. La composición productiva queda preparada para inyectar `HmacLocalConsistencySigner`, pero todavía no se ha creado un composition root ni se ha activado una unidad systemd.
 
 ## 8. Criterio de salida
 
