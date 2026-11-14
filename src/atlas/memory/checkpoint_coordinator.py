@@ -4,7 +4,7 @@ The coordinator keeps independent projection storage outside SQLite's writer
 transaction. It makes no external anti-rollback claim.
 """
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Protocol
 
 from atlas.core.errors import ContractError
 from atlas.memory.checkpoint_projection_codec import (
@@ -39,6 +39,15 @@ from atlas.memory.ports.recovery import (
 )
 
 
+class LocalVerifiedRecoveryPort(Protocol):
+    """Local-profile port that returns independently verified recovery evidence."""
+
+    def load_verified_recovery_state(
+        self, domain_id: str
+    ) -> ConsistencyRecoveryVerificationResult:
+        ...
+
+
 class LocalCheckpointCoordinator:
     """Publish, read back, verify and atomically commit a local checkpoint.
 
@@ -54,10 +63,11 @@ class LocalCheckpointCoordinator:
         projection_resolver: CheckpointProjectionPort,
         trust_policy: LocalConsistencyTrustPolicy,
         *,
+        verified_recovery: LocalVerifiedRecoveryPort,
         reducer_version: str,
     ) -> None:
-        if not callable(getattr(journal, "load_verified_recovery_state", None)):
-            raise ContractError("journal debe exponer load_verified_recovery_state")
+        if not callable(getattr(verified_recovery, "load_verified_recovery_state", None)):
+            raise ContractError("verified_recovery debe implementar load_verified_recovery_state")
         if not callable(getattr(journal, "commit_checkpoint", None)):
             raise ContractError("journal debe exponer commit_checkpoint")
         if not callable(getattr(projection_publisher, "publish_checkpoint_projection", None)):
@@ -91,6 +101,7 @@ class LocalCheckpointCoordinator:
         self._trust_policy = trust_policy
         self._reducer_version = reducer_version
         self._journal = journal
+        self._verified_recovery = verified_recovery
         self._publisher = projection_publisher
         self._resolver = projection_resolver
 
@@ -176,7 +187,7 @@ class LocalCheckpointCoordinator:
             return self._conflict()
 
         try:
-            verification = self._journal.load_verified_recovery_state(
+            verification = self._verified_recovery.load_verified_recovery_state(
                 self._trust_policy.consistency_domain_id
             )
         except Exception:
