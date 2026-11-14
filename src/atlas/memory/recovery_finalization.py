@@ -42,6 +42,7 @@ class RecoveryAdmissionFinalizationRequest:
     authority_epoch: int
     operation_id: str
     admission_id: str
+    previous_generation: int
     generation: int
     route_ids: frozenset[str]
     endpoint_receipts: tuple[VerifiedTerminalReceipt, ...]
@@ -51,8 +52,10 @@ class RecoveryAdmissionFinalizationRequest:
             _required(getattr(self, field), field)
         if isinstance(self.authority_epoch, bool) or not isinstance(self.authority_epoch, int) or self.authority_epoch < 1:
             raise ContractError("authority_epoch debe ser positivo")
-        if isinstance(self.generation, bool) or not isinstance(self.generation, int) or self.generation < 1:
-            raise ContractError("generation debe ser positiva")
+        if isinstance(self.previous_generation, bool) or not isinstance(self.previous_generation, int) or self.previous_generation < 1:
+            raise ContractError("previous_generation debe ser positiva")
+        if isinstance(self.generation, bool) or not isinstance(self.generation, int) or self.generation <= self.previous_generation:
+            raise ContractError("generation debe superar previous_generation")
         if not isinstance(self.route_ids, frozenset) or not self.route_ids:
             raise ContractError("route_ids debe ser frozenset no vacío")
         if not isinstance(self.endpoint_receipts, tuple) or not self.endpoint_receipts:
@@ -70,6 +73,7 @@ class RecoveryAdmissionFinalizationRequest:
                 or receipt.admission_id != self.admission_id
                 or receipt.kind is not TerminalReceiptKind.ENDPOINT_FENCED
                 or receipt.generation != self.generation
+                or receipt.previous_generation != self.previous_generation
                 or receipt.endpoint_id is None
             ):
                 raise ContractError("endpoint receipt no corresponde a la finalización exacta")
@@ -88,12 +92,17 @@ class RecoveryAdmissionFinalizationRequest:
 
 @dataclass(frozen=True, slots=True)
 class RecoveryAdmissionTerminalReceipt:
+    consistency_domain_id: str
+    authority_epoch: int
     operation_id: str
     admission_id: str
     generation: int
     receipt_id: str
 
     def __post_init__(self) -> None:
+        _required(self.consistency_domain_id, "consistency_domain_id")
+        if isinstance(self.authority_epoch, bool) or not isinstance(self.authority_epoch, int) or self.authority_epoch < 1:
+            raise ContractError("authority_epoch debe ser positiva")
         _required(self.operation_id, "operation_id")
         _required(self.admission_id, "admission_id")
         _required(self.receipt_id, "receipt_id")
@@ -287,6 +296,7 @@ class RecoveryAdmissionFinalizationCoordinator:
                 authority_epoch=state.authority_epoch,
                 operation_id=closure.operation_id,
                 admission_id=admission_id,
+                previous_generation=admission.generation,
                 generation=closure.generation,
                 route_ids=admission.route_ids,
                 endpoint_receipts=endpoint_receipts,
@@ -298,6 +308,8 @@ class RecoveryAdmissionFinalizationCoordinator:
                 continue
             if (
                 not isinstance(terminal, RecoveryAdmissionTerminalReceipt)
+                or terminal.consistency_domain_id != state.domain_id
+                or terminal.authority_epoch != state.authority_epoch
                 or terminal.operation_id != closure.operation_id
                 or terminal.admission_id != admission_id
                 or terminal.generation != closure.generation
