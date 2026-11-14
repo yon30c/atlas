@@ -534,6 +534,13 @@ class SQLiteLocalHmacIntegrationTests(unittest.TestCase):
         self.assertIsNotNone(result.verified_local_state)
         self.assertEqual(projection_port.calls, 1)
         self.assertEqual(result.verified_local_state.head_sequence, 2)
+        self.assertIsNotNone(result.verified_local_state.projection)
+        self.assertEqual(
+            result.verified_local_state.projection.head_sequence, 2
+        )
+        self.assertEqual(
+            len(result.verified_local_state.projection.admissions), 1
+        )
         self.assertFalse(
             result.verified_local_state.external_anti_rollback_protected
         )
