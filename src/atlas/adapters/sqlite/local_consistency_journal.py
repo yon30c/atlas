@@ -17,7 +17,6 @@ from atlas.memory.journal import (
     JournalEntry,
     JournalOperationResolution,
 )
-from atlas.memory.ports.journal import ConsistencyJournalPort
 
 
 class LocalSQLiteConsistencyJournalAdapter:
