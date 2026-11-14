@@ -409,13 +409,17 @@ class SQLiteConsistencyJournalTests(unittest.TestCase):
         self.assertIsNone(result.state)
 
     def test_typed_recovery_load_rejects_multiple_operation_rows_for_one_entry(self):
-        transition = read_admitted(record_id=RECORD_1)
+        first = read_admitted(record_id=RECORD_1)
+        second = replace(first, record_id=RECORD_2, snapshot_id="snapshot-two")
         self.assertIsNotNone(
-            self.journal.append_transition(self.position(0), "one-operation", transition)
+            self.journal.append_transition(self.position(0), "one-operation", first)
+        )
+        self.assertIsNotNone(
+            self.journal.append_transition(self.position(1), "second-operation", second)
         )
         with self.database.write_transaction() as connection:
             row = connection.execute(
-                "SELECT * FROM journal_operations WHERE domain_id='domain-a'"
+                "SELECT * FROM journal_operations WHERE domain_id='domain-a' AND sequence=1"
             ).fetchone()
             connection.execute(
                 """
@@ -430,6 +434,9 @@ class SQLiteConsistencyJournalTests(unittest.TestCase):
                     row["request_digest"], row["sequence"], row["record_id"],
                     row["created_at"],
                 ),
+            )
+            connection.execute(
+                "DELETE FROM journal_operations WHERE domain_id='domain-a' AND sequence=2"
             )
 
         result = self.journal.load_recovery_state_result("domain-a")
