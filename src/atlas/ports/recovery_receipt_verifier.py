@@ -1,12 +1,14 @@
 """Puerto independiente de verificación de finalización global."""
+from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, TYPE_CHECKING
 
-from atlas.memory.recovery_completion import (
-    RecoveryCompletionReceipt,
-    RecoveryCompletionRequest,
-    VerifiedRecoveryCompletionReceipt,
-)
+if TYPE_CHECKING:
+    from atlas.memory.recovery_completion import (
+        RecoveryCompletionReceipt,
+        RecoveryCompletionRequest,
+        VerifiedRecoveryCompletionReceipt,
+    )
 
 
 class RecoveryCompletionVerifierPort(Protocol):
