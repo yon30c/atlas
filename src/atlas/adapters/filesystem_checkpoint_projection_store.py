@@ -55,8 +55,14 @@ class FilesystemCheckpointProjectionStore(
         path = self._root / name
         try:
             path.mkdir(mode=0o700, exist_ok=True)
-            if path.is_symlink() or not path.is_dir():
+            metadata = path.lstat()
+            if not stat.S_ISDIR(metadata.st_mode):
                 raise ContractError(f"directorio de almacén inválido: {name}")
+            mode = stat.S_IMODE(metadata.st_mode)
+            if (mode & 0o077) != 0 or (mode & 0o700) != 0o700:
+                raise ContractError(
+                    f"directorio de almacén debe tener permisos 0700: {name}"
+                )
             resolved = path.resolve(strict=True)
             if resolved != path:
                 raise ContractError(f"directorio de almacén no canónico: {name}")
