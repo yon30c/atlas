@@ -138,6 +138,14 @@ class CheckpointProjectionCodecTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             encode_projection(replace(self.projection, replay_metadata_version=0))
 
+    def test_codec_rejects_boolean_replay_version_and_wrong_collection_items(self):
+        from dataclasses import replace
+
+        with self.assertRaises(ContractError):
+            encode_projection(replace(self.projection, replay_metadata_version=True))
+        with self.assertRaises(ContractError):
+            encode_projection(replace(self.projection, admissions=("not-an-admission",)))
+
     def test_codec_rejects_unknown_wrapper_fields(self):
         document = json.loads(encode_projection(self.projection))
         document["unexpected"] = True
