@@ -1,6 +1,6 @@
 # ME-03K-C — Contratos tipados de ancla de confianza y verificación
 
-**Estado:** contrato técnico de diseño; no implementa criptografía, persistencia ni transporte.  
+**Estado:** contrato técnico de diseño con Trust Anchor opcional. El perfil local es el baseline actual; el perfil anclado queda postergado hasta la etapa final de Atlas. Este documento no implementa criptografía, persistencia ni transporte.  
 **Rama:** `implementation/me-01-to-me-04-memory-engine`.  
 **Dependencias:** ME-03K, ME-03K-A y ME-03K-B.
 
@@ -8,24 +8,26 @@
 
 ME-03K-B establece las garantías de persistencia, autenticidad, continuidad y anti-rollback. Este documento cierra las fronteras tipadas que permiten exigir esas garantías sin seleccionar un algoritmo, formato criptográfico, proveedor de claves, base de datos o transporte.
 
-El adaptador no puede entregar al reducer un estado solo porque sea estructuralmente válido. Debe entregar un estado cuya autenticidad y continuidad hayan sido verificadas contra un ancla externa vigente.
+El adaptador no puede entregar al reducer un estado solo porque sea estructuralmente válido. Debe entregar un estado cuya autenticidad y continuidad hayan sido verificadas conforme al perfil declarado. El perfil local valida la continuidad disponible dentro del conjunto local, pero no demuestra que el head sea el último existente antes de una restauración; el perfil anclado añade verificación contra un Trust Anchor externo vigente.
 
 ## 2. Separación de responsabilidades
 
 1. **Journal adapter:** persiste transiciones, checkpoints, claves idempotentes, tombstones y recibos; resuelve escrituras ambiguas.
-2. **Trust-anchor provider:** obtiene y actualiza monotónicamente el último estado durable confirmado fuera del dominio de rollback del journal/checkpoint.
-3. **Checkpoint verifier:** valida autenticidad, ancla, continuidad, época, posición y proyección del checkpoint.
+2. **Trust-anchor provider (opcional):** cuando se habilite el perfil anclado, obtiene y actualiza monotónicamente el último estado durable confirmado fuera del dominio de rollback del journal/checkpoint. No es dependencia del perfil local.
+3. **Checkpoint/recovery verifier:** valida autenticidad, continuidad interna, época, posición y proyección del checkpoint; cuando se usa el perfil anclado, valida además el ancla y anti-rollback.
 4. **Receipt verifier:** valida autenticidad, emisor autorizado, claims, vigencia, revocación, replay y binding exacto.
 5. **Reducer:** procesa únicamente un estado ya verificado. No autentica, no consulta anclas y no decide confianza criptográfica.
 6. **Single recovery authority:** serializa las operaciones de lectura, egress, cierres, invalidaciones, recuperación y reapertura según ME-03K-B.
 
 Ninguna de estas fronteras puede sustituir a otra. En particular, el journal no puede autoatestiguar que su propio último checkpoint es el más reciente.
 
-## 3. Ancla externa de continuidad
+## 3. Trust Anchor externo opcional
 
-### 3.1 Modelo lógico
+La implementación real del Trust Anchor queda postergada hasta la etapa final de Atlas. El baseline actual utiliza un único servidor y el perfil local. La existencia de los modelos/puertos tipados no obliga a desarrollar ni desplegar ahora el proveedor externo.
 
-El ancla confiable debe representar, como mínimo:
+### 3.1 Modelo lógico (solo perfil anclado)
+
+Cuando el perfil anclado esté habilitado, el ancla confiable debe representar, como mínimo:
 
 - `anchor_id`: identificador opaco único;
 - `consistency_domain_id`;
@@ -53,7 +55,7 @@ El compromiso protege únicamente el estado de control del journal/checkpoint. N
 
 ### 3.3 Puerto requerido
 
-El proveedor debe ofrecer operaciones equivalentes a:
+El proveedor opcional, cuando se implemente, debe ofrecer operaciones equivalentes a:
 
 - `load_current_anchor(domain_id) -> TrustAnchorReadResult`;
 - `advance_anchor(TrustAnchorAdvanceRequest) -> TrustAnchorUpdateStatus`, donde la solicitud contiene el ancla previa completa y la nueva ancla autenticada. La revisión debe avanzar exactamente una unidad; dentro de una época la secuencia nunca retrocede y el commitment no cambia sin avanzar secuencia. El cambio de época solo puede ser +1, empezar en secuencia cero y aportar referencia explícita de handoff autenticado.
@@ -108,11 +110,11 @@ Solo el verificador puede producir un objeto interno `VerifiedConsistencyRecover
 
 El constructor/creación de este resultado debe permanecer dentro de la frontera del verificador/adaptador confiable. No debe aceptarse una instancia fabricada por un caller no confiable.
 
-### 5.3 Condiciones de rechazo
+### 5.3 Condiciones de rechazo del perfil anclado
 
 El resultado debe ser UNKNOWN o REJECTED y no entregar estado al reducer si ocurre cualquiera de estas condiciones:
 
-- ancla ausente, desconocida, antigua, no autenticada o no disponible;
+- ancla ausente, desconocida, antigua, no autenticada o no disponible en perfil anclado;
 - checkpoint por debajo de la secuencia máxima del ancla;
 - dominio o época distintos;
 - compromiso o referencia de continuidad no coincidente;
@@ -195,8 +197,8 @@ El contrato de `ConsistencyJournalPort.resolve_operation` queda precisado así:
 
 Los siguientes contratos deben alinearse antes de declarar ME-03K-B cerrado:
 
-1. `ConsistencyJournalPort.load_verified_recovery_state` entrega `ConsistencyRecoveryVerificationResult`; solo VERIFIED contiene `VerifiedConsistencyRecoveryState`. `load_recovery_state` queda limitado a diagnóstico/migración y está prohibido en recuperación operativa.
-2. `ConsistencyCheckpoint` debe referenciar el envelope autenticado, versión de reducer/proyección y ancla externa usada; no debe tratar `integrity_reference` como prueba suficiente.
+1. `ConsistencyJournalPort.load_verified_recovery_state` entrega un resultado tipado que identifica el perfil de verificación. En perfil anclado, VERIFIED contiene `VerifiedConsistencyRecoveryState` vinculado al Trust Anchor. En perfil local debe existir un resultado tipado distinto, sin campo ni afirmación de ancla, que exprese integridad/continuidad local y declare explícitamente que anti-rollback externo no está demostrado. `load_recovery_state` desnudo queda limitado a diagnóstico/migración y está prohibido en recuperación operativa.
+2. `ConsistencyCheckpoint` debe referenciar el envelope autenticado y la versión de reducer/proyección. La referencia a ancla externa solo aplica al perfil anclado; `integrity_reference` nunca es prueba suficiente por sí sola.
 3. `ConsistencyRecoveryState` es únicamente estructural. `VerifiedConsistencyRecoveryState` envuelve el estado junto con el ancla exacta y exige coincidencia de dominio, época, secuencia y commitment; el reducer nunca crea esa confianza.
 4. `TerminalReceiptVerifierPort` y `RecoveryCompletionVerifierPort` disponen de variantes trust-aware que reciben `ReceiptTrustContext`. El contexto fija tipo de recibo, dominio, época, operación, ID esperado obligatorio, claims de endpoint/admisión o inventarios globales, referencia canónica, política y tiempo UTC. `binds_terminal_request` y `binds_recovery_completion` permiten exigir coincidencia exacta del contexto con la solicitud/recibo. El verificador debe resolver la referencia canónica y comprobar el contenido semántico completo; la referencia por sí sola no es autenticación. La variante legacy se conserva solo para dobles de prueba/migración; no satisface conformidad de adaptador durable.
 5. `ProtectedMemoryRecoveryAuthorityPort` sigue siendo una única implementación concreta compartida por Gateway y coordinadores. La verificación no crea una segunda autoridad de orden.
@@ -214,7 +216,7 @@ Los siguientes contratos deben alinearse antes de declarar ME-03K-B cerrado:
 
 ## 10. Decisiones que permanecen abiertas
 
-Este contrato no selecciona:
+La decisión de hacer Trust Anchor opcional y postergarlo hasta la etapa final está aprobada; no vuelve a estar pendiente. Este contrato no selecciona:
 
 - algoritmo de firma/MAC, envelope físico ni canonicalización binaria;
 - HSM/KMS, almacén de claves o proveedor de identidad de emisores;
@@ -240,9 +242,11 @@ La construcción de `VerifiedConsistencyRecoveryState` es una garantía de tipo 
 3. Ejecutar las suites focalizadas y CI de Python 3.10–3.13; los modelos tipados por sí solos no prueban autenticidad.
 4. Verificar que la autoridad durable consulta ancla, journal y estado idempotente bajo un mismo orden linealizable y no reabre el gate ante resultados ambiguos.
 
-## 13. Criterio de cierre
+## 13. Criterios de cierre por perfil
 
-ME-03K-C queda cerrado en diseño cuando:
+El diseño del perfil local puede cerrarse cuando se definen y verifican sus garantías locales, su resultado tipado y sus limitaciones explícitas. El perfil anclado solo puede cerrarse cuando se implemente y valide el proveedor externo y sus garantías anti-rollback.
+
+ME-03K-C queda cerrado en diseño para cada perfil cuando:
 
 1. Existe un modelo tipado de ancla externa monotónica y sus resultados.
 2. El estado del journal no llega al reducer sin evidencia tipada de verificación desde esa ancla.
@@ -253,3 +257,18 @@ ME-03K-C queda cerrado en diseño cuando:
 7. Las interfaces siguen agnósticas a proveedor y no exponen contenido de memoria.
 
 El cierre de diseño no equivale a implementación ni a conformidad operativa. Ninguna lectura protegida ni Forget físico queda autorizada por este documento.
+
+
+## 14. Decisión del propietario — Trust Anchor opcional y postergado
+
+**Estado: APROBADO — 13 de noviembre de 2026.**
+
+1. Trust Anchor es una capacidad opcional, no un requisito universal para Atlas ni para las etapas actuales del Memory Engine.
+2. Su implementación real queda postergada hasta la etapa final del proyecto. No se construirá ahora un proveedor, una VM de confianza ni una integración con un servicio externo.
+3. El baseline inicial opera en perfil local sobre un único servidor. El modo de verificación debe quedar explícito en el resultado de recuperación.
+4. El perfil local valida autenticidad disponible, estructura, continuidad interna, secuencias, inventarios y recibos; no demuestra que el estado sea el último que existió antes de una restauración coherente del conjunto local y no ofrece anti-rollback externo.
+5. El perfil anclado, cuando se implemente, añade verificación contra el ancla externa monotónica. Si el ancla no está disponible, el perfil anclado falla cerrado y no degrada automáticamente al perfil local.
+6. El código actual contiene tipos y coordinadores que exigen el resultado verificado con ancla. Este contrato actualizado no significa que el perfil local opcional ya esté implementado. La adaptación de código se planificará en su etapa correspondiente, sin desarrollar ahora el proveedor Trust Anchor.
+7. Cualquier garantía que dependa de probar el último estado confirmado fuera del conjunto restaurable —en particular, impedir la reaparición de memorias olvidadas tras restaurar backups antiguos— no se considera cubierta por el perfil local. La restauración afectada debe permanecer bloqueada o someterse a reconciliación explícita con una fuente independiente aprobada.
+
+La decisión no autoriza lecturas protegidas, Forget físico, recuperación productiva ni restauraciones de memoria no reconciliadas.
