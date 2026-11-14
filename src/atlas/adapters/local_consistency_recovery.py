@@ -56,8 +56,9 @@ class LocalCheckpointProjectionAdapter:
             return CheckpointProjectionResult(RecoveryVerificationStatus.UNAVAILABLE)
         if result.status is LocalVerificationStatus.REJECTED:
             return CheckpointProjectionResult(RecoveryVerificationStatus.REJECTED)
-        local_evidence = require_local_checkpoint_projection(local_request, result)
-        neutral_evidence = VerifiedCheckpointProjection(
+        try:
+            local_evidence = require_local_checkpoint_projection(local_request, result)
+            neutral_evidence = VerifiedCheckpointProjection(
             checkpoint_id=local_evidence.checkpoint_id,
             consistency_domain_id=local_evidence.consistency_domain_id,
             authority_epoch=local_evidence.authority_epoch,
@@ -70,13 +71,15 @@ class LocalCheckpointProjectionAdapter:
             reducer_version=local_evidence.reducer_version,
             trust_policy_version=local_evidence.trust_policy_version,
             projection=local_evidence.projection,
-            verification_id=local_evidence.verification_id,
-        )
-        neutral_result = CheckpointProjectionResult(
-            RecoveryVerificationStatus.VERIFIED, neutral_evidence
-        )
-        require_verified_checkpoint_projection(request, neutral_result)
-        return neutral_result
+                verification_id=local_evidence.verification_id,
+            )
+            neutral_result = CheckpointProjectionResult(
+                RecoveryVerificationStatus.VERIFIED, neutral_evidence
+            )
+            require_verified_checkpoint_projection(request, neutral_result)
+            return neutral_result
+        except (ContractError, ValueError, TypeError, AttributeError):
+            return CheckpointProjectionResult(RecoveryVerificationStatus.REJECTED)
 
 
 class LocalRecoveryInventoryAdapter:
@@ -104,8 +107,9 @@ class LocalRecoveryInventoryAdapter:
             return RecoveryInventoryResult(RecoveryVerificationStatus.UNAVAILABLE)
         if result.status is LocalVerificationStatus.REJECTED:
             return RecoveryInventoryResult(RecoveryVerificationStatus.REJECTED)
-        local_evidence = require_verified_local_inventories(local_request, result)
-        neutral_evidence = VerifiedRecoveryInventories(
+        try:
+            local_evidence = require_verified_local_inventories(local_request, result)
+            neutral_evidence = VerifiedRecoveryInventories(
             consistency_domain_id=local_evidence.consistency_domain_id,
             authority_epoch=local_evidence.authority_epoch,
             head_sequence=local_evidence.head_sequence,
@@ -115,10 +119,12 @@ class LocalRecoveryInventoryAdapter:
             verified_receipt_ids=local_evidence.verified_receipt_ids,
             verified_tombstone_ids=local_evidence.verified_tombstone_ids,
             verified_reference_ids=local_evidence.verified_reference_ids,
-            verification_id=local_evidence.verification_id,
-        )
-        neutral_result = RecoveryInventoryResult(
-            RecoveryVerificationStatus.VERIFIED, neutral_evidence
-        )
-        require_verified_recovery_inventories(request, neutral_result)
-        return neutral_result
+                verification_id=local_evidence.verification_id,
+            )
+            neutral_result = RecoveryInventoryResult(
+                RecoveryVerificationStatus.VERIFIED, neutral_evidence
+            )
+            require_verified_recovery_inventories(request, neutral_result)
+            return neutral_result
+        except (ContractError, ValueError, TypeError, AttributeError):
+            return RecoveryInventoryResult(RecoveryVerificationStatus.REJECTED)
