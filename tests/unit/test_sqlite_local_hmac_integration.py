@@ -280,11 +280,19 @@ class SQLiteLocalHmacIntegrationTests(unittest.TestCase):
                     LocalVerificationStatus.VERIFIED, evidence
                 )
 
+        reducer_calls = []
+
+        class ReducerMustNotRun:
+            def reduce(inner_self, state):
+                reducer_calls.append("reduce")
+                raise AssertionError("reducer must not run before HMAC verification")
+
         verifier = LocalConsistencyRecoveryVerifier(
             trust_policy=policy,
             key_port=HistoricalKeys(),
             inventory_verifier=Inventory(),
             verifier_id="sqlite-local-verifier",
+            reducer=ReducerMustNotRun(),
         )
         provider = FakeActiveKeyProvider(
             ActiveLocalConsistencyKey("local-key-v1", self.key)
@@ -319,6 +327,7 @@ class SQLiteLocalHmacIntegrationTests(unittest.TestCase):
             result.status, ConsistencyRecoveryVerificationStatus.REJECTED
         )
         self.assertIsNone(result.verified_local_state)
+        self.assertEqual(reducer_calls, [])
 
 
     def test_verified_read_preserves_missing_historical_key_as_unavailable(self):
