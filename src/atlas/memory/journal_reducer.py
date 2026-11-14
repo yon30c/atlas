@@ -93,6 +93,16 @@ class IdempotencyProjection:
 
 
 @dataclass(frozen=True, slots=True)
+class RecoveryProjection:
+    operation_id: str
+    generation: int
+    affected_admission_ids: frozenset[str]
+    route_ids: frozenset[str]
+    reconciled: bool
+    terminal_receipt_id: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class ConsistencyProjection:
     domain_id: str
     authority_epoch: int
@@ -102,6 +112,7 @@ class ConsistencyProjection:
     invalidations: tuple[InvalidationProjection, ...]
     idempotency_records: tuple[IdempotencyProjection, ...]
     receipt_ids: frozenset[str]
+    recovery_closures: tuple[RecoveryProjection, ...] = ()
 
 
 def reconstruct_read_target(admission: AdmissionProjection) -> ReadTarget | None:
@@ -182,6 +193,9 @@ class ConsistencyJournalReducer:
         emission_ids = set()
         idempotency_records = {}
         latest_invalidation = {}
+        recoveries = {}
+        active_recovery = None
+        latest_recovery_generation = 0
 
         def admission_for(transition: ConsistencyTransition):
             item = admissions.get(transition.admission_id)
@@ -213,6 +227,14 @@ class ConsistencyJournalReducer:
                 )
 
             if kind is ConsistencyRecordKind.READ_ADMITTED:
+                self._require(
+                    active_recovery is None,
+                    "READ_ADMITTED durante recuperación pendiente del dominio",
+                )
+                self._require(
+                    transition.generation >= latest_recovery_generation,
+                    "READ_ADMITTED usa generación anterior a la última recuperación",
+                )
                 admission_id = transition.admission_id
                 self._require(
                     admission_id not in admissions,
@@ -272,6 +294,10 @@ class ConsistencyJournalReducer:
                 continue
 
             if kind is ConsistencyRecordKind.READ_ACTIVATED:
+                self._require(
+                    active_recovery is None,
+                    "READ_ACTIVATED durante recuperación pendiente",
+                )
                 item = admission_for(transition)
                 self._require(
                     item["status"] is ReadAdmissionStatus.ADMITTED,
@@ -281,6 +307,10 @@ class ConsistencyJournalReducer:
                 continue
 
             if kind is ConsistencyRecordKind.EGRESS_COMMITTED:
+                self._require(
+                    active_recovery is None,
+                    "egress prohibido mientras el dominio se recupera",
+                )
                 item = admission_for(transition)
                 endpoint = item["endpoints"].get(transition.endpoint_id)
                 self._require(endpoint is not None, "egress usa endpoint no admitido")
@@ -328,6 +358,10 @@ class ConsistencyJournalReducer:
                     "endpoint ya tiene estado terminal",
                 )
                 if kind is ConsistencyRecordKind.ENDPOINT_COMPLETED:
+                    self._require(
+                        active_recovery is None,
+                        "finalización ordinaria prohibida durante recovery fencing",
+                    )
                     if transition.operation_id == item["operation_id"]:
                         expected_generation = item["generation"]
                         self._require(
@@ -360,7 +394,12 @@ class ConsistencyJournalReducer:
                 else:
                     closure = forgets.get(transition.operation_id)
                     invalidation = invalidations.get(transition.operation_id)
-                    operation = closure if closure is not None else invalidation
+                    recovery_closure = recoveries.get(transition.operation_id)
+                    operation = (
+                        closure if closure is not None
+                        else invalidation if invalidation is not None
+                        else recovery_closure
+                    )
                     self._require(
                         operation is not None
                         and transition.admission_id in operation["affected_admission_ids"],
@@ -371,6 +410,12 @@ class ConsistencyJournalReducer:
                         and transition.generation > item["generation"],
                         "ENDPOINT_FENCED debe usar la nueva generación del cierre",
                     )
+                    if recovery_closure is not None:
+                        self._require(
+                            active_recovery == transition.operation_id
+                            and item["status"] is ReadAdmissionStatus.UNRESOLVED,
+                            "fencing de recovery requiere admisión UNRESOLVED",
+                        )
                     endpoint["status"] = EndpointProjectionStatus.FENCED
                 add_receipt(transition.receipt_id)
                 endpoint["receipt_ids"].add(transition.receipt_id)
@@ -387,6 +432,7 @@ class ConsistencyJournalReducer:
             if kind is ConsistencyRecordKind.ADMISSION_RECONCILED:
                 item = admissions.get(transition.admission_id)
                 self._require(item is not None, "reconciliación referencia una admisión inexistente")
+                recovery_closure = recoveries.get(transition.operation_id)
                 self._require(
                     transition.operation_id == item["operation_id"]
                     or (
@@ -396,12 +442,21 @@ class ConsistencyJournalReducer:
                     or (
                         transition.operation_id in invalidations
                         and transition.admission_id in invalidations[transition.operation_id]["affected_admission_ids"]
+                    )
+                    or (
+                        recovery_closure is not None
+                        and transition.admission_id in recovery_closure["affected_admission_ids"]
                     ),
                     "reconciliación no corresponde a la operación exacta",
                 )
+                expected_generation = (
+                    recovery_closure["generation"]
+                    if recovery_closure is not None
+                    else item["generation"]
+                )
                 self._require(
-                    transition.generation == item["generation"],
-                    "ADMISSION_RECONCILED debe identificar la generación de la admisión",
+                    transition.generation == expected_generation,
+                    "ADMISSION_RECONCILED debe identificar la generación de la operación",
                 )
                 self._require(
                     item["status"] not in (
@@ -436,6 +491,10 @@ class ConsistencyJournalReducer:
                 continue
 
             if kind is ConsistencyRecordKind.FORGET_CLOSED:
+                self._require(
+                    active_recovery is None,
+                    "FORGET_CLOSED durante recuperación pendiente",
+                )
                 memory_id = transition.memory_id
                 self._require(memory_id not in forgotten_memories, "memoria ya tiene FORGET_CLOSED")
                 related = {
@@ -518,6 +577,10 @@ class ConsistencyJournalReducer:
                 continue
 
             if kind is ConsistencyRecordKind.INVALIDATION_CLOSED:
+                self._require(
+                    active_recovery is None,
+                    "INVALIDATION_CLOSED durante recuperación pendiente",
+                )
                 self._require(
                     transition.operation_id not in invalidations,
                     "operation_id de invalidación duplicado",
@@ -623,6 +686,95 @@ class ConsistencyJournalReducer:
                 closure["reconciled"] = True
                 continue
 
+            if kind is ConsistencyRecordKind.RECOVERY_CLOSED:
+                self._require(
+                    active_recovery is None,
+                    "ya existe una recuperación del dominio pendiente",
+                )
+                expected_ids = frozenset(
+                    admission_id
+                    for admission_id, item in admissions.items()
+                    if item["status"] not in (
+                        ReadAdmissionStatus.COMPLETED,
+                        ReadAdmissionStatus.CANCELLED,
+                    )
+                )
+                expected_routes = frozenset(
+                    route
+                    for admission_id in expected_ids
+                    for route in admissions[admission_id]["route_ids"]
+                )
+                self._require(bool(expected_ids), "RECOVERY_CLOSED sin admisiones pendientes")
+                self._require(
+                    transition.affected_admission_ids == expected_ids
+                    and transition.route_ids == expected_routes,
+                    "RECOVERY_CLOSED debe incluir todas las admisiones y rutas pendientes",
+                )
+                prior_generations = [
+                    item["generation"] for item in admissions.values()
+                ] + [
+                    item["generation"] for item in forgets.values()
+                ] + [
+                    item["generation"] for item in invalidations.values()
+                ]
+                self._require(
+                    not prior_generations
+                    or transition.generation > max(prior_generations),
+                    "RECOVERY_CLOSED debe avanzar todas las generaciones previas",
+                )
+                expected_operation = (
+                    f"recovery:{recovery.domain_id}:"
+                    f"{recovery.authority_epoch}:{transition.generation}"
+                )
+                self._require(
+                    transition.operation_id == expected_operation
+                    and transition.operation_id not in recoveries,
+                    "operation_id de recuperación no es único o canónico",
+                )
+                for admission_id in expected_ids:
+                    admissions[admission_id]["status"] = ReadAdmissionStatus.UNRESOLVED
+                recoveries[transition.operation_id] = {
+                    "generation": transition.generation,
+                    "affected_admission_ids": expected_ids,
+                    "route_ids": expected_routes,
+                    "reconciled": False,
+                    "terminal_receipt_id": None,
+                }
+                active_recovery = transition.operation_id
+                continue
+
+            if kind is ConsistencyRecordKind.RECOVERY_RECONCILED:
+                closure = recoveries.get(transition.operation_id)
+                self._require(
+                    closure is not None and active_recovery == transition.operation_id,
+                    "RECOVERY_RECONCILED sin cierre activo",
+                )
+                self._require(
+                    transition.generation == closure["generation"]
+                    and transition.affected_admission_ids == closure["affected_admission_ids"]
+                    and transition.route_ids == closure["route_ids"],
+                    "RECOVERY_RECONCILED no coincide con el cierre",
+                )
+                self._require(
+                    not closure["reconciled"]
+                    and all(
+                        admissions[admission_id]["status"] in (
+                            ReadAdmissionStatus.COMPLETED,
+                            ReadAdmissionStatus.CANCELLED,
+                        )
+                        for admission_id in closure["affected_admission_ids"]
+                    ),
+                    "RECOVERY_RECONCILED con admisiones pendientes o duplicado",
+                )
+                add_receipt(transition.receipt_id)
+                closure["terminal_receipt_id"] = transition.receipt_id
+                closure["reconciled"] = True
+                active_recovery = None
+                latest_recovery_generation = max(
+                    latest_recovery_generation, closure["generation"]
+                )
+                continue
+
             if kind is ConsistencyRecordKind.CHECKPOINT_COMMITTED:
                 continue
 
@@ -688,6 +840,17 @@ class ConsistencyJournalReducer:
             )
             for operation_id, item in sorted(invalidations.items())
         )
+        recovery_projection = tuple(
+            RecoveryProjection(
+                operation_id=operation_id,
+                generation=item["generation"],
+                affected_admission_ids=item["affected_admission_ids"],
+                route_ids=item["route_ids"],
+                reconciled=item["reconciled"],
+                terminal_receipt_id=item["terminal_receipt_id"],
+            )
+            for operation_id, item in sorted(recoveries.items())
+        )
         return ConsistencyProjection(
             domain_id=recovery.domain_id,
             authority_epoch=recovery.authority_epoch,
@@ -700,4 +863,5 @@ class ConsistencyJournalReducer:
                 for key, value in sorted(idempotency_records.items())
             ),
             receipt_ids=frozenset(receipts),
+            recovery_closures=recovery_projection,
         )
