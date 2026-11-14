@@ -400,3 +400,31 @@ Después delega en `verify_recovery_chain` la validación HMAC, el commitment de
 La función devuelve falso ante política ausente o incompatible, cadena vacía, envelope no autorizado, canonicalización no permitida, clave no disponible o fallo criptográfico. No modifica ni reemplaza el helper anterior, que permanece disponible para compatibilidad y diagnósticos; el helper anterior no debe confundirse con la nueva verificación ligada a política.
 
 Se añaden pruebas para autorización exacta, par emisor/rol no autorizado, canonicalización no permitida y dominio distinto. La función **no prueba completitud de inventarios, autenticidad de recibos/tombstones, frescura anti-rollback ni replay semántico desde checkpoint**. No abre el recovery gate ni autoriza lecturas protegidas.
+
+
+## 20. Replay semántico desde una proyección base de checkpoint
+
+**Estado: IMPLEMENTADO EN RAMA FEATURE — requiere validación del propietario en Debian.**
+
+Se incorpora `ConsistencyJournalReducer.reduce_from_projection(recovery, base_projection)` para continuar el replay desde la proyección base resuelta por el puerto de checkpoint. El método exige que la proyección coincida exactamente con el dominio, época y secuencia del checkpoint; la recuperación conserva la validación estructural de secuencias consecutivas desde `checkpoint.sequence + 1` hasta el head.
+
+La proyección añade dos campos de metadatos de replay:
+- `emission_ids`: conjunto acumulado de identificadores de emisión, necesario para impedir duplicados entre el prefijo compactado y el journal posterior al checkpoint.
+- `replay_metadata_version`: versión explícita del formato de estado interno necesario para continuar el reducer.
+
+El reducer emite la versión 1. Para continuar desde checkpoint exige exactamente esa versión y valida tipos de las colecciones, identificadores de recibos/emisiones y binding de la proyección. Las proyecciones históricas o incompletas sin metadatos compatibles se rechazan; no se interpretan como conjuntos vacíos.
+
+La hidratación de estado restaura admisiones y endpoints, cierres de Forget, invalidaciones, recuperaciones, idempotencia, recibos, emisiones, generaciones y estado de reconciliación. Luego aplica las mismas reglas semánticas a las entradas posteriores y devuelve una proyección equivalente al replay completo cuando ambas fuentes representan el mismo historial.
+
+Se añadieron pruebas para:
+- equivalencia entre replay completo y replay desde checkpoint;
+- rechazo de checkpoint sin proyección base;
+- rechazo de versión de metadatos ausente/no soportada;
+- rechazo de proyección ligada a otro dominio, época o secuencia;
+- preservación de unicidad de `emission_id` a través del checkpoint.
+
+### Límite de confianza
+
+`reduce_from_projection` valida estructura y semántica, pero **no autentica el almacenamiento del checkpoint ni demuestra que la proyección provenga del puerto confiable**. La función no debe ser llamada como puerta de recuperación desde código no confiable. La composición del futuro `LocalConsistencyRecoveryVerifier` debe invocarla únicamente después de que `LocalConsistencyCheckpointProjectionPort` devuelva `VERIFIED`, valide el binding completo de la respuesta contra la solicitud exacta y la política independiente autorice versiones y referencias.
+
+Esta entrega no implementa todavía adaptadores de almacenamiento, verificación de inventarios, autenticidad de recibos/tombstones ni el verificador integrado. El recovery gate permanece cerrado.
