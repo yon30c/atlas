@@ -477,6 +477,6 @@ Resultados:
 
 El orquestador no contiene adaptadores de almacenamiento, no crea ni custodia claves, no prueba que el backup sea el más reciente y no implementa Trust Anchor. La confianza en los resultados de los puertos depende de que su composición use implementaciones autoritativas y no fakes en producción.
 
-Se añaden pruebas de orquestación para cadena autenticada, inventario que omite un recibo, inventario no disponible, commitment final incorrecto y contexto de política/dominio incompatible. El módulo se exporta desde `atlas.memory`.
+Se añaden pruebas de orquestación para cadena autenticada, inventario que omite un recibo, inventario no disponible, commitment final incorrecto, contexto de política/dominio incompatible, resolución correcta de checkpoint antes del replay y ausencia del resolver de checkpoint. El módulo se exporta desde `atlas.memory`.
 
 **Límite operativo:** este verificador es una implementación del flujo de decisión local, no evidencia de conformidad durable K01–K07. Hasta disponer de adaptadores autoritativos y pruebas contra almacenamiento real, no se habilitan lecturas protegidas ni recuperación productiva. El perfil local tampoco garantiza que un Forget no reaparezca al restaurar un conjunto antiguo coherente.
