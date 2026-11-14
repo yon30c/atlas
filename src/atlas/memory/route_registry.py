@@ -10,6 +10,7 @@ from typing import Protocol
 
 from atlas.core.errors import ContractError
 from atlas.memory.consistency import DeliveryRouteSet
+from atlas.memory.journal import ConsistencyPosition
 
 
 def _required(value: object, field: str) -> None:
@@ -58,6 +59,7 @@ class RouteRegistryResult:
     requested_route_ids: frozenset[str]
     status: RouteRegistryStatus
     routes: tuple[DeliveryRouteDescriptor, ...] = ()
+    consistency_position: ConsistencyPosition | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.requested_route_ids, frozenset) or not self.requested_route_ids:
@@ -74,6 +76,12 @@ class RouteRegistryResult:
         resolved_ids = tuple(route.route_id for route in self.routes)
         if len(resolved_ids) != len(set(resolved_ids)):
             raise ContractError("el registro devolvió rutas duplicadas")
+        if self.status is RouteRegistryStatus.UNAVAILABLE:
+            if self.consistency_position is not None:
+                raise ContractError("UNAVAILABLE no puede afirmar una posición validada")
+        elif not isinstance(self.consistency_position, ConsistencyPosition):
+            raise ContractError("RESOLVED/REJECTED requieren ConsistencyPosition")
+
         if self.status is RouteRegistryStatus.RESOLVED:
             if frozenset(resolved_ids) != self.requested_route_ids:
                 raise ContractError("RESOLVED requiere resolver exactamente todas las rutas solicitadas")
@@ -100,5 +108,14 @@ class DeliveryRouteRegistryPort(Protocol):
     the same invalidation/fencing authority before they become effective.
     """
 
-    def resolve_routes(self, routes: DeliveryRouteSet) -> RouteRegistryResult:
-        """Resolve every route ID or fail closed without returning partial data."""
+    def resolve_routes(
+        self,
+        routes: DeliveryRouteSet,
+        expected_position: ConsistencyPosition,
+    ) -> RouteRegistryResult:
+        """Resolve all IDs against the exact verified consistency position.
+
+        The caller rechecks that position inside its SQLiteUnitOfWork before
+        appending READ_ADMITTED. A registry change must first publish its
+        invalidation at that same authority; otherwise the adapter is unsafe.
+        """
