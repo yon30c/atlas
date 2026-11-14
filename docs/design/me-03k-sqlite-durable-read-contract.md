@@ -23,6 +23,7 @@ A loaded state is still untrusted. Structural validation requires:
 - A non-empty journal beginning at sequence 1. Checkpoint-backed histories return UNAVAILABLE until checkpoint/projection loading is implemented.
 - Journal row count and operation row count equal the persisted head.
 - Exactly one operation-resolution row maps to each journal entry by domain, epoch, sequence, record ID and operation ID.
+- Each operation row's idempotency key, canonical semantic request bytes and SHA-256 digest agree with the reconstructed transition and the frozen K01 projection v1.
 - Contiguous sequence numbers from 1 through head.
 - Typed transition reconstruction and exact canonical-byte round trip.
 - Duplicated record metadata agrees with the reconstructed transition.
