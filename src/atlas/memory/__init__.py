@@ -122,6 +122,7 @@ from atlas.memory.local_trust_policy import (
     LocalConsistencyTrustPolicy,
     LocalIssuerAuthorization,
 )
+from atlas.memory.local_recovery_verifier import LocalConsistencyRecoveryVerifier
 from atlas.memory.trust import (
     ConsistencyRecoveryProfile,
     ConsistencyRecoveryVerificationResult,
@@ -138,6 +139,7 @@ __all__ = [
     "AuthenticatedConsistencyEnvelope",
     "LocalConsistencyTrustPolicy",
     "LocalIssuerAuthorization",
+    "LocalConsistencyRecoveryVerifier",
     "authenticate_envelope",
     "canonical_json_bytes",
     "checkpoint_payload",
