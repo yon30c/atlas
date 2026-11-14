@@ -29,7 +29,7 @@ Receipt kinds are closed:
 - `ADMISSION_COMPLETED`;
 - `ADMISSION_CANCELLED`.
 
-Endpoint completion binds final sequence. Endpoint fencing binds old and new generations. Admission terminal receipts bind the final COMPLETED/CANCELLED outcome.
+Endpoint completion binds final sequence. Endpoint fencing binds old and new generations and the last committed sequence through which the endpoint guarantees no further emission. Admission terminal receipts bind the final COMPLETED/CANCELLED outcome.
 
 ## 3. Verification result
 
