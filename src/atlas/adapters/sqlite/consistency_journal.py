@@ -497,14 +497,14 @@ class SQLiteConsistencyJournal:
                 ):
                     return rejected
 
+                epoch = domain["authority_epoch"]
                 checkpoint_count = connection.execute(
-                    "SELECT COUNT(*) FROM checkpoints WHERE domain_id=?",
-                    (domain_id,),
+                    "SELECT COUNT(*) FROM checkpoints WHERE domain_id=? AND authority_epoch=?",
+                    (domain_id, epoch),
                 ).fetchone()[0]
                 if checkpoint_count:
                     return unavailable
 
-                epoch = domain["authority_epoch"]
                 head = domain["head_sequence"]
                 if head == 0:
                     return unavailable
