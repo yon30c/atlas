@@ -114,6 +114,7 @@ class FakeEndpointFencer:
             "generation": request.generation,
             "receipt_id": f"fence:{request.admission_id}:{request.endpoint_id}",
             "confirmed": True,
+            "fenced_through_sequence": request.last_committed_sequence,
         }
         if self.mismatch_field:
             values[self.mismatch_field] = "wrong-binding"
@@ -151,6 +152,7 @@ class FakeTerminalVerifier:
             "endpoint_id": request.endpoint_id,
             "previous_generation": request.previous_generation,
             "final_sequence": request.final_sequence,
+            "fenced_through_sequence": request.fenced_through_sequence,
         }
         if self.mismatch_field:
             values[self.mismatch_field] = "wrong-binding"
