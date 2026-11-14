@@ -2,9 +2,11 @@
 from enum import Enum
 from typing import Protocol
 
+from atlas.memory.journal import ConsistencyRecoveryState
 from atlas.memory.trust import (
     CheckpointVerificationResult,
     ConsistencyCheckpointVerificationRequest,
+    ConsistencyRecoveryTrustContext,
     ConsistencyRecoveryVerificationResult,
     ConsistencyTrustAnchor,
     ReceiptTrustContext,
@@ -56,8 +58,8 @@ class ConsistencyRecoveryVerifierPort(Protocol):
 
     def verify_recovery_state(
         self,
-        consistency_domain_id: str,
+        state: ConsistencyRecoveryState,
         anchor: ConsistencyTrustAnchor,
-        trust_context: ReceiptTrustContext,
+        trust_context: ConsistencyRecoveryTrustContext,
     ) -> ConsistencyRecoveryVerificationResult:
         """Reject rollback, forks, gaps, missing tombstones and unresolved continuity."""
