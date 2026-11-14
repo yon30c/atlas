@@ -12,6 +12,8 @@ from atlas.memory.journal import (
     ConsistencyPosition,
     JournalCommit,
     JournalEntry,
+    JournalOperationResolution,
+    ConsistencyTransition,
 )
 
 
@@ -32,14 +34,40 @@ class ConsistencyJournalPort(Protocol):
         de reintentar; no se presupone que el append haya fallado.
         """
 
+    def resolve_operation(
+        self,
+        domain_id: str,
+        authority_epoch: int,
+        operation_id: str,
+        idempotency_key: str | None,
+        expected_transition: ConsistencyTransition,
+        expected_position: ConsistencyPosition,
+    ) -> JournalOperationResolution:
+        """Resuelve una escritura ambigua por identidad y solicitud canónica exacta.
+
+        COMMITTED_EXACT solo si existe una transición durable única que coincide
+        en todos los campos semánticos esperados. NOT_COMMITTED solo si la
+        autoridad demuestra ausencia de commit y devuelve su posición actual.
+        Clave/operación asociada a otra solicitud => CONFLICT. Indisponibilidad,
+        pérdida de continuidad o imposibilidad de probar ausencia => UNKNOWN.
+        UNKNOWN/CONFLICT nunca autorizan reintento nuevo ni apertura de gate.
+        La implementación compara la forma canónica versionada; no bytes de
+        transporte ni timestamps/IDs regenerados por el caller.
+        """
+
     def load_recovery_state(
         self,
         domain_id: str,
     ) -> ConsistencyRecoveryState | None:
-        """Devuelve solo estado estructuralmente completo y con continuidad verificada.
+        """Devuelve estado solo después de verificar autenticidad y anti-rollback.
 
-        Ausencia, corrupción, truncamiento, rollback, época desconocida o
-        procedencia no verificable => None; la autoridad mantiene el dominio cerrado.
+        Debe validar la cadena desde un ancla confiable externa al conjunto
+        restaurable, dominio/época/posición monotónica, esquema, checkpoint,
+        continuidad, idempotency tombstones y operaciones no terminales.
+        Ausencia, corrupción, truncamiento, rollback, época desconocida, ancla
+        indisponible o procedencia no verificable => None; gate cerrado.
+        El reducer recibe exclusivamente estado cuya autenticidad/continuidad
+        ya haya sido verificada por el adaptador.
         """
 
     def load_endpoint_receipts(
