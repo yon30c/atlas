@@ -257,15 +257,15 @@ El checkpoint no sustituye el registro histórico ni puede descartar evidencia n
 7. Recuperar como `UNRESOLVED` cualquier admisión cuya terminalidad no esté probada por recibos recuperables.
 8. Consultar/fencear cada endpoint y registrar recibos nuevos cuando sean necesarios.
 9. Reconciliar operaciones solo cuando la evidencia cubra todos los endpoints.
-10. Habilitar únicamente dominios/rutas cuya continuidad y estado hayan sido verificados.
+10. Habilitar únicamente dominios/rutas cuya integridad, continuidad disponible y estado hayan sido verificados, identificando si la recuperación es local o anclada.
 
 Si falla cualquier paso, el dominio afectado permanece en cuarentena fail-closed. No se reconstruye una admisión ausente por inferencia, ni se marca CANCELLED por timeout.
 
 ### 8.3 Protección contra rollback y truncamiento
 
-La recuperación debe poder detectar que está leyendo una copia antigua o truncada del registro. Para ello requiere una referencia de continuidad/alto-watermark confiable, independiente de los datos recuperados que se están validando.
+La recuperación debe detectar alteraciones, huecos, forks y truncamientos no coherentes que pueda observar en el conjunto disponible. Detectar una restauración coherente de una copia antigua exige una referencia de continuidad/alto-watermark independiente de los datos recuperados.
 
-El algoritmo criptográfico, almacenamiento de anclas, protección contra manipulación y ubicación del watermark no se eligen en este documento. Sin una prueba verificable de continuidad, no se reabren rutas protegidas.
+Por decisión del propietario del 13 de noviembre de 2026, esa referencia externa (Trust Anchor) es opcional y su implementación queda postergada hasta la etapa final de Atlas. El perfil local valida la continuidad interna disponible, pero no demuestra que el conjunto restaurado sea el último estado existente ni ofrece anti-rollback externo. El perfil anclado, cuando se implemente, añadirá esa garantía y fallará cerrado si el ancla no puede verificarse. La ausencia de ancla no debe presentarse como prueba de continuidad externa.
 
 ## 9. Fallos intermedios y resultado exigido
 
@@ -368,7 +368,7 @@ Este diseño no decide:
 1. Tecnología de almacenamiento, motor, esquema físico u ORM.
 2. Mecanismo de transacción, consenso, lock distribuido o compare-and-swap.
 3. Si el journal será global, particionado o replicado, siempre que preserve la relación de orden exigida.
-4. Formato criptográfico, firmas, MAC, hash chain o anclas antirrollback.
+4. Formato criptográfico, firmas, MAC y hash chain; Trust Anchor externo opcional y postergado hasta la etapa final.
 5. Tecnología de almacenamiento y consulta de recibos durables en endpoints.
 6. Política de retención/compactación de registros y tombstones, compatible con idempotencia y CT-05.
 7. Estrategia de backups, replicación, restauración y pruebas operativas.
@@ -384,7 +384,7 @@ El contrato estará listo para traducirse a modelos/puertos implementables cuand
 
 - se acepte el alcance de orden y atomicidad de §3 y §6;
 - las clases de registro y sus campos mínimos estén revisadas;
-- el contrato de recuperación y anti-rollback de §8 tenga una fuente verificable definida a nivel de interfaz;
+- el contrato de recuperación local de §8 esté definido a nivel de interfaz; la fuente externa de anti-rollback queda como capacidad opcional de la etapa final;
 - el tratamiento del resultado incierto de egress y OwnerDecisionProof esté resuelto;
 - los casos C45–C64 ya están representados por pruebas de protocolo; falta validarlos contra adaptadores/autoridad reales cuando existan;
 - se mantenga separada la autoridad de consistencia de EventStore y SecurityAudit.
@@ -427,3 +427,8 @@ La revisión del reducer corrigió una distinción importante del contrato de eg
 **Límite:** el reducer valida estructura y semántica de los registros entregados. No autentica su origen, no demuestra continuidad/anti-rollback, no consulta endpoints y no habilita rutas. Una referencia opaca de continuidad no se trata como prueba verificada.
 
 **Validación:** 78 métodos de prueba están escritos en los tres archivos de journal/reducer y se ejecutaron dentro de la suite completa de 360 tests, con éxito en Python 3.10–3.13 ([Atlas CI #43526491006](https://github.com/yon30c/atlas/actions/runs/43526491006)). No existe journal durable ni adaptador real; el resultado no demuestra persistencia o recuperación distribuida.
+
+
+## 15. Decisión del propietario — Trust Anchor opcional
+
+**APROBADO — 13 de noviembre de 2026.** El baseline de desarrollo utilizará un único servidor y verificación local. El Trust Anchor externo es opcional y su implementación queda postergada hasta la etapa final. La recuperación local debe validar la continuidad interna disponible y mantener el gate cerrado ante corrupción, ambigüedad o inventarios incompletos, pero no puede afirmar que detecta una restauración coherente a un head anterior. Las garantías de no reaparición de memorias olvidadas tras restaurar backups requieren una fuente independiente de supresión/continuidad o una reconciliación aprobada; de lo contrario, la restauración afectada no se habilita.
