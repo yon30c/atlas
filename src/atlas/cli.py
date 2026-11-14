@@ -23,6 +23,7 @@ from atlas.ports.llm import LLMProvider
 DEFAULT_MODEL = "gemma4:e2b"
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
 DEFAULT_CONVERSATION_HISTORY_TURNS = 8
+DEFAULT_CONVERSATION_MESSAGE_CHARS = 2000
 
 
 def main(
@@ -40,7 +41,8 @@ def main(
     ATLAS_MODEL y ATLAS_OLLAMA_URL permiten cambiar el modelo o el endpoint.
     El adaptador rechaza cualquier endpoint que no sea loopback.
     ATLAS_MODE=offline conserva el modo informativo sin proveedor LLM.
-    El historial se mantiene solo en memoria y conserva hasta ocho turnos.
+    El historial en memoria conserva hasta ocho turnos, con 2000 caracteres
+    como máximo por mensaje histórico.
     """
     clock = SystemClock()
     request_factory = LocalConsoleRequestFactory(clock, user_id=user_id)
@@ -73,7 +75,8 @@ def main(
     conversation_processor = ConversationContextProcessor(
         assistant=assistant_service,
         history_store=InMemoryConversationHistory(
-            max_turns=DEFAULT_CONVERSATION_HISTORY_TURNS
+            max_turns=DEFAULT_CONVERSATION_HISTORY_TURNS,
+            max_message_chars=DEFAULT_CONVERSATION_MESSAGE_CHARS,
         ),
     )
     atlas_core = AtlasCore(
