@@ -284,6 +284,60 @@ class SQLiteConsistencyJournalTests(unittest.TestCase):
         self.assertIs(result.status, JournalOperationResolutionStatus.CONFLICT)
         self.assertIsNone(result.commit)
 
+    def test_append_transition_in_reuses_the_callers_unit_of_work(self):
+        transition = read_admitted(record_id=RECORD_1)
+
+        with self.database.unit_of_work() as unit_of_work:
+            result = self.journal.append_transition_in(
+                unit_of_work, self.position(0), "append-in-uow", transition
+            )
+            self.assertIsNotNone(result)
+            self.assertEqual(result.position.sequence, 1)
+
+        with self.database.connection() as connection:
+            head = connection.execute(
+                "SELECT head_sequence FROM consistency_domains WHERE domain_id='domain-a'"
+            ).fetchone()[0]
+        self.assertEqual(head, 1)
+
+    def test_append_transition_in_signer_failure_rolls_back_composed_mutations(self):
+        class FailingSigner:
+            def sign_envelope(self, envelope, object_value):
+                raise OSError("signer unavailable")
+
+        failing_journal = SQLiteConsistencyJournal(
+            self.database,
+            FailingSigner(),
+            reducer_version="reducer-v1",
+            issuer_id="issuer-test",
+            issuer_role="service",
+            key_reference="key-test",
+            trust_policy_version="policy-v1",
+        )
+        with self.database.write_transaction() as connection:
+            connection.execute("CREATE TABLE uow_probe (value TEXT NOT NULL)")
+
+        transition = read_admitted(record_id=RECORD_1)
+        with self.assertRaises(OSError):
+            with self.database.unit_of_work() as unit_of_work:
+                connection = unit_of_work._connection_for(self.database)
+                connection.execute(
+                    "INSERT INTO uow_probe(value) VALUES ('must-rollback')"
+                )
+                failing_journal.append_transition_in(
+                    unit_of_work, self.position(0), "append-failing", transition
+                )
+
+        with self.database.connection() as connection:
+            probe_count = connection.execute(
+                "SELECT COUNT(*) FROM uow_probe"
+            ).fetchone()[0]
+            head = connection.execute(
+                "SELECT head_sequence FROM consistency_domains WHERE domain_id='domain-a'"
+            ).fetchone()[0]
+        self.assertEqual(probe_count, 0)
+        self.assertEqual(head, 0)
+
     def test_append_failure_from_signer_leaves_head_and_journal_unchanged(self):
         class FailingSigner:
             def sign_envelope(self, envelope, object_value):
