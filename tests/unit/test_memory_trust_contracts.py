@@ -8,7 +8,12 @@ from atlas.memory.journal import (
     ConsistencyPosition,
     ConsistencyRecoveryState,
 )
-from atlas.memory.receipt_verification import TerminalReceiptKind, TerminalReceiptVerificationRequest
+from atlas.memory.receipt_verification import (
+    TerminalReceiptKind,
+    TerminalReceiptVerificationRequest,
+    VerifiedTerminalReceipt,
+)
+from atlas.memory.recovery_completion import RecoveryCompletionReceipt, RecoveryCompletionRequest
 from atlas.memory.trust import (
     AuthenticatedConsistencyEnvelope,
     ConsistencyCheckpointVerificationRequest,
@@ -356,6 +361,55 @@ class ConsistencyTrustContractTests(unittest.TestCase):
                 ConsistencyRecoveryVerificationStatus.REJECTED,
                 verified,
             )
+
+    def test_global_receipt_trust_context_binds_exact_admission_and_route_inventory(self):
+        admission_receipt = VerifiedTerminalReceipt(
+            verification_id="verified-admission-1",
+            issuer_id="terminal-verifier",
+            verified_at=self.now,
+            consistency_domain_id="atlas-main",
+            authority_epoch=4,
+            operation_id="recovery-op-1",
+            admission_id="admission-1",
+            receipt_id="admission-receipt-1",
+            kind=TerminalReceiptKind.ADMISSION_CANCELLED,
+            generation=7,
+        )
+        request = RecoveryCompletionRequest(
+            consistency_domain_id="atlas-main",
+            authority_epoch=4,
+            operation_id="recovery-op-1",
+            generation=7,
+            affected_admission_ids=frozenset({"admission-1"}),
+            route_ids=frozenset({"api-response"}),
+            admission_receipts=(admission_receipt,),
+        )
+        receipt = RecoveryCompletionReceipt(
+            consistency_domain_id="atlas-main",
+            authority_epoch=4,
+            operation_id="recovery-op-1",
+            generation=7,
+            affected_admission_ids=frozenset({"admission-1"}),
+            route_ids=frozenset({"api-response"}),
+            receipt_id="global-receipt-1",
+        )
+        context = ReceiptTrustContext(
+            consistency_domain_id="atlas-main",
+            authority_epoch=4,
+            operation_id="recovery-op-1",
+            expected_receipt_kind=TrustedReceiptKind.RECOVERY_COMPLETED,
+            canonical_request_reference="canonical-recovery-request-1",
+            trust_policy_version="policy-v2",
+            verification_time=self.now,
+            purpose="global-recovery-gate-reopen",
+            expected_receipt_id="global-receipt-1",
+            generation=7,
+            affected_admission_ids=frozenset({"admission-1"}),
+            route_ids=frozenset({"api-response"}),
+        )
+        self.assertTrue(context.binds_recovery_completion(request, receipt))
+        changed = replace(receipt, route_ids=frozenset({"assistant-response"}))
+        self.assertFalse(context.binds_recovery_completion(request, changed))
 
     def test_receipt_trust_context_requires_utc_time_and_exact_purpose(self):
         request = TerminalReceiptVerificationRequest(
