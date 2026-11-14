@@ -5,9 +5,8 @@ from datetime import datetime, timedelta
 import secrets
 from threading import RLock
 
-from atlas.authorization.memory_service import MemoryAuthorizationService
 from atlas.authorization.models import AuthorizationDecision, AuthorizationResult
-from atlas.core.context import OperationContext
+from atlas.memory.context import MemoryRequestContext
 from atlas.memory.consistency import (
     AuthorizationSnapshot,
     DeliveryRouteSet,
@@ -18,6 +17,7 @@ from atlas.memory.consistency import (
 )
 from atlas.memory.models import MemoryClassification, MemoryId, MemoryVersionId
 from atlas.ports.clock import Clock
+from atlas.ports.memory_authorization import MemoryAuthorizationPort
 from atlas.ports.protected_memory_read import (
     ProtectedMemoryContentPort,
     ProtectedMemoryRead,
@@ -44,7 +44,7 @@ class MemoryGatewayService:
 
     def __init__(
         self,
-        authorization: MemoryAuthorizationService,
+        authorization: MemoryAuthorizationPort,
         content_port: ProtectedMemoryContentPort,
         consistency: ProtectedMemoryConsistencyPort,
         routes: DeliveryRouteSet,
@@ -106,13 +106,13 @@ class MemoryGatewayService:
 
     def get_version(
         self,
-        context: OperationContext,
+        context: MemoryRequestContext,
         memory_id: MemoryId,
         version_id: MemoryVersionId,
     ) -> ProtectedMemoryRead | None:
         """Abre una lectura protegida sin devolver el contenido al llamador."""
         if (
-            not isinstance(context, OperationContext)
+            not isinstance(context, MemoryRequestContext)
             or not isinstance(memory_id, str)
             or not memory_id.strip()
             or not isinstance(version_id, str)
@@ -138,8 +138,8 @@ class MemoryGatewayService:
             if (
                 snapshot.memory_id != memory_id
                 or snapshot.version_id != version_id
-                or snapshot.actor_identity_id != context.actor.identity_id
-                or snapshot.revisions.identity_revision.revision != context.actor.revision
+                or snapshot.actor_identity_id != context.actor_id
+                or snapshot.revisions.identity_revision.revision != context.actor_revision
                 or snapshot.request_id != context.request_id
                 or snapshot.action != "memory.read"
             ):
