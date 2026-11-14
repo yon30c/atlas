@@ -451,10 +451,10 @@ class JournalOperationResolutionStatus(str, Enum):
 
 @dataclass(frozen=True, slots=True)
 class JournalOperationResolution:
-    """Resultado inequívoco (o explícitamente desconocido) de una escritura incierta."""
+    """Resultado de reconciliación de un append incierto."""
 
     status: JournalOperationResolutionStatus
-    operation_id: str
+    append_id: str
     idempotency_key: str | None
     expected_position: ConsistencyPosition
     expected_transition: ConsistencyTransition
@@ -465,15 +465,13 @@ class JournalOperationResolution:
     def __post_init__(self) -> None:
         if not isinstance(self.status, JournalOperationResolutionStatus):
             raise ContractError("status debe ser JournalOperationResolutionStatus")
-        _required(self.operation_id, "operation_id")
+        _required(self.append_id, "append_id")
         if self.idempotency_key is not None:
             _required(self.idempotency_key, "idempotency_key")
         if not isinstance(self.expected_position, ConsistencyPosition):
             raise ContractError("expected_position debe ser ConsistencyPosition")
         if not isinstance(self.expected_transition, ConsistencyTransition):
             raise ContractError("expected_transition debe ser ConsistencyTransition")
-        if self.expected_transition.operation_id != self.operation_id:
-            raise ContractError("expected_transition no corresponde a operation_id")
         if self.expected_transition.idempotency_key != self.idempotency_key:
             raise ContractError("expected_transition no corresponde a idempotency_key")
         if self.current_position is not None and not isinstance(
@@ -488,21 +486,20 @@ class JournalOperationResolution:
             raise ContractError("committed_transition debe ser ConsistencyTransition")
         if self.status is JournalOperationResolutionStatus.COMMITTED_EXACT:
             if (
-                self.commit is None
-                or self.current_position is None
+                self.commit is None or self.current_position is None
                 or self.committed_transition is None
             ):
                 raise ContractError("COMMITTED_EXACT requiere commit y posición actual")
             if (
                 self.commit.position.consistency_domain_id
-                != self.expected_position.consistency_domain_id
+                    != self.expected_position.consistency_domain_id
                 or self.commit.position.authority_epoch
-                != self.expected_position.authority_epoch
+                    != self.expected_position.authority_epoch
                 or self.commit.position.sequence != self.expected_position.sequence + 1
                 or self.current_position.consistency_domain_id
-                != self.expected_position.consistency_domain_id
+                    != self.expected_position.consistency_domain_id
                 or self.current_position.authority_epoch
-                != self.expected_position.authority_epoch
+                    != self.expected_position.authority_epoch
                 or self.current_position.sequence < self.commit.position.sequence
                 or not same_semantic_transition(
                     self.expected_position.consistency_domain_id,
@@ -512,29 +509,31 @@ class JournalOperationResolution:
                 )
                 or self.committed_transition.idempotency_key
                     != self.expected_transition.idempotency_key
-                or (
-                    self.expected_transition.idempotency_key is None
-                    and self.committed_transition.operation_id
-                    != self.expected_transition.operation_id
-                )
                 or self.commit.record_id != self.committed_transition.record_id
             ):
-                raise ContractError("commit/transición/posición no corresponden exactamente a la solicitud")
+                raise ContractError(
+                    "commit/transición/posición no corresponden exactamente a la solicitud"
+                )
         elif self.commit is not None or self.committed_transition is not None:
-            raise ContractError("solo COMMITTED_EXACT puede incluir commit y transición persistida")
+            raise ContractError(
+                "solo COMMITTED_EXACT puede incluir commit y transición persistida"
+            )
         if self.status is JournalOperationResolutionStatus.NOT_COMMITTED:
             if self.current_position is None:
                 raise ContractError("NOT_COMMITTED requiere posición actual demostrada")
             if (
                 self.current_position.consistency_domain_id
-                != self.expected_position.consistency_domain_id
+                    != self.expected_position.consistency_domain_id
                 or self.current_position.authority_epoch
-                != self.expected_position.authority_epoch
+                    != self.expected_position.authority_epoch
                 or self.current_position.sequence < self.expected_position.sequence
             ):
-                raise ContractError("NOT_COMMITTED requiere misma autoridad, época y posición no regresiva")
+                raise ContractError(
+                    "NOT_COMMITTED requiere misma autoridad, época y posición no regresiva"
+                )
         if self.status is JournalOperationResolutionStatus.UNKNOWN and self.commit is not None:
             raise ContractError("UNKNOWN no puede afirmar un commit")
+
 
 @dataclass(frozen=True, slots=True)
 class JournalEntry:

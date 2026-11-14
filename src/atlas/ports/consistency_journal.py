@@ -23,6 +23,7 @@ class ConsistencyJournalPort(Protocol):
     def append_transition(
         self,
         expected_position: ConsistencyPosition,
+        append_id: str,
         transition: ConsistencyTransition,
     ) -> JournalCommit | None:
         """Confirma transición y secuencia como una unidad lógica.
@@ -30,26 +31,27 @@ class ConsistencyJournalPort(Protocol):
         Misma idempotency_key + misma solicitud canónica devuelve el commit
         existente. Clave reutilizada con otra solicitud, posición obsoleta,
         transición ilegal o resultado no verificable => None/conflicto fail-closed.
-        Un resultado ambiguo debe poder consultarse por operación/clave antes
-        de reintentar; no se presupone que el append haya fallado.
+        append_id es estable durante los reintentos de este append y único
+        dentro del dominio/época. operation_id es solo correlación de negocio.
+        Un resultado ambiguo se consulta por append_id y, si existe, por
+        idempotency_key; nunca por operation_id.
         """
 
-    def resolve_operation(
+    def resolve_append(
         self,
         domain_id: str,
         authority_epoch: int,
-        operation_id: str,
+        append_id: str,
         idempotency_key: str | None,
         expected_transition: ConsistencyTransition,
         expected_position: ConsistencyPosition,
     ) -> JournalOperationResolution:
-        """Resuelve una escritura ambigua por identidad y solicitud canónica exacta.
+        """Resuelve una escritura ambigua por append_id y clave semántica.
 
-        COMMITTED_EXACT solo si existe una transición durable única que coincide
-        en todos los campos semánticos esperados. NOT_COMMITTED solo si la
-        autoridad demuestra ausencia de commit y devuelve su posición actual.
-        Clave/operación asociada a otra solicitud => CONFLICT. Indisponibilidad,
-        pérdida de continuidad o imposibilidad de probar ausencia => UNKNOWN.
+        operation_id nunca es localizador único. Si ambos localizadores
+        identifican commits distintos, o uno identifica otra semántica => CONFLICT.
+        NOT_COMMITTED requiere ausencia por ambos localizadores y posición coherente.
+        Indisponibilidad o evidencia insuficiente => UNKNOWN.
         UNKNOWN/CONFLICT nunca autorizan reintento nuevo ni apertura de gate.
         La implementación compara la forma canónica versionada; no bytes de
         transporte ni timestamps/IDs regenerados por el caller.

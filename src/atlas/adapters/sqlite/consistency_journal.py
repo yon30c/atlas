@@ -150,41 +150,29 @@ class SQLiteConsistencyJournal:
             replayed,
         )
 
-    def _load_operation(
+    def _load_append(
         self, connection: sqlite3.Connection, domain_id: str, epoch: int,
-        *, operation_id: str | None = None, idempotency_key: str | None = None,
+        *, append_id: str | None = None, idempotency_key: str | None = None,
     ) -> sqlite3.Row | None:
-        if operation_id is not None:
-            return connection.execute(
-                """
-                SELECT o.*, j.transition_canonical, j.record_kind, j.schema_version,
-                       j.envelope_version, j.reducer_version, j.previous_commitment,
-                       j.object_commitment, j.issuer_id, j.issuer_role, j.key_reference,
-                       j.trust_policy_version, j.issued_at, j.authentication_evidence
-                FROM journal_operations o
-                JOIN journal_entries j
-                  ON j.domain_id=o.domain_id AND j.authority_epoch=o.authority_epoch
-                 AND j.sequence=o.sequence AND j.record_id=o.record_id
-                 AND j.operation_id=o.operation_id
-                WHERE o.domain_id=? AND o.authority_epoch=? AND o.operation_id=?
-                """, (domain_id, epoch, operation_id)
-            ).fetchone()
-        if idempotency_key is not None:
-            return connection.execute(
-                """
-                SELECT o.*, j.transition_canonical, j.record_kind, j.schema_version,
-                       j.envelope_version, j.reducer_version, j.previous_commitment,
-                       j.object_commitment, j.issuer_id, j.issuer_role, j.key_reference,
-                       j.trust_policy_version, j.issued_at, j.authentication_evidence
-                FROM journal_operations o
-                JOIN journal_entries j
-                  ON j.domain_id=o.domain_id AND j.authority_epoch=o.authority_epoch
-                 AND j.sequence=o.sequence AND j.record_id=o.record_id
-                 AND j.operation_id=o.operation_id
-                WHERE o.domain_id=? AND o.authority_epoch=? AND o.idempotency_key=?
-                """, (domain_id, epoch, idempotency_key)
-            ).fetchone()
-        return None
+        if (append_id is None) == (idempotency_key is None):
+            raise ContractError("se requiere exactamente un localizador")
+        predicate = "o.append_id=?" if append_id is not None else "o.idempotency_key=?"
+        locator = append_id if append_id is not None else idempotency_key
+        return connection.execute(
+            f"""
+            SELECT o.*, j.transition_canonical, j.record_kind, j.schema_version,
+                   j.envelope_version, j.reducer_version, j.previous_commitment,
+                   j.object_commitment, j.issuer_id, j.issuer_role, j.key_reference,
+                   j.trust_policy_version, j.issued_at, j.authentication_evidence
+            FROM journal_operations o
+            JOIN journal_entries j
+              ON j.domain_id=o.domain_id AND j.authority_epoch=o.authority_epoch
+             AND j.sequence=o.sequence AND j.record_id=o.record_id
+             AND j.operation_id=o.operation_id
+            WHERE o.domain_id=? AND o.authority_epoch=? AND {predicate}
+            """,
+            (domain_id, epoch, locator),
+        ).fetchone()
 
     @staticmethod
     def _request_bytes(domain_id: str, epoch: int, transition: ConsistencyTransition) -> bytes:
@@ -195,9 +183,14 @@ class SQLiteConsistencyJournal:
     def append_transition(
         self,
         expected_position: ConsistencyPosition,
+        append_id: str,
         transition: ConsistencyTransition,
     ) -> JournalCommit | None:
-        if not isinstance(expected_position, ConsistencyPosition) or not isinstance(transition, ConsistencyTransition):
+        if (
+            not isinstance(expected_position, ConsistencyPosition)
+            or not isinstance(append_id, str) or not append_id.strip()
+            or not isinstance(transition, ConsistencyTransition)
+        ):
             return None
         domain_id = expected_position.consistency_domain_id
         epoch = expected_position.authority_epoch
@@ -216,21 +209,27 @@ class SQLiteConsistencyJournal:
                 ):
                     return None
 
-                by_key = self._load_operation(
-                    connection, domain_id, epoch, idempotency_key=transition.idempotency_key
+                by_key = (
+                    self._load_append(
+                        connection, domain_id, epoch,
+                        idempotency_key=transition.idempotency_key,
+                    )
+                    if transition.idempotency_key is not None else None
                 )
-                by_operation = self._load_operation(
-                    connection, domain_id, epoch, operation_id=transition.operation_id
+                by_append = self._load_append(
+                    connection, domain_id, epoch, append_id=append_id
                 )
-                if by_key is not None and by_operation is not None and (
-                    by_key["operation_id"] != by_operation["operation_id"]
+                if by_key is not None and by_append is not None and (
+                    (by_key["sequence"], by_key["record_id"])
+                    != (by_append["sequence"], by_append["record_id"])
                 ):
                     return None
-                existing = by_key or by_operation
+                existing = by_key or by_append
                 if existing is not None:
                     if (
                         bytes(existing["request_canonical"]) != request_bytes
                         or existing["idempotency_key"] != transition.idempotency_key
+                        or (by_append is not None and by_append["append_id"] != append_id)
                     ):
                         return None
                     return self._row_commit(existing, replayed=True)
@@ -311,12 +310,12 @@ class SQLiteConsistencyJournal:
                 connection.execute(
                     """
                     INSERT INTO journal_operations (
-                        domain_id, authority_epoch, operation_id, idempotency_key,
+                        domain_id, authority_epoch, append_id, operation_id, idempotency_key,
                         request_canonical, request_digest, sequence, record_id, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
-                        domain_id, epoch, transition.operation_id,
+                        domain_id, epoch, append_id, transition.operation_id,
                         transition.idempotency_key, request_bytes, request_digest,
                         sequence, transition.record_id, now,
                     ),
@@ -338,27 +337,27 @@ class SQLiteConsistencyJournal:
         except (sqlite3.Error, ContractError, OSError, RuntimeError, ValueError):
             return None
 
-    def resolve_operation(
+    def resolve_append(
         self,
         domain_id: str,
         authority_epoch: int,
-        operation_id: str,
+        append_id: str,
         idempotency_key: str | None,
         expected_transition: ConsistencyTransition,
         expected_position: ConsistencyPosition,
     ) -> JournalOperationResolution:
         unknown = JournalOperationResolutionStatus.UNKNOWN
         if (
-            not isinstance(expected_transition, ConsistencyTransition)
+            not isinstance(append_id, str) or not append_id.strip()
+            or not isinstance(expected_transition, ConsistencyTransition)
             or not isinstance(expected_position, ConsistencyPosition)
-            or expected_transition.operation_id != operation_id
             or expected_transition.idempotency_key != idempotency_key
             or expected_position.consistency_domain_id != domain_id
             or expected_position.authority_epoch != authority_epoch
         ):
             return JournalOperationResolution(
-                unknown, operation_id, idempotency_key, expected_position,
-                expected_transition, None, None,
+                unknown, append_id if isinstance(append_id, str) else "",
+                idempotency_key, expected_position, expected_transition, None, None,
             )
         try:
             with self._database.connection() as connection:
@@ -371,47 +370,57 @@ class SQLiteConsistencyJournal:
                     or domain["trust_policy_version"] != self._trust_policy_version
                 ):
                     raise sqlite3.DatabaseError("dominio no verificable")
-                by_operation = self._load_operation(
-                    connection, domain_id, authority_epoch, operation_id=operation_id
+                by_append = self._load_append(
+                    connection, domain_id, authority_epoch, append_id=append_id
                 )
-                by_key = self._load_operation(
-                    connection, domain_id, authority_epoch, idempotency_key=idempotency_key
+                by_key = (
+                    self._load_append(
+                        connection, domain_id, authority_epoch,
+                        idempotency_key=idempotency_key,
+                    )
+                    if idempotency_key is not None else None
                 )
                 current = self._position(domain_id, authority_epoch, domain["head_sequence"])
-                if by_operation is not None and by_key is not None and (
-                    by_operation["operation_id"] != by_key["operation_id"]
-                ):
-                    status = JournalOperationResolutionStatus.CONFLICT
-                    return JournalOperationResolution(
-                        status, operation_id, idempotency_key, expected_position,
-                        expected_transition, current, None,
-                    )
-                row = by_key or by_operation
-                if row is None:
-                    return JournalOperationResolution(
-                        JournalOperationResolutionStatus.NOT_COMMITTED,
-                        operation_id, idempotency_key, expected_position,
-                        expected_transition, current, None,
-                    )
-                committed = _transition_from_bytes(bytes(row["transition_canonical"]))
-                request_bytes = self._request_bytes(domain_id, authority_epoch, expected_transition)
-                if (
-                    bytes(row["request_canonical"]) != request_bytes
-                    or row["idempotency_key"] != idempotency_key
+                if by_append is not None and by_key is not None and (
+                    (by_append["sequence"], by_append["record_id"])
+                    != (by_key["sequence"], by_key["record_id"])
                 ):
                     return JournalOperationResolution(
                         JournalOperationResolutionStatus.CONFLICT,
-                        operation_id, idempotency_key, expected_position,
+                        append_id, idempotency_key, expected_position,
+                        expected_transition, current, None,
+                    )
+                row = by_key or by_append
+                if row is None:
+                    if current.sequence < expected_position.sequence:
+                        raise sqlite3.DatabaseError("posición actual regresiva")
+                    return JournalOperationResolution(
+                        JournalOperationResolutionStatus.NOT_COMMITTED,
+                        append_id, idempotency_key, expected_position,
+                        expected_transition, current, None,
+                    )
+                committed = _transition_from_bytes(bytes(row["transition_canonical"]))
+                request_bytes = self._request_bytes(
+                    domain_id, authority_epoch, expected_transition
+                )
+                if (
+                    bytes(row["request_canonical"]) != request_bytes
+                    or row["idempotency_key"] != idempotency_key
+                    or (by_append is not None and row["append_id"] != append_id)
+                ):
+                    return JournalOperationResolution(
+                        JournalOperationResolutionStatus.CONFLICT,
+                        append_id, idempotency_key, expected_position,
                         expected_transition, current, None,
                     )
                 commit = self._row_commit(row, replayed=True)
                 return JournalOperationResolution(
                     JournalOperationResolutionStatus.COMMITTED_EXACT,
-                    operation_id, idempotency_key, expected_position,
+                    append_id, idempotency_key, expected_position,
                     expected_transition, current, commit, committed,
                 )
         except Exception:
             return JournalOperationResolution(
-                unknown, operation_id, idempotency_key, expected_position,
+                unknown, append_id, idempotency_key, expected_position,
                 expected_transition, None, None,
             )

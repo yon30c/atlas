@@ -41,7 +41,7 @@ class JournalOperationResolutionTests(unittest.TestCase):
     def _result(self, status, **overrides):
         values = dict(
             status=status,
-            operation_id=self.transition.operation_id,
+            append_id="append-10",
             idempotency_key=self.transition.idempotency_key,
             expected_position=self.expected,
             expected_transition=self.transition,
@@ -111,11 +111,11 @@ class JournalOperationResolutionTests(unittest.TestCase):
         )
         self.assertIs(result.status, JournalOperationResolutionStatus.CONFLICT)
 
-    def test_resolution_cannot_mismatch_operation_or_idempotency_key(self):
+    def test_resolution_requires_append_identity_and_matching_idempotency_key(self):
         with self.assertRaises(ContractError):
             self._result(
                 JournalOperationResolutionStatus.UNKNOWN,
-                operation_id="different-operation",
+                append_id="append-other",
             )
         with self.assertRaises(ContractError):
             self._result(
