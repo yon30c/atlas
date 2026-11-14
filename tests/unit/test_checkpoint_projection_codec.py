@@ -177,7 +177,10 @@ class CheckpointProjectionCodecTests(unittest.TestCase):
             trust_policy_version="local-policy-v1",
         )
         projection, manifest, integrity_commitment = decode_checkpoint_projection_artifacts(
-            artifacts.state_bytes, artifacts.manifest_bytes
+            artifacts.state_bytes,
+            artifacts.manifest_bytes,
+            expected_state_reference=artifacts.state_reference,
+            expected_integrity_reference=artifacts.integrity_reference,
         )
         self.assertEqual(projection, self.projection)
         self.assertEqual(manifest, artifacts.manifest)
@@ -205,7 +208,10 @@ class CheckpointProjectionCodecTests(unittest.TestCase):
         )
         with self.assertRaises(ContractError):
             decode_checkpoint_projection_artifacts(
-                encode_projection(changed), artifacts.manifest_bytes
+                encode_projection(changed),
+                artifacts.manifest_bytes,
+                expected_state_reference=artifacts.state_reference,
+                expected_integrity_reference=artifacts.integrity_reference,
             )
 
     def test_artifact_decoder_rejects_manifest_tampering(self):
@@ -219,11 +225,13 @@ class CheckpointProjectionCodecTests(unittest.TestCase):
         document = json.loads(artifacts.manifest_bytes)
         document["trust_policy_version"] = "different-policy"
         changed_manifest = canonical_json_bytes(document)
-        _, manifest, changed_commitment = decode_checkpoint_projection_artifacts(
-            artifacts.state_bytes, changed_manifest
-        )
-        self.assertEqual(manifest.trust_policy_version, "different-policy")
-        self.assertNotEqual(changed_commitment, artifacts.integrity_commitment)
+        with self.assertRaises(ContractError):
+            decode_checkpoint_projection_artifacts(
+                artifacts.state_bytes,
+                changed_manifest,
+                expected_state_reference=artifacts.state_reference,
+                expected_integrity_reference=artifacts.integrity_reference,
+            )
 
 
 if __name__ == "__main__":
