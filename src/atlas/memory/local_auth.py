@@ -9,7 +9,7 @@ import re
 from typing import Any
 
 from atlas.core.errors import ContractError
-from atlas.memory.trust import AuthenticatedConsistencyEnvelope
+from atlas.memory.envelope import AuthenticatedConsistencyEnvelope
 
 CANONICALIZATION_VERSION = 1
 ENVELOPE_VERSION = 1
@@ -63,8 +63,64 @@ def canonical_json_bytes(value: Any) -> bytes:
         raise ContractError("no se pudo canonicalizar el objeto") from exc
 
 
+def checkpoint_payload(checkpoint: Any) -> dict[str, Any]:
+    """Canonical checkpoint fields, deliberately excluding the envelope."""
+    return {
+        "checkpoint_id": checkpoint.checkpoint_id,
+        "position": checkpoint.position,
+        "state_reference": checkpoint.state_reference,
+        "integrity_reference": checkpoint.integrity_reference,
+        "created_at": checkpoint.created_at,
+    }
+
+
+def journal_entry_payload(entry: Any) -> dict[str, Any]:
+    """Canonical journal-entry fields, deliberately excluding the envelope."""
+    return {"position": entry.position, "transition": entry.transition}
+
+
 def object_commitment(value: Any) -> str:
     return hashlib.sha256(canonical_json_bytes(value)).hexdigest()
+
+
+def verify_recovery_chain(state: Any, key_port: Any, trust_policy_version: str) -> bool:
+    """Verify all local envelopes and predecessor links; no anti-rollback claim."""
+    from atlas.memory.journal import ConsistencyRecoveryState
+
+    if not isinstance(state, ConsistencyRecoveryState):
+        return False
+    if not isinstance(trust_policy_version, str) or not trust_policy_version.strip():
+        return False
+    records = []
+    if state.checkpoint is not None:
+        records.append(("checkpoint", state.checkpoint, checkpoint_payload(state.checkpoint)))
+    records.extend(("journal_entry", entry, journal_entry_payload(entry)) for entry in state.entries)
+    if not records:
+        return state.head_sequence == 0 and state.checkpoint is None and not state.entries
+
+    previous = None
+    for kind, record, payload in records:
+        envelope = record.envelope
+        if not isinstance(envelope, AuthenticatedConsistencyEnvelope):
+            return False
+        if (envelope.object_kind != kind
+                or envelope.consistency_domain_id != state.domain_id
+                or envelope.authority_epoch != state.authority_epoch
+                or envelope.trust_policy_version != trust_policy_version
+                or envelope.previous_commitment != previous):
+            return False
+        try:
+            key = key_port.load_key(envelope.key_reference)
+        except Exception:
+            return False
+        if not isinstance(key, bytes) or not verify_envelope(envelope, payload, key):
+            return False
+        previous = envelope.object_commitment
+
+    final_envelope = records[-1][1].envelope
+    return (previous == state.continuity_reference
+            and final_envelope.sequence == state.head_sequence)
+
 
 
 def _validate_key(key: bytes) -> None:
