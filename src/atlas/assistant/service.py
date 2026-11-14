@@ -66,6 +66,7 @@ class AssistantService:
                 isinstance(generated, tuple)
                 and len(generated) == 2
                 and isinstance(generated[1], str)
+                and generated[0] is not AssistantResponseKind.ERROR
             ):
                 on_token(generated[1])
         return self._build_response(request, generated)
