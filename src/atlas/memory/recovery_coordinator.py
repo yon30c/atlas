@@ -72,8 +72,11 @@ class RecoveryJournalCoordinator:
             raise ContractError("id_factory y clock deben ser invocables")
         if not isinstance(domain_id, str) or not domain_id.strip():
             raise ContractError("domain_id debe ser no vacío")
-        if not callable(getattr(recovery_gate, "close_recovery_gate", None)):
-            raise ContractError("recovery_gate debe implementar RecoveryGatePort")
+        if (
+            not callable(getattr(recovery_gate, "close_recovery_gate", None))
+            or not callable(getattr(recovery_gate, "ensure_recovery_gate_closed", None))
+        ):
+            raise ContractError("recovery_gate debe implementar RecoveryGatePort completo")
         self._journal = journal
         self._recovery_gate = recovery_gate
         self._fencer = fencer
@@ -174,6 +177,14 @@ class RecoveryJournalCoordinator:
     ) -> tuple[str, int] | None:
         active = self._active_recovery(projection)
         if active is not None:
+            try:
+                restored = self._recovery_gate.ensure_recovery_gate_closed(
+                    active.operation_id, active.generation
+                )
+            except Exception:
+                return None
+            if restored is not True:
+                return None
             return active.operation_id, active.generation
         if any(not item.reconciled for item in projection.recovery_closures):
             return None
