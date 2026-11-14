@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Callable, Protocol
 
 from atlas.adapters.sqlite.consistency_journal import SQLiteConsistencyJournal
+from atlas.adapters.sqlite.recovery_gate import LocalSQLiteRecoveryGateAdapter
 from atlas.adapters.sqlite.local_consistency_journal import (
     LocalSQLiteConsistencyJournalAdapter,
 )
@@ -164,5 +165,68 @@ def compose_local_sqlite_recovery_coordinator(
     return LocalSQLiteRecoveryCoordinatorComposition(
         journal_ports=ports,
         consistency_authority=consistency_authority,
+        coordinator=coordinator,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class LocalSQLiteRecoveryGateCoordinatorComposition:
+    """Gate-only recovery composition; it is not a protected read authority."""
+
+    journal_ports: LocalSQLiteConsistencyJournalPorts
+    recovery_gate: LocalSQLiteRecoveryGateAdapter
+    coordinator: RecoveryJournalCoordinator
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.journal_ports, LocalSQLiteConsistencyJournalPorts):
+            raise ContractError("journal_ports debe ser LocalSQLiteConsistencyJournalPorts")
+        if not isinstance(self.recovery_gate, LocalSQLiteRecoveryGateAdapter):
+            raise ContractError("recovery_gate debe ser LocalSQLiteRecoveryGateAdapter")
+        journal = self.journal_ports.persistence._journal
+        if self.journal_ports.verified_recovery._journal is not journal:
+            raise ContractError("los puertos de journal no comparten la misma instancia")
+        if self.recovery_gate.consistency_journal is not journal:
+            raise ContractError("el gate debe usar la misma instancia de journal")
+        if self.coordinator._journal is not self.journal_ports.persistence:
+            raise ContractError("el coordinador no usa el puerto de persistencia compuesto")
+        if self.coordinator._verified_recovery is not self.journal_ports.verified_recovery:
+            raise ContractError("el coordinador no usa el puerto de recuperación compuesto")
+        if self.coordinator._recovery_gate is not self.recovery_gate:
+            raise ContractError("el coordinador no usa el gate SQLite compuesto")
+
+
+def compose_local_sqlite_recovery_gate_coordinator(
+    *,
+    journal: SQLiteConsistencyJournal,
+    fencer: object,
+    verifier: object,
+    trust_context_factory: object,
+    domain_id: str,
+    id_factory: Callable[[], str],
+    clock: Callable[[], datetime],
+) -> LocalSQLiteRecoveryGateCoordinatorComposition:
+    """Compose journal-first recovery with the durable gate adapter only.
+
+    This deliberately does not claim a complete ProtectedMemoryRecoveryAuthorityPort:
+    read admission and protected egress are not yet backed by this SQLite authority.
+    """
+    if not isinstance(journal, SQLiteConsistencyJournal):
+        raise ContractError("journal debe ser SQLiteConsistencyJournal")
+    gate = LocalSQLiteRecoveryGateAdapter(journal)
+    ports = compose_local_sqlite_journal_ports(journal)
+    coordinator = RecoveryJournalCoordinator(
+        journal=ports.persistence,
+        recovery_gate=gate,
+        fencer=fencer,
+        verifier=verifier,
+        trust_context_factory=trust_context_factory,
+        verified_recovery=ports.verified_recovery,
+        domain_id=domain_id,
+        id_factory=id_factory,
+        clock=clock,
+    )
+    return LocalSQLiteRecoveryGateCoordinatorComposition(
+        journal_ports=ports,
+        recovery_gate=gate,
         coordinator=coordinator,
     )
