@@ -32,4 +32,10 @@ class TrustAwareRecoveryCompletionVerifierPort(RecoveryCompletionVerifierPort, P
         receipt: RecoveryCompletionReceipt,
         trust_context: ReceiptTrustContext,
     ) -> VerifiedRecoveryCompletionReceipt | None:
-        """Verify the exact global receipt and inventories under trusted policy/time."""
+        """Verify only if trust_context.binds_recovery_completion(request, receipt).
+
+        Resolve the canonical request reference, verify the exact admission and
+        route inventories plus the commitment to verified terminal receipts,
+        then validate issuer authorization, key status, authenticity, validity,
+        revocation and replay. The context itself is not proof of authenticity.
+        """
