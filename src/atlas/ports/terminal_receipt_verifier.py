@@ -5,6 +5,7 @@ from atlas.memory.receipt_verification import (
     ReceiptVerificationResult,
     TerminalReceiptVerificationRequest,
 )
+from atlas.memory.trust import ReceiptTrustContext
 
 
 class TerminalReceiptVerifierPort(Protocol):
@@ -22,3 +23,19 @@ class TerminalReceiptVerifierPort(Protocol):
         request: TerminalReceiptVerificationRequest,
     ) -> ReceiptVerificationResult:
         """Return VERIFIED only after independent trust and binding checks."""
+
+
+class TrustAwareTerminalReceiptVerifierPort(TerminalReceiptVerifierPort, Protocol):
+    """ME-03K trust-context-aware receipt verification contract.
+
+    This is the required interface for durable adapters. The legacy method
+    remains for existing in-process test doubles during migration only; it
+    cannot be treated as satisfying ME-03K-C in production composition.
+    """
+
+    def verify_terminal_receipt_with_context(
+        self,
+        request: TerminalReceiptVerificationRequest,
+        trust_context: "ReceiptTrustContext",
+    ) -> ReceiptVerificationResult:
+        """Verify canonical request binding under the supplied trust policy/time."""
