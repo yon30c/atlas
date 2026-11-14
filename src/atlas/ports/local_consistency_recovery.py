@@ -64,17 +64,21 @@ class VerifiedCheckpointProjection:
     consistency_domain_id: str
     authority_epoch: int
     sequence: int
+    state_reference: str
+    integrity_reference: str
     state_commitment: str
     integrity_commitment: str
     schema_version: int
     reducer_version: str
+    trust_policy_version: str
     projection: ConsistencyProjection
     verification_id: str
 
     def __post_init__(self) -> None:
         for field in (
-            "checkpoint_id", "consistency_domain_id", "state_commitment",
-            "integrity_commitment", "reducer_version", "verification_id",
+            "checkpoint_id", "consistency_domain_id", "state_reference",
+            "integrity_reference", "state_commitment", "integrity_commitment",
+            "reducer_version", "trust_policy_version", "verification_id",
         ):
             _required(getattr(self, field), field)
         _non_negative(self.sequence, "sequence")
@@ -105,6 +109,35 @@ class CheckpointProjectionResolution:
                 raise ContractError("VERIFIED requiere VerifiedCheckpointProjection")
         elif self.verified_projection is not None:
             raise ContractError("REJECTED/UNAVAILABLE no pueden incluir proyección")
+
+
+def require_verified_checkpoint_projection(
+    request: LocalCheckpointProjectionRequest,
+    resolution: CheckpointProjectionResolution,
+) -> VerifiedCheckpointProjection:
+    """Return evidence only when it is bound to the exact trusted request."""
+    if not isinstance(request, LocalCheckpointProjectionRequest):
+        raise ContractError("request debe ser LocalCheckpointProjectionRequest")
+    if not isinstance(resolution, CheckpointProjectionResolution):
+        raise ContractError("resolution debe ser CheckpointProjectionResolution")
+    if resolution.status is not LocalVerificationStatus.VERIFIED:
+        raise ContractError("resolución de checkpoint no está VERIFIED")
+    evidence = resolution.verified_projection
+    checkpoint = request.checkpoint
+    if (
+        evidence.checkpoint_id != checkpoint.checkpoint_id
+        or evidence.consistency_domain_id != request.consistency_domain_id
+        or evidence.authority_epoch != request.authority_epoch
+        or evidence.sequence != checkpoint.position.sequence
+        or evidence.state_reference != checkpoint.state_reference
+        or evidence.integrity_reference != checkpoint.integrity_reference
+        or evidence.trust_policy_version != request.trust_policy_version
+        or evidence.schema_version not in request.allowed_schema_versions
+        or evidence.reducer_version not in request.allowed_reducer_versions
+        or evidence.projection.replay_metadata_version != 1
+    ):
+        raise ContractError("evidencia VERIFIED no corresponde a la solicitud exacta")
+    return evidence
 
 
 class LocalConsistencyCheckpointProjectionPort(Protocol):
