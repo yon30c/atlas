@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 
 from atlas.core.errors import ContractError
+from atlas.memory.receipt_verification import TerminalReceiptVerificationRequest
 from atlas.memory.journal import (
     ConsistencyCheckpoint,
     ConsistencyPosition,
@@ -363,18 +364,28 @@ class ConsistencyRecoveryTrustContext:
 
 @dataclass(frozen=True, slots=True)
 class ReceiptTrustContext:
-    consistency_domain_id: str
-    authority_epoch: int
+    request: TerminalReceiptVerificationRequest
     canonical_request_reference: str
     trust_policy_version: str
     verification_time: datetime
     purpose: str
 
     def __post_init__(self) -> None:
+        if not isinstance(self.request, TerminalReceiptVerificationRequest):
+            raise ContractError("request debe ser TerminalReceiptVerificationRequest")
         for field in (
-            "consistency_domain_id", "canonical_request_reference",
-            "trust_policy_version", "purpose",
+            "canonical_request_reference", "trust_policy_version", "purpose",
         ):
             _required(getattr(self, field), field)
-        _positive(self.authority_epoch, "authority_epoch")
         _utc(self.verification_time, "verification_time")
+
+    @property
+    def consistency_domain_id(self) -> str:
+        return self.request.consistency_domain_id
+
+    @property
+    def authority_epoch(self) -> int:
+        return self.request.authority_epoch
+
+    def binds(self, request: TerminalReceiptVerificationRequest) -> bool:
+        return isinstance(request, TerminalReceiptVerificationRequest) and request == self.request
