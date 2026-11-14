@@ -17,6 +17,7 @@ from atlas.ports.local_consistency_recovery import (
     LocalVerificationStatus,
     VerifiedCheckpointProjection,
     VerifiedLocalConsistencyInventories,
+    require_verified_checkpoint_projection,
 )
 
 
@@ -40,6 +41,7 @@ class LocalRecoveryPortContractTests(unittest.TestCase):
             idempotency_records=(),
             receipt_ids=frozenset(),
             recovery_closures=(),
+            replay_metadata_version=1,
         )
         self.state = ConsistencyRecoveryState(
             domain_id="atlas-main",
@@ -87,10 +89,13 @@ class LocalRecoveryPortContractTests(unittest.TestCase):
             consistency_domain_id="atlas-main",
             authority_epoch=2,
             sequence=7,
+            state_reference=self.checkpoint.state_reference,
+            integrity_reference=self.checkpoint.integrity_reference,
             state_commitment="state-commitment",
             integrity_commitment="integrity-commitment",
             schema_version=1,
             reducer_version="reducer-v1",
+            trust_policy_version="local-policy-v1",
             projection=self.projection,
             verification_id="checkpoint-verification-1",
         )
@@ -160,6 +165,90 @@ class LocalRecoveryPortContractTests(unittest.TestCase):
             LocalConsistencyInventoryVerificationResult(LocalVerificationStatus.VERIFIED)
         with self.assertRaises(ContractError):
             LocalConsistencyInventoryVerificationResult(LocalVerificationStatus.UNAVAILABLE, object())
+
+
+    def test_checkpoint_projection_binding_requires_exact_request(self):
+        request = LocalCheckpointProjectionRequest(
+            checkpoint=self.checkpoint,
+            consistency_domain_id="atlas-main",
+            authority_epoch=2,
+            trust_policy_version="local-policy-v1",
+            allowed_schema_versions=frozenset({1}),
+            allowed_reducer_versions=frozenset({"reducer-v1"}),
+        )
+        evidence = VerifiedCheckpointProjection(
+            checkpoint_id=self.checkpoint.checkpoint_id,
+            consistency_domain_id="atlas-main",
+            authority_epoch=2,
+            sequence=7,
+            state_reference=self.checkpoint.state_reference,
+            integrity_reference=self.checkpoint.integrity_reference,
+            state_commitment="state-commitment",
+            integrity_commitment="integrity-commitment",
+            schema_version=1,
+            reducer_version="reducer-v1",
+            trust_policy_version="local-policy-v1",
+            projection=self.projection,
+            verification_id="checkpoint-verification-2",
+        )
+        result = CheckpointProjectionResolution(LocalVerificationStatus.VERIFIED, evidence)
+        self.assertIs(require_verified_checkpoint_projection(request, result), evidence)
+
+    def test_checkpoint_projection_binding_rejects_wrong_reference_or_policy(self):
+        from dataclasses import replace
+
+        request = LocalCheckpointProjectionRequest(
+            checkpoint=self.checkpoint,
+            consistency_domain_id="atlas-main",
+            authority_epoch=2,
+            trust_policy_version="local-policy-v1",
+            allowed_schema_versions=frozenset({1}),
+            allowed_reducer_versions=frozenset({"reducer-v1"}),
+        )
+        evidence = VerifiedCheckpointProjection(
+            checkpoint_id=self.checkpoint.checkpoint_id,
+            consistency_domain_id="atlas-main",
+            authority_epoch=2,
+            sequence=7,
+            state_reference=self.checkpoint.state_reference,
+            integrity_reference=self.checkpoint.integrity_reference,
+            state_commitment="state-commitment",
+            integrity_commitment="integrity-commitment",
+            schema_version=1,
+            reducer_version="reducer-v1",
+            trust_policy_version="local-policy-v1",
+            projection=self.projection,
+            verification_id="checkpoint-verification-3",
+        )
+        for wrong in (
+            replace(evidence, state_reference="different-state"),
+            replace(evidence, trust_policy_version="different-policy"),
+            replace(evidence, schema_version=2),
+            replace(evidence, reducer_version="reducer-v2"),
+        ):
+            with self.subTest(wrong=wrong):
+                with self.assertRaises(ContractError):
+                    require_verified_checkpoint_projection(
+                        request,
+                        CheckpointProjectionResolution(
+                            LocalVerificationStatus.VERIFIED, wrong
+                        ),
+                    )
+
+    def test_checkpoint_projection_binding_rejects_unavailable_resolution(self):
+        request = LocalCheckpointProjectionRequest(
+            checkpoint=self.checkpoint,
+            consistency_domain_id="atlas-main",
+            authority_epoch=2,
+            trust_policy_version="local-policy-v1",
+            allowed_schema_versions=frozenset({1}),
+            allowed_reducer_versions=frozenset({"reducer-v1"}),
+        )
+        with self.assertRaises(ContractError):
+            require_verified_checkpoint_projection(
+                request,
+                CheckpointProjectionResolution(LocalVerificationStatus.UNAVAILABLE),
+            )
 
 
 if __name__ == "__main__":
