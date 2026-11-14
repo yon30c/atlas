@@ -97,6 +97,8 @@ class AtomicRecoveryGate(CoordinatorRecoveryGateFake):
             or verified_receipt.receipt.receipt_id != transition.receipt_id
             or verified_receipt.receipt.operation_id != transition.operation_id
             or verified_receipt.receipt.generation != transition.generation
+            or verified_receipt.receipt.affected_admission_ids != transition.affected_admission_ids
+            or verified_receipt.receipt.route_ids != transition.route_ids
             or expected_position.sequence != self.journal.state.head_sequence
         ):
             return None
