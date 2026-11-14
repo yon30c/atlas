@@ -30,8 +30,8 @@ from atlas.memory.receipt_verification import (
     TerminalReceiptKind,
     TerminalReceiptVerificationRequest,
     VerifiedTerminalReceipt,
-    match_verified_receipt,
 )
+from atlas.memory.receipt_trust import verify_terminal_receipt_with_context
 from atlas.ports.consistency_journal import ConsistencyJournalPort
 
 
@@ -138,6 +138,7 @@ class RecoveryAdmissionFinalizationCoordinator:
         finalizer: object,
         verifier: object,
         *,
+        trust_context_factory: object,
         domain_id: str,
         id_factory: Callable[[], str],
         clock: Callable[[], datetime],
@@ -148,14 +149,17 @@ class RecoveryAdmissionFinalizationCoordinator:
             raise ContractError("journal debe implementar ConsistencyJournalPort")
         if not callable(getattr(finalizer, "finalize_cancelled_admission", None)):
             raise ContractError("finalizer debe implementar RecoveryAdmissionFinalizerPort")
-        if not callable(getattr(verifier, "verify_terminal_receipt", None)):
-            raise ContractError("verifier debe implementar TerminalReceiptVerifierPort")
+        if not callable(getattr(verifier, "verify_terminal_receipt_with_context", None)):
+            raise ContractError("verifier debe implementar TerminalReceiptVerifierPort trust-aware")
+        if not callable(getattr(trust_context_factory, "for_terminal_receipt", None)):
+            raise ContractError("trust_context_factory debe implementar ReceiptTrustContextFactoryPort")
         if not callable(id_factory) or not callable(clock):
             raise ContractError("id_factory y clock deben ser invocables")
         _required(domain_id, "domain_id")
         self._journal = journal
         self._finalizer = finalizer
         self._verifier = verifier
+        self._trust_context_factory = trust_context_factory
         self._domain_id = domain_id
         self._id_factory = id_factory
         self._clock = clock
@@ -212,10 +216,15 @@ class RecoveryAdmissionFinalizationCoordinator:
                 fenced_through_sequence=endpoint.last_emission_sequence,
             )
             try:
-                result = self._verifier.verify_terminal_receipt(request)
+                receipt = verify_terminal_receipt_with_context(
+                    self._verifier,
+                    self._trust_context_factory,
+                    request,
+                    purpose="recovery-admission-endpoint-fencing",
+                    verification_time=self._clock(),
+                )
             except Exception:
                 return None
-            receipt = match_verified_receipt(request, result)
             if receipt is None:
                 return None
             verified.append(receipt)
@@ -337,11 +346,17 @@ class RecoveryAdmissionFinalizationCoordinator:
                 generation=closure.generation,
             )
             try:
-                result = self._verifier.verify_terminal_receipt(terminal_request)
+                verified_terminal = verify_terminal_receipt_with_context(
+                    self._verifier,
+                    self._trust_context_factory,
+                    terminal_request,
+                    purpose="recovery-admission-terminalization",
+                    verification_time=self._clock(),
+                )
             except Exception:
                 pending.append(admission_id)
                 continue
-            if match_verified_receipt(terminal_request, result) is None:
+            if verified_terminal is None:
                 pending.append(admission_id)
                 continue
             try:
