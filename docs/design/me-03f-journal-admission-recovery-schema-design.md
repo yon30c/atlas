@@ -81,7 +81,7 @@ A recovery adapter may reconstruct a typed `ReadTarget` only from a recoverable 
 - use `admitted_at` from the journal record;
 - preserve the exact configured route inventory and generation.
 
-A v2 record is necessary but not sufficient for recovery. The recovery authority must still verify journal authenticity, continuity/anti-rollback, current authority revisions, suppression state, and every endpoint receipt before opening any delivery path.
+A v2 record is necessary but not sufficient for recovery. The recovery authority must still verify journal authenticity, the continuity available under the selected profile, current authority revisions, suppression state, and every endpoint receipt before opening any delivery path. Local verification does not prove external anti-rollback or that a coherent restored journal is the latest state. External Trust Anchor verification is optional and deferred to Atlas's final project stage.
 
 ### 5.2 Old emitters and nonterminal admissions
 
@@ -158,7 +158,7 @@ Do not combine this work with real persistence, anti-rollback cryptography, netw
 
 ## 9. Explicit limitations
 
-This design does not establish durable storage, authenticated journal origin, anti-rollback, distributed consensus, atomic network egress, endpoint liveness, complete delivery-route inventory, backup/restore policy, or physical Forget. Those remain blocked by ME-03E prerequisites and CT-05. A passing fake/test suite will validate the model and integration contract only, not those runtime guarantees.
+This design does not establish durable storage, authenticated journal origin, external anti-rollback, distributed consensus, atomic network egress, endpoint liveness, complete delivery-route inventory, backup/restore policy, or physical Forget. External anti-rollback via Trust Anchor is optional and deferred to Atlas's final project stage. A passing fake/test suite will validate the model and integration contract only, not those runtime guarantees.
 
 ## 10. Implementation tracking
 
@@ -179,3 +179,8 @@ This design does not establish durable storage, authenticated journal origin, an
 CI for the implemented portion: [Atlas CI #43529942908](https://github.com/yon30c/atlas/actions/runs/43529942908), all four Python versions successful.
 
 This tracking note does not change the design's non-goals or imply durable recovery.
+
+
+## 11. Decisión posterior — Trust Anchor opcional
+
+**APROBADO — 13 de noviembre de 2026.** La recuperación de admisiones en el baseline local debe verificar la continuidad interna disponible, revisiones de autoridad, supresión y recibos de endpoints. No puede afirmar anti-rollback externo. El proveedor Trust Anchor y las pruebas de restauración frente a un ancla externa quedan postergados hasta la etapa final. No se reanudan emisores antiguos ni se abren rutas con inventarios, recibos o resultados ambiguos incompletos.
