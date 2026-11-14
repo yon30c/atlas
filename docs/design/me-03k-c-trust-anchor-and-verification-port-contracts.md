@@ -84,7 +84,7 @@ Un hash simple, una referencia opaca o un ID de recibo no constituye autenticaci
 
 ## 5. Verificación de checkpoint y estado recuperado
 
-### 5.1 Solicitud de verificación
+### 5.1 Solicitud de verificación del perfil anclado
 
 La solicitud debe identificar exactamente:
 
@@ -96,7 +96,7 @@ La solicitud debe identificar exactamente:
 - referencia de continuidad;
 - política de confianza y tiempo confiable de verificación.
 
-### 5.2 Resultado verificado
+### 5.2 Resultado verificado del perfil anclado
 
 Solo el verificador puede producir un objeto interno `VerifiedConsistencyRecoveryState`, que contenga:
 
@@ -110,7 +110,7 @@ Solo el verificador puede producir un objeto interno `VerifiedConsistencyRecover
 
 El constructor/creación de este resultado debe permanecer dentro de la frontera del verificador/adaptador confiable. No debe aceptarse una instancia fabricada por un caller no confiable.
 
-### 5.3 Condiciones de rechazo del perfil anclado
+### 5.3 Condiciones de rechazo del perfil anclado del perfil anclado
 
 El resultado debe ser UNKNOWN o REJECTED y no entregar estado al reducer si ocurre cualquiera de estas condiciones:
 
@@ -126,6 +126,15 @@ El resultado debe ser UNKNOWN o REJECTED y no entregar estado al reducer si ocur
 - imposibilidad de demostrar que el estado restaurado es el último estado confirmado.
 
 No se permite degradar a una validación estructural ni reconstruir scope, owner, generaciones o inventarios por inferencia.
+
+
+### 5.4 Verificación del perfil local
+
+El perfil local no requiere Trust Anchor. Su solicitud de verificación debe identificar dominio, época, posición esperada, checkpoint/proyección base, cadena local disponible, versiones de esquema/reducer, política de verificación local y tiempo UTC de evaluación. El verificador debe validar autenticidad disponible, estructura, secuencias, referencias, continuidad interna, inventarios, tombstones y operaciones no terminales.
+
+Solo una verificación local satisfactoria puede producir un resultado tipado propio, por ejemplo `VerifiedLocalConsistencyRecoveryState`, que incluya el estado validado, dominio/época/head, compromiso local, identificador y emisor del verificador, política, instante UTC y el perfil explícito `local`. Este resultado MUST NOT incluir un Trust Anchor ficticio, ni reutilizar `VerifiedConsistencyRecoveryState` de perfil anclado, ni afirmar anti-rollback externo.
+
+El perfil local debe rechazar corrupción, huecos, forks, referencias rotas, inventarios incompletos, schema/reducer no soportados y resultados ambiguos. Sin embargo, una cadena local internamente válida no permite demostrar que no se restauró un backup antiguo coherente. El resultado debe conservar explícitamente esa limitación para que no se confunda con una verificación anclada.
 
 ## 6. Contrato común de verificación de recibos
 
@@ -199,7 +208,7 @@ Los siguientes contratos deben alinearse antes de declarar ME-03K-B cerrado:
 
 1. `ConsistencyJournalPort.load_verified_recovery_state` entrega un resultado tipado que identifica el perfil de verificación. En perfil anclado, VERIFIED contiene `VerifiedConsistencyRecoveryState` vinculado al Trust Anchor. En perfil local debe existir un resultado tipado distinto, sin campo ni afirmación de ancla, que exprese integridad/continuidad local y declare explícitamente que anti-rollback externo no está demostrado. `load_recovery_state` desnudo queda limitado a diagnóstico/migración y está prohibido en recuperación operativa.
 2. `ConsistencyCheckpoint` debe referenciar el envelope autenticado y la versión de reducer/proyección. La referencia a ancla externa solo aplica al perfil anclado; `integrity_reference` nunca es prueba suficiente por sí sola.
-3. `ConsistencyRecoveryState` es únicamente estructural. `VerifiedConsistencyRecoveryState` envuelve el estado junto con el ancla exacta y exige coincidencia de dominio, época, secuencia y commitment; el reducer nunca crea esa confianza.
+3. `ConsistencyRecoveryState` es únicamente estructural. `VerifiedConsistencyRecoveryState` corresponde exclusivamente al perfil anclado y envuelve el estado junto con el ancla exacta, exigiendo coincidencia de dominio, época, secuencia y commitment. El perfil local utiliza un resultado tipado separado, sin ancla y sin afirmación anti-rollback. El reducer nunca crea esa confianza.
 4. `TerminalReceiptVerifierPort` y `RecoveryCompletionVerifierPort` disponen de variantes trust-aware que reciben `ReceiptTrustContext`. El contexto fija tipo de recibo, dominio, época, operación, ID esperado obligatorio, claims de endpoint/admisión o inventarios globales, referencia canónica, política y tiempo UTC. `binds_terminal_request` y `binds_recovery_completion` permiten exigir coincidencia exacta del contexto con la solicitud/recibo. El verificador debe resolver la referencia canónica y comprobar el contenido semántico completo; la referencia por sí sola no es autenticación. La variante legacy se conserva solo para dobles de prueba/migración; no satisface conformidad de adaptador durable.
 5. `ProtectedMemoryRecoveryAuthorityPort` sigue siendo una única implementación concreta compartida por Gateway y coordinadores. La verificación no crea una segunda autoridad de orden.
 6. `reconcile_and_open_recovery_gate` debe consumir una evidencia verificada vinculada al cierre exacto y confirmar evento + apertura en una sola operación linealizable.
@@ -248,9 +257,15 @@ El diseño del perfil local puede cerrarse cuando se definen y verifican sus gar
 
 ME-03K-C queda cerrado en diseño para cada perfil cuando:
 
+**Perfil local:**
+1. Existe un resultado tipado de recuperación local, distinto del resultado anclado y sin Trust Anchor.
+2. El estado del journal no llega al reducer sin evidencia tipada de autenticidad disponible y continuidad interna.
+3. Checkpoints y registros autentican dominio, época, posición, esquema, continuidad disponible y emisor; las limitaciones anti-rollback quedan explícitas.
+
+**Perfil anclado (opcional, etapa final):**
 1. Existe un modelo tipado de ancla externa monotónica y sus resultados.
 2. El estado del journal no llega al reducer sin evidencia tipada de verificación desde esa ancla.
-3. Checkpoints y registros autentican dominio, época, posición, esquema, continuidad y emisor.
+3. Checkpoints y registros autentican dominio, época, posición, esquema, continuidad y emisor contra el ancla vigente.
 4. Recibos operativos/globales comparten claims y contexto de confianza sin permitir autoaprobación.
 5. La consulta de resultados ambiguos distingue COMMITTED_EXACT, NOT_COMMITTED, CONFLICT y UNKNOWN bajo consistencia fuerte.
 6. Reloj, revocación, replay y recuperación histórica tienen resultados fail-closed definidos.
