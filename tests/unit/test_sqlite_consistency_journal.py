@@ -791,5 +791,62 @@ class SQLiteConsistencyJournalTests(unittest.TestCase):
         self.assertEqual(head, 1)
 
 
+    def test_commit_checkpoint_head_commitment_mismatch_does_not_write(self):
+        _, checkpoint = self._checkpoint_request_at_current_head()
+
+        result = self.journal.commit_checkpoint(
+            self.position(1), "0" * 64, checkpoint
+        )
+
+        self.assertIs(result.status, CheckpointCommitStatus.CONFLICT)
+        with self.database.connection() as connection:
+            checkpoint_count = connection.execute(
+                "SELECT COUNT(*) FROM checkpoints"
+            ).fetchone()[0]
+            head = connection.execute(
+                "SELECT head_sequence FROM consistency_domains WHERE domain_id='domain-a'"
+            ).fetchone()[0]
+        self.assertEqual(checkpoint_count, 0)
+        self.assertEqual(head, 1)
+
+    def test_commit_checkpoint_marker_insert_failure_rolls_back_checkpoint(self):
+        head_commitment, checkpoint = self._checkpoint_request_at_current_head()
+        with self.database.write_transaction() as connection:
+            connection.execute(
+                """
+                CREATE TRIGGER reject_checkpoint_marker
+                BEFORE INSERT ON journal_entries
+                WHEN NEW.record_kind='checkpoint_committed'
+                BEGIN
+                    SELECT RAISE(ABORT, 'injected marker insert failure');
+                END
+                """
+            )
+
+        result = self.journal.commit_checkpoint(
+            self.position(1), head_commitment, checkpoint
+        )
+
+        self.assertIs(result.status, CheckpointCommitStatus.UNKNOWN)
+        with self.database.connection() as connection:
+            checkpoint_count = connection.execute(
+                "SELECT COUNT(*) FROM checkpoints"
+            ).fetchone()[0]
+            marker_count = connection.execute(
+                "SELECT COUNT(*) FROM journal_entries WHERE record_kind='checkpoint_committed'"
+            ).fetchone()[0]
+            operation_count = connection.execute(
+                "SELECT COUNT(*) FROM journal_operations WHERE append_id=?",
+                (f"checkpoint-append:{CHECKPOINT_ID}",),
+            ).fetchone()[0]
+            head = connection.execute(
+                "SELECT head_sequence FROM consistency_domains WHERE domain_id='domain-a'"
+            ).fetchone()[0]
+        self.assertEqual(checkpoint_count, 0)
+        self.assertEqual(marker_count, 0)
+        self.assertEqual(operation_count, 0)
+        self.assertEqual(head, 1)
+
+
 if __name__ == "__main__":
     unittest.main()
