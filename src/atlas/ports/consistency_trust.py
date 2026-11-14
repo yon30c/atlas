@@ -1,4 +1,5 @@
 """Provider-agnostic ports for external anchors and consistency verification."""
+from enum import Enum
 from typing import Protocol
 
 from atlas.memory.trust import (
@@ -9,13 +10,13 @@ from atlas.memory.trust import (
 )
 
 
-class TrustAnchorReadStatus(str):
+class TrustAnchorReadStatus(str, Enum):
     FOUND = "found"
     NOT_FOUND = "not_found"
     UNKNOWN = "unknown"
 
 
-class TrustAnchorUpdateStatus(str):
+class TrustAnchorUpdateStatus(str, Enum):
     UPDATED = "updated"
     REPLAYED = "replayed"
     CONFLICT = "conflict"
@@ -27,7 +28,7 @@ class TrustAnchorPort(Protocol):
 
     def load_current_anchor(
         self, consistency_domain_id: str
-    ) -> tuple[str, ConsistencyTrustAnchor | None]:
+    ) -> tuple[TrustAnchorReadStatus, ConsistencyTrustAnchor | None]:
         """Return FOUND/NOT_FOUND/UNKNOWN; NOT_FOUND never bootstraps recovery."""
 
     def advance_anchor(
@@ -35,7 +36,7 @@ class TrustAnchorPort(Protocol):
         expected_anchor_revision: int,
         expected_position_sequence: int,
         new_anchor: ConsistencyTrustAnchor,
-    ) -> str:
+    ) -> TrustAnchorUpdateStatus:
         """CAS advance; same canonical update replays, incompatible update conflicts."""
 
 
