@@ -1,43 +1,56 @@
-# ME-03K — SQLite durable journal read contract
+# ME-03K — SQLite durable journal read and verification contract
 
 ## Scope
 
-This increment implements only the structural diagnostic read path for the local SQLite journal. It does not authenticate records, authorize recovery, feed the reducer, load checkpoint projections, or claim external anti-rollback protection.
+The local SQLite adapter now exposes two distinct read boundaries:
 
-## Read contract
+- `load_recovery_state()`: structural diagnostic read only.
+- `load_verified_recovery_state()`: operational local-profile read, enabled only when an explicit verifier and the exact immutable trust-policy object are injected at construction.
 
-`SQLiteConsistencyJournal.load_recovery_state(domain_id)` returns a `ConsistencyRecoveryState` only when one SQLite read transaction observes a structurally coherent local domain:
+Neither path claims external anti-rollback protection. The implementation does not provision keys, modify systemd credentials, change services, or deploy to production.
 
-- The domain exists, has the local profile, and uses the adapter's configured trust-policy version.
-- The current implementation supports a journal beginning at sequence 1 without a checkpoint. If any checkpoint exists for the domain, the method returns `None` until checkpoint/projection loading is implemented.
-- A non-empty journal is required. An empty domain returns `None`; it is not represented as an authenticated recovery state.
-- Journal sequences are contiguous from 1 through the persisted head.
-- The journal row count and operation row count both equal the persisted head.
-- Persisted transition bytes reconstruct into typed `ConsistencyTransition` objects.
-- Duplicated metadata columns (record ID, operation ID, record kind, schema version) agree with the reconstructed transition.
-- Every envelope is reconstructed from persisted columns and its predecessor commitment matches the preceding record.
-- The final envelope commitment equals the domain's persisted head commitment.
+## Structural read
 
-Any missing, malformed, unsupported, or inconsistent data returns `None` (diagnostic read unavailable/rejected at this structural boundary). No partially reconstructed state is returned.
+`load_recovery_state_result(domain_id)` returns a typed `ConsistencyRecoveryLoadResult`:
 
-## Security boundary
+- `LOADED`: one SQLite read transaction observed a structurally coherent state.
+- `REJECTED`: malformed or internally inconsistent persisted evidence.
+- `UNAVAILABLE`: domain/state absent, database access failure, empty journal, or checkpoint path not yet supported.
 
-The returned state is structurally reconstructed, not trusted. Its envelopes have not yet been verified against historical HMAC keys or the independent `LocalConsistencyTrustPolicy`. Consumers must not pass this result directly to the operational reducer.
+A loaded state is still untrusted. Structural validation requires:
 
-The operational sequence remains:
+- Local profile and exact configured trust-policy version.
+- A non-empty journal beginning at sequence 1. Checkpoint-backed histories return UNAVAILABLE until checkpoint/projection loading is implemented.
+- Journal row count and operation row count equal the persisted head.
+- Exactly one operation-resolution row maps to each journal entry by domain, epoch, sequence, record ID and operation ID.
+- Contiguous sequence numbers from 1 through head.
+- Typed transition reconstruction and exact canonical-byte round trip.
+- Duplicated record metadata agrees with the reconstructed transition.
+- Typed envelope reconstruction, exact entry binding, predecessor continuity, and final commitment equal to the persisted domain head.
 
-1. Load structural state.
-2. Verify envelope policy, historical key availability, HMAC, metadata, and continuity.
-3. Only after successful chain verification, run the existing `LocalConsistencyRecoveryVerifier` pipeline, including checkpoint projection (when supported), reducer, and inventory verification.
-4. Return typed `VERIFIED`, `UNAVAILABLE`, or `REJECTED` evidence. Only `VERIFIED` evidence may authorize downstream recovery.
+No partial state is returned. The compatibility method `load_recovery_state()` returns a state only for LOADED and remains diagnostic-only.
+
+## Operational local verification
+
+`load_verified_recovery_state(domain_id)` follows this order:
+
+1. Require explicit `LocalConsistencyRecoveryVerifier` and `LocalConsistencyTrustPolicy` composition. They must be the same policy object, and its version must match the journal's configured policy version. No implicit default or trust downgrade exists.
+2. Load a typed structural result. Preserve REJECTED and UNAVAILABLE distinctly.
+3. Construct a local recovery trust context for the exact domain and epoch.
+4. Invoke the existing verifier. It checks the independent policy allowlist, historical key availability, HMAC authenticity, envelope metadata and chain continuity.
+5. Only after chain verification, the verifier runs the reducer and independent inventory verification.
+6. Return typed VERIFIED, REJECTED or UNAVAILABLE. Only VERIFIED includes `VerifiedLocalConsistencyRecoveryState`; this explicitly states `external_anti_rollback_protected=False`.
+
+An absent verifier configuration returns UNAVAILABLE. Unexpected verifier exceptions also return UNAVAILABLE. Invalid persisted evidence returns REJECTED. A missing or malformed historical key remains UNAVAILABLE through the existing key-verification contract.
 
 ## Deliberate exclusions
 
-- No checkpoint or checkpoint-projection read support in this increment.
-- No integration of the SQLite adapter with `LocalConsistencyRecoveryVerifier`.
-- No key provisioning, systemd credential changes, service changes, or production deployment.
-- No anti-rollback claim against restoration of a coherent older database backup.
+- Durable checkpoint and checkpoint-projection loading; encountering any checkpoint returns UNAVAILABLE rather than silently replaying an incomplete journal.
+- Anchored-profile recovery and external Trust Anchor integration.
+- Endpoint receipt loading, checkpoint commits, Recovery Gate changes, or production composition.
+- Key generation, rotation, systemd credential provisioning, service changes, or production deployment.
+- Protection against restoration of a coherent older database backup.
 
-## Validation status
+## Validation
 
-Static implementation and test additions only. The user must run the targeted and full test suites on Debian; no tests are claimed as executed by the assistant.
+Static implementation and test additions are committed to `feature/me-03k-local-profile`. The user must run targeted and full test suites on Debian. No tests are claimed as executed by the assistant.
