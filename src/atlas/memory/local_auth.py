@@ -1,5 +1,5 @@
 """Versioned canonical JSON and HMAC-SHA-256 primitives for local consistency evidence."""
-from dataclasses import fields, is_dataclass, replace
+from dataclasses import dataclass, fields, is_dataclass, replace
 from datetime import datetime, timedelta
 from enum import Enum
 import hashlib
@@ -17,6 +17,25 @@ HMAC_ALGORITHM = "HMAC-SHA-256"
 KEY_LENGTH_BYTES = 32
 _HEX_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _DOMAIN = b"atlas-local-consistency-envelope\x00v1\x00"
+
+
+class RecoveryChainVerificationStatus(str, Enum):
+    VERIFIED = "verified"
+    REJECTED = "rejected"
+    UNAVAILABLE = "unavailable"
+
+
+@dataclass(frozen=True, slots=True)
+class RecoveryChainVerificationResult:
+    status: RecoveryChainVerificationStatus
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.status, RecoveryChainVerificationStatus):
+            raise ContractError("status de verificación no válido")
+
+    def __bool__(self) -> bool:
+        """Preserve compatibility with existing boolean consumers."""
+        return self.status is RecoveryChainVerificationStatus.VERIFIED
 
 
 def _utc_text(value: datetime) -> str:
@@ -83,84 +102,136 @@ def object_commitment(value: Any) -> str:
     return hashlib.sha256(canonical_json_bytes(value)).hexdigest()
 
 
-def verify_recovery_chain(state: Any, key_port: Any, trust_policy_version: str) -> bool:
-    """Verify all local envelopes and predecessor links; no anti-rollback claim."""
+def verify_recovery_chain(
+    state: Any,
+    key_port: Any,
+    trust_policy_version: str,
+) -> RecoveryChainVerificationResult:
+    """Verify local envelopes, distinguishing invalid evidence from unavailable keys."""
     from atlas.memory.journal import ConsistencyRecoveryState
 
+    rejected = RecoveryChainVerificationResult(
+        RecoveryChainVerificationStatus.REJECTED
+    )
+    unavailable = RecoveryChainVerificationResult(
+        RecoveryChainVerificationStatus.UNAVAILABLE
+    )
+
     if not isinstance(state, ConsistencyRecoveryState):
-        return False
+        return rejected
     if not isinstance(trust_policy_version, str) or not trust_policy_version.strip():
-        return False
+        return rejected
+
     records = []
     if state.checkpoint is not None:
-        records.append(("checkpoint", state.checkpoint, checkpoint_payload(state.checkpoint)))
-    records.extend(("journal_entry", entry, journal_entry_payload(entry)) for entry in state.entries)
+        records.append(
+            ("checkpoint", state.checkpoint, checkpoint_payload(state.checkpoint))
+        )
+    records.extend(
+        ("journal_entry", entry, journal_entry_payload(entry))
+        for entry in state.entries
+    )
+
     if not records:
-        return False
+        return rejected
 
     previous = None
+
     for kind, record, payload in records:
         envelope = record.envelope
+
         if not isinstance(envelope, AuthenticatedConsistencyEnvelope):
-            return False
-        if (envelope.object_kind != kind
-                or envelope.consistency_domain_id != state.domain_id
-                or envelope.authority_epoch != state.authority_epoch
-                or envelope.trust_policy_version != trust_policy_version
-                or envelope.previous_commitment != previous):
-            return False
+            return rejected
+
+        if (
+            envelope.object_kind != kind
+            or envelope.consistency_domain_id != state.domain_id
+            or envelope.authority_epoch != state.authority_epoch
+            or envelope.trust_policy_version != trust_policy_version
+            or envelope.previous_commitment != previous
+        ):
+            return rejected
+
         try:
             key = key_port.load_key(envelope.key_reference)
         except Exception:
-            return False
-        if not isinstance(key, bytes) or not verify_envelope(envelope, payload, key):
-            return False
+            return unavailable
+
+        # Missing, malformed or incorrectly sized key material is a
+        # custody/availability failure, not evidence of an invalid MAC.
+        if not isinstance(key, bytes) or len(key) != KEY_LENGTH_BYTES:
+            return unavailable
+
+        if not verify_envelope(envelope, payload, key):
+            return rejected
+
         previous = envelope.object_commitment
 
     final_envelope = records[-1][1].envelope
-    return (previous == state.continuity_reference
-            and final_envelope.sequence == state.head_sequence)
+
+    if (
+        previous != state.continuity_reference
+        or final_envelope.sequence != state.head_sequence
+    ):
+        return rejected
+
+    return RecoveryChainVerificationResult(
+        RecoveryChainVerificationStatus.VERIFIED
+    )
 
 
-
-def verify_recovery_chain_with_policy(state: Any, key_port: Any, trust_policy: Any) -> bool:
-    """Verify the local chain against the independent server-configured allowlist.
-
-    The policy is deliberately supplied by trusted composition, never restored
-    from the recovery state. This adds issuer, role, key-reference, schema,
-    reducer, envelope and canonicalization allowlists to cryptographic checks.
-    It still makes no external anti-rollback or inventory-completeness claim.
-    """
+def verify_recovery_chain_with_policy(
+    state: Any,
+    key_port: Any,
+    trust_policy: Any,
+) -> RecoveryChainVerificationResult:
+    """Verify the local chain against the independent server-configured allowlist."""
     from atlas.memory.local_trust_policy import LocalConsistencyTrustPolicy
+    from atlas.memory.journal import ConsistencyRecoveryState
+
+    rejected = RecoveryChainVerificationResult(
+        RecoveryChainVerificationStatus.REJECTED
+    )
 
     if not isinstance(trust_policy, LocalConsistencyTrustPolicy):
-        return False
-    from atlas.memory.journal import ConsistencyRecoveryState
+        return rejected
+
     if not isinstance(state, ConsistencyRecoveryState):
-        return False
+        return rejected
+
     if (
         state.domain_id != trust_policy.consistency_domain_id
         or not trust_policy.supports_canonicalization(CANONICALIZATION_VERSION)
     ):
-        return False
+        return rejected
 
     records = []
     if state.checkpoint is not None:
         records.append(("checkpoint", state.checkpoint))
-    records.extend(("journal_entry", entry) for entry in state.entries)
+
+    records.extend(
+        ("journal_entry", entry)
+        for entry in state.entries
+    )
 
     if not records:
-        return False
+        return rejected
+
     for object_kind, record in records:
         envelope = record.envelope
+
         if (
             envelope is None
             or envelope.object_kind != object_kind
             or not trust_policy.authorizes_envelope(envelope)
         ):
-            return False
-    return verify_recovery_chain(state, key_port, trust_policy.policy_version)
+            return rejected
 
+    return verify_recovery_chain(
+        state,
+        key_port,
+        trust_policy.policy_version,
+    )
 
 
 def _validate_key(key: bytes) -> None:
