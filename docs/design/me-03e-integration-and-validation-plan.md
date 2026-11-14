@@ -276,3 +276,34 @@ Pruebas:
 - CI [#43530661316](https://github.com/yon30c/atlas/actions/runs/43530661316): Python 3.10–3.13, todos exitosos.
 
 **Límite:** la implementación no verifica firmas criptográficas ni contacta endpoints reales. Tampoco restaura admisiones no terminales. La evidencia verificada no es una capacidad de lectura ni una autorización CAM. La siguiente etapa es recuperar las admisiones pendientes como UNRESOLVED, mantener cerrado el gate y exigir fencing real de todos los endpoints con generación nueva y recibos verificados.
+
+## 18. ME-03H — Recuperación de admisiones pendientes y fencing tras reinicio
+
+Se añadió `docs/design/me-03h-unresolved-admission-recovery-design.md` y una implementación incremental del modelo de recuperación.
+
+### Modelo y coordinación de fencing
+
+- `src/atlas/memory/recovery.py` conserva todas las admisiones no terminales, tanto v1 como v2, con inventario exacto de endpoints y última secuencia comprometida.
+- Las admisiones v2 pueden reconstruir un `ReadTarget` solo como metadato; las v1 mantienen `target=None`, sin inferencia de scope.
+- El plan exige una generación estrictamente superior a todas las generaciones previas de admisiones, Forget e invalidaciones.
+- Cada endpoint recibe una solicitud de fencing ligada a dominio, época, operación, admisión, endpoint, generación anterior/nueva y última secuencia comprometida.
+- Cada recibo se verifica mediante el puerto ME-03G. Se agregó `fenced_through_sequence` al recibo terminal para probar que el endpoint cercó también toda la secuencia ya comprometida.
+- El lote solo se considera verificado cuando todos los endpoints de todas las admisiones pendientes están cercados y verificados. Resultados parciales o ambiguos no producen un lote aceptado.
+
+### Journal y reducer
+
+Se agregaron `RECOVERY_CLOSED` y `RECOVERY_RECONCILED`:
+- `RECOVERY_CLOSED` exige el inventario exacto de todas las admisiones y rutas no terminales y avanza la generación.
+- El reducer marca las admisiones capturadas como UNRESOLVED.
+- Mientras la recuperación siga pendiente, rechaza nuevas admisiones y cualquier egress.
+- `ENDPOINT_FENCED` solo acepta el operation ID exacto y la generación nueva de recuperación.
+- `ADMISSION_RECONCILED` requiere que todos los endpoints de esa admisión estén terminales.
+- `RECOVERY_RECONCILED` exige que todas las admisiones afectadas estén terminales antes de cerrar la recuperación.
+
+### Validación
+
+- 25 pruebas en `tests/unit/test_memory_unresolved_admission_recovery.py`.
+- Se amplió el fake de autoridad en `tests/unit/test_memory_consistency_authority.py`: tras restaurar una admisión pendiente, el emisor de generación antigua no puede entregar, nuevas lecturas permanecen bloqueadas y solo se admite una lectura nueva después de confirmar el fencing de todos los endpoints.
+- CI [#43532495188](https://github.com/yon30c/atlas/actions/runs/43532495188): Python 3.10, 3.11, 3.12 y 3.13, todos exitosos.
+
+**Límite vigente:** esto valida modelos, reducer y fakes. No existe todavía un coordinador durable que confirme `RECOVERY_CLOSED` antes de contactar endpoints y que escriba de forma atómica todos los recibos verificados, las reconciliaciones y el cierre final. No hay fencing real de procesos/transporte ni recuperación distribuida demostrada. No habilitar producción.
