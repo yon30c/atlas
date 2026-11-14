@@ -98,3 +98,14 @@ PYTHONPATH=src python -m unittest \
 ## Próximas etapas
 
 Validar el contexto de sesión con la suite completa y una conversación local real. Después, diseñar la integración controlada de memoria persistente y las políticas de autorización antes de exponer herramientas. Ninguna capacidad futura debe considerarse implementada hasta contar con código y pruebas verificadas.
+
+
+## Memory Engine — persistencia local (en desarrollo)
+
+El perfil SQLite del Memory Engine tiene migraciones y un journal de consistencia local, pero todavía no implementa la autoridad SQLite compartida que necesita el Recovery Gate y la entrega protegida. No debe activarse como servicio de memoria persistente ni utilizarse para egress protegido.
+
+- [README de Memory Engine: configuración SQLite, journal y límites](docs/memory-engine/README.md)
+- [ME-D4J: diseño de unidad de trabajo SQLite compartida](docs/design/ME-D4J-sqlite-unit-of-work.md)
+- [Registro de implementación e independencia](docs/design/memory-engine-project-independence-implementation.md)
+
+La guía explica cómo preparar el archivo SQLite, aplicar migraciones y configurar las dependencias explícitas del journal. La autoridad transaccional, la implementación completa de Forget/egress y sus pruebas de concurrencia siguen pendientes.
