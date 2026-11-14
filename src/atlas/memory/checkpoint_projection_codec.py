@@ -12,7 +12,14 @@ import types
 from typing import Any, Union, get_args, get_origin, get_type_hints
 
 from atlas.core.errors import ContractError
-from atlas.memory.journal_reducer import ConsistencyProjection
+from atlas.memory.journal_reducer import (
+    AdmissionProjection,
+    ConsistencyProjection,
+    ForgetProjection,
+    IdempotencyProjection,
+    InvalidationProjection,
+    RecoveryProjection,
+)
 from atlas.memory.identifiers import validate_atlas_id
 from atlas.memory.local_auth import CANONICALIZATION_VERSION, canonical_json_bytes
 
@@ -244,15 +251,18 @@ def _validate_projection_shape(projection: ConsistencyProjection) -> None:
     ):
         raise ContractError("solo se pueden persistir proyecciones replay metadata v1")
     tuple_fields = (
-        ("admissions",),
-        ("forget_closures",),
-        ("invalidations",),
-        ("idempotency_records",),
-        ("recovery_closures",),
+        ("admissions", AdmissionProjection),
+        ("forget_closures", ForgetProjection),
+        ("invalidations", InvalidationProjection),
+        ("idempotency_records", IdempotencyProjection),
+        ("recovery_closures", RecoveryProjection),
     )
-    for (field,) in tuple_fields:
-        if not isinstance(getattr(projection, field), tuple):
-            raise ContractError(f"{field} debe ser tuple")
+    for field, expected_type in tuple_fields:
+        values = getattr(projection, field)
+        if not isinstance(values, tuple) or any(
+            not isinstance(item, expected_type) for item in values
+        ):
+            raise ContractError(f"{field} de proyección no es válido")
     for field in ("receipt_ids", "emission_ids"):
         values = getattr(projection, field)
         if (
