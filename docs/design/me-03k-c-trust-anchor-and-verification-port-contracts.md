@@ -1,7 +1,7 @@
 # ME-03K-C — Contratos tipados de ancla de confianza y verificación
 
 **Estado:** contrato técnico de diseño con Trust Anchor opcional. El perfil local es el baseline actual; el perfil anclado queda postergado hasta la etapa final de Atlas. Este documento no implementa criptografía, persistencia ni transporte.  
-**Rama:** `implementation/me-01-to-me-04-memory-engine`.  
+**Rama:** `main` (baseline documental vigente).  
 **Dependencias:** ME-03K, ME-03K-A y ME-03K-B.
 
 ## 1. Propósito
