@@ -4,7 +4,6 @@ The recovery loader below is a test-only verified-evidence fixture. It validates
 the adapter's transaction behavior, not cryptographic key custody or anti-rollback.
 """
 from dataclasses import replace
-from datetime import timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Barrier, Thread
@@ -193,9 +192,25 @@ class LocalSQLiteRecoveryGateAdapterTests(unittest.TestCase):
         self.assertEqual(row["active_recovery_operation_id"], RECOVERY_OPERATION)
         self.assertEqual(row["active_recovery_generation"], 2)
         self.assertIsNone(row["recovery_receipt_id"])
+        with self.database.write_transaction() as connection:
+            connection.execute(
+                "UPDATE consistency_domains SET recovery_gate_state='open', "
+                "active_recovery_operation_id=NULL, active_recovery_generation=NULL "
+                "WHERE domain_id=?",
+                (DOMAIN,),
+            )
         self.assertTrue(
             self.adapter.ensure_recovery_gate_closed(RECOVERY_OPERATION, 2)
         )
+        with self.database.connection() as connection:
+            restored = connection.execute(
+                "SELECT recovery_gate_state, active_recovery_operation_id, "
+                "active_recovery_generation FROM consistency_domains WHERE domain_id=?",
+                (DOMAIN,),
+            ).fetchone()
+        self.assertEqual(restored["recovery_gate_state"], "closed")
+        self.assertEqual(restored["active_recovery_operation_id"], RECOVERY_OPERATION)
+        self.assertEqual(restored["active_recovery_generation"], 2)
 
     def test_gate_projection_failure_rolls_back_recovery_journal_append(self):
         self.adapter._update_projection = lambda *args, **kwargs: False
