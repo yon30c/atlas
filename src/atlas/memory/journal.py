@@ -614,8 +614,11 @@ class CheckpointCommitResult:
             CheckpointCommitStatus.COMMITTED,
             CheckpointCommitStatus.REPLAYED,
         ):
-            if not isinstance(self.checkpoint, ConsistencyCheckpoint):
-                raise ContractError("COMMITTED/REPLAYED requiere checkpoint")
+            if (
+                not isinstance(self.checkpoint, ConsistencyCheckpoint)
+                or self.checkpoint.envelope is None
+            ):
+                raise ContractError("COMMITTED/REPLAYED requiere checkpoint autenticado")
             if not isinstance(self.marker_commit, JournalCommit):
                 raise ContractError("COMMITTED/REPLAYED requiere marker_commit")
             if (
