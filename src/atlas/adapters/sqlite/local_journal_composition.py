@@ -11,7 +11,10 @@ from atlas.adapters.sqlite.local_consistency_journal import (
     LocalSQLiteConsistencyJournalAdapter,
 )
 from atlas.core.errors import ContractError
-from atlas.memory.trust import ConsistencyRecoveryVerificationResult
+from atlas.memory.trust import (
+    ConsistencyRecoveryVerificationResult,
+    ConsistencyRecoveryVerificationStatus,
+)
 
 
 class LocalSQLiteVerifiedRecoveryAdapter:
@@ -32,7 +35,16 @@ class LocalSQLiteVerifiedRecoveryAdapter:
         """Delegate to the configured local verifier; never read structural state."""
         result = self._journal.load_verified_recovery_state(domain_id)
         if not isinstance(result, ConsistencyRecoveryVerificationResult):
-            return ConsistencyRecoveryVerificationResult.unavailable()
+            return ConsistencyRecoveryVerificationResult(
+                ConsistencyRecoveryVerificationStatus.UNAVAILABLE
+            )
+        if (
+            result.status is ConsistencyRecoveryVerificationStatus.VERIFIED
+            and result.verified_local_state is None
+        ):
+            return ConsistencyRecoveryVerificationResult(
+                ConsistencyRecoveryVerificationStatus.REJECTED
+            )
         return result
 
 
