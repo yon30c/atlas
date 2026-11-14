@@ -30,12 +30,14 @@ class FakeStreamingTransport:
 class FakeStreamingProvider:
     def __init__(self):
         self.request = None
+        self.requests = []
 
     def generate(self, request):
         raise AssertionError("La ruta de streaming debía utilizarse")
 
     def generate_stream(self, request, on_token):
         self.request = request
+        self.requests.append(request)
         on_token("Hola")
         on_token(", Atlas.")
         return LLMResponse(
@@ -133,6 +135,36 @@ class OllamaStreamingTests(unittest.TestCase):
         self.assertEqual("".join(written), "Atlas> Hola, Atlas.\n")
         self.assertIn("Atlas está listo. Escribe 'salir' para terminar.", output)
         self.assertEqual(output[-1], "Atlas: hasta luego.")
+
+    def test_cli_includes_previous_turn_in_the_next_model_request(self):
+        provider = FakeStreamingProvider()
+        inputs = iter(["Me llamo Ana", "¿Cómo me llamo?", "salir"])
+        output = []
+        written = []
+
+        with patch.dict("os.environ", {"ATLAS_MODE": "", "ATLAS_MODEL": ""}):
+            main(
+                input_fn=lambda _prompt: next(inputs),
+                output_fn=output.append,
+                write_fn=written.append,
+                user_id="context-test",
+                provider=provider,
+            )
+
+        self.assertEqual(len(provider.requests), 2)
+        second_messages = provider.requests[1].messages
+        self.assertEqual(
+            [message.role.value for message in second_messages],
+            ["system", "user", "assistant", "user"],
+        )
+        self.assertEqual(
+            [message.content for message in second_messages[1:]],
+            [
+                "Me llamo Ana",
+                "Hola, Atlas.",
+                "¿Cómo me llamo?",
+            ],
+        )
 
     def _llm_request(self):
         from atlas.ports.llm import LLMMessage, LLMMessageRole, LLMRequest
