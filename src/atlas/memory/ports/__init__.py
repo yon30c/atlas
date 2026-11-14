@@ -7,11 +7,17 @@ from atlas.memory.ports.metadata import (
     MemoryMetadataPort,
     ProjectMetadataPort,
 )
+from atlas.memory.ports.recovery import (
+    CheckpointProjectionPort,
+    RecoveryInventoryVerifierPort,
+)
 
 __all__ = [
+    "CheckpointProjectionPort",
     "EnvironmentMetadataPort",
     "MemoryConsistencyKeyPort",
     "MemoryConsistencySignerPort",
     "MemoryMetadataPort",
     "ProjectMetadataPort",
+    "RecoveryInventoryVerifierPort",
 ]
