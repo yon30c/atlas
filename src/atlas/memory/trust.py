@@ -153,8 +153,7 @@ class VerifiedConsistencyRecoveryState:
     """State admitted to the reducer only after independent trust verification."""
 
     state: ConsistencyRecoveryState
-    anchor_id: str
-    anchor_revision: int
+    anchor: ConsistencyTrustAnchor
     authenticated_state_commitment: str
     verification_id: str
     verifier_id: str
@@ -164,12 +163,21 @@ class VerifiedConsistencyRecoveryState:
     def __post_init__(self) -> None:
         if not isinstance(self.state, ConsistencyRecoveryState):
             raise ContractError("state debe ser ConsistencyRecoveryState")
+        if not isinstance(self.anchor, ConsistencyTrustAnchor):
+            raise ContractError("anchor debe ser ConsistencyTrustAnchor")
         for field in (
-            "anchor_id", "authenticated_state_commitment", "verification_id",
+            "authenticated_state_commitment", "verification_id",
             "verifier_id", "trust_policy_version",
         ):
             _required(getattr(self, field), field)
-        _positive(self.anchor_revision, "anchor_revision")
+        if self.anchor.consistency_domain_id != self.state.domain_id:
+            raise ContractError("ancla y estado pertenecen a dominios distintos")
+        if self.anchor.authority_epoch != self.state.authority_epoch:
+            raise ContractError("ancla y estado pertenecen a épocas distintas")
+        if self.anchor.maximum_committed_sequence != self.state.head_sequence:
+            raise ContractError("head_sequence no coincide con la posición máxima del ancla")
+        if self.anchor.authenticated_state_commitment != self.authenticated_state_commitment:
+            raise ContractError("commitment no coincide con el ancla")
         _utc(self.verified_at, "verified_at")
 
 
