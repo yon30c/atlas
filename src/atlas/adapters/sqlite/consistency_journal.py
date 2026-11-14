@@ -1,0 +1,417 @@
+"""Transactional SQLite implementation of K01 append and operation resolution.
+
+This adapter intentionally implements only the write/reconciliation slice of
+ConsistencyJournalPort. It does not expose unverified recovery state.
+"""
+from dataclasses import fields
+from datetime import datetime, timezone
+import hashlib
+import json
+import sqlite3
+from typing import Any
+
+from atlas.adapters.sqlite.database import SQLiteDatabase
+from atlas.core.errors import ContractError
+from atlas.memory.consistency import (
+    AuthorityKind, AuthorityRevision, AuthorizationRevisionSet, ReadAdmissionStatus,
+)
+from atlas.memory.envelope import AuthenticatedConsistencyEnvelope
+from atlas.memory.journal import (
+    ConsistencyPosition, ConsistencyRecordKind, ConsistencyTransition,
+    JournalCommit, JournalEntry, JournalOperationResolution,
+    JournalOperationResolutionStatus, consistency_transition_request_projection,
+)
+from atlas.memory.local_auth import (
+    CANONICALIZATION_VERSION, ENVELOPE_VERSION, canonical_json_bytes,
+    journal_entry_payload, object_commitment,
+)
+from atlas.memory.models import MemoryScopeKind
+from atlas.ports.local_consistency_signer import LocalConsistencySignerPort
+
+
+def _utc_text(value: datetime) -> str:
+    if value.tzinfo is None or value.utcoffset() is None or value.utcoffset().total_seconds() != 0:
+        raise ContractError("datetime debe estar en UTC")
+    return value.isoformat(timespec="microseconds")
+
+
+def _parse_datetime(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None or parsed.utcoffset() is None or parsed.utcoffset().total_seconds() != 0:
+        raise ContractError("timestamp persistido no está en UTC")
+    return parsed
+
+
+def _transition_from_bytes(raw: bytes) -> ConsistencyTransition:
+    try:
+        data = json.loads(raw.decode("utf-8"))
+        data["occurred_at"] = _parse_datetime(data["occurred_at"])
+        data["record_kind"] = ConsistencyRecordKind(data["record_kind"])
+        if data.get("scope_kind") is not None:
+            data["scope_kind"] = MemoryScopeKind(data["scope_kind"])
+        if data.get("authority_kind") is not None:
+            data["authority_kind"] = AuthorityKind(data["authority_kind"])
+        if data.get("admission_terminal_status") is not None:
+            data["admission_terminal_status"] = ReadAdmissionStatus(
+                data["admission_terminal_status"]
+            )
+        for name in ("route_ids", "affected_admission_ids"):
+            data[name] = frozenset(data.get(name, ()))
+        revisions = data.get("revisions")
+        if revisions is not None:
+            for name in (
+                "memory_revision", "version_revision", "identity_revision",
+                "project_revision", "environment_revision", "grant_revision",
+            ):
+                item = revisions.get(name)
+                if item is not None:
+                    item["authority_kind"] = AuthorityKind(item["authority_kind"])
+                    revisions[name] = AuthorityRevision(**item)
+            data["revisions"] = AuthorizationRevisionSet(**revisions)
+        return ConsistencyTransition(**data)
+    except (KeyError, TypeError, ValueError, UnicodeError) as exc:
+        raise ContractError("transición SQLite no se puede reconstruir") from exc
+
+
+class SQLiteConsistencyJournal:
+    """Single-host durable K01 append/reconciliation adapter."""
+
+    def __init__(
+        self,
+        database: SQLiteDatabase,
+        signer: LocalConsistencySignerPort,
+        *,
+        reducer_version: str,
+        issuer_id: str,
+        issuer_role: str,
+        key_reference: str,
+        trust_policy_version: str,
+    ) -> None:
+        if not isinstance(database, SQLiteDatabase):
+            raise ContractError("database debe ser SQLiteDatabase")
+        if signer is None or not callable(getattr(signer, "sign_envelope", None)):
+            raise ContractError("signer debe implementar sign_envelope")
+        for name, value in (
+            ("reducer_version", reducer_version), ("issuer_id", issuer_id),
+            ("issuer_role", issuer_role), ("key_reference", key_reference),
+            ("trust_policy_version", trust_policy_version),
+        ):
+            if not isinstance(value, str) or not value.strip():
+                raise ContractError(f"{name} debe ser una cadena no vacía")
+        self._database = database
+        self._signer = signer
+        self._reducer_version = reducer_version
+        self._issuer_id = issuer_id
+        self._issuer_role = issuer_role
+        self._key_reference = key_reference
+        self._trust_policy_version = trust_policy_version
+
+    def create_local_domain(self, domain_id: str, authority_epoch: int) -> bool:
+        """Explicit one-time domain bootstrap; never silently changes an existing domain."""
+        if not isinstance(domain_id, str) or not domain_id.strip():
+            raise ContractError("domain_id debe ser no vacío")
+        if isinstance(authority_epoch, bool) or not isinstance(authority_epoch, int) or authority_epoch < 1:
+            raise ContractError("authority_epoch debe ser positivo")
+        now = _utc_text(datetime.now(timezone.utc))
+        try:
+            with self._database.write_transaction() as connection:
+                existing = connection.execute(
+                    "SELECT authority_epoch, profile, trust_policy_version "
+                    "FROM consistency_domains WHERE domain_id = ?", (domain_id,)
+                ).fetchone()
+                if existing is not None:
+                    return (
+                        existing["authority_epoch"] == authority_epoch
+                        and existing["profile"] == "local"
+                        and existing["trust_policy_version"] == self._trust_policy_version
+                    )
+                connection.execute(
+                    """
+                    INSERT INTO consistency_domains (
+                        domain_id, authority_epoch, head_sequence, head_commitment,
+                        profile, trust_policy_version, created_at, updated_at
+                    ) VALUES (?, ?, 0, NULL, 'local', ?, ?, ?)
+                    """,
+                    (domain_id, authority_epoch, self._trust_policy_version, now, now),
+                )
+            return True
+        except sqlite3.Error:
+            return False
+
+    @staticmethod
+    def _position(domain_id: str, epoch: int, sequence: int) -> ConsistencyPosition:
+        return ConsistencyPosition(domain_id, epoch, sequence)
+
+    @staticmethod
+    def _row_commit(row: sqlite3.Row, *, replayed: bool) -> JournalCommit:
+        return JournalCommit(
+            ConsistencyPosition(row["domain_id"], row["authority_epoch"], row["sequence"]),
+            row["record_id"],
+            replayed,
+        )
+
+    def _load_operation(
+        self, connection: sqlite3.Connection, domain_id: str, epoch: int,
+        *, operation_id: str | None = None, idempotency_key: str | None = None,
+    ) -> sqlite3.Row | None:
+        if operation_id is not None:
+            return connection.execute(
+                """
+                SELECT o.*, j.transition_canonical, j.record_kind, j.schema_version,
+                       j.envelope_version, j.reducer_version, j.previous_commitment,
+                       j.object_commitment, j.issuer_id, j.issuer_role, j.key_reference,
+                       j.trust_policy_version, j.issued_at, j.authentication_evidence
+                FROM journal_operations o
+                JOIN journal_entries j
+                  ON j.domain_id=o.domain_id AND j.authority_epoch=o.authority_epoch
+                 AND j.sequence=o.sequence AND j.record_id=o.record_id
+                 AND j.operation_id=o.operation_id
+                WHERE o.domain_id=? AND o.authority_epoch=? AND o.operation_id=?
+                """, (domain_id, epoch, operation_id)
+            ).fetchone()
+        if idempotency_key is not None:
+            return connection.execute(
+                """
+                SELECT o.*, j.transition_canonical, j.record_kind, j.schema_version,
+                       j.envelope_version, j.reducer_version, j.previous_commitment,
+                       j.object_commitment, j.issuer_id, j.issuer_role, j.key_reference,
+                       j.trust_policy_version, j.issued_at, j.authentication_evidence
+                FROM journal_operations o
+                JOIN journal_entries j
+                  ON j.domain_id=o.domain_id AND j.authority_epoch=o.authority_epoch
+                 AND j.sequence=o.sequence AND j.record_id=o.record_id
+                 AND j.operation_id=o.operation_id
+                WHERE o.domain_id=? AND o.authority_epoch=? AND o.idempotency_key=?
+                """, (domain_id, epoch, idempotency_key)
+            ).fetchone()
+        return None
+
+    @staticmethod
+    def _request_bytes(domain_id: str, epoch: int, transition: ConsistencyTransition) -> bytes:
+        return canonical_json_bytes(
+            consistency_transition_request_projection(domain_id, epoch, transition)
+        )
+
+    def append_transition(
+        self,
+        expected_position: ConsistencyPosition,
+        transition: ConsistencyTransition,
+    ) -> JournalCommit | None:
+        if not isinstance(expected_position, ConsistencyPosition) or not isinstance(transition, ConsistencyTransition):
+            return None
+        domain_id = expected_position.consistency_domain_id
+        epoch = expected_position.authority_epoch
+        request_bytes = self._request_bytes(domain_id, epoch, transition)
+        request_digest = hashlib.sha256(request_bytes).hexdigest()
+        now = _utc_text(datetime.now(timezone.utc))
+        try:
+            with self._database.write_transaction() as connection:
+                domain = connection.execute(
+                    "SELECT * FROM consistency_domains WHERE domain_id=?", (domain_id,)
+                ).fetchone()
+                if (
+                    domain is None or domain["authority_epoch"] != epoch
+                    or domain["profile"] != "local"
+                    or domain["trust_policy_version"] != self._trust_policy_version
+                ):
+                    return None
+
+                by_key = self._load_operation(
+                    connection, domain_id, epoch, idempotency_key=transition.idempotency_key
+                )
+                by_operation = self._load_operation(
+                    connection, domain_id, epoch, operation_id=transition.operation_id
+                )
+                if by_key is not None and by_operation is not None and (
+                    by_key["operation_id"] != by_operation["operation_id"]
+                ):
+                    return None
+                existing = by_key or by_operation
+                if existing is not None:
+                    if (
+                        bytes(existing["request_canonical"]) != request_bytes
+                        or existing["idempotency_key"] != transition.idempotency_key
+                    ):
+                        return None
+                    return self._row_commit(existing, replayed=True)
+
+                if expected_position.sequence != domain["head_sequence"]:
+                    return None
+                if transition.record_id == "" or transition.operation_id == "":
+                    return None
+
+                sequence = domain["head_sequence"] + 1
+                position = self._position(domain_id, epoch, sequence)
+                unsigned = AuthenticatedConsistencyEnvelope(
+                    object_kind="journal_entry",
+                    envelope_version=ENVELOPE_VERSION,
+                    consistency_domain_id=domain_id,
+                    authority_epoch=epoch,
+                    sequence=sequence,
+                    object_id=transition.record_id,
+                    schema_version=transition.schema_version,
+                    reducer_version=self._reducer_version,
+                    previous_commitment=domain["head_commitment"],
+                    object_commitment="pending",
+                    issuer_id=self._issuer_id,
+                    issuer_role=self._issuer_role,
+                    key_reference=self._key_reference,
+                    trust_policy_version=self._trust_policy_version,
+                    issued_at=datetime.now(timezone.utc),
+                    authentication_evidence="pending",
+                )
+                unsigned_entry = JournalEntry(position, transition)
+                signed = self._signer.sign_envelope(
+                    unsigned, journal_entry_payload(unsigned_entry)
+                )
+                if not isinstance(signed, AuthenticatedConsistencyEnvelope):
+                    return None
+                expected_commitment = object_commitment(journal_entry_payload(unsigned_entry))
+                if (
+                    signed.object_kind != unsigned.object_kind
+                    or signed.envelope_version != unsigned.envelope_version
+                    or signed.consistency_domain_id != domain_id
+                    or signed.authority_epoch != epoch
+                    or signed.sequence != sequence
+                    or signed.object_id != transition.record_id
+                    or signed.schema_version != transition.schema_version
+                    or signed.reducer_version != self._reducer_version
+                    or signed.previous_commitment != domain["head_commitment"]
+                    or signed.issuer_id != self._issuer_id
+                    or signed.issuer_role != self._issuer_role
+                    or signed.key_reference != self._key_reference
+                    or signed.trust_policy_version != self._trust_policy_version
+                    or signed.object_commitment != expected_commitment
+                    or not signed.authentication_evidence
+                ):
+                    return None
+                entry = JournalEntry(position, transition, signed)
+                transition_bytes = canonical_json_bytes(transition)
+                connection.execute(
+                    """
+                    INSERT INTO journal_entries (
+                        domain_id, authority_epoch, sequence, record_id, operation_id,
+                        record_kind, schema_version, transition_canonical,
+                        envelope_version, reducer_version, previous_commitment,
+                        object_commitment, issuer_id, issuer_role, key_reference,
+                        trust_policy_version, issued_at, authentication_evidence
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        domain_id, epoch, sequence, transition.record_id,
+                        transition.operation_id, transition.record_kind.value,
+                        transition.schema_version, transition_bytes,
+                        signed.envelope_version, signed.reducer_version,
+                        signed.previous_commitment, signed.object_commitment,
+                        signed.issuer_id, signed.issuer_role, signed.key_reference,
+                        signed.trust_policy_version, _utc_text(signed.issued_at),
+                        signed.authentication_evidence,
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO journal_operations (
+                        domain_id, authority_epoch, operation_id, idempotency_key,
+                        request_canonical, request_digest, sequence, record_id, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        domain_id, epoch, transition.operation_id,
+                        transition.idempotency_key, request_bytes, request_digest,
+                        sequence, transition.record_id, now,
+                    ),
+                )
+                updated = connection.execute(
+                    """
+                    UPDATE consistency_domains
+                    SET head_sequence=?, head_commitment=?, updated_at=?
+                    WHERE domain_id=? AND authority_epoch=? AND head_sequence=?
+                    """,
+                    (
+                        sequence, signed.object_commitment, now, domain_id, epoch,
+                        expected_position.sequence,
+                    ),
+                )
+                if updated.rowcount != 1:
+                    return None
+            return JournalCommit(position, transition.record_id, False)
+        except (sqlite3.Error, ContractError, OSError, RuntimeError, ValueError):
+            return None
+
+    def resolve_operation(
+        self,
+        domain_id: str,
+        authority_epoch: int,
+        operation_id: str,
+        idempotency_key: str | None,
+        expected_transition: ConsistencyTransition,
+        expected_position: ConsistencyPosition,
+    ) -> JournalOperationResolution:
+        unknown = JournalOperationResolutionStatus.UNKNOWN
+        if (
+            not isinstance(expected_transition, ConsistencyTransition)
+            or not isinstance(expected_position, ConsistencyPosition)
+            or expected_transition.operation_id != operation_id
+            or expected_transition.idempotency_key != idempotency_key
+            or expected_position.consistency_domain_id != domain_id
+            or expected_position.authority_epoch != authority_epoch
+        ):
+            return JournalOperationResolution(
+                unknown, operation_id, idempotency_key, expected_position,
+                expected_transition, None, None,
+            )
+        try:
+            with self._database.connection() as connection:
+                domain = connection.execute(
+                    "SELECT * FROM consistency_domains WHERE domain_id=?", (domain_id,)
+                ).fetchone()
+                if (
+                    domain is None or domain["authority_epoch"] != authority_epoch
+                    or domain["profile"] != "local"
+                    or domain["trust_policy_version"] != self._trust_policy_version
+                ):
+                    raise sqlite3.DatabaseError("dominio no verificable")
+                by_operation = self._load_operation(
+                    connection, domain_id, authority_epoch, operation_id=operation_id
+                )
+                by_key = self._load_operation(
+                    connection, domain_id, authority_epoch, idempotency_key=idempotency_key
+                )
+                current = self._position(domain_id, authority_epoch, domain["head_sequence"])
+                if by_operation is not None and by_key is not None and (
+                    by_operation["operation_id"] != by_key["operation_id"]
+                ):
+                    status = JournalOperationResolutionStatus.CONFLICT
+                    return JournalOperationResolution(
+                        status, operation_id, idempotency_key, expected_position,
+                        expected_transition, current, None,
+                    )
+                row = by_key or by_operation
+                if row is None:
+                    return JournalOperationResolution(
+                        JournalOperationResolutionStatus.NOT_COMMITTED,
+                        operation_id, idempotency_key, expected_position,
+                        expected_transition, current, None,
+                    )
+                committed = _transition_from_bytes(bytes(row["transition_canonical"]))
+                request_bytes = self._request_bytes(domain_id, authority_epoch, expected_transition)
+                if (
+                    bytes(row["request_canonical"]) != request_bytes
+                    or row["idempotency_key"] != idempotency_key
+                ):
+                    return JournalOperationResolution(
+                        JournalOperationResolutionStatus.CONFLICT,
+                        operation_id, idempotency_key, expected_position,
+                        expected_transition, current, None,
+                    )
+                commit = self._row_commit(row, replayed=True)
+                return JournalOperationResolution(
+                    JournalOperationResolutionStatus.COMMITTED_EXACT,
+                    operation_id, idempotency_key, expected_position,
+                    expected_transition, current, commit, committed,
+                )
+        except Exception:
+            return JournalOperationResolution(
+                unknown, operation_id, idempotency_key, expected_position,
+                expected_transition, None, None,
+            )
