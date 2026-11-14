@@ -220,12 +220,51 @@ def _decode_value(value: Any, expected_type: Any, path: str) -> Any:
     raise ContractError(f"tipo de campo no admitido en {path}: {expected_type!r}")
 
 
-def encode_projection(projection: ConsistencyProjection) -> bytes:
-    """Encode a projection using the frozen format and canonical JSON v1."""
+def _validate_projection_shape(projection: ConsistencyProjection) -> None:
     if not isinstance(projection, ConsistencyProjection):
         raise ContractError("projection debe ser ConsistencyProjection")
-    if projection.replay_metadata_version != 1:
+    if not isinstance(projection.domain_id, str) or not projection.domain_id.strip():
+        raise ContractError("domain_id debe ser una cadena no vacía")
+    if (
+        isinstance(projection.authority_epoch, bool)
+        or not isinstance(projection.authority_epoch, int)
+        or projection.authority_epoch < 1
+    ):
+        raise ContractError("authority_epoch debe ser un entero positivo")
+    if (
+        isinstance(projection.head_sequence, bool)
+        or not isinstance(projection.head_sequence, int)
+        or projection.head_sequence < 0
+    ):
+        raise ContractError("head_sequence debe ser un entero no negativo")
+    if (
+        isinstance(projection.replay_metadata_version, bool)
+        or not isinstance(projection.replay_metadata_version, int)
+        or projection.replay_metadata_version != 1
+    ):
         raise ContractError("solo se pueden persistir proyecciones replay metadata v1")
+    tuple_fields = (
+        ("admissions",),
+        ("forget_closures",),
+        ("invalidations",),
+        ("idempotency_records",),
+        ("recovery_closures",),
+    )
+    for (field,) in tuple_fields:
+        if not isinstance(getattr(projection, field), tuple):
+            raise ContractError(f"{field} debe ser tuple")
+    for field in ("receipt_ids", "emission_ids"):
+        values = getattr(projection, field)
+        if (
+            not isinstance(values, frozenset)
+            or any(not isinstance(value, str) or not value.strip() for value in values)
+        ):
+            raise ContractError(f"{field} debe ser frozenset de cadenas no vacías")
+
+
+def encode_projection(projection: ConsistencyProjection) -> bytes:
+    """Encode a projection using the frozen format and canonical JSON v1."""
+    _validate_projection_shape(projection)
     return canonical_json_bytes({
         "format": PROJECTION_FORMAT,
         "format_version": PROJECTION_FORMAT_VERSION,
@@ -241,8 +280,7 @@ def decode_projection(raw: bytes) -> ConsistencyProjection:
     if document["format"] != PROJECTION_FORMAT or document["format_version"] != PROJECTION_FORMAT_VERSION:
         raise ContractError("formato o versión de proyección no admitidos")
     projection = _decode_value(document["projection"], ConsistencyProjection, "projection")
-    if projection.replay_metadata_version != 1:
-        raise ContractError("replay metadata version no admitida")
+    _validate_projection_shape(projection)
     if encode_projection(projection) != raw:
         raise ContractError("la proyección reconstruida no conserva sus bytes canónicos")
     return projection
