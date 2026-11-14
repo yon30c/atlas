@@ -7,6 +7,8 @@ itself; authorization policy must still evaluate ownership and scope.
 from dataclasses import dataclass
 from typing import Protocol
 
+from atlas.memory.errors import MemoryContractError
+
 
 @dataclass(frozen=True, slots=True)
 class MemoryIdentityBinding:
@@ -21,7 +23,7 @@ class MemoryIdentityBinding:
         for field in ("actor_identity_id", "subject_id"):
             value = getattr(self, field)
             if not isinstance(value, str) or not value.strip():
-                raise ValueError(f"{field} must be a non-empty string")
+                raise MemoryContractError(f"{field} must be a non-empty string")
         if not isinstance(self.is_active, bool):
             raise ValueError("is_active must be bool")
         if isinstance(self.revision, bool) or not isinstance(self.revision, int) or self.revision < 1:
