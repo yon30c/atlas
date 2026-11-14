@@ -349,3 +349,34 @@ Por tanto, el verificador local no debe emitir `VERIFIED` hasta que se definan e
 - comprobaciones de operaciones pendientes/no terminales y cierre coherente del conjunto recuperado.
 
 El perfil local continúa sin anti-rollback externo y no prueba que el backup restaurado sea el más reciente. Hasta cerrar esas fronteras, el recovery gate permanece cerrado.
+
+
+## 18. Decisión del propietario — puertos independientes de checkpoint e inventarios
+
+**Estado: APROBADO — 14 de noviembre de 2026.**
+
+Se aprueban dos puertos independientes para la recuperación local:
+
+### 18.1 `LocalConsistencyCheckpointProjectionPort`
+
+Resuelve `state_reference` e `integrity_reference` del checkpoint y devuelve una proyección base únicamente cuando demuestra:
+- correspondencia exacta de dominio, época, secuencia e identidad del checkpoint;
+- integridad/autenticidad de la proyección y de sus referencias;
+- compatibilidad con versiones de esquema y reducer autorizadas por la política local;
+- completitud de la proyección base necesaria para continuar el replay.
+
+El contrato usa `LocalCheckpointProjectionRequest`, `CheckpointProjectionResolution` y `VerifiedCheckpointProjection`. `VERIFIED` exige evidencia tipada y una proyección cuyo dominio, época y head coincidan exactamente con el checkpoint. Una referencia opaca por sí sola nunca basta.
+
+### 18.2 `LocalConsistencyInventoryVerifierPort`
+
+Comprueba el conjunto completo de inventarios y referencias asociados al estado/proyección recuperados, incluidos recibos terminales, tombstones de Forget e invalidación, referencias a objetos/snapshots y operaciones pendientes/no terminales. No basta con comprobar los IDs que el journal declara: debe demostrar completitud contra la fuente autoritativa de cada inventario, detectar elementos ausentes, extra, duplicados o no autenticados y vincular el resultado al mismo dominio, época, head, commitment de continuidad y versión de política.
+
+El contrato usa `LocalConsistencyInventoryVerificationRequest`, `LocalConsistencyInventoryVerificationResult` y `VerifiedLocalConsistencyInventories`. El commitment del inventario y los conjuntos verificados identifican exactamente qué fue comprobado.
+
+### 18.3 Límites de esta entrega
+
+Esta entrega define los contratos y sus DTOs inmutables, con validación estructural y pruebas unitarias de contrato. **No implementa adaptadores de almacenamiento ni verificadores reales**, no resuelve todavía el replay desde checkpoint, no integra el inventario con el reducer y no cambia el resultado del recovery gate.
+
+El verificador concreto solo podrá emitir `VERIFIED` cuando ambos puertos hayan respondido `VERIFIED`, la proyección base se haya combinado/reproducido semánticamente hasta el head, la política independiente haya autorizado todos los envelopes y versiones, y todas las evidencias se hayan ligado al mismo estado recuperado. Cualquier `REJECTED`, `UNAVAILABLE`, discrepancia o evidencia incompleta mantiene el gate cerrado.
+
+El perfil local continúa sin anti-rollback externo. Ninguno de estos puertos puede inferir que el backup es el más reciente.
