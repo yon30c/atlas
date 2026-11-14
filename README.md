@@ -7,22 +7,35 @@ Atlas es un entorno personal de automatización y gestión de proyectos diseñad
 La rama `feature/atlas-functional-f1` incorpora una primera experiencia conversacional local:
 
 - Modelos inmutables `AssistantRequest` y `AssistantResponse`.
+- Mensajes históricos neutrales al proveedor mediante `ConversationMessage`.
 - Servicio de aplicación que correlaciona solicitudes y respuestas.
 - Adaptador de consola desacoplado de la lógica de aplicación.
 - Identidad inicial derivada de la cuenta local del sistema.
 - Contexto explícito por solicitud y marcas de tiempo UTC.
-- Orquestador `AtlasCore` en `atlas.application`, que coordina la creación de solicitudes, el servicio conversacional y el streaming.
+- Orquestador `AtlasCore` en `atlas.application`, que coordina la creación de solicitudes, el contexto conversacional, el servicio y el streaming.
 - Inicio mediante `python -m atlas` o el comando `atlas` tras instalar el paquete.
 
 `src/atlas/core` conserva los contratos fundamentales del dominio (identidad, contexto, errores y enums). No debe confundirse con `AtlasCore`, que es la fachada de orquestación de aplicación en `src/atlas/application/atlas_core.py`.
 
-La consola solo recoge y presenta texto. AtlasCore recibe ese texto, solicita a la fábrica el contexto local, delega en `AssistantService` y valida que la respuesta corresponda a la solicitud original. Esta capa no concede permisos, no ejecuta herramientas ni permite que el modelo acceda directamente a archivos o sistemas.
+La consola solo recoge y presenta texto. AtlasCore recibe ese texto, solicita a la fábrica el contexto local, delega en el procesador de contexto conversacional y valida que la respuesta corresponda a la solicitud original. Esta capa no concede permisos, no ejecuta herramientas ni permite que el modelo acceda directamente a archivos o sistemas.
+
+### Contexto conversacional de sesión
+
+`ConversationContextProcessor` enriquece cada solicitud con los turnos anteriores de la misma conversación. El historial se mantiene en `InMemoryConversationHistory`, separado por `conversation_id`, protegido para accesos concurrentes y limitado por cantidad y tamaño:
+
+- Hasta 8 turnos anteriores (16 mensajes: usuario y asistente).
+- Hasta 2000 caracteres por mensaje histórico; el contenido más allá del límite se trunca con una marca explícita.
+- Solo se guardan turnos cuya respuesta no sea de tipo `ERROR`.
+- Las respuestas y solicitudes conservan sus identificadores y contexto originales.
+- El historial desaparece al terminar el proceso. No se escribe en disco ni se comparte entre sesiones.
+
+El mensaje de sistema se mantiene al principio del prompt; después se envían los mensajes históricos en orden y, al final, el mensaje actual del usuario. La gestión del historial pertenece a la capa de aplicación, no a Ollama.
 
 Los contratos neutrales para proveedores de modelos (`LLMProvider`, `LLMRequest`, `LLMResponse` y `LLMMessage`) están definidos en `atlas.ports.llm`. No dependen de un SDK ni de un proveedor concreto y no conceden capacidad para ejecutar herramientas.
 
 El adaptador `OllamaProvider` implementa la API local `/api/chat` mediante la biblioteca estándar. Solo acepta endpoints HTTP loopback (`localhost`, `127.0.0.1` o `::1`); no admite proveedores remotos ni proxies del entorno. Soporta tanto respuestas completas como streaming NDJSON.
 
-El puente `OllamaResponseGenerator` conecta el puerto LLM con `AssistantService`. Convierte cada solicitud en mensajes de sistema y usuario y traduce fallos conocidos de Ollama en respuestas de tipo `ERROR`, sin propagar detalles internos al usuario. El streaming atraviesa proveedor, generador, servicio, AtlasCore y consola: los fragmentos se muestran conforme llegan, sin esperar a que termine la generación. Se rechazan flujos que no entreguen el evento final de Ollama.
+El puente `OllamaResponseGenerator` conecta el puerto LLM con `AssistantService`. Convierte cada solicitud en mensajes de sistema, historial y mensaje actual, y traduce fallos conocidos de Ollama en respuestas de tipo `ERROR`, sin propagar detalles internos al usuario. El streaming atraviesa proveedor, generador, servicio, contexto conversacional, AtlasCore y consola: los fragmentos se muestran conforme llegan, sin esperar a que termine la generación. Se rechazan flujos que no entreguen el evento final de Ollama.
 
 ### Configuración local de la consola
 
@@ -31,6 +44,7 @@ La consola utiliza por defecto:
 - Modelo: `gemma4:e2b`.
 - Endpoint: `http://127.0.0.1:11434`.
 - Streaming: activado.
+- Historial de sesión: hasta 8 turnos, 2000 caracteres por mensaje histórico.
 
 Variables opcionales:
 
@@ -77,9 +91,10 @@ PYTHONPATH=src python -m unittest \
   tests.unit.test_ollama_adapter \
   tests.unit.test_ollama_assistant \
   tests.unit.test_ollama_streaming \
-  tests.unit.test_atlas_core -v
+  tests.unit.test_atlas_core \
+  tests.unit.test_conversation_context -v
 ```
 
 ## Próximas etapas
 
-Validar AtlasCore con la suite completa y una conversación local real. Después, diseñar la integración controlada de contexto/memoria y las políticas de autorización antes de exponer herramientas. Ninguna capacidad futura debe considerarse implementada hasta contar con código y pruebas verificadas.
+Validar el contexto de sesión con la suite completa y una conversación local real. Después, diseñar la integración controlada de memoria persistente y las políticas de autorización antes de exponer herramientas. Ninguna capacidad futura debe considerarse implementada hasta contar con código y pruebas verificadas.
