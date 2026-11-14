@@ -15,7 +15,7 @@ Se añadió ProtectedMemoryRecoveryAuthorityPort, que compone ambas facetas. La 
 
 - Append condicional por dominio/época/secuencia.
 - Idempotencia durable para solicitud canónica.
-- Recuperación con continuidad autenticada y anti-rollback.
+- Recuperación con integridad y continuidad local en el baseline; anti-rollback externo como capacidad opcional futura.
 - Lectura completa de recibos de endpoint y estado de operaciones.
 - Checkpoint con referencia a baseline confiable.
 - Resolución de resultados ambiguos mediante lectura de estado durable.
@@ -54,4 +54,8 @@ Se añadió ProtectedMemoryRecoveryAuthorityPort, que compone ambas facetas. La 
 
 ## Siguiente subetapa
 
-ME-03K-B debe definir el contrato de persistencia y autenticidad mínimo para journal/checkpoints/recibos, incluyendo ancla externa anti-rollback, consulta de resultados ambiguos e invariantes de atomicidad. Después podrá prepararse una comparación de tecnologías basada en esos requisitos, sin decisión anticipada.
+ME-03K-B debe definir el contrato de persistencia y autenticidad mínimo para journal/checkpoints/recibos, consulta de resultados ambiguos e invariantes de atomicidad. El Trust Anchor externo es opcional y su implementación queda postergada hasta la etapa final de Atlas. El baseline local debe declarar que no demuestra anti-rollback externo; la comparación de tecnologías del proveedor anclado se reserva para esa etapa.
+
+## Decisión posterior — Trust Anchor opcional
+
+**APROBADO — 13 de noviembre de 2026.** El Trust Anchor externo no es requisito para las etapas actuales. Se utilizará un perfil local en un único servidor y se desarrollará el proveedor anclado únicamente en la etapa final. Esta decisión no elimina la verificación local ni permite afirmar anti-rollback. Las garantías que dependan de conocer el último estado fuera del conjunto restaurable permanecen bloqueadas o requieren reconciliación independiente aprobada.
