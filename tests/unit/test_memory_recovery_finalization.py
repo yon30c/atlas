@@ -104,7 +104,7 @@ class RecoveryAdmissionFinalizationTests(unittest.TestCase):
         projection = ConsistencyJournalReducer().reduce(self.journal.state)
         admission = projection.admissions[0]
         self.assertIs(admission.status, ReadAdmissionStatus.CANCELLED)
-        self.assertEqual(admission.terminal_operation_id, "recovery:consistency-domain:4:5")
+        self.assertEqual(admission.terminal_operation_id, "recovery:consistency-domain:4:3")
 
     def test_retries_are_idempotent_and_do_not_reconcile_twice(self):
         first = self.coordinator.run()

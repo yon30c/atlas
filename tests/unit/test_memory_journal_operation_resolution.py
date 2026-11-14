@@ -20,11 +20,17 @@ class JournalOperationResolutionTests(unittest.TestCase):
         self.transition = ConsistencyTransition(
             record_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074502",
             schema_version=1,
-            record_kind=ConsistencyRecordKind.CHECKPOINT_COMMITTED,
-            operation_id="checkpoint:op-10",
+            record_kind=ConsistencyRecordKind.FORGET_CLOSED,
+            operation_id="forget:op-10",
             occurred_at=self.now,
-            idempotency_key="checkpoint-idem-10",
-            checkpoint_reference="checkpoint-ref-10",
+            idempotency_key="forget-idem-10",
+            request_id="forget-request-10",
+            actor_identity_id="owner-identity-10",
+            subject_user_id="owner-user-10",
+            owner_id="owner-user-10",
+            memory_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074503",
+            generation=1,
+            proof_reference="forget-proof-10",
         )
         self.commit = JournalCommit(
             position=ConsistencyPosition("domain-a", 3, 11),
@@ -58,11 +64,17 @@ class JournalOperationResolutionTests(unittest.TestCase):
         conflicting = ConsistencyTransition(
             record_id=self.transition.record_id,
             schema_version=1,
-            record_kind=ConsistencyRecordKind.CHECKPOINT_COMMITTED,
+            record_kind=ConsistencyRecordKind.FORGET_CLOSED,
             operation_id=self.transition.operation_id,
             occurred_at=self.now,
             idempotency_key=self.transition.idempotency_key,
-            checkpoint_reference="different-checkpoint-ref",
+            request_id="forget-request-10",
+            actor_identity_id="owner-identity-10",
+            subject_user_id="owner-user-10",
+            owner_id="owner-user-10",
+            memory_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074503",
+            generation=1,
+            proof_reference="different-forget-proof",
         )
         with self.assertRaises(ContractError):
             self._result(
