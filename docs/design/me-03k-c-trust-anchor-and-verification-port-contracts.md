@@ -249,11 +249,11 @@ La construcción de `VerifiedConsistencyRecoveryState` es una garantía de tipo 
 1. **Implementado en la frontera de coordinación:** propagar `ReceiptTrustContext` a ambos verificadores trust-aware y rechazar interfaces legacy en los coordinadores. Sigue pendiente una factoría durable que resuelva referencias canónicas desde la autoridad confiable.
 2. Añadir pruebas negativas de emisor/clave desconocidos, firma inválida, revocación histórica, replay, timeout y canonicalización incompatible en el verificador de referencia/fakes.
 3. Ejecutar las suites focalizadas y CI de Python 3.10–3.13; los modelos tipados por sí solos no prueban autenticidad.
-4. Verificar que la autoridad durable consulta ancla, journal y estado idempotente bajo un mismo orden linealizable y no reabre el gate ante resultados ambiguos.
+4. Verificar que la autoridad durable consulta journal y estado idempotente bajo un mismo orden linealizable y no reabre el gate ante resultados ambiguos; añadir consulta del Trust Anchor solo para el perfil anclado.
 
 ## 13. Criterios de cierre por perfil
 
-El diseño del perfil local puede cerrarse cuando se definen y verifican sus garantías locales, su resultado tipado y sus limitaciones explícitas. El perfil anclado solo puede cerrarse cuando se implemente y valide el proveedor externo y sus garantías anti-rollback.
+El diseño del perfil local puede cerrarse cuando se definen y verifican sus garantías locales, su resultado tipado y sus limitaciones explícitas. El perfil anclado solo puede cerrarse cuando se implemente y valide el proveedor externo y sus garantías anti-rollback. La implementación del proveedor anclado está postergada hasta la etapa final de Atlas.
 
 ME-03K-C queda cerrado en diseño para cada perfil cuando:
 
@@ -266,6 +266,7 @@ ME-03K-C queda cerrado en diseño para cada perfil cuando:
 1. Existe un modelo tipado de ancla externa monotónica y sus resultados.
 2. El estado del journal no llega al reducer sin evidencia tipada de verificación desde esa ancla.
 3. Checkpoints y registros autentican dominio, época, posición, esquema, continuidad y emisor contra el ancla vigente.
+**Requisitos comunes a ambos perfiles:**
 4. Recibos operativos/globales comparten claims y contexto de confianza sin permitir autoaprobación.
 5. La consulta de resultados ambiguos distingue COMMITTED_EXACT, NOT_COMMITTED, CONFLICT y UNKNOWN bajo consistencia fuerte.
 6. Reloj, revocación, replay y recuperación histórica tienen resultados fail-closed definidos.
