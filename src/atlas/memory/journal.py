@@ -495,7 +495,7 @@ class JournalOperationResolution:
                     != self.expected_position.consistency_domain_id
                 or self.commit.position.authority_epoch
                     != self.expected_position.authority_epoch
-                or self.commit.position.sequence != self.expected_position.sequence + 1
+                or self.commit.position.sequence < 1
                 or self.current_position.consistency_domain_id
                     != self.expected_position.consistency_domain_id
                 or self.current_position.authority_epoch

@@ -1,12 +1,12 @@
 # ME-03K — SQLite K01 append y resolución
 
-**Estado:** contrato actualizado a identidad separada; implementación del adaptador pendiente de alineación con schema v3.
+**Estado:** contrato y primera implementación K01 alineados con schema v3; pruebas de integración del adaptador pendientes de ejecución en Debian.
 
 ## Alcance
 
 El adaptador local implementará únicamente `append_transition` y `resolve_append`. No declarará todavía conformidad completa con `ConsistencyJournalPort`: recuperación autenticada, checkpoints y recibos de endpoint permanecen fuera de alcance.
 
-**Importante:** el primer borrador de `consistency_journal.py` fue escrito antes de aprobar `append_id`. No es compatible con schema v3 y no debe considerarse implementado ni utilizarse hasta que se actualice. Su lookup por `operation_id` queda expresamente supersedido por el contrato de identidad de append.
+**Importante:** el primer borrador de `consistency_journal.py` fue escrito antes de aprobar `append_id` y quedó supersedido. La implementación actual utiliza `append_id` e `idempotency_key`; `operation_id` se conserva únicamente como correlación de negocio.
 
 ## Identidades
 
@@ -58,12 +58,14 @@ Dentro de una única transacción `BEGIN IMMEDIATE`:
 - `NOT_COMMITTED` solo cuando ambos localizadores están ausentes y la posición actual es coherente;
 - `UNKNOWN` ante indisponibilidad, corrupción o evidencia insuficiente.
 
-## Siguiente trabajo de implementación
+## Estado de implementación
 
-1. Alinear `JournalOperationResolution` y el puerto de journal para expresar `append_id`.
-2. Actualizar `SQLiteConsistencyJournal` para usar `append_id` y el schema v3.
-3. Añadir pruebas de replay con append IDs regenerados, colisiones, múltiples eventos con un mismo `operation_id`, fallos del firmante, CAS y concurrencia entre procesos.
-4. Mantener desactivada la custodia real mediante systemd credentials.
+1. `ConsistencyJournalPort.append_transition` recibe `append_id` como argumento independiente.
+2. La reconciliación se denomina `resolve_append` y el DTO `JournalOperationResolution` identifica el intento mediante `append_id`, no `operation_id`.
+3. `SQLiteConsistencyJournal` consulta por `append_id` y `idempotency_key`, inserta `append_id` en `journal_operations` y conserva el commit original en replay semántico.
+4. `operation_id` no se utiliza para lookup ni unicidad.
+5. La implementación todavía requiere pruebas de integración específicas, revisión de los consumidores del puerto y validación completa en Debian.
+6. Mantener desactivada la custodia real mediante systemd credentials.
 
 ## Límites
 
