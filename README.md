@@ -108,6 +108,7 @@ El perfil SQLite del Memory Engine tiene migraciones, journal local y un adaptad
 - [ME-D4J: diseño de unidad de trabajo SQLite compartida](docs/design/ME-D4J-sqlite-unit-of-work.md)
 - [ME-D4N: adaptador SQLite del Recovery Gate y límites](docs/design/ME-D4N-sqlite-recovery-gate.md)
 - [ME-D4O: bootstrap seguro e integración de autoridad SQLite](docs/design/ME-D4O-sqlite-authority-bootstrap-and-integration.md)
+- [ME-D4O-A: contrato de bootstrap autenticado](docs/design/ME-D4O-A-authenticated-domain-bootstrap.md)
 - [Registro de implementación e independencia](docs/design/memory-engine-project-independence-implementation.md)
 
 La guía explica cómo preparar el archivo SQLite, aplicar migraciones y configurar las dependencias explícitas del journal. La autoridad transaccional, la implementación completa de Forget/egress y sus pruebas de concurrencia siguen pendientes.
