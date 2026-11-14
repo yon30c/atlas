@@ -521,3 +521,14 @@ Estas resoluciones no seleccionan proveedor de autenticación, almacenamiento, a
 **APROBADO — 13 de noviembre de 2026.** Trust Anchor externo es opcional y su implementación real queda postergada hasta la etapa final de Atlas. Las etapas actuales utilizan el perfil local en un único servidor. El perfil local valida la integridad y continuidad interna disponible, pero no demuestra anti-rollback frente a una restauración coherente del conjunto local ni que el head recuperado sea el último estado existente.
 
 La garantía MEM-14 de no reaparición sigue siendo normativa. Por tanto, una restauración que pueda reintroducir datos anteriores a un Forget no puede habilitarse sin una fuente independiente de supresión/continuidad o reconciliación explícita aprobada. Esta limitación no se resuelve con una comprobación de integridad local. La decisión no implementa ni activa Trust Anchor, Forget físico, lecturas protegidas o restauraciones productivas.
+
+
+## 16. Estado de implementación — independencia del proyecto consumidor
+
+**ME-D1 — primera extracción implementada en la rama funcional, pendiente de pruebas.** Se incorporaron `MemoryRequestContext`, `MemoryAuthorizationResult`, `MemoryAuthorizationPort` y `AtlasMemoryAuthorizationAdapter`. `MemoryGatewayService` ahora depende del puerto y del contexto neutral, no directamente de `MemoryAuthorizationService` ni de `OperationContext`.
+
+El contexto neutral transporta atributos y **no es una prueba de autenticación**. Solo debe ser emitido por una frontera de identidad confiable del consumidor. El adaptador debe validar contra fuentes autoritativas y fallar cerrado. La extracción no altera las reglas PRIVATE/PROJECT, el orden de autorización ni las garantías de lectura protegida.
+
+El adaptador Atlas conserva temporalmente la integración CAM existente. La independencia completa no está terminada: permanecen acoplamientos en modelos/validadores, metadatos, consistencia/recuperación local y autorización; tampoco existe aún persistencia del contenido de memoria. El alcance y las fases pendientes se registran en `docs/design/memory-engine-project-independence-implementation.md`.
+
+Esta anotación describe código incorporado, no una validación de pruebas. No se ejecutaron pruebas en esta etapa.
