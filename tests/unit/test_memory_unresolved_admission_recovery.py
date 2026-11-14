@@ -598,6 +598,7 @@ class CoordinatorJournalFake:
             issuer_id="test-trust-authority",
             key_reference="test-key",
             trust_policy_version="test-policy-v1",
+            authentication_evidence="test-anchor-auth-evidence",
             anchor_revision=max(1, self.state.head_sequence + 1),
             issued_at=NOW,
         )
