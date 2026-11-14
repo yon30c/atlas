@@ -1,7 +1,9 @@
 """Pruebas de la composición local de Atlas."""
 
 from datetime import datetime, timezone
+import os
 import unittest
+from unittest.mock import patch
 
 from atlas.adapters.system_clock import SystemClock
 from atlas.assistant.local_console import (
@@ -76,15 +78,18 @@ class LocalConsoleCompositionTests(unittest.TestCase):
     def test_main_runs_a_complete_local_terminal_session(self):
         inputs = iter(["Hola, Atlas", "salir"])
         output = []
+        written = []
 
-        main(
-            input_fn=lambda _prompt: next(inputs),
-            output_fn=output.append,
-            user_id="test-user",
-        )
+        with patch.dict(os.environ, {"ATLAS_MODE": "offline"}):
+            main(
+                input_fn=lambda _prompt: next(inputs),
+                output_fn=output.append,
+                write_fn=written.append,
+                user_id="test-user",
+            )
 
         self.assertEqual(output[0], "Atlas está listo. Escribe 'salir' para terminar.")
-        self.assertTrue(any("modelo de lenguaje" in line for line in output))
+        self.assertIn("modelo de lenguaje", "".join(written))
         self.assertEqual(output[-1], "Atlas: hasta luego.")
 
 
