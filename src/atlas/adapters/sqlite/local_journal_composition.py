@@ -145,6 +145,7 @@ def compose_local_sqlite_recovery_coordinator(
         "record_endpoint_ack", "get_nonterminal_admissions", "reconcile",
         "commit_and_emit", "finish", "fence", "reconcile_endpoint",
         "close_recovery_gate", "ensure_recovery_gate_closed",
+        "reconcile_and_open_recovery_gate", "ensure_recovery_gate_open",
     )
     if any(not callable(getattr(consistency_authority, name, None)) for name in required):
         raise ContractError("consistency_authority debe implementar ProtectedMemoryRecoveryAuthorityPort")
