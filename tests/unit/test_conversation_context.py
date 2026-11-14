@@ -115,6 +115,22 @@ class ConversationContextTests(unittest.TestCase):
             ],
         )
 
+    def test_historical_messages_are_truncated_to_character_limit(self):
+        history = InMemoryConversationHistory(
+            max_turns=1,
+            max_message_chars=40,
+        )
+        history.append_turn(
+            "conversation-a",
+            "u" * 100,
+            "a" * 100,
+        )
+
+        messages = history.get_history("conversation-a")
+        self.assertEqual(len(messages), 2)
+        self.assertTrue(all(len(message.content) <= 40 for message in messages))
+        self.assertTrue(all("contenido histórico truncado" in message.content for message in messages))
+
     def test_error_response_is_not_saved_in_history(self):
         self.assistant.next_kind = AssistantResponseKind.ERROR
         self.processor.respond(make_request("fallo"))
@@ -144,11 +160,16 @@ class ConversationContextTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             self.processor.respond(make_request("sin sesión", None))
 
-    def test_invalid_history_limit_and_dependencies_are_rejected(self):
+    def test_invalid_history_limits_and_dependencies_are_rejected(self):
         for invalid_limit in (0, -1, True, 1.5):
             with self.subTest(invalid_limit=invalid_limit):
                 with self.assertRaises(ContractError):
                     InMemoryConversationHistory(max_turns=invalid_limit)
+
+        for invalid_limit in (0, -1, True, 1.5, 10):
+            with self.subTest(max_message_chars=invalid_limit):
+                with self.assertRaises(ContractError):
+                    InMemoryConversationHistory(max_message_chars=invalid_limit)
 
         with self.assertRaises(ContractError):
             ConversationContextProcessor(object(), self.history)
