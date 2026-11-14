@@ -5,6 +5,7 @@ No implementan persistencia, orden distribuido ni verificación criptográfica.
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
+from types import MappingProxyType
 
 from atlas.core.errors import ContractError
 from atlas.memory.consistency import (
@@ -373,6 +374,13 @@ _REQUEST_PROJECTION_EXCLUDED_FIELDS = frozenset({
     "idempotency_key",
 })
 
+# Snapshot the v1 semantic allowlist independently from transition validation.
+# Adding a field to a future transition schema must not silently change v1 identity.
+REQUEST_PROJECTION_FIELDS_V1 = MappingProxyType({
+    kind: frozenset(fields - _REQUEST_PROJECTION_EXCLUDED_FIELDS)
+    for kind, fields in _TRANSITION_FIELDS_BY_KIND.items()
+})
+
 
 def consistency_transition_request_projection(
     consistency_domain_id: str,
@@ -390,16 +398,14 @@ def consistency_transition_request_projection(
     if not isinstance(transition, ConsistencyTransition):
         raise ContractError("transition debe ser ConsistencyTransition")
 
-    allowed_fields = _TRANSITION_FIELDS_BY_KIND[transition.record_kind]
+    semantic_fields = REQUEST_PROJECTION_FIELDS_V1[transition.record_kind]
     if (
         transition.record_kind is ConsistencyRecordKind.READ_ADMITTED
         and transition.schema_version == 1
     ):
-        allowed_fields = allowed_fields - frozenset({
+        semantic_fields = semantic_fields - frozenset({
             "scope_kind", "scope_project_id"
         })
-
-    semantic_fields = allowed_fields - _REQUEST_PROJECTION_EXCLUDED_FIELDS
     return {
         "request_projection_version": REQUEST_PROJECTION_VERSION,
         "consistency_domain_id": consistency_domain_id,
