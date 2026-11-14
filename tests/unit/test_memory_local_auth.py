@@ -7,6 +7,7 @@ from atlas.core.errors import ContractError
 from atlas.memory.local_auth import (
     authenticate_envelope, canonical_json_bytes, journal_entry_payload,
     object_commitment, verify_envelope, verify_recovery_chain,
+    verify_recovery_chain_with_policy,
 )
 from atlas.memory.envelope import AuthenticatedConsistencyEnvelope
 
@@ -112,6 +113,111 @@ class RecoveryChainTests(unittest.TestCase):
         self.assertFalse(verify_recovery_chain(
             replace(state, continuity_reference="wrong"), Keys(), "policy-v1"
         ))
+
+
+class RecoveryPolicyTests(unittest.TestCase):
+    def setUp(self):
+        from atlas.memory.journal import (
+            ConsistencyPosition, ConsistencyRecordKind, ConsistencyRecoveryState,
+            ConsistencyTransition, JournalEntry,
+        )
+        from atlas.memory.local_trust_policy import (
+            LocalConsistencyTrustPolicy, LocalIssuerAuthorization,
+        )
+
+        self.now = datetime(2026, 11, 13, 12, 0, tzinfo=timezone.utc)
+        self.key = b"p" * 32
+        transition = ConsistencyTransition(
+            record_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074611",
+            schema_version=1,
+            record_kind=ConsistencyRecordKind.RECOVERY_CLOSED,
+            operation_id="recovery:policy-test",
+            occurred_at=self.now,
+            generation=1,
+        )
+        position = ConsistencyPosition("policy-domain", 1, 1)
+        plain = JournalEntry(position, transition)
+        unsigned = AuthenticatedConsistencyEnvelope(
+            object_kind="journal_entry",
+            envelope_version=1,
+            consistency_domain_id="policy-domain",
+            authority_epoch=1,
+            sequence=1,
+            object_id=transition.record_id,
+            schema_version=1,
+            reducer_version="reducer-v1",
+            previous_commitment=None,
+            object_commitment="0" * 64,
+            issuer_id="local-issuer",
+            issuer_role="consistency-journal",
+            key_reference="key-1",
+            trust_policy_version="policy-v1",
+            issued_at=self.now,
+            authentication_evidence="pending",
+        )
+        signed = authenticate_envelope(unsigned, journal_entry_payload(plain), self.key)
+        entry = replace(plain, envelope=signed)
+        self.state = ConsistencyRecoveryState(
+            domain_id="policy-domain",
+            authority_epoch=1,
+            checkpoint=None,
+            entries=(entry,),
+            head_sequence=1,
+            continuity_reference=signed.object_commitment,
+        )
+
+        class Keys:
+            def load_key(inner_self, key_reference):
+                return self.key if key_reference == "key-1" else None
+
+        self.keys = Keys()
+        self.policy_type = LocalConsistencyTrustPolicy
+        self.issuer_type = LocalIssuerAuthorization
+        self.policy = LocalConsistencyTrustPolicy(
+            policy_version="policy-v1",
+            consistency_domain_id="policy-domain",
+            issuer_authorizations=frozenset({
+                LocalIssuerAuthorization(
+                    "journal_entry", "local-issuer", "consistency-journal"
+                )
+            }),
+            allowed_key_references=frozenset({"key-1"}),
+            allowed_envelope_versions=frozenset({1}),
+            allowed_canonicalization_versions=frozenset({1}),
+            allowed_schema_versions=frozenset({1}),
+            allowed_reducer_versions=frozenset({"reducer-v1"}),
+        )
+
+    def test_chain_passes_exact_independent_policy(self):
+        self.assertTrue(
+            verify_recovery_chain_with_policy(self.state, self.keys, self.policy)
+        )
+
+    def test_chain_rejects_unapproved_issuer_role_pair(self):
+        from dataclasses import replace
+        from atlas.memory.local_trust_policy import LocalIssuerAuthorization
+
+        wrong = replace(
+            self.policy,
+            issuer_authorizations=frozenset({
+                LocalIssuerAuthorization(
+                    "journal_entry", "local-issuer", "different-role"
+                )
+            }),
+        )
+        self.assertFalse(verify_recovery_chain_with_policy(self.state, self.keys, wrong))
+
+    def test_chain_rejects_disallowed_canonicalization_version(self):
+        from dataclasses import replace
+
+        wrong = replace(self.policy, allowed_canonicalization_versions=frozenset({2}))
+        self.assertFalse(verify_recovery_chain_with_policy(self.state, self.keys, wrong))
+
+    def test_chain_rejects_policy_for_another_domain(self):
+        from dataclasses import replace
+
+        wrong = replace(self.policy, consistency_domain_id="other-domain")
+        self.assertFalse(verify_recovery_chain_with_policy(self.state, self.keys, wrong))
 
 
 if __name__ == "__main__":
