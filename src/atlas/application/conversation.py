@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 from threading import RLock
-from typing import Protocol
+from typing import Callable, Protocol
 
 from atlas.assistant.models import (
     AssistantRequest,
@@ -12,6 +12,20 @@ from atlas.assistant.models import (
     ConversationMessageRole,
 )
 from atlas.core.errors import ContractError
+
+
+class AssistantProcessor(Protocol):
+    """Procesador de solicitudes completas y en streaming."""
+
+    def respond(self, request: AssistantRequest) -> AssistantResponse:
+        """Genera una respuesta completa."""
+
+    def respond_streaming(
+        self,
+        request: AssistantRequest,
+        on_token: Callable[[str], None],
+    ) -> AssistantResponse:
+        """Genera una respuesta progresiva."""
 
 
 class ConversationHistoryStore(Protocol):
@@ -33,7 +47,11 @@ class InMemoryConversationHistory:
     """Historial en memoria, aislado por conversación y limitado por turnos."""
 
     def __init__(self, max_turns: int = 8) -> None:
-        if isinstance(max_turns, bool) or not isinstance(max_turns, int) or max_turns < 1:
+        if (
+            isinstance(max_turns, bool)
+            or not isinstance(max_turns, int)
+            or max_turns < 1
+        ):
             raise ContractError("max_turns debe ser un entero positivo")
         self._max_messages = max_turns * 2
         self._histories: dict[str, list[ConversationMessage]] = {}
@@ -72,7 +90,7 @@ class ConversationContextProcessor:
 
     def __init__(
         self,
-        assistant: object,
+        assistant: AssistantProcessor,
         history_store: ConversationHistoryStore,
     ) -> None:
         if not callable(getattr(assistant, "respond", None)):
@@ -96,7 +114,11 @@ class ConversationContextProcessor:
         self._commit_successful_turn(enriched_request, response)
         return response
 
-    def respond_streaming(self, request, on_token) -> AssistantResponse:
+    def respond_streaming(
+        self,
+        request: AssistantRequest,
+        on_token: Callable[[str], None],
+    ) -> AssistantResponse:
         if not callable(on_token):
             raise ContractError("on_token debe ser invocable")
         enriched_request = self._with_history(request)
@@ -119,10 +141,18 @@ class ConversationContextProcessor:
     ) -> None:
         if not isinstance(response, AssistantResponse):
             raise ContractError("assistant debe devolver AssistantResponse")
+        if (
+            response.request_id != request.request_id
+            or response.context != request.context
+        ):
+            raise ContractError("la respuesta no corresponde a la solicitud")
         if response.kind is AssistantResponseKind.ERROR:
             return
+        conversation_id = request.conversation_id
+        if conversation_id is None:
+            raise ContractError("la solicitud requiere conversation_id")
         self._history_store.append_turn(
-            request.conversation_id,
+            conversation_id,
             request.content,
             response.content,
         )
