@@ -1,6 +1,6 @@
 # ME-D4O — Bootstrap seguro e integración de la autoridad SQLite
 
-**Estado:** inspección completada; diseño de integración pendiente de decisión sobre bootstrap.  
+**Estado:** ME-D4O-A definido a nivel contractual; implementación bloqueada por dependencias externas de autorización y Trust Anchor.  
 **Rama:** `feature/atlas-functional-f1`.  
 **Alcance:** preparar la implementación de `ProtectedMemoryRecoveryAuthorityPort` sin activar el runtime.
 
@@ -50,10 +50,10 @@ La integración se dividirá para evitar una implementación monolítica y no ve
 
 ### ME-D4O-A — contrato de bootstrap
 
-- Definir el evento de journal y el puerto de activación inicial, o una alternativa equivalente respaldada por evidencia independiente.
-- Especificar el estado inicial, la idempotencia, la identidad autorizante y la recuperación ante commit ambiguo.
-- Mantener el gate cerrado hasta que la evidencia exacta se verifique.
-- No activar servicios ni cambiar bases existentes.
+- **Diseño completado, sin implementación.** El protocolo exige autorización explícita del propietario y ancla externa independiente.
+- El TrustAnchorPort actual solo lee/avanza anclas existentes; falta inicialización autenticada create-if-absent y no hay proveedor concreto.
+- No se añade todavía evento de génesis ni apertura del gate: hacerlo sin esas dependencias sería una falsa garantía de anti-rollback.
+- Criterios, secuencia de dos fronteras y recuperación de fallos: [ME-D4O-A](ME-D4O-A-authenticated-domain-bootstrap.md).
 
 ### ME-D4O-B — admisión durable
 
@@ -119,10 +119,11 @@ La proyección SQLite del gate no se convierte en una autoridad paralela. Una di
 - ME-D4L: `append_transition_in` implementado.
 - ME-D4M: `commit_checkpoint_in` implementado.
 - ME-D4N: adaptador gate-only implementado; sus pruebas siguen pendientes de ejecución.
-- ME-D4O: inspección de contratos y hallazgo de bootstrap completados; no se añadió código de admisión/egress porque hacerlo sin un contrato de activación dejaría el dominio inutilizable o incentivaría un bypass inseguro.
+- ME-D4O: inspección y diseño general completados.
+- ME-D4O-A: contrato de bootstrap autenticado documentado; sin código ni proveedor. La admisión/egress siguen bloqueados.
 
 No se ejecutaron pruebas, build ni CI. No se modificó el esquema, el runtime, Broker, Registry, Docker, systemd ni producción.
 
 ## 8. Criterio para continuar
 
-El siguiente cambio de código debe comenzar por ME-D4O-A. No implementar `admit_read` ni conectar MemoryGateway hasta que exista una ruta de bootstrap explícita, autenticada, idempotente y compatible con el modelo de recuperación/anti-rollback.
+El siguiente trabajo no es implementar `admit_read`: primero deben satisfacerse los criterios externos de ME-D4O-A (autorización de propietario verificable y proveedor de ancla independiente). No conectar MemoryGateway ni habilitar egress mientras falte cualquiera de ellos.
