@@ -8,7 +8,6 @@ from datetime import datetime, timedelta
 from enum import Enum
 
 from atlas.core.errors import ContractError
-from atlas.memory.receipt_verification import TerminalReceiptVerificationRequest
 from atlas.memory.journal import (
     ConsistencyCheckpoint,
     ConsistencyPosition,
@@ -376,30 +375,116 @@ class ConsistencyRecoveryTrustContext:
         _utc(self.verification_time, "verification_time")
 
 
+class TrustedReceiptKind(str, Enum):
+    ENDPOINT_COMPLETED = "endpoint_completed"
+    ENDPOINT_FENCED = "endpoint_fenced"
+    ADMISSION_COMPLETED = "admission_completed"
+    ADMISSION_CANCELLED = "admission_cancelled"
+    RECOVERY_COMPLETED = "recovery_completed"
+
+
 @dataclass(frozen=True, slots=True)
 class ReceiptTrustContext:
-    request: TerminalReceiptVerificationRequest
+    consistency_domain_id: str
+    authority_epoch: int
+    operation_id: str
+    expected_receipt_kind: TrustedReceiptKind
     canonical_request_reference: str
     trust_policy_version: str
     verification_time: datetime
     purpose: str
+    expected_receipt_id: str | None = None
+    admission_id: str | None = None
+    endpoint_id: str | None = None
+    generation: int | None = None
+    previous_generation: int | None = None
+    final_sequence: int | None = None
+    fenced_through_sequence: int | None = None
+    affected_admission_ids: frozenset[str] = frozenset()
+    route_ids: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
-        if not isinstance(self.request, TerminalReceiptVerificationRequest):
-            raise ContractError("request debe ser TerminalReceiptVerificationRequest")
         for field in (
-            "canonical_request_reference", "trust_policy_version", "purpose",
+            "consistency_domain_id", "operation_id", "canonical_request_reference",
+            "trust_policy_version", "purpose",
         ):
             _required(getattr(self, field), field)
+        _positive(self.authority_epoch, "authority_epoch")
+        if not isinstance(self.expected_receipt_kind, TrustedReceiptKind):
+            raise ContractError("expected_receipt_kind debe ser TrustedReceiptKind")
         _utc(self.verification_time, "verification_time")
+        for field in ("expected_receipt_id", "admission_id", "endpoint_id"):
+            value = getattr(self, field)
+            if value is not None:
+                _required(value, field)
+        for field in ("generation", "previous_generation"):
+            value = getattr(self, field)
+            if value is not None:
+                _positive(value, field)
+        for field in ("final_sequence", "fenced_through_sequence"):
+            value = getattr(self, field)
+            if value is not None and (
+                isinstance(value, bool) or not isinstance(value, int) or value < 0
+            ):
+                raise ContractError(f"{field} debe ser entero no negativo")
+        for field in ("affected_admission_ids", "route_ids"):
+            values = getattr(self, field)
+            if not isinstance(values, frozenset):
+                raise ContractError(f"{field} debe ser frozenset")
+            for value in values:
+                _required(value, field)
+        if self.expected_receipt_kind in (
+            TrustedReceiptKind.ENDPOINT_COMPLETED,
+            TrustedReceiptKind.ENDPOINT_FENCED,
+        ):
+            _required(self.admission_id, "admission_id")
+            _required(self.endpoint_id, "endpoint_id")
+            _positive(self.generation, "generation")
+        elif self.endpoint_id is not None:
+            raise ContractError("endpoint_id solo aplica a recibos de endpoint")
+        if self.expected_receipt_kind is TrustedReceiptKind.RECOVERY_COMPLETED:
+            _positive(self.generation, "generation")
+            if not self.affected_admission_ids or not self.route_ids:
+                raise ContractError("recibo global requiere inventarios exactos no vacíos")
+        elif self.affected_admission_ids or self.route_ids:
+            raise ContractError("inventarios solo aplican al recibo global de recuperación")
 
-    @property
-    def consistency_domain_id(self) -> str:
-        return self.request.consistency_domain_id
+    def binds_terminal_request(self, request: object) -> bool:
+        fields = (
+            ("consistency_domain_id", self.consistency_domain_id),
+            ("authority_epoch", self.authority_epoch),
+            ("operation_id", self.operation_id),
+            ("receipt_id", self.expected_receipt_id),
+            ("admission_id", self.admission_id),
+            ("endpoint_id", self.endpoint_id),
+            ("generation", self.generation),
+            ("previous_generation", self.previous_generation),
+            ("final_sequence", self.final_sequence),
+            ("fenced_through_sequence", self.fenced_through_sequence),
+        )
+        if self.expected_receipt_kind is TrustedReceiptKind.RECOVERY_COMPLETED:
+            return False
+        return all(
+            getattr(request, name, object()) == expected
+            for name, expected in fields
+            if expected is not None
+        ) and getattr(getattr(request, "kind", None), "value", None) == self.expected_receipt_kind.value
 
-    @property
-    def authority_epoch(self) -> int:
-        return self.request.authority_epoch
-
-    def binds(self, request: TerminalReceiptVerificationRequest) -> bool:
-        return isinstance(request, TerminalReceiptVerificationRequest) and request == self.request
+    def binds_recovery_completion(self, request: object, receipt: object) -> bool:
+        if self.expected_receipt_kind is not TrustedReceiptKind.RECOVERY_COMPLETED:
+            return False
+        return all((
+            getattr(request, "consistency_domain_id", None) == self.consistency_domain_id,
+            getattr(request, "authority_epoch", None) == self.authority_epoch,
+            getattr(request, "operation_id", None) == self.operation_id,
+            getattr(request, "generation", None) == self.generation,
+            getattr(request, "affected_admission_ids", None) == self.affected_admission_ids,
+            getattr(request, "route_ids", None) == self.route_ids,
+            getattr(receipt, "receipt_id", None) == self.expected_receipt_id,
+            getattr(receipt, "consistency_domain_id", None) == self.consistency_domain_id,
+            getattr(receipt, "authority_epoch", None) == self.authority_epoch,
+            getattr(receipt, "operation_id", None) == self.operation_id,
+            getattr(receipt, "generation", None) == self.generation,
+            getattr(receipt, "affected_admission_ids", None) == self.affected_admission_ids,
+            getattr(receipt, "route_ids", None) == self.route_ids,
+        ))
