@@ -46,6 +46,8 @@ El contrato detallado está en [ME-D4O-A](ME-D4O-A-authenticated-domain-bootstra
 
 ## 4. ME-D4O-B — admisión durable
 
+El diseño técnico inicial está documentado en [ME-D4O-B — Diseño de admisión durable de lectura](ME-D4O-B-durable-read-admission.md). La inspección de identidad/CAM confirmó que el binding de sujeto y el snapshot de lectura son evidencia de autenticación/autorización para esa lectura, pero no evidencia de acción directa del propietario. Por ello, D4O-B puede consumir snapshots CAM sin simular aprobación del propietario; el bootstrap LOCAL y Forget mantienen su dependencia separada de OwnerDecisionVerifier/evidencia directa.
+
 Puede desarrollarse para el baseline LOCAL, manteniendo gate cerrado hasta completar bootstrap y validación:
 
 - Implementar `admit_read` sobre la misma `SQLiteUnitOfWork` del journal.
@@ -115,7 +117,7 @@ La proyección SQLite del gate no se convierte en autoridad paralela. Una discre
 
 ## 10. Estado y criterio para continuar
 
-ME-D4K–D4N proporcionan primitivas parciales (UoW, append/checkpoint en UoW y adaptador gate-only); las pruebas siguen pendientes. No existe aún implementación concreta completa de `ProtectedMemoryRecoveryAuthorityPort`.
+ME-D4K–D4N proporcionan primitivas parciales (UoW, append/checkpoint en UoW y adaptador gate-only); las pruebas siguen pendientes. El diseño D4O-B ya está especificado, pero su código aún no está implementado. No existe aún implementación concreta completa de `ProtectedMemoryRecoveryAuthorityPort`.
 
 La corrección de ME-D4O-A elimina la dependencia del proveedor externo para el baseline. Se puede continuar con el desarrollo de D4O-B, C y D en LOCAL, manteniendo runtime protegido deshabilitado hasta que el bootstrap local, evidencia de propietario, autoridad compuesta y validación estén completos. La integración ANCHORED queda para la etapa final.
 
