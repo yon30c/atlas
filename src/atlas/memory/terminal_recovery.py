@@ -5,12 +5,11 @@ from atlas.memory.journal_reducer import (
 )
 from atlas.memory.consistency import ReadAdmissionStatus
 from atlas.memory.receipt_verification import (
-    ReceiptVerificationStatus,
     TerminalReceiptKind,
     TerminalReceiptVerificationRequest,
     VerifiedAdmissionTerminalEvidence,
-    match_verified_receipt,
 )
+from atlas.memory.receipt_trust import verify_terminal_receipt_with_context
 
 
 def verify_terminal_admission_projection(
@@ -18,6 +17,9 @@ def verify_terminal_admission_projection(
     consistency_domain_id: str,
     authority_epoch: int,
     verifier: object,
+    *,
+    trust_context_factory: object,
+    verification_time: object,
 ) -> VerifiedAdmissionTerminalEvidence | None:
     """Verify every endpoint and admission receipt; never trusts receipt IDs alone.
 
@@ -36,7 +38,8 @@ def verify_terminal_admission_projection(
         or isinstance(authority_epoch, bool)
         or not isinstance(authority_epoch, int)
         or authority_epoch < 1
-        or not callable(getattr(verifier, "verify_terminal_receipt", None))
+        or not callable(getattr(verifier, "verify_terminal_receipt_with_context", None))
+        or not callable(getattr(trust_context_factory, "for_terminal_receipt", None))
     ):
         return None
     if (
@@ -94,11 +97,13 @@ def verify_terminal_admission_projection(
             final_sequence=final_sequence,
             fenced_through_sequence=fenced_through_sequence,
         )
-        try:
-            result = verifier.verify_terminal_receipt(request)
-        except Exception:
-            return None
-        verified = match_verified_receipt(request, result)
+        verified = verify_terminal_receipt_with_context(
+            verifier,
+            trust_context_factory,
+            request,
+            purpose="terminal-admission-restoration",
+            verification_time=verification_time,
+        )
         if verified is None:
             return None
         endpoint_receipts.append(verified)
@@ -122,12 +127,12 @@ def verify_terminal_admission_projection(
         kind=admission_kind,
         generation=admission.terminal_generation,
     )
-    try:
-        admission_result = verifier.verify_terminal_receipt(admission_request)
-    except Exception:
-        return None
-    verified_admission_receipt = match_verified_receipt(
-        admission_request, admission_result
+    verified_admission_receipt = verify_terminal_receipt_with_context(
+        verifier,
+        trust_context_factory,
+        admission_request,
+        purpose="terminal-admission-restoration",
+        verification_time=verification_time,
     )
     if verified_admission_receipt is None:
         return None
