@@ -156,6 +156,10 @@ class ConsistencyTrustContractTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             TrustAnchorAdvanceRequest(self.anchor, new)
 
+    def test_external_anchor_requires_opaque_authentication_evidence(self):
+        with self.assertRaises(ContractError):
+            replace(self.anchor, authentication_evidence="")
+
     def test_anchor_read_result_enforces_status_and_value_pairing(self):
         found = TrustAnchorReadResult(TrustAnchorReadStatus.FOUND, self.anchor)
         self.assertIs(found.anchor, self.anchor)
