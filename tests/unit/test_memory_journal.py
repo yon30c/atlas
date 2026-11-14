@@ -697,10 +697,6 @@ class ConsistencyJournalModelTests(unittest.TestCase):
             )
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
     def test_semantic_projection_ignores_regenerated_technical_fields(self):
         original = read_admitted(idempotency_key="same-request-key")
         retry = replace(
@@ -747,3 +743,6 @@ if __name__ == "__main__":
         )
         self.assertEqual(result.commit.record_id, RECORD_1)
         self.assertEqual(result.committed_transition, committed)
+
+if __name__ == "__main__":
+    unittest.main()
