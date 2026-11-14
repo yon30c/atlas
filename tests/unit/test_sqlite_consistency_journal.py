@@ -733,8 +733,9 @@ class SQLiteConsistencyJournalTests(unittest.TestCase):
     def test_commit_checkpoint_rejects_stale_head_without_writes(self):
         head_commitment, checkpoint = self._checkpoint_request_at_current_head()
 
+        stale_checkpoint = replace(checkpoint, position=self.position(0))
         result = self.journal.commit_checkpoint(
-            self.position(0), head_commitment, checkpoint
+            self.position(0), head_commitment, stale_checkpoint
         )
 
         self.assertIs(result.status, CheckpointCommitStatus.CONFLICT)
