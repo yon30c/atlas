@@ -178,22 +178,45 @@ class RevisionValidationContractTests(unittest.TestCase):
 
     def test_rejected_and_unavailable_do_not_expose_revision_data(self):
         snapshot = private_snapshot()
-        for status in (RevisionValidationStatus.REJECTED, RevisionValidationStatus.UNAVAILABLE):
-            result = RevisionValidationResult(
+        rejected = RevisionValidationResult(
+            snapshot_id=snapshot.snapshot_id,
+            expected_revisions=snapshot.revisions,
+            status=RevisionValidationStatus.REJECTED,
+            checked_at=NOW,
+            validated_position=POSITION,
+        )
+        unavailable = RevisionValidationResult(
+            snapshot_id=snapshot.snapshot_id,
+            expected_revisions=snapshot.revisions,
+            status=RevisionValidationStatus.UNAVAILABLE,
+            checked_at=NOW,
+        )
+        self.assertIsNone(rejected.current_revisions)
+        self.assertIsNone(unavailable.current_revisions)
+        with self.assertRaises(ContractError):
+            RevisionValidationResult(
                 snapshot_id=snapshot.snapshot_id,
                 expected_revisions=snapshot.revisions,
-                status=status,
+                status=RevisionValidationStatus.REJECTED,
                 checked_at=NOW,
             )
-            self.assertIsNone(result.current_revisions)
-            with self.assertRaises(ContractError):
-                RevisionValidationResult(
-                    snapshot_id=snapshot.snapshot_id,
-                    expected_revisions=snapshot.revisions,
-                    status=status,
-                    checked_at=NOW,
-                    current_revisions=snapshot.revisions,
-                )
+        with self.assertRaises(ContractError):
+            RevisionValidationResult(
+                snapshot_id=snapshot.snapshot_id,
+                expected_revisions=snapshot.revisions,
+                status=RevisionValidationStatus.UNAVAILABLE,
+                checked_at=NOW,
+                validated_position=POSITION,
+            )
+        with self.assertRaises(ContractError):
+            RevisionValidationResult(
+                snapshot_id=snapshot.snapshot_id,
+                expected_revisions=snapshot.revisions,
+                status=RevisionValidationStatus.REJECTED,
+                checked_at=NOW,
+                current_revisions=snapshot.revisions,
+                validated_position=POSITION,
+            )
 
     def test_validation_timestamp_must_be_utc(self):
         snapshot = private_snapshot()
