@@ -256,11 +256,13 @@ class SQLiteDatabase:
                         pass
                     raise
         finally:
-            if unit is not None:
-                unit._deactivate()
-            if connection is not None:
-                connection.close()
-            self._transaction_state.active = False
+            try:
+                if unit is not None:
+                    unit._deactivate()
+                if connection is not None:
+                    connection.close()
+            finally:
+                self._transaction_state.active = False
 
     @contextmanager
     def write_transaction(self) -> Iterator[sqlite3.Connection]:
