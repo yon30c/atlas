@@ -15,6 +15,7 @@ from atlas.memory.trust import (
     ConsistencyRecoveryVerificationResult,
     ConsistencyRecoveryVerificationStatus,
     ConsistencyTrustAnchor,
+    VerifiedConsistencyCheckpoint,
     TrustAnchorAdvanceRequest,
     TrustAnchorReadResult,
     TrustAnchorReadStatus,
@@ -113,6 +114,40 @@ class ConsistencyTrustContractTests(unittest.TestCase):
         )
         self.assertEqual(request.checkpoint.position.sequence, 2)
         self.assertEqual(request.anchor.maximum_committed_sequence, 3)
+
+    def test_verified_checkpoint_binds_checkpoint_commitment_and_anchor_head(self):
+        verified = VerifiedConsistencyCheckpoint(
+            checkpoint=self.checkpoint,
+            anchor=self.anchor,
+            checkpoint_commitment="checkpoint-control-commitment",
+            verification_id="checkpoint-verification-1",
+            verifier_id="independent-verifier",
+            trust_policy_version="policy-v2",
+            verified_at=self.now,
+        )
+        self.assertEqual(verified.checkpoint_commitment, "checkpoint-control-commitment")
+
+    def test_verified_checkpoint_at_anchor_head_requires_anchor_commitment(self):
+        with self.assertRaises(ContractError):
+            VerifiedConsistencyCheckpoint(
+                checkpoint=self.checkpoint,
+                anchor=self.anchor,
+                checkpoint_commitment="wrong-head-commitment",
+                verification_id="checkpoint-verification-1",
+                verifier_id="independent-verifier",
+                trust_policy_version="policy-v2",
+                verified_at=self.now,
+            )
+
+    def test_anchor_cas_rejects_commitment_change_without_sequence_advance(self):
+        new = replace(
+            self.anchor,
+            anchor_id="anchor-2",
+            anchor_revision=10,
+            authenticated_state_commitment="different-same-sequence",
+        )
+        with self.assertRaises(ContractError):
+            TrustAnchorAdvanceRequest(self.anchor, new)
 
     def test_anchor_read_result_enforces_status_and_value_pairing(self):
         found = TrustAnchorReadResult(TrustAnchorReadStatus.FOUND, self.anchor)
