@@ -15,6 +15,7 @@ from atlas.memory.journal import (
     ConsistencyRecordKind,
     ConsistencyRecoveryLoadStatus,
     ConsistencyTransition,
+    CheckpointCommitStatus,
     JournalOperationResolutionStatus,
 )
 from atlas.memory.local_auth import checkpoint_payload, object_commitment
@@ -629,6 +630,164 @@ class SQLiteConsistencyJournalTests(unittest.TestCase):
         result = self.journal.load_recovery_state_result("domain-a")
         self.assertIs(result.status, ConsistencyRecoveryLoadStatus.REJECTED)
         self.assertIsNone(result.state)
+
+
+    def _checkpoint_request_at_current_head(self):
+        transition = read_admitted(record_id=RECORD_1)
+        commit = self.journal.append_transition(
+            self.position(0), "append-before-new-checkpoint", transition
+        )
+        self.assertIsNotNone(commit)
+        with self.database.connection() as connection:
+            head_commitment = connection.execute(
+                "SELECT head_commitment FROM consistency_domains WHERE domain_id='domain-a'"
+            ).fetchone()[0]
+        checkpoint = ConsistencyCheckpoint(
+            checkpoint_id=CHECKPOINT_ID,
+            position=self.position(1),
+            state_reference="sha256:" + "1" * 64,
+            integrity_reference="sha256:" + "2" * 64,
+            created_at=NOW,
+        )
+        return head_commitment, checkpoint
+
+    def test_commit_checkpoint_atomically_persists_root_marker_and_head(self):
+        head_commitment, checkpoint = self._checkpoint_request_at_current_head()
+
+        result = self.journal.commit_checkpoint(
+            self.position(1), head_commitment, checkpoint
+        )
+
+        self.assertIs(result.status, CheckpointCommitStatus.COMMITTED)
+        self.assertEqual(result.checkpoint.position.sequence, 1)
+        self.assertIsNone(result.checkpoint.envelope.previous_commitment)
+        self.assertEqual(result.marker_commit.position.sequence, 2)
+        self.assertFalse(result.marker_commit.replayed)
+        with self.database.connection() as connection:
+            domain = connection.execute(
+                "SELECT head_sequence, head_commitment FROM consistency_domains "
+                "WHERE domain_id='domain-a'"
+            ).fetchone()
+            stored_checkpoint = connection.execute(
+                "SELECT * FROM checkpoints WHERE checkpoint_id=?",
+                (CHECKPOINT_ID,),
+            ).fetchone()
+            marker = connection.execute(
+                "SELECT * FROM journal_entries WHERE domain_id='domain-a' AND sequence=2"
+            ).fetchone()
+            operation = connection.execute(
+                "SELECT * FROM journal_operations WHERE domain_id='domain-a' AND sequence=2"
+            ).fetchone()
+        self.assertEqual(domain["head_sequence"], 2)
+        self.assertEqual(domain["head_commitment"], marker["object_commitment"])
+        self.assertIsNotNone(stored_checkpoint)
+        self.assertEqual(stored_checkpoint["object_commitment"], result.checkpoint.envelope.object_commitment)
+        self.assertEqual(marker["previous_commitment"], stored_checkpoint["object_commitment"])
+        self.assertEqual(operation["append_id"], f"checkpoint-append:{CHECKPOINT_ID}")
+        self.assertEqual(operation["operation_id"], f"checkpoint:{CHECKPOINT_ID}")
+
+        loaded = self.journal.load_recovery_state_result("domain-a")
+        self.assertIs(loaded.status, ConsistencyRecoveryLoadStatus.LOADED)
+        self.assertEqual(loaded.state.checkpoint, result.checkpoint)
+        self.assertEqual(loaded.state.head_sequence, 2)
+        self.assertEqual(loaded.state.entries[0].transition.record_kind,
+                         ConsistencyRecordKind.CHECKPOINT_COMMITTED)
+
+    def test_commit_checkpoint_exact_retry_is_replayed_without_duplicate_marker(self):
+        head_commitment, checkpoint = self._checkpoint_request_at_current_head()
+        first = self.journal.commit_checkpoint(
+            self.position(1), head_commitment, checkpoint
+        )
+        second = self.journal.commit_checkpoint(
+            self.position(1), head_commitment, checkpoint
+        )
+
+        self.assertIs(first.status, CheckpointCommitStatus.COMMITTED)
+        self.assertIs(second.status, CheckpointCommitStatus.REPLAYED)
+        self.assertEqual(second.marker_commit.position, first.marker_commit.position)
+        with self.database.connection() as connection:
+            checkpoint_count = connection.execute(
+                "SELECT COUNT(*) FROM checkpoints WHERE checkpoint_id=?",
+                (CHECKPOINT_ID,),
+            ).fetchone()[0]
+            marker_count = connection.execute(
+                "SELECT COUNT(*) FROM journal_entries WHERE domain_id='domain-a' "
+                "AND record_kind='checkpoint_committed'"
+            ).fetchone()[0]
+        self.assertEqual(checkpoint_count, 1)
+        self.assertEqual(marker_count, 1)
+
+    def test_commit_checkpoint_same_id_with_changed_references_conflicts(self):
+        head_commitment, checkpoint = self._checkpoint_request_at_current_head()
+        first = self.journal.commit_checkpoint(
+            self.position(1), head_commitment, checkpoint
+        )
+        changed = replace(checkpoint, state_reference="sha256:" + "3" * 64)
+        retry = self.journal.commit_checkpoint(
+            self.position(1), head_commitment, changed
+        )
+
+        self.assertIs(first.status, CheckpointCommitStatus.COMMITTED)
+        self.assertIs(retry.status, CheckpointCommitStatus.CONFLICT)
+
+    def test_commit_checkpoint_rejects_stale_head_without_writes(self):
+        head_commitment, checkpoint = self._checkpoint_request_at_current_head()
+
+        result = self.journal.commit_checkpoint(
+            self.position(0), head_commitment, checkpoint
+        )
+
+        self.assertIs(result.status, CheckpointCommitStatus.CONFLICT)
+        with self.database.connection() as connection:
+            checkpoint_count = connection.execute(
+                "SELECT COUNT(*) FROM checkpoints"
+            ).fetchone()[0]
+            head = connection.execute(
+                "SELECT head_sequence FROM consistency_domains WHERE domain_id='domain-a'"
+            ).fetchone()[0]
+        self.assertEqual(checkpoint_count, 0)
+        self.assertEqual(head, 1)
+
+    def test_commit_checkpoint_second_signer_failure_rolls_back_everything(self):
+        class SecondCallFailsSigner:
+            def __init__(self):
+                self.calls = 0
+
+            def sign_envelope(self, envelope, object_value):
+                self.calls += 1
+                if self.calls == 2:
+                    raise OSError("marker signing unavailable")
+                return FakeSigner().sign_envelope(envelope, object_value)
+
+        head_commitment, checkpoint = self._checkpoint_request_at_current_head()
+        journal = SQLiteConsistencyJournal(
+            self.database,
+            SecondCallFailsSigner(),
+            reducer_version="reducer-v1",
+            issuer_id="issuer-test",
+            issuer_role="service",
+            key_reference="key-test",
+            trust_policy_version="policy-v1",
+        )
+
+        result = journal.commit_checkpoint(
+            self.position(1), head_commitment, checkpoint
+        )
+
+        self.assertIs(result.status, CheckpointCommitStatus.UNAVAILABLE)
+        with self.database.connection() as connection:
+            checkpoint_count = connection.execute(
+                "SELECT COUNT(*) FROM checkpoints"
+            ).fetchone()[0]
+            marker_count = connection.execute(
+                "SELECT COUNT(*) FROM journal_entries WHERE record_kind='checkpoint_committed'"
+            ).fetchone()[0]
+            head = connection.execute(
+                "SELECT head_sequence FROM consistency_domains WHERE domain_id='domain-a'"
+            ).fetchone()[0]
+        self.assertEqual(checkpoint_count, 0)
+        self.assertEqual(marker_count, 0)
+        self.assertEqual(head, 1)
 
 
 if __name__ == "__main__":
