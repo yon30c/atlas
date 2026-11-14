@@ -197,13 +197,15 @@ Solo después del cuarto punto puede marcarse la memoria/versión afectada como 
 
 Todo proceso de restauración, reindexación, reconstrucción, replicación o importación debe consultar y aplicar la supresión antes de hacer que cualquier contenido vuelva a estar disponible.
 
-Una copia restaurada no puede revivir una memoria olvidada. Si no es posible comprobar la supresión antes de exponer los datos, el proceso debe bloquear la exposición.
+Una copia restaurada no puede revivir una memoria olvidada. Si no es posible comprobar la supresión antes de exponer los datos, el proceso debe bloquear la exposición. Esta comprobación requiere una fuente de supresión vigente e independiente del backup restaurado, o una reconciliación explícita aprobada. El perfil local de Atlas sin Trust Anchor externo no puede demostrar por sí solo que el registro local restaurado sea el más reciente. Si no existe esa fuente independiente, la restauración de datos que puedan preceder a un Forget debe permanecer bloqueada; la integridad local del backup no basta para declarar satisfecha la garantía.
 
 ### 9.6 Registro mínimo
 
 La evidencia de la operación debe permitir auditar su resultado sin conservar el contenido olvidado. El registro de supresión se limita a identificadores opacos y metadatos operativos mínimos; no debe convertirse en un archivo alternativo del contenido.
 
 Los detalles de reconciliación, retención de evidencia operativa y tratamiento de backups quedan PENDIENTES, sin alterar las garantías anteriores.
+
+**Decisión de arquitectura — 13 de noviembre de 2026:** Trust Anchor externo es opcional y su implementación queda postergada hasta la etapa final de Atlas. El perfil local conserva las reglas de supresión, pero no ofrece anti-rollback externo. Por ello, no se permite restaurar ni exponer datos de memoria potencialmente anteriores a un Forget sin reconciliar la supresión contra una fuente independiente aprobada.
 
 ## 10. Límites de los componentes
 
