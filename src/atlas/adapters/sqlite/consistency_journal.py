@@ -20,6 +20,7 @@ from atlas.memory.journal import (
     ConsistencyPosition, ConsistencyRecordKind, ConsistencyTransition,
     JournalCommit, JournalEntry, JournalOperationResolution,
     JournalOperationResolutionStatus, ConsistencyRecoveryState, ConsistencyCheckpoint,
+    ConsistencyRecoveryLoadResult, ConsistencyRecoveryLoadStatus,
     consistency_transition_request_projection,
 )
 from atlas.memory.local_auth import (
@@ -28,6 +29,13 @@ from atlas.memory.local_auth import (
 )
 from atlas.memory.models import MemoryScopeKind
 from atlas.ports.local_consistency_signer import LocalConsistencySignerPort
+from atlas.memory.local_recovery_verifier import LocalConsistencyRecoveryVerifier
+from atlas.memory.local_trust_policy import LocalConsistencyTrustPolicy
+from atlas.memory.trust import (
+    ConsistencyRecoveryTrustContext,
+    ConsistencyRecoveryVerificationResult,
+    ConsistencyRecoveryVerificationStatus,
+)
 
 
 def _utc_text(value: datetime) -> str:
@@ -87,6 +95,8 @@ class SQLiteConsistencyJournal:
         issuer_role: str,
         key_reference: str,
         trust_policy_version: str,
+        recovery_verifier: LocalConsistencyRecoveryVerifier | None = None,
+        recovery_trust_policy: LocalConsistencyTrustPolicy | None = None,
     ) -> None:
         if not isinstance(database, SQLiteDatabase):
             raise ContractError("database debe ser SQLiteDatabase")
@@ -105,7 +115,18 @@ class SQLiteConsistencyJournal:
         self._issuer_id = issuer_id
         self._issuer_role = issuer_role
         self._key_reference = key_reference
+        if (recovery_verifier is None) != (recovery_trust_policy is None):
+            raise ContractError("recovery_verifier y recovery_trust_policy deben configurarse juntos")
+        if recovery_verifier is not None and (
+            not isinstance(recovery_verifier, LocalConsistencyRecoveryVerifier)
+            or not isinstance(recovery_trust_policy, LocalConsistencyTrustPolicy)
+            or recovery_verifier.trust_policy is not recovery_trust_policy
+            or recovery_trust_policy.policy_version != trust_policy_version
+        ):
+            raise ContractError("composición de recuperación local no coincide con la política del journal")
         self._trust_policy_version = trust_policy_version
+        self._recovery_verifier = recovery_verifier
+        self._recovery_trust_policy = recovery_trust_policy
 
     def create_local_domain(self, domain_id: str, authority_epoch: int) -> bool:
         """Explicit one-time domain bootstrap; never silently changes an existing domain."""
@@ -453,17 +474,14 @@ class SQLiteConsistencyJournal:
             authentication_evidence=row["authentication_evidence"],
         )
 
-    def load_recovery_state(
+    def load_recovery_state_result(
         self, domain_id: str,
-    ) -> ConsistencyRecoveryState | None:
-        """Load a structurally coherent journal snapshot for diagnostics only.
-
-        This method does not authenticate records and must never feed the
-        operational reducer. Checkpoint-backed histories are intentionally
-        unavailable until durable checkpoint projection loading is implemented.
-        """
+    ) -> ConsistencyRecoveryLoadResult:
+        """Load and structurally validate one snapshot without authenticating it."""
+        rejected = ConsistencyRecoveryLoadResult(ConsistencyRecoveryLoadStatus.REJECTED)
+        unavailable = ConsistencyRecoveryLoadResult(ConsistencyRecoveryLoadStatus.UNAVAILABLE)
         if not isinstance(domain_id, str) or not domain_id.strip():
-            return None
+            return rejected
         try:
             with self._database.connection() as connection:
                 connection.execute("BEGIN")
@@ -471,26 +489,31 @@ class SQLiteConsistencyJournal:
                     "SELECT * FROM consistency_domains WHERE domain_id=?",
                     (domain_id,),
                 ).fetchone()
+                if domain is None:
+                    return unavailable
                 if (
-                    domain is None
-                    or domain["profile"] != "local"
+                    domain["profile"] != "local"
                     or domain["trust_policy_version"] != self._trust_policy_version
                 ):
-                    return None
+                    return rejected
 
-                # Do not silently ignore checkpoint state or claim a complete
-                # replay when its trusted projection has not yet been loaded.
                 checkpoint_count = connection.execute(
                     "SELECT COUNT(*) FROM checkpoints WHERE domain_id=?",
                     (domain_id,),
                 ).fetchone()[0]
                 if checkpoint_count:
-                    return None
+                    return unavailable
 
                 epoch = domain["authority_epoch"]
                 head = domain["head_sequence"]
-                if head < 1 or not isinstance(domain["head_commitment"], str):
-                    return None
+                if head == 0:
+                    return unavailable
+                if (
+                    isinstance(head, bool) or not isinstance(head, int) or head < 1
+                    or not isinstance(domain["head_commitment"], str)
+                    or not domain["head_commitment"]
+                ):
+                    return rejected
 
                 rows = connection.execute(
                     """
@@ -508,7 +531,27 @@ class SQLiteConsistencyJournal:
                     (domain_id, epoch),
                 ).fetchone()[0]
                 if len(rows) != head or operation_count != head:
-                    return None
+                    return rejected
+
+                unmatched = connection.execute(
+                    """
+                    SELECT j.sequence
+                    FROM journal_entries j
+                    LEFT JOIN journal_operations o
+                      ON o.domain_id=j.domain_id
+                     AND o.authority_epoch=j.authority_epoch
+                     AND o.sequence=j.sequence
+                     AND o.record_id=j.record_id
+                     AND o.operation_id=j.operation_id
+                    WHERE j.domain_id=? AND j.authority_epoch=?
+                    GROUP BY j.sequence
+                    HAVING COUNT(o.append_id) != 1
+                    LIMIT 1
+                    """,
+                    (domain_id, epoch),
+                ).fetchone()
+                if unmatched is not None:
+                    return rejected
 
                 entries = []
                 expected_sequence = 1
@@ -516,17 +559,18 @@ class SQLiteConsistencyJournal:
                 for row in rows:
                     sequence = row["sequence"]
                     if sequence != expected_sequence:
-                        return None
-                    transition = _transition_from_bytes(
-                        bytes(row["transition_canonical"])
-                    )
+                        return rejected
+                    raw_transition = bytes(row["transition_canonical"])
+                    transition = _transition_from_bytes(raw_transition)
+                    if canonical_json_bytes(transition) != raw_transition:
+                        return rejected
                     if (
                         row["record_id"] != transition.record_id
                         or row["operation_id"] != transition.operation_id
                         or row["record_kind"] != transition.record_kind.value
                         or row["schema_version"] != transition.schema_version
                     ):
-                        return None
+                        return rejected
                     envelope = self._envelope_from_row(
                         row,
                         object_kind="journal_entry",
@@ -537,7 +581,7 @@ class SQLiteConsistencyJournal:
                         schema_version=transition.schema_version,
                     )
                     if envelope.previous_commitment != previous_commitment:
-                        return None
+                        return rejected
                     position = ConsistencyPosition(domain_id, epoch, sequence)
                     entries.append(JournalEntry(position, transition, envelope))
                     previous_commitment = envelope.object_commitment
@@ -547,12 +591,68 @@ class SQLiteConsistencyJournal:
                     expected_sequence - 1 != head
                     or previous_commitment != domain["head_commitment"]
                 ):
-                    return None
+                    return rejected
 
                 connection.commit()
-                return ConsistencyRecoveryState(
+                state = ConsistencyRecoveryState(
                     domain_id, epoch, None, tuple(entries), head,
                     domain["head_commitment"],
                 )
+                return ConsistencyRecoveryLoadResult(
+                    ConsistencyRecoveryLoadStatus.LOADED, state
+                )
+        except sqlite3.Error:
+            return unavailable
         except Exception:
-            return None
+            return rejected
+
+    def load_recovery_state(
+        self, domain_id: str,
+    ) -> ConsistencyRecoveryState | None:
+        """Diagnostic structural read; never an operational reducer input."""
+        result = self.load_recovery_state_result(domain_id)
+        return result.state if result.status is ConsistencyRecoveryLoadStatus.LOADED else None
+
+    def load_verified_recovery_state(
+        self, domain_id: str,
+    ) -> ConsistencyRecoveryVerificationResult:
+        """Authenticate and validate inventories before exposing local recovery evidence."""
+        if self._recovery_verifier is None or self._recovery_trust_policy is None:
+            return ConsistencyRecoveryVerificationResult(
+                ConsistencyRecoveryVerificationStatus.UNAVAILABLE
+            )
+
+        loaded = self.load_recovery_state_result(domain_id)
+        if loaded.status is ConsistencyRecoveryLoadStatus.UNAVAILABLE:
+            return ConsistencyRecoveryVerificationResult(
+                ConsistencyRecoveryVerificationStatus.UNAVAILABLE
+            )
+        if loaded.status is ConsistencyRecoveryLoadStatus.REJECTED:
+            return ConsistencyRecoveryVerificationResult(
+                ConsistencyRecoveryVerificationStatus.REJECTED
+            )
+
+        state = loaded.state
+        if state is None:
+            return ConsistencyRecoveryVerificationResult(
+                ConsistencyRecoveryVerificationStatus.REJECTED
+            )
+        if state.domain_id != self._recovery_trust_policy.consistency_domain_id:
+            return ConsistencyRecoveryVerificationResult(
+                ConsistencyRecoveryVerificationStatus.REJECTED
+            )
+
+        try:
+            context = ConsistencyRecoveryTrustContext(
+                consistency_domain_id=state.domain_id,
+                authority_epoch=state.authority_epoch,
+                trust_policy_version=self._recovery_trust_policy.policy_version,
+                verification_time=datetime.now(timezone.utc),
+                purpose="sqlite-local-journal-recovery",
+            )
+        except Exception:
+            return ConsistencyRecoveryVerificationResult(
+                ConsistencyRecoveryVerificationStatus.UNAVAILABLE
+            )
+
+        return self._recovery_verifier.verify_recovery_state(state, context)
