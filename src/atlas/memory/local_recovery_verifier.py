@@ -18,7 +18,7 @@ from atlas.memory.trust import (
     ConsistencyRecoveryVerificationStatus,
     VerifiedLocalConsistencyRecoveryState,
 )
-from atlas.ports.local_consistency_keys import LocalConsistencyKeyPort
+from atlas.memory.ports.consistency_keys import MemoryConsistencyKeyPort
 from atlas.ports.local_consistency_recovery import (
     CheckpointProjectionResolution,
     LocalCheckpointProjectionRequest,
@@ -39,7 +39,7 @@ class LocalConsistencyRecoveryVerifier:
         self,
         *,
         trust_policy: LocalConsistencyTrustPolicy,
-        key_port: LocalConsistencyKeyPort,
+        key_port: MemoryConsistencyKeyPort,
         inventory_verifier: LocalConsistencyInventoryVerifierPort,
         verifier_id: str,
         checkpoint_projection_port: LocalConsistencyCheckpointProjectionPort | None = None,
