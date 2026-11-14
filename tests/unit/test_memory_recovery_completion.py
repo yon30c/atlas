@@ -3,6 +3,7 @@ import unittest
 from dataclasses import replace
 from datetime import datetime, timezone
 
+from atlas.core.errors import ContractError
 from atlas.memory.journal import ConsistencyRecordKind
 from atlas.memory.recovery_completion import (
     RecoveryCompletionCoordinator,
@@ -182,10 +183,9 @@ class RecoveryCompletionCoordinatorTests(unittest.TestCase):
 
 
     def test_receipts_reject_empty_inventory_identifiers(self):
-        request = self.completion_finalizer.requests
         self.coordinator.run()
         valid = self.completion_finalizer.requests[-1]
-        with self.assertRaises(Exception):
+        with self.assertRaises(ContractError):
             RecoveryCompletionReceipt(
                 consistency_domain_id=valid.consistency_domain_id,
                 authority_epoch=valid.authority_epoch,
