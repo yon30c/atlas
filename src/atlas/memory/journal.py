@@ -591,6 +591,49 @@ class ConsistencyCheckpoint:
                 raise ContractError("envelope no corresponde al checkpoint exacto")
 
 
+class CheckpointCommitStatus(str, Enum):
+    COMMITTED = "committed"
+    REPLAYED = "replayed"
+    CONFLICT = "conflict"
+    UNAVAILABLE = "unavailable"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True, slots=True)
+class CheckpointCommitResult:
+    """Outcome of one atomic checkpoint + marker + head commit."""
+
+    status: CheckpointCommitStatus
+    checkpoint: ConsistencyCheckpoint | None = None
+    marker_commit: JournalCommit | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.status, CheckpointCommitStatus):
+            raise ContractError("status debe ser CheckpointCommitStatus")
+        if self.status in (
+            CheckpointCommitStatus.COMMITTED,
+            CheckpointCommitStatus.REPLAYED,
+        ):
+            if not isinstance(self.checkpoint, ConsistencyCheckpoint):
+                raise ContractError("COMMITTED/REPLAYED requiere checkpoint")
+            if not isinstance(self.marker_commit, JournalCommit):
+                raise ContractError("COMMITTED/REPLAYED requiere marker_commit")
+            if (
+                self.marker_commit.record_id != self.checkpoint.checkpoint_id
+                or self.marker_commit.position.consistency_domain_id
+                    != self.checkpoint.position.consistency_domain_id
+                or self.marker_commit.position.authority_epoch
+                    != self.checkpoint.position.authority_epoch
+                or self.marker_commit.position.sequence
+                    != self.checkpoint.position.sequence + 1
+                or self.marker_commit.replayed
+                    != (self.status is CheckpointCommitStatus.REPLAYED)
+            ):
+                raise ContractError("resultado de checkpoint no corresponde al marcador")
+        elif self.checkpoint is not None or self.marker_commit is not None:
+            raise ContractError("resultado no exitoso no puede incluir commit")
+
+
 class ConsistencyRecoveryLoadStatus(str, Enum):
     LOADED = "loaded"
     REJECTED = "rejected"
