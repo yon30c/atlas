@@ -129,6 +129,28 @@ class SQLiteConsistencyJournal:
         self._recovery_verifier = recovery_verifier
         self._recovery_trust_policy = recovery_trust_policy
 
+    @property
+    def reducer_version(self) -> str:
+        """Configured reducer version used by journal and checkpoint envelopes."""
+        return self._reducer_version
+
+    @property
+    def trust_policy_version(self) -> str:
+        """Configured local trust-policy version."""
+        return self._trust_policy_version
+
+    @property
+    def recovery_trust_policy(self) -> LocalConsistencyTrustPolicy | None:
+        """Exact policy object used by the operational recovery verifier."""
+        return self._recovery_trust_policy
+
+    @property
+    def checkpoint_projection_port(self):
+        """Exact projection resolver used by operational checkpoint recovery."""
+        if self._recovery_verifier is None:
+            return None
+        return self._recovery_verifier.checkpoint_projection_port
+
     def create_local_domain(self, domain_id: str, authority_epoch: int) -> bool:
         """Explicit one-time domain bootstrap; never silently changes an existing domain."""
         if not isinstance(domain_id, str) or not domain_id.strip():
