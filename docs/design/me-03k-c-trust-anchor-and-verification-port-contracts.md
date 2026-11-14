@@ -454,3 +454,29 @@ El DTO de evidencia ahora conserva las referencias exactas y la versión de pol�
 Ambos validadores rechazan `REJECTED`, `UNAVAILABLE`, tipos incorrectos o evidencia ligada a otro contexto. Se añadieron pruebas negativas para referencias/políticas/versiones incompatibles y para head/continuidad/dominio distintos.
 
 Estos validadores son controles de binding, no adaptadores de almacenamiento ni autenticadores autónomos. La autoridad de un resultado `VERIFIED` depende de la implementación confiable del puerto y de la composición del verificador. El recovery gate permanece cerrado hasta integrar y validar los adaptadores reales y el verificador completo.
+
+
+## 22. Orquestador del verificador de recuperación local
+
+**Estado: IMPLEMENTADO EN RAMA FEATURE — requiere validación del propietario en Debian.**
+
+Se incorpora `LocalConsistencyRecoveryVerifier`, que implementa la secuencia de verificación del perfil local:
+
+1. Comprueba que el estado y el contexto pertenecen al dominio, época y versión de política configurados por confianza independiente.
+2. Verifica envelopes, HMAC-SHA-256, allowlists, commitments, secuencia y continuidad del checkpoint/journal.
+3. Si existe checkpoint, exige el puerto de resolución, estado `VERIFIED`, binding exacto de referencias/política/versiones y proyección base con metadatos de replay compatibles.
+4. Ejecuta el reducer completo o continúa desde la proyección base autenticada.
+5. Invoca el verificador de inventarios y exige evidencia ligada al mismo dominio, época, head, commitment de continuidad y política.
+6. Comprueba que todos los recibos declarados por el replay estén incluidos en los recibos verificados.
+7. Solo entonces construye `VerifiedLocalConsistencyRecoveryState`, declarando explícitamente `profile=LOCAL` y `external_anti_rollback_protected=False`.
+
+Resultados:
+- `REJECTED`: inconsistencia, evidencia no autorizada, binding incorrecto, replay semántico inválido o recibos ausentes.
+- `UNAVAILABLE`: puerto requerido no configurado, fuente no disponible o excepción de acceso a la fuente.
+- `VERIFIED`: todas las fronteras anteriores se completaron y el resultado tipado declara el perfil local sin anti-rollback externo.
+
+El orquestador no contiene adaptadores de almacenamiento, no crea ni custodia claves, no prueba que el backup sea el más reciente y no implementa Trust Anchor. La confianza en los resultados de los puertos depende de que su composición use implementaciones autoritativas y no fakes en producción.
+
+Se añaden pruebas de orquestación para cadena autenticada, inventario que omite un recibo, inventario no disponible, commitment final incorrecto y contexto de política/dominio incompatible. El módulo se exporta desde `atlas.memory`.
+
+**Límite operativo:** este verificador es una implementación del flujo de decisión local, no evidencia de conformidad durable K01–K07. Hasta disponer de adaptadores autoritativos y pruebas contra almacenamiento real, no se habilitan lecturas protegidas ni recuperación productiva. El perfil local tampoco garantiza que un Forget no reaparezca al restaurar un conjunto antiguo coherente.
