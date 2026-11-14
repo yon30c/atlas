@@ -169,3 +169,13 @@ La implementación se añadió, pero no se ejecutaron pruebas ni build. Los test
 - `append_transition(...)` conserva su firma y contrato anterior: abre su propia unidad de trabajo y convierte fallos ordinarios en `None`.
 - La integración cubre únicamente `append_transition`. `create_local_domain`, `commit_checkpoint` y otras operaciones todavía administran sus propias transacciones; no deben combinarse suponiendo atomicidad con una UoW externa.
 - Se añadieron pruebas para reutilización de UoW y rollback de una mutación acompañante ante fallo del signer. **No ejecutadas**.
+
+
+## ME-D4M — checkpoint y marcador dentro de SQLiteUnitOfWork
+
+- SQLiteConsistencyJournal.commit_checkpoint_in(unit_of_work, ...) ejecuta la persistencia del checkpoint, marcador autenticado, registro idempotente y actualización CAS del head usando la conexión de la UoW externa.
+- La operación valida el tipo, propietario y estado activo de la UoW. No abre, confirma ni revierte transacciones.
+- Los errores inesperados de SQLite se propagan para que el propietario revierta también las mutaciones acompañantes. Los fallos del signer y los conflictos conservan sus estados de resultado y ocurren antes de las escrituras del checkpoint.
+- commit_checkpoint(...) conserva su firma pública y abre una UoW propia; ante errores transaccionales ambiguos devuelve UNKNOWN, manteniendo la reconciliación por identificador estable.
+- Se añadieron pruebas para commit dentro de una UoW externa y rollback de mutaciones acompañantes cuando falla la inserción del marcador. **No ejecutadas**.
+- Esto no implementa la autoridad Recovery Gate ni demuestra todavía atomicidad de admisión/gate/egress.
