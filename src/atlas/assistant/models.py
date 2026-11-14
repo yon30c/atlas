@@ -23,6 +23,26 @@ class AssistantResponseKind(str, Enum):
     ERROR = "error"
 
 
+class ConversationMessageRole(str, Enum):
+    """Roles permitidos en el historial de una conversación."""
+
+    USER = "user"
+    ASSISTANT = "assistant"
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationMessage:
+    """Mensaje histórico neutral respecto al proveedor LLM."""
+
+    role: ConversationMessageRole
+    content: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.role, ConversationMessageRole):
+            raise ContractError("role debe ser ConversationMessageRole")
+        _required(self.content, "content")
+
+
 def _require_utc(value: datetime, field: str) -> None:
     if not isinstance(value, datetime):
         raise ContractError(f"{field} debe ser datetime")
@@ -42,6 +62,7 @@ class AssistantRequest:
     received_at: datetime
     conversation_id: str | None = None
     attachments: tuple[str, ...] = ()
+    history: tuple[ConversationMessage, ...] = ()
 
     def __post_init__(self) -> None:
         _required(self.request_id, "request_id")
@@ -60,6 +81,11 @@ class AssistantRequest:
             for item in self.attachments
         ):
             raise ContractError("attachments debe ser una tupla de referencias no vacias")
+
+        if not isinstance(self.history, tuple) or any(
+            not isinstance(item, ConversationMessage) for item in self.history
+        ):
+            raise ContractError("history debe ser una tupla de ConversationMessage")
 
 
 @dataclass(frozen=True, slots=True)
