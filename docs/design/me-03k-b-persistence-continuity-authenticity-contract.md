@@ -1,6 +1,6 @@
 # ME-03K-B — Contrato de persistencia, continuidad y autenticidad
 
-**Estado:** contrato técnico de diseño propuesto para cerrar ME-03K antes de elegir tecnología.  
+**Estado:** contrato técnico de diseño con dos perfiles de recuperación: local (baseline) y anclado (opcional, postergado hasta la etapa final de Atlas).  
 **Ámbito:** journal de consistencia, checkpoints, recibos operativos y recuperación.  
 **No autoriza:** activar almacenamiento protegido, Forget físico ni cambios de producción.
 
@@ -79,28 +79,45 @@ Cada unidad autenticada debe vincular como mínimo:
 
 El mecanismo puede ser firma, MAC, hash-chain autenticada u otro mecanismo equivalente, pero debe resistir falsificación, sustitución, truncamiento y reordenamiento dentro del modelo de amenazas declarado. Un hash sin autenticación no prueba quién emitió el registro.
 
-El verificador debe validar la cadena completa desde un ancla confiable; validar solo el último registro o una referencia declarada por el mismo conjunto restaurable no basta.
+En el perfil anclado, el verificador debe validar la cadena completa hasta un Trust Anchor externo vigente; validar solo el último registro o una referencia declarada por el mismo conjunto restaurable no basta. En el perfil local, debe validar la autenticidad disponible, la cadena, el orden y la continuidad interna desde la raíz/checkpoint conservado. Esta verificación local no demuestra que el head recuperado sea el último que existió antes de una restauración y no ofrece protección anti-rollback externa.
 
-## 5. Ancla externa y anti-rollback
+## 5. Trust Anchor opcional y perfiles de continuidad
 
-### 5.1 Ancla confiable
+### 5.1 Decisión de arquitectura
 
-El estado más reciente confirmado debe quedar vinculado a un ancla de continuidad almacenada o atestiguada fuera del mismo dominio de rollback que el journal/checkpoint restaurable. El respaldo de datos no puede ser la única fuente de verdad sobre cuál era el estado más reciente.
+El Trust Anchor externo es una capacidad opcional de Atlas. Su implementación y despliegue quedan postergados hasta la etapa final del proyecto. No es una dependencia obligatoria para desarrollar ni completar el baseline local del Memory Engine. La topología inicial es un único servidor; no se exige una segunda máquina ni un proveedor externo durante las etapas actuales.
 
-El ancla identifica al menos dominio, época, secuencia máxima confirmada y compromiso autenticado del estado correspondiente. Su actualización debe tener semántica monotónica y autenticada.
+La ausencia del Trust Anchor no debe ocultarse ni interpretarse como una verificación equivalente. El modo de recuperación debe quedar identificado explícitamente y nunca cambiar silenciosamente de perfil ante un fallo.
 
-### 5.2 Restauración
+### 5.2 Perfil local — baseline inicial
 
+- Journal, checkpoints y material de verificación disponible se validan localmente.
+- Se comprueban autenticidad según el mecanismo implementado, estructura, dominio, época, secuencias, referencias, ausencia de huecos/forks detectables y consistencia de inventarios.
+- La recuperación reconstruye cierres, generaciones, tombstones, invalidaciones y admisiones no terminales antes de aceptar tráfico.
+- El perfil local NO puede demostrar que el estado recuperado sea el último estado que existió antes de una restauración o truncamiento coherente del conjunto local.
+- Por tanto, el perfil local NO ofrece anti-rollback externo ni protección demostrada frente a restaurar un backup antiguo pero internamente válido.
+- El estado operativo debe indicar que la recuperación se realizó en perfil local y no puede presentarse como verificación anclada.
+
+### 5.3 Perfil anclado — capacidad opcional futura
+
+Cuando se implemente, el Trust Anchor deberá residir fuera del mismo dominio de rollback que el journal/checkpoint restaurable. Identificará al menos dominio, época, secuencia máxima confirmada y compromiso autenticado del estado correspondiente. Su actualización tendrá semántica monotónica y autenticada.
+
+En este perfil:
 - Un checkpoint anterior al ancla externa vigente se rechaza.
 - Una época desconocida, inferior o no autorizada se rechaza.
 - Un journal truncado, con huecos, forks o cadena rota se rechaza.
-- Si el ancla externa no está disponible, no puede verificarse o discrepa, el dominio permanece cerrado.
+- Si el ancla no está disponible, no puede verificarse o discrepa, el perfil anclado permanece cerrado; no se degrada automáticamente al perfil local.
 - Restaurar datos desde backup nunca restaura automáticamente la autoridad para admitir lecturas o emitir contenido.
-- La recuperación debe reconstruir cierres, generaciones, tombstones, invalidaciones y admisiones no terminales antes de aceptar tráfico.
 
-### 5.3 Cambio de autoridad/época
+### 5.4 Restauración y funciones dependientes de anti-rollback
 
-El cambio de autoridad requiere una transición de handoff autenticada que identifique autoridad anterior/nueva, época anterior/nueva, posición final anterior, posición inicial nueva y evidencia de que los emisores antiguos quedan cercados. Un lease expirado por sí solo no demuestra fencing ni autoriza a una autoridad nueva a emitir.
+Ambos perfiles exigen integridad local, reconstrucción completa y recuperación fail-closed ante corrupción, inventarios incompletos o resultados ambiguos. Solo el perfil anclado permite afirmar protección anti-rollback externa.
+
+Cualquier función cuya garantía aprobada dependa de demostrar que el estado recuperado es el último estado confirmado —en particular, impedir que una restauración antigua reintroduzca una memoria ya olvidada— no puede declararse garantizada por el perfil local. Esa función deberá permanecer bloqueada para restauraciones no reconciliadas o disponer de una fuente independiente de supresión/continuidad aprobada. No se puede rebajar esa garantía por el mero hecho de que Trust Anchor sea opcional.
+
+### 5.5 Cambio de autoridad/época
+
+El cambio de autoridad requiere una transición de handoff autenticada que identifique autoridad anterior/nueva, época anterior/nueva, posición final anterior, posición inicial nueva y evidencia de que los emisores antiguos quedan cercados. Un lease expirado por sí solo no demuestra fencing ni autoriza a una autoridad nueva a emitir. Las garantías de continuidad de un cambio de época se clasifican según el perfil local o anclado utilizado.
 
 ## 6. Checkpoints y compactación
 
@@ -193,7 +210,8 @@ Las consultas no deben devolver contenido de memoria. Sus respuestas deben ser c
 
 | Condición | Resultado obligatorio |
 |---|---|
-| Journal/ancla/verificador no disponible | UNKNOWN; gate cerrado |
+| Journal/verificador local no disponible | UNKNOWN; gate cerrado |
+| Trust Anchor no disponible en perfil anclado | UNKNOWN; gate cerrado; no degradar a perfil local |
 | Conflicto de idempotencia | CONFLICT; sin mutación |
 | CAS obsoleto | Rechazo; recargar y reevaluar bajo autoridad |
 | Timeout con commit posiblemente aplicado | Resolver por clave/operación; no duplicar |
@@ -210,8 +228,8 @@ El adaptador deberá demostrar con pruebas K01–K07 y fallos inyectados:
 - escritura concurrente CAS y ausencia de forks;
 - replay de clave idempotente con misma solicitud y conflicto con solicitud distinta;
 - timeout después de commit y consulta exacta del resultado;
-- autenticidad de cadena, detección de alteración/truncamiento/reordenamiento;
-- restauración de checkpoint antiguo frente a ancla externa más nueva;
+- autenticidad de cadena, detección de alteración/reordenamiento y truncamiento detectable;
+- restauración de checkpoint antiguo frente a ancla externa más nueva (solo conformidad del perfil anclado, postergada);
 - revocación/rotación de claves y validación de recibos históricos;
 - duplicación/replay de recibos y binding incorrecto;
 - caída en cada frontera de cierre, fencing, finalización y apertura;
@@ -232,14 +250,14 @@ Siguen pendientes y no se infieren aquí:
 - objetivos de disponibilidad, RPO/RTO y procedimiento de recuperación manual;
 - topología, límites de dominio y despliegue.
 
-Estas decisiones se evaluarán después de cerrar el contrato y comparar alternativas contra cada requisito verificable.
+Estas decisiones se evaluarán cuando corresponda. La implementación del Trust Anchor externo queda expresamente postergada hasta la etapa final de Atlas; su proveedor, custodia y despliegue no son dependencias de las etapas actuales.
 
 ## 13. Criterio de cierre de ME-03K-B
 
 ME-03K-B se considera contractualmente cerrado cuando:
 
 1. Los puertos de journal y autoridad representan todas las operaciones de consulta/ambigüedad descritas.
-2. El adaptador valida autenticidad y anti-rollback antes de entregar estado al reducer.
+2. En perfil local, el adaptador valida autenticidad disponible, continuidad interna y estructura antes de entregar estado al reducer, declarando explícitamente que no demuestra anti-rollback externo. En perfil anclado, valida además la continuidad contra el Trust Anchor vigente.
 3. El gate no puede abrirse por una consulta eventual ni por un recibo no verificado.
 4. Checkpoints, claves idempotentes, tombstones y recibos tienen ciclo de vida durable definido.
 5. La misma autoridad serializa lecturas, Forget, invalidación, egress y recuperación.
@@ -251,6 +269,19 @@ Este cierre de diseño no equivale a implementación ni conformidad operativa. N
 
 Los tipos y puertos que hacen exigibles las garantías de ancla externa, verificación de checkpoint/estado, contexto de confianza, autenticidad de recibos y resolución de operaciones ambiguas se especifican en `me-03k-c-trust-anchor-and-verification-port-contracts.md`.
 
-ME-03K-B y ME-03K-C deben leerse conjuntamente. El journal no entrega un estado desnudo al reducer: la recuperación debe demostrar autenticidad y continuidad desde un ancla externa vigente. Los recibos tipados no son por sí mismos evidencia autenticada. El finalizador y el verificador permanecen separados.
+ME-03K-B y ME-03K-C deben leerse conjuntamente. El journal no entrega un estado desnudo al reducer: la recuperación debe demostrar la verificación correspondiente al perfil declarado. En perfil local no se afirma anti-rollback externo; en perfil anclado la continuidad se demuestra desde un Trust Anchor externo vigente. Los recibos tipados no son por sí mismos evidencia autenticada. El finalizador y el verificador permanecen separados.
 
 El cierre de ambos contratos sigue siendo diseño; los puertos y modelos existentes aún requieren alineación de tipos antes de iniciar adaptadores durables.
+
+
+## 15. Decisión del propietario — Trust Anchor opcional y postergado
+
+**Estado: APROBADO — 13 de noviembre de 2026.**
+
+El Trust Anchor externo será opcional para Atlas y su desarrollo real queda postergado hasta la etapa final del proyecto. Las etapas actuales utilizarán el perfil local en un único servidor. No se desarrollará ahora un proveedor externo, una VM como autoridad de confianza ni infraestructura de custodia independiente.
+
+La opcionalidad del Trust Anchor no elimina la verificación local de integridad, autenticidad disponible, secuencias, inventarios, recibos ni la recuperación fail-closed. Tampoco permite afirmar protección anti-rollback externa. El perfil de recuperación debe quedar identificado y no puede cambiarse automáticamente ante fallos.
+
+Las garantías que dependan de conocer el último estado confirmado fuera del dominio restaurable —incluida la no reaparición de memorias olvidadas después de restaurar un backup antiguo— no se consideran satisfechas por el perfil local sin una fuente independiente de supresión/continuidad. Esas rutas permanecerán bloqueadas o sujetas a reconciliación explícita hasta que exista una solución aprobada.
+
+La decisión no autoriza activar lecturas protegidas, Forget físico, restauraciones de memoria no reconciliadas ni producción.
