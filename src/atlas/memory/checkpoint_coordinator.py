@@ -201,17 +201,19 @@ class LocalCheckpointCoordinator:
             or verified.head_sequence != expected_position.sequence
             or state.continuity_reference != verified.local_state_commitment
             or not state.entries
-            or state.entries[-1].envelope is None
         ):
             return self._conflict()
 
-        latest_envelope = state.entries[-1].envelope
         checkpoint_authorization = LocalIssuerAuthorization(
-            "checkpoint", latest_envelope.issuer_id, latest_envelope.issuer_role
+            "checkpoint", self._journal.issuer_id, self._journal.issuer_role
+        )
+        journal_authorization = LocalIssuerAuthorization(
+            "journal_entry", self._journal.issuer_id, self._journal.issuer_role
         )
         if (
             checkpoint_authorization not in self._trust_policy.issuer_authorizations
-            or latest_envelope.key_reference not in self._trust_policy.allowed_key_references
+            or journal_authorization not in self._trust_policy.issuer_authorizations
+            or self._journal.key_reference not in self._trust_policy.allowed_key_references
         ):
             return self._conflict()
 
