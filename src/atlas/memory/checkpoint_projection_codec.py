@@ -298,8 +298,17 @@ def build_checkpoint_projection_artifacts(
 def decode_checkpoint_projection_artifacts(
     state_bytes: bytes,
     manifest_bytes: bytes,
+    *,
+    expected_state_reference: str,
+    expected_integrity_reference: str,
 ) -> tuple[ConsistencyProjection, CheckpointProjectionManifest, str]:
-    """Verify blob/manifest commitments and bindings, not external authenticity."""
+    """Verify bytes against the exact opaque references supplied by the checkpoint."""
+    for name, value in (
+        ("expected_state_reference", expected_state_reference),
+        ("expected_integrity_reference", expected_integrity_reference),
+    ):
+        if not isinstance(value, str) or not value.strip():
+            raise ContractError(f"{name} debe ser una referencia no vacía")
     projection = decode_projection(state_bytes)
     manifest = decode_manifest(manifest_bytes)
     state_commitment = _sha256(state_bytes)
@@ -307,9 +316,11 @@ def decode_checkpoint_projection_artifacts(
     if (
         manifest.state_commitment != state_commitment
         or manifest.state_reference != _SHA256_PREFIX + state_commitment
+        or expected_state_reference != manifest.state_reference
+        or expected_integrity_reference != _SHA256_PREFIX + integrity_commitment
         or projection.domain_id != manifest.consistency_domain_id
         or projection.authority_epoch != manifest.authority_epoch
         or projection.head_sequence != manifest.sequence
     ):
-        raise ContractError("proyección y manifiesto no coinciden")
+        raise ContractError("proyección, manifiesto y referencias no coinciden")
     return projection, manifest, integrity_commitment
