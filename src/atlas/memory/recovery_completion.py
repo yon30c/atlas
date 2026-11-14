@@ -21,7 +21,7 @@ from atlas.memory.receipt_verification import (
 )
 from atlas.ports.consistency_journal import ConsistencyJournalPort
 from atlas.ports.recovery_completion import RecoveryCompletionFinalizerPort
-from atlas.ports.recovery_gate import RecoveryGatePort
+from atlas.ports.memory_consistency_authority import ProtectedMemoryRecoveryAuthorityPort
 from atlas.ports.recovery_receipt_verifier import RecoveryCompletionVerifierPort
 
 
@@ -158,7 +158,7 @@ class RecoveryCompletionCoordinator:
     def __init__(
         self,
         journal: ConsistencyJournalPort,
-        recovery_gate: RecoveryGatePort,
+        recovery_gate: ProtectedMemoryRecoveryAuthorityPort,
         finalizer: RecoveryCompletionFinalizerPort,
         verifier: RecoveryCompletionVerifierPort,
         terminal_verifier: object,
