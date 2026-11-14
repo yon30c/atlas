@@ -189,16 +189,16 @@ class FakeReadConsistencyAndEgress:
         if unresolved:
             if len(pending_recoveries) != 1:
                 return None
-            closure = pending_recoveries[0]
+            recovery_closure = pending_recoveries[0]
             unresolved_ids = frozenset(item.admission_id for item in unresolved)
             expected_routes = frozenset(
                 route for item in unresolved for route in item.route_ids
             )
             if (
-                unresolved_ids != closure.affected_admission_ids
-                or expected_routes != closure.route_ids
+                unresolved_ids != recovery_closure.affected_admission_ids
+                or expected_routes != recovery_closure.route_ids
                 or any(item.status is not ReadAdmissionStatus.UNRESOLVED for item in unresolved)
-                or any(closure.generation <= item.generation for item in unresolved)
+                or any(recovery_closure.generation <= item.generation for item in unresolved)
             ):
                 return None
         elif pending_recoveries:
@@ -208,7 +208,7 @@ class FakeReadConsistencyAndEgress:
         with restored._lock:
             for closure in projection.forget_closures:
                 restored.suppressed_memories.add(closure.memory_id)
-                restored.generation = max(restored.generation, closure.generation)
+                restored.generation = max(restored.generation, recovery_closure.generation)
             for invalidation in projection.invalidations:
                 restored.revisions[
                     (invalidation.authority_kind, invalidation.authority_id)
@@ -220,11 +220,11 @@ class FakeReadConsistencyAndEgress:
             if unresolved:
                 restored.recovery_pending = True
                 restored.generation = max(restored.generation, closure.generation)
-                restored.operations[closure.operation_id] = {
-                    "affected": closure.affected_admission_ids,
+                restored.operations[recovery_closure.operation_id] = {
+                    "affected": recovery_closure.affected_admission_ids,
                     "pending": True,
                     "kind": "recovery",
-                    "generation": closure.generation,
+                    "generation": recovery_closure.generation,
                 }
                 for item in unresolved:
                     restored.admissions[item.admission_id] = RecoveredAdmissionState(
@@ -237,7 +237,7 @@ class FakeReadConsistencyAndEgress:
                         admitted_at=item.admitted_at,
                     )
                     # The active generation is advanced; old capabilities cannot emit.
-                    restored.admission_generations[item.admission_id] = closure.generation
+                    restored.admission_generations[item.admission_id] = recovery_closure.generation
         return restored
 
     @classmethod
