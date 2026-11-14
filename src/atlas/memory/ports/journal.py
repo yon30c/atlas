@@ -61,6 +61,14 @@ class ConsistencyCheckpointLike(Protocol):
     created_at: datetime
 
 
+class CheckpointCommitResultLike(Protocol):
+    """Profile-owned result for the atomic checkpoint and marker transaction."""
+
+    status: str
+    checkpoint: ConsistencyCheckpointLike | None
+    marker_commit: JournalCommitLike | None
+
+
 class ConsistencyRecoveryStateLike(Protocol):
     """Structural journal state; this type carries no trust attestation."""
 
@@ -78,6 +86,7 @@ CommitT = TypeVar("CommitT", bound=JournalCommitLike)
 ResolutionT = TypeVar("ResolutionT", bound=JournalOperationResolutionLike)
 EntryT = TypeVar("EntryT", bound=JournalEntryLike)
 CheckpointT = TypeVar("CheckpointT", bound=ConsistencyCheckpointLike)
+CheckpointResultT = TypeVar("CheckpointResultT", bound=CheckpointCommitResultLike)
 RecoveryStateT = TypeVar("RecoveryStateT", bound=ConsistencyRecoveryStateLike)
 
 
@@ -89,6 +98,7 @@ class ConsistencyJournalPort(
         ResolutionT,
         EntryT,
         CheckpointT,
+        CheckpointResultT,
         RecoveryStateT,
     ]
 ):
@@ -122,11 +132,12 @@ class ConsistencyJournalPort(
         """Load an unauthenticated structural snapshot for diagnostics only."""
 
     def load_endpoint_receipts(self, admission_id: str) -> tuple[EntryT, ...] | None:
-        """Load a complete endpoint receipt set, or None if completeness is unknown."""
+        """Load complete endpoint receipts; None means completeness is unproven."""
 
     def commit_checkpoint(
         self,
         checkpoint: CheckpointT,
         expected_position: PositionT,
-    ) -> CommitT | None:
-        """Commit a checkpoint against one exact expected journal position."""
+        expected_continuity_reference: str,
+    ) -> CheckpointResultT:
+        """Atomically commit checkpoint, marker and head against exact prior state."""
