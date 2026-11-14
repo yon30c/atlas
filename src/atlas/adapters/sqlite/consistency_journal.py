@@ -552,17 +552,40 @@ class SQLiteConsistencyJournal:
                 ).fetchone()
                 if unmatched is not None:
                     return rejected
+                operation_rows = connection.execute(
+                    """
+                    SELECT * FROM journal_operations
+                    WHERE domain_id=? AND authority_epoch=?
+                    ORDER BY sequence ASC
+                    """,
+                    (domain_id, epoch),
+                ).fetchall()
 
                 entries = []
                 expected_sequence = 1
                 previous_commitment = None
-                for row in rows:
+                for row, operation in zip(rows, operation_rows, strict=True):
                     sequence = row["sequence"]
+                    if (
+                        operation["sequence"] != sequence
+                        or operation["record_id"] != row["record_id"]
+                        or operation["operation_id"] != row["operation_id"]
+                    ):
+                        return rejected
                     if sequence != expected_sequence:
                         return rejected
                     raw_transition = bytes(row["transition_canonical"])
                     transition = _transition_from_bytes(raw_transition)
                     if canonical_json_bytes(transition) != raw_transition:
+                        return rejected
+                    expected_request = self._request_bytes(domain_id, epoch, transition)
+                    if (
+                        bytes(operation["request_canonical"]) != expected_request
+                        or operation["request_digest"] != hashlib.sha256(
+                            expected_request
+                        ).hexdigest()
+                        or operation["idempotency_key"] != transition.idempotency_key
+                    ):
                         return rejected
                     if (
                         row["record_id"] != transition.record_id
