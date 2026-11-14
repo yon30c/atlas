@@ -198,3 +198,14 @@ Límite crítico: no se implementaron todavía admit_read, Forget/invalidation n
 Se añadieron pruebas de cierre, reapertura, rollback, recibo exacto, restauración y concurrencia. No ejecutadas; no se ejecutaron build ni CI.
 
 Diseño y límites: [ME-D4N — Recovery Gate SQLite](../design/ME-D4N-sqlite-recovery-gate.md).
+
+
+## ME-D4O — bootstrap e integración de autoridad SQLite
+
+La inspección confirmó un bloqueo previo a la admisión durable: `consistency_domains.recovery_gate_state` nace `closed`, pero el contrato actual solo permite abrirlo tras un `RECOVERY_RECONCILED` verificado. No existe evento/puerto de bootstrap inicial, y el coordinador de recovery no abre un dominio vacío.
+
+No se debe solucionar con UPDATE manual ni default abierto. El diseño ME-D4O divide el trabajo en: (A) contrato de bootstrap autenticado; (B) admisión durable; (C) egress durable; (D) lifecycle de admisiones/Forget/invalidation; (E) composición completa `ProtectedMemoryRecoveryAuthorityPort`.
+
+**Estado:** inspección y diseño documentados; no se añadió implementación de admisión/egress. Pruebas/build/CI siguen pendientes y no se ejecutaron.
+
+Véase [ME-D4O — bootstrap seguro e integración](../design/ME-D4O-sqlite-authority-bootstrap-and-integration.md).
