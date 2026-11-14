@@ -1,12 +1,12 @@
-"""Servicio CAM para autorizar lecturas de memoria sin exponer contenido."""
+"""Servicio CAM de Atlas para autorizar lecturas de memoria sin exponer contenido."""
 
 from datetime import datetime, timedelta
 from uuid import uuid4
 
 from atlas.authorization.evaluator import AuthorizationEvaluator
 from atlas.authorization.identity_binding import (
+    AtlasIdentityBindingAdapter,
     IdentitySubjectBindingPort,
-    resolve_authenticated_user_binding,
 )
 from atlas.authorization.memory_metadata_resolver import MemoryMetadataResolver
 from atlas.authorization.models import (
@@ -23,6 +23,7 @@ from atlas.memory.consistency import (
     AuthorizationRevisionSet,
     AuthorizationSnapshot,
 )
+from atlas.memory.identity import resolve_authenticated_memory_binding
 from atlas.memory.models import (
     MemoryClassification,
     MemoryId,
@@ -34,7 +35,7 @@ from atlas.ports.grants import GrantRepository
 
 
 class MemoryAuthorizationService:
-    """Evalúa acceso a una memoria usando metadatos y Grants autoritativos."""
+    """Política CAM de Atlas; consume binding neutral detrás de un adaptador."""
 
     READ_ACTION = "memory.read"
 
@@ -46,7 +47,7 @@ class MemoryAuthorizationService:
         grant_repository: GrantRepository | None = None,
     ) -> None:
         self._metadata = metadata_resolver
-        self._identity_binding = identity_binding_port
+        self._identity_binding = AtlasIdentityBindingAdapter(identity_binding_port)
         self._evaluator = evaluator or AuthorizationEvaluator()
         self._grant_repository = grant_repository
 
@@ -106,10 +107,13 @@ class MemoryAuthorizationService:
                     return self._deny()
                 if context.actor.kind.value != "user":
                     return self._deny()
-                binding = resolve_authenticated_user_binding(
-                    context, self._identity_binding
+                binding = resolve_authenticated_memory_binding(
+                    actor_identity_id=context.actor.identity_id,
+                    actor_revision=context.actor.revision,
+                    actor_active=context.actor.status is IdentityStatus.ACTIVE,
+                    binding_port=self._identity_binding,
                 )
-                if binding is None or binding.subject_user_id != memory.owner_id:
+                if binding is None or binding.subject_id != memory.owner_id:
                     return self._deny()
                 revisions = AuthorizationRevisionSet(
                     memory_revision=AuthorityRevision(
@@ -128,7 +132,7 @@ class MemoryAuthorizationService:
                     request_id=context.request_id,
                     action=self.READ_ACTION,
                     actor_identity_id=context.actor.identity_id,
-                    subject_user_id=binding.subject_user_id,
+                    subject_user_id=binding.subject_id,
                     memory_id=memory.memory_id,
                     version_id=version.version_id,
                     owner_id=memory.owner_id,
