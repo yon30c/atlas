@@ -2,8 +2,8 @@
 
 **Estado:** baseline arquitectónico aprobado por el propietario.
 **Implementación:** autorizada únicamente para la Fase 1, conforme al alcance registrado en §20.5.
-**Versión:** revisión 2.
-**Fecha:** 12 de noviembre de 2026.
+**Versión:** revisión 3.
+**Fecha:** 13 de noviembre de 2026.
 **Alcance:** especificación documental y contractual.
 **Implementación:** este documento no autoriza ni declara implementados los componentes descritos.
 
@@ -1447,7 +1447,7 @@ Atlas podrá analizar, proponer y solicitar estas decisiones, pero no podrá apr
 
 - `memory.forget` requiere autorización mediante CAM y aprobación específica y directa del propietario de Atlas. La aprobación no puede delegarse. CAM deberá validar por separado que el actor tiene autorización vigente para ejecutar la operación.
 - La eliminación debe contemplar los almacenes principales, índices derivados, réplicas y respaldos pertinentes.
-- La restauración o reindexación no puede reintroducir una memoria cuyo olvido haya sido aprobado y ejecutado.
+- La restauración o reindexación no puede reintroducir una memoria cuyo olvido haya sido aprobado y ejecutado. Esta garantía requiere una fuente de supresión/continuidad que no pueda retroceder junto con el backup. En el perfil local sin Trust Anchor externo, Atlas no puede demostrar por sí solo que el backup sea posterior al Forget; la restauración de datos de memoria afectados por un Forget posterior al backup debe permanecer bloqueada hasta reconciliarse con una fuente independiente aprobada. No se declarará satisfecha esta garantía mediante una comprobación de integridad local solamente.
 - La evidencia de eliminación debe permitir verificar la operación sin conservar innecesariamente el contenido olvidado.
 
 **APROBADO:**
@@ -2718,5 +2718,35 @@ El trabajo se realizará directamente en el servidor de desarrollo. La revisión
 La autorización para desarrollar no implica autorización automática para realizar commits, push, merges o publicar cambios. Estas acciones seguirán sujetas a la aprobación correspondiente del propietario.
 
 Las decisiones pendientes identificadas en §20.2 permanecen pendientes y no se consideran resueltas por esta aprobación.
+
+
+### 20.6 — Decisión del propietario: Trust Anchor opcional y postergado
+
+**Fecha:** 13 de noviembre de 2026.  
+**Estado:** APROBADO.
+
+El propietario decide que el Trust Anchor externo será una capacidad **opcional** de Atlas y que su implementación real se postergará hasta la etapa final del proyecto.
+
+#### Decisiones aprobadas
+
+1. Las etapas actuales de Atlas trabajarán con un único servidor y el perfil local de continuidad/verificación.
+2. No se desarrollará ni desplegará ahora un proveedor externo de Trust Anchor, una VM que actúe como autoridad independiente ni una integración con servicios externos de custodia.
+3. La arquitectura conservará interfaces y separación de responsabilidades que permitan incorporar el perfil anclado en la etapa final, sin convertirlo en dependencia de las etapas actuales.
+4. La ausencia de Trust Anchor debe declararse explícitamente. El perfil local puede verificar integridad disponible, estructura, secuencias, continuidad interna, inventarios y recibos conforme a sus mecanismos implementados, pero **no demuestra que el estado recuperado sea el último que existió antes de una restauración coherente del conjunto local** y no ofrece protección anti-rollback externa.
+5. El perfil anclado será opt-in y deberá seleccionarse explícitamente. Si se selecciona y el proveedor no está disponible o no puede verificarse, fallará cerrado; nunca degradará automáticamente al perfil local.
+6. La autenticidad de recibos, el control de autoridad, la idempotencia, la atomicidad, el fencing y la recuperación local siguen siendo requisitos independientes. Hacer Trust Anchor opcional no elimina esos controles.
+7. La garantía de que una memoria olvidada no reaparezca tras restaurar un backup anterior al Forget requiere una fuente de supresión/continuidad independiente del conjunto restaurable. Sin ella, la restauración afectada permanecerá bloqueada o requerirá reconciliación explícita; no se afirmará que la garantía está satisfecha.
+8. Esta decisión es documental y arquitectónica. No modifica código, no declara implementado el perfil local sin ancla y no autoriza lecturas protegidas, Forget físico, migraciones, despliegues ni cambios de infraestructura.
+
+#### Consecuencias para los contratos ME-03K
+
+- ME-03K-B y ME-03K-C definen dos perfiles: local (baseline actual) y anclado (opcional, etapa final).
+- ME-03K-A y la especificación de conformidad separan la validación local de la prueba anti-rollback externa.
+- Las pruebas con fakes solo acreditan contratos de coordinación; no prueban criptografía, custodia externa ni anti-rollback.
+- El código actual contiene modelos y coordinadores cuyo flujo verificado requiere un Trust Anchor. La compatibilidad de código con el perfil local opcional queda pendiente para su fase de adaptación; no se desarrollará ahora el proveedor Trust Anchor.
+
+#### Registro de cambio
+
+Revisión 3: incorpora la decisión aprobada sobre Trust Anchor opcional, aplaza su implementación real a la etapa final y documenta las limitaciones de anti-rollback y restauración en el perfil local. También actualiza la regla de no reintroducción de memorias olvidadas para evitar afirmar una garantía que no pueda demostrarse sin una fuente independiente de supresión/continuidad.
 
 **Fin del documento.**
