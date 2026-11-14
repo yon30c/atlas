@@ -10,56 +10,54 @@ Convertir Memory Engine en un componente reutilizable por Atlas y por aplicacion
 ## Implementado en ME-D1 — frontera de contexto y autorización
 
 - `atlas.memory.context.MemoryRequestContext`: contexto neutral para transportar atributos de una solicitud desde un consumidor.
-- `atlas.memory.authorization.MemoryAuthorizationDecision` y `MemoryAuthorizationResult`: resultado de autorización propio del dominio Memory Engine. ALLOW exige un `AuthorizationSnapshot`; DENY no puede transportar snapshot.
+- `atlas.memory.authorization.MemoryAuthorizationDecision` y `MemoryAuthorizationResult`: resultado de autorización propio del dominio Memory Engine.
 - `atlas.ports.memory_authorization.MemoryAuthorizationPort`: contrato que desacopla el Gateway de la implementación concreta de CAM.
-- `atlas.adapters.atlas_memory_authorization.AtlasMemoryAuthorizationAdapter`: adaptador de compatibilidad que traduce el contexto neutral a `OperationContext` y el resultado CAM de Atlas al resultado neutral.
-- `MemoryGatewayService` depende de `MemoryAuthorizationPort` y `MemoryRequestContext`, no directamente de `MemoryAuthorizationService` ni de `OperationContext`.
-- `atlas.ports.memory.MemoryGateway` usa el contexto neutral.
-- Los contratos neutrales se exportan desde `atlas.memory`.
+- `atlas.adapters.atlas_memory_authorization.AtlasMemoryAuthorizationAdapter`: adaptador de compatibilidad con CAM Atlas.
+- `MemoryGatewayService` depende del puerto y contexto neutrales, no directamente de `MemoryAuthorizationService` ni de `OperationContext`.
 
 ## Implementado en ME-D2 — contrato neutral de vinculación de identidad
 
-- `atlas.memory.identity.MemoryIdentityBinding`: evidencia tipada e inmutable que relaciona un actor autenticado con un sujeto canónico, incluyendo estado y revisión.
-- `MemoryIdentityBindingPort`: contrato neutral para resolver la vinculación desde una fuente de identidad autoritativa.
-- `resolve_authenticated_memory_binding`: validación fail-closed de actor, estado, identidad exacta y revisión exacta. No acepta como prueba los atributos que el llamador declara en el contexto.
-- `AtlasIdentityBindingAdapter`: adapta el puerto histórico de Atlas (`resolve_user_subject`) al nuevo contrato neutral (`resolve_subject`).
-- `MemoryAuthorizationService` consume el binding neutral mediante el adaptador Atlas. La política CAM, los Grants y la evaluación de permisos permanecen en Atlas; no se han movido ni debilitado.
-- Se conservó `AuthenticatedUserSubject` y `IdentitySubjectBindingPort` como contratos de compatibilidad para no forzar una migración simultánea de consumidores existentes.
+- `atlas.memory.identity.MemoryIdentityBinding`: relación verificada actor-sujeto, activa y versionada.
+- `MemoryIdentityBindingPort` y `resolve_authenticated_memory_binding`: contrato de resolución y validación fail-closed.
+- `AtlasIdentityBindingAdapter`: adapta el contrato histórico de identidad de Atlas.
+- `MemoryAuthorizationService` consume el binding neutral. La política CAM, Grants y evaluación PROJECT permanecen en Atlas.
+
+## Implementado en ME-D3 — metadatos independientes del consumidor
+
+- `atlas.memory.ports.metadata` contiene `MemoryMetadataPort`, `ProjectMetadataPort` y `EnvironmentMetadataPort`. Son contratos que cada consumidor debe implementar contra sus fuentes canónicas.
+- `atlas.memory.metadata_resolver.MemoryMetadataResolver` se trasladó al núcleo de Memory Engine. Valida IDs exactos, tipo de respuesta y correspondencia del recurso; errores, excepciones, respuestas ausentes o IDs discordantes devuelven ausencia y no habilitan fallback.
+- Los DTO `MemoryVersionMetadata`, `ProjectMetadata` y `EnvironmentMetadata` usan `MemoryContractError`; la validación UUIDv7 de sus identificadores de memoria se realiza sin importar `atlas.core.errors.ContractError` ni el validador de Atlas.
+- `MemoryAuthorizationService` importa el resolver desde `atlas.memory`, mientras la política CAM continúa siendo específica de Atlas.
+- Se conservaron los módulos anteriores `atlas.ports.memory_metadata` y `atlas.authorization.memory_metadata_resolver` como reexportaciones de compatibilidad para consumidores existentes.
 
 ## Límite de confianza obligatorio
 
-`MemoryRequestContext` transporta atributos, no es una credencial ni una prueba criptográfica de autenticación. No debe construirse directamente a partir de campos controlados por el usuario final.
+Los contextos transportan atributos, no credenciales. Los bindings de identidad solo acreditan una relación actor-sujeto; no conceden permisos. Los metadatos de memoria, proyecto y entorno deben proceder de las fuentes canónicas implementadas por el consumidor, nunca de valores declarados por el solicitante.
 
-Cada consumidor debe emitir el contexto desde su propia frontera de identidad confiable. El adaptador de autorización debe verificar identidad, estado, revisión, propietario, proyecto y entorno contra fuentes autoritativas. Si no puede verificar esos atributos, debe denegar.
+Los adaptadores deben verificar identidad, estado, revisión, propietario, proyecto y entorno. Si no pueden verificar un atributo necesario, deben denegar. La política de autorización debe comprobar propietario, scope, clasificación, estado de versión y Grants aplicables después de resolver los metadatos.
 
-`MemoryIdentityBinding` tampoco concede acceso por sí solo. Solo aporta una vinculación verificada actor-sujeto. La política de autorización debe comprobar después el propietario canónico, scope, clasificación, estado de versión y, cuando corresponda, proyecto, entorno y Grants. No se aceptan permisos suministrados por el solicitante.
-
-La autorización sigue siendo obligatoria antes de admitir una lectura. Los snapshots, admisiones, rutas, fencing y egress protegido no se sustituyen ni se debilitan con estas extracciones.
+La reutilización del resolver no convierte al consumidor en autoridad de autorización ni cambia las reglas PRIVATE/PROJECT. Los snapshots, admisiones, rutas, fencing y egress protegido permanecen obligatorios.
 
 ## Compatibilidad y alcance
 
 Esta entrega es incremental, no la finalización de la independencia.
 
-- El adaptador Atlas mantiene la integración heredada con `OperationContext`, `Identity`, CAM, Grants y metadatos Atlas.
-- La política de autorización PROJECT continúa usando `AuthorizationRequest`, `AuthorizationEvaluator` y `GrantRepository` de Atlas.
-- Modelos y validadores de memoria todavía utilizan algunos tipos/errores compartidos de `atlas.core`.
-- Los identificadores UUIDv7 conservan el validador histórico `validate_atlas_id`.
-- La resolución de metadatos de memoria/proyecto/entorno sigue siendo implementación Atlas detrás de contratos existentes.
-- Los mecanismos locales de consistencia, claves y recuperación aún no están extraídos como adaptadores reemplazables.
+- CAM, Grants, evaluación de permisos y construcción de snapshots siguen siendo Atlas.
+- Los modelos de dominio y validadores generales aún conservan dependencias de tipos/errores de `atlas.core`.
+- Los mecanismos locales de consistencia, claves y recuperación no están extraídos como adaptadores reemplazables.
 - La persistencia del contenido de memorias, versiones y propuestas no está implementada; SQLite continúa persistiendo el diario/control de consistencia.
-- Los puertos de listado y envío de propuestas están definidos, pero sus servicios operativos no están completos.
+- Los servicios operativos de propuestas, revisión y Forget no están completos.
 
 ## Próximas fases
 
-1. Desacoplar metadatos de memoria, proyecto y entorno, preservando la autoridad canónica y el fail-closed.
-2. Extraer consistencia y recuperación local detrás de puertos sin cambiar sus garantías.
-3. Implementar repositorios persistentes para Memory, MemoryVersion y MemoryProposal.
-4. Completar propuesta, aprobación/rechazo explícitos, Forget operativo e integración con AtlasCore.
-5. Añadir pruebas de conformidad con al menos dos consumidores distintos y pruebas negativas de aislamiento.
+1. Extraer consistencia y recuperación local detrás de puertos sin cambiar sus garantías.
+2. Implementar repositorios persistentes para Memory, MemoryVersion y MemoryProposal.
+3. Completar propuesta, aprobación/rechazo explícitos, Forget operativo e integración con AtlasCore.
+4. Añadir pruebas de conformidad con al menos dos consumidores distintos y pruebas negativas de aislamiento.
 
 ## Validación pendiente
 
-Por instrucción del propietario, no se ejecutaron pruebas ni builds durante ME-D1/ME-D2. La compatibilidad con los fakes y consumidores actuales, la construcción de los paquetes y los casos negativos de identidad quedan pendientes de la fase de pruebas.
+Por instrucción del propietario, no se ejecutaron pruebas ni builds durante ME-D1, ME-D2 o ME-D3. La compatibilidad con fakes y consumidores actuales, imports, construcción de paquetes y casos negativos quedan pendientes de la fase de pruebas.
 
 ## No incluido
 
