@@ -120,6 +120,18 @@ class RouteRegistryContractTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             DeliveryRouteDescriptor("route", 1, 1, True)
 
+    def test_route_resolution_requires_a_position_unless_unavailable(self):
+        requested = frozenset({"assistant-response"})
+        route = DeliveryRouteDescriptor("assistant-response", 1, True, True)
+        with self.assertRaises(ContractError):
+            RouteRegistryResult(requested, RouteRegistryStatus.RESOLVED, (route,))
+        with self.assertRaises(ContractError):
+            RouteRegistryResult(requested, RouteRegistryStatus.REJECTED)
+        unavailable = RouteRegistryResult(
+            requested, RouteRegistryStatus.UNAVAILABLE
+        )
+        self.assertIsNone(unavailable.consistency_position)
+
 
 class RevisionValidationContractTests(unittest.TestCase):
     def test_current_result_is_bound_to_exact_snapshot_and_revisions(self):
