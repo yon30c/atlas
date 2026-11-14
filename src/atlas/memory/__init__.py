@@ -97,6 +97,14 @@ from atlas.memory.recovery_finalization import (
     RecoveryAdmissionFinalizationStatus,
     RecoveryAdmissionTerminalReceipt,
 )
+from atlas.memory.recovery_completion import (
+    RecoveryCompletionCoordinator,
+    RecoveryCompletionRequest,
+    RecoveryCompletionReceipt,
+    RecoveryCompletionResult,
+    RecoveryCompletionStatus,
+    VerifiedRecoveryCompletionReceipt,
+)
 from atlas.memory.validation import (
     validate_memory_aggregate,
     validate_proposal_links,
@@ -125,6 +133,12 @@ __all__ = [
     "RecoveryAdmissionFinalizationResult",
     "RecoveryAdmissionFinalizationStatus",
     "RecoveryAdmissionTerminalReceipt",
+    "RecoveryCompletionCoordinator",
+    "RecoveryCompletionRequest",
+    "RecoveryCompletionReceipt",
+    "RecoveryCompletionResult",
+    "RecoveryCompletionStatus",
+    "VerifiedRecoveryCompletionReceipt",
     "ForgetClosure",
     "ForgetClosureStatus",
     "ForgetRecoverySnapshot",
