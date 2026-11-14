@@ -1,6 +1,6 @@
 # ME-D4J — diseño de unidad de trabajo SQLite compartida
 
-**Estado:** diseño propuesto para revisión. No implementado.  
+**Estado:** diseño base implementado parcialmente mediante ME-D4K–ME-D4N; la autoridad completa de admisión/egress y su validación siguen pendientes.  
 **Rama objetivo:** `feature/atlas-functional-f1`  
 **Precondición:** ME-D4I identificó que `SQLiteConsistencyJournal` abre una transacción privada por operación.
 
