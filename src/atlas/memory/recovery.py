@@ -14,8 +14,8 @@ from atlas.memory.receipt_verification import (
     TerminalReceiptKind,
     TerminalReceiptVerificationRequest,
     VerifiedTerminalReceipt,
-    match_verified_receipt,
 )
+from atlas.memory.receipt_trust import verify_terminal_receipt_with_context
 
 
 def _required(value: object, field: str) -> None:
@@ -281,12 +281,15 @@ def execute_recovery_fencing(
     plan: RecoveryFencePlan,
     fencer: object,
     verifier: object,
+    trust_context_factory: object,
+    verification_time: object,
 ) -> VerifiedRecoveryFenceBatch | None:
     """Fence every endpoint and verify every receipt; partial batches fail closed."""
     if (
         not isinstance(plan, RecoveryFencePlan)
         or not callable(getattr(fencer, "fence_endpoint", None))
-        or not callable(getattr(verifier, "verify_terminal_receipt", None))
+        or not callable(getattr(verifier, "verify_terminal_receipt_with_context", None))
+        or not callable(getattr(trust_context_factory, "for_terminal_receipt", None))
     ):
         return None
     requests = build_recovery_fence_requests(plan)
@@ -322,11 +325,13 @@ def execute_recovery_fencing(
             previous_generation=request.previous_generation,
             fenced_through_sequence=request.last_committed_sequence,
         )
-        try:
-            verification_result = verifier.verify_terminal_receipt(verification_request)
-        except Exception:
-            return None
-        verified = match_verified_receipt(verification_request, verification_result)
+        verified = verify_terminal_receipt_with_context(
+            verifier,
+            trust_context_factory,
+            verification_request,
+            purpose="recovery-endpoint-fencing",
+            verification_time=verification_time,
+        )
         if verified is None:
             return None
         verified_receipts.append(verified)
