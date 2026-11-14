@@ -22,7 +22,11 @@ from atlas.memory.local_trust_policy import (
     LocalConsistencyTrustPolicy,
     LocalIssuerAuthorization,
 )
-from atlas.memory.trust import ConsistencyRecoveryVerificationStatus
+from atlas.memory.trust import (
+    ConsistencyRecoveryVerificationResult,
+    ConsistencyRecoveryVerificationStatus,
+    VerifiedLocalConsistencyRecoveryState,
+)
 from atlas.ports.checkpoint_projection_store import (
     LocalCheckpointProjectionPublisherPort,
 )
@@ -174,15 +178,15 @@ class LocalCheckpointCoordinator:
         except Exception:
             return self._unavailable()
 
-        if not hasattr(verification, "status"):
+        if not isinstance(verification, ConsistencyRecoveryVerificationResult):
             return self._conflict()
         if verification.status is ConsistencyRecoveryVerificationStatus.UNAVAILABLE:
             return self._unavailable()
         if verification.status is not ConsistencyRecoveryVerificationStatus.VERIFIED:
             return self._conflict()
 
-        verified = getattr(verification, "verified_local_state", None)
-        if verified is None:
+        verified = verification.verified_local_state
+        if not isinstance(verified, VerifiedLocalConsistencyRecoveryState):
             # This coordinator is deliberately restricted to the local profile.
             return self._conflict()
         if verified.trust_policy_version != self._trust_policy.policy_version:
