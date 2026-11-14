@@ -194,9 +194,9 @@ El contrato de `ConsistencyJournalPort.resolve_operation` queda precisado así:
 
 Los siguientes contratos deben alinearse antes de declarar ME-03K-B cerrado:
 
-1. `ConsistencyJournalPort.load_recovery_state` solo puede entregar `VerifiedConsistencyRecoveryState` o un resultado explícito UNKNOWN/REJECTED; no un estado desnudo cuya verificación dependa de una promesa documental.
+1. `ConsistencyJournalPort.load_verified_recovery_state` entrega `ConsistencyRecoveryVerificationResult`; solo VERIFIED contiene `VerifiedConsistencyRecoveryState`. `load_recovery_state` queda limitado a diagnóstico/migración y está prohibido en recuperación operativa.
 2. `ConsistencyCheckpoint` debe referenciar el envelope autenticado, versión de reducer/proyección y ancla externa usada; no debe tratar `integrity_reference` como prueba suficiente.
-3. `ConsistencyRecoveryState` debe preservar la referencia de verificación y la posición exacta del ancla, sin permitir que el reducer cree esa confianza.
+3. `ConsistencyRecoveryState` es únicamente estructural. `VerifiedConsistencyRecoveryState` envuelve el estado junto con el ancla exacta y exige coincidencia de dominio, época, secuencia y commitment; el reducer nunca crea esa confianza.
 4. `TerminalReceiptVerifierPort` y `RecoveryCompletionVerifierPort` deben compartir el modelo de contexto de confianza, manteniendo resultados tipados y separados por propósito.
 5. `ProtectedMemoryRecoveryAuthorityPort` sigue siendo una única implementación concreta compartida por Gateway y coordinadores. La verificación no crea una segunda autoridad de orden.
 6. `reconcile_and_open_recovery_gate` debe consumir una evidencia verificada vinculada al cierre exacto y confirmar evento + apertura en una sola operación linealizable.
@@ -224,7 +224,15 @@ Este contrato no selecciona:
 
 Cada elección futura debe demostrar conformidad con estos contratos y K01–K07.
 
-## 11. Criterio de cierre
+## 11. Estado de alineación en código
+
+Se añadieron `src/atlas/memory/trust.py` y `src/atlas/ports/consistency_trust.py` con modelos tipados para ancla externa, envelope autenticado, solicitud de verificación, resultado de recuperación verificada, contexto de confianza y puertos provider-agnostic. `ConsistencyJournalPort` ahora define `load_verified_recovery_state`; la carga estructural desnuda queda marcada solo para diagnóstico/migración. Los coordinadores de recuperación, finalización de admisiones y finalización global consumen exclusivamente el resultado VERIFIED y se bloquean ante REJECTED, UNAVAILABLE, excepción o resultado mal tipado. Los fakes de integración crean atestaciones de prueba explícitas; no simulan criptografía real.
+
+Pruebas de contrato añadidas en `tests/unit/test_memory_trust_contracts.py` para bindings de dominio/época/política, rollback, commitment y resultados tipados. Estas pruebas y las suites de coordinadores requieren ejecución/CI antes de declarar validada esta alineación. El puerto de verificación de recibos aún no recibe el contexto de confianza común en todos los coordinadores; esa integración queda pendiente.
+
+La construcción de `VerifiedConsistencyRecoveryState` es una garantía de tipo dentro del proceso, no una barrera criptográfica frente a código arbitrario del mismo proceso. La procedencia auténtica depende de que solo el adaptador/verificador confiable produzca ese objeto y de que la composición de dependencias no permita inyección de un verificador no confiable.
+
+## 12. Criterio de cierre
 
 ME-03K-C queda cerrado en diseño cuando:
 
