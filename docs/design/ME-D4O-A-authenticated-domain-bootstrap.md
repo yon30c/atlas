@@ -1,152 +1,130 @@
-# ME-D4O-A — Contrato de bootstrap autenticado del dominio
+# ME-D4O-A — Contrato de bootstrap de dominio por perfil
 
-**Estado:** diseño contractual; no implementado.  
-**Rama de trabajo:** `feature/atlas-functional-f1`.  
-**Alcance:** definir cómo activar por primera vez un dominio SQLite sin convertir el propio journal restaurable en la autoridad de su frescura.
+**Estado:** diseño contractual corregido; no implementado.  
+**Rama:** `feature/atlas-functional-f1`.  
+**Alcance:** definir la activación inicial de un dominio SQLite sin confundir autenticidad local con anti-rollback externo.
 
-## 1. Decisión
+## 1. Decisión de arquitectura
 
-El bootstrap no se tratará como una recuperación vacía ni como una operación administrativa que modifica `recovery_gate_state`.
+ME-03K-B, ME-03K-C y Contrato de diseño Atlas v1 §20.6 establecen dos perfiles:
 
-La activación inicial requiere dos evidencias distintas:
+- **LOCAL:** baseline actual, un servidor, sin Trust Anchor externo. Es el perfil de desarrollo y operación previsto para las etapas actuales.
+- **ANCHORED:** capacidad opt-in futura. Su proveedor externo y sus garantías anti-rollback se implementarán en la etapa final. Si se selecciona este perfil y el proveedor no está disponible o no puede verificarse, falla cerrado; nunca degrada automáticamente a LOCAL.
 
-1. **Autorización explícita del propietario**, verificada fuera de SQLite y ligada a un descriptor canónico del dominio.
-2. **Ancla externa monotónica**, inicializada fuera del dominio de rollback de SQLite y capaz de impedir que un backup antiguo vuelva a presentarse como estado vigente.
+El Trust Anchor externo **no es requisito para desarrollar ni completar el baseline LOCAL**. Su ausencia no elimina la autorización explícita del propietario, la autenticidad local disponible, la idempotencia, la atomicidad, el fencing ni la recuperación fail-closed.
 
-El `TrustAnchorPort` actual solo permite leer y avanzar un ancla existente. No ofrece inicialización autenticada de un ancla nueva. El contrato `ME-03K-C` exige precisamente un procedimiento de bootstrap explícito y autenticado fuera del flujo ordinario de recuperación, pero deja su tecnología y proveedor para una etapa posterior.
+El bootstrap es distinto de una recuperación de un dominio previamente activo. Un journal vacío no prueba por sí solo frescura frente a un backup antiguo.
 
-Por tanto, **no se añade todavía un evento `DOMAIN_BOOTSTRAPPED` al reducer ni una operación que abra el gate**. Añadir el evento antes de contar con la evidencia externa convertiría una firma del journal en una falsa prueba de anti-rollback.
+## 2. Bootstrap del perfil LOCAL
 
-## 2. Descriptor canónico de bootstrap
+El perfil LOCAL debe disponer de una activación inicial deliberada y autenticada, sin proveedor Trust Anchor externo.
 
-La solicitud de bootstrap debe comprometer, como mínimo:
+La activación requiere:
+
+1. Descriptor canónico del dominio y compromiso del estado de génesis.
+2. Acción explícita del propietario, ligada al dominio, época, perfil y solicitud exactos.
+3. Verificación local de esa autorización mediante una frontera confiable separada de la fila SQLite que se activa. El caller no puede fabricar un resultado `VERIFIED`.
+4. Firma/autenticación local del evento de génesis usando los puertos de custodia y firma locales configurados.
+5. Creación idempotente del evento inicial y actualización del estado del gate dentro de una misma `SQLiteUnitOfWork`.
+6. Verificación posterior de la cadena, proyección y estado del gate conforme al perfil LOCAL antes de permitir operaciones.
+
+La autorización del propietario no equivale a Trust Anchor. Una credencial local puede demostrar quién autorizó la activación conforme al mecanismo implementado, pero no demuestra que el conjunto SQLite restaurado sea el más reciente.
+
+El formato de evidencia de acción directa del propietario sigue sujeto al contrato de identidad/CAM y a la decisión pendiente registrada en `docs/contracts/memory.md` §8. No se inventará un bypass ni se tratará UID, variable de entorno, flag o fila SQLite como aprobación por sí solos.
+
+## 3. Descriptor canónico
+
+La solicitud de bootstrap comprometerá, como mínimo:
 
 - `consistency_domain_id`;
 - `authority_epoch` inicial;
-- perfil (`local` o perfil anclado, sin mezclarlos);
+- perfil explícito (`LOCAL` o `ANCHORED`);
 - `trust_policy_version`;
-- identidad estable del propietario/tenant que controla el dominio;
+- identidad estable del propietario/tenant;
 - `issuer_id`, `issuer_role` y `key_reference` autorizados;
 - versión de esquema y reducer;
 - identificador único de solicitud;
-- instante de autorización emitido/verificado por una fuente confiable;
 - compromiso del estado de control de génesis.
 
-El compromiso de génesis solo cubre metadatos de control del journal. No debe contener ni derivarse de contenido de memoria, texto, fragmentos, embeddings, snippets ni hashes de contenido.
+El compromiso cubre solo metadatos de control del journal. No contiene ni deriva de contenido de memoria, texto, fragmentos, embeddings, snippets ni hashes de contenido.
 
-La canonicalización debe ser versionada, determinista y compartida por el verificador de autorización, el proveedor del ancla y el journal. El descriptor no puede aceptar campos desconocidos, valores por defecto implícitos ni normalizaciones dependientes de plataforma.
+La canonicalización debe ser versionada, determinista y rechazar campos desconocidos, valores por defecto implícitos y normalizaciones dependientes de plataforma.
 
-## 3. Frontera de autorización del propietario
+## 4. Evento de génesis LOCAL
 
-Se requiere un contrato independiente para verificar la aprobación del propietario. El caller no puede construir directamente un objeto de autorización verificada ni declarar que una sesión autenticada equivale a aprobación.
+El evento futuro debe ser un tipo explícito, por ejemplo `DOMAIN_BOOTSTRAPPED`; no se reutilizará `RECOVERY_RECONCILED`.
 
-La evidencia verificada debe vincular exactamente:
+Reglas:
 
-- principal autenticado y rol de propietario autorizado;
-- dominio, época y descriptor canónico;
-- acción explícita `bootstrap`;
-- política de confianza aplicable;
-- solicitud/nonce de un solo uso o identificador idempotente;
-- fecha de emisión y vigencia;
-- referencia y evidencia autenticada verificables fuera de SQLite.
+- primer y único evento de génesis del dominio;
+- secuencia inicial exacta y época/dominio coincidentes;
+- descriptor, commitment, perfil y política exactos;
+- referencia a la autorización local verificada del propietario;
+- emisor/clave y autenticación local válidos;
+- operación e idempotency key estables;
+- rechazo si hay cualquier transición, admisión u operación previa;
+- conflicto ante descriptor distinto o intento de reinicialización.
 
-Resultados conceptuales:
+La creación del evento y la mutación materializada del gate deben confirmarse o revertirse en la misma UoW. El evento no puede autoatestiguar frescura externa.
 
-- `VERIFIED`: produce evidencia tipada no falsificable por el caller;
-- `REJECTED`: autorización inválida, revocada, vencida o contradictoria;
-- `UNAVAILABLE`: no se pudo verificar; no permite avanzar.
+## 5. Perfil ANCHORED — extensión futura
 
-La identidad del proceso local, el UID del sistema, un flag de configuración, una variable de entorno o una fila SQLite no constituyen por sí solos aprobación del propietario.
+El perfil ANCHORED añadirá una autoridad externa independiente del dominio de rollback SQLite. Su proveedor deberá soportar:
 
-## 4. Frontera del proveedor de ancla
+- inicialización autenticada create-if-absent;
+- vinculación de dominio, época, perfil, commitment, emisor, clave y política;
+- idempotencia para la misma solicitud y conflicto para una distinta;
+- lectura de ancla vigente y avance monotónico mediante CAS;
+- evidencia verificable, protección contra replay y reconciliación de resultados ambiguos;
+- rechazo de backups por debajo del ancla vigente.
 
-El proveedor futuro deberá extender la capacidad actual de `TrustAnchorPort` con una operación de inicialización autenticada equivalente a:
+La secuencia de coordinación entre proveedor y SQLite será recuperable ante fallos; no se presupone una transacción distribuida. La ausencia o discrepancia del proveedor en perfil ANCHORED mantiene el gate cerrado. No se permite fallback a LOCAL.
 
-`initialize_anchor(verified_bootstrap_authorization, genesis_anchor) -> TrustAnchorUpdateStatus`
+La implementación real del proveedor sigue postergada hasta la etapa final. No se añade ahora una tabla, archivo o clave local que se presente como ancla externa.
 
-Requisitos:
+## 6. Restauración y límites del perfil LOCAL
 
-- almacenamiento y control de acceso independientes de la base SQLite;
-- creación atómica create-if-absent para el dominio;
-- vinculación exacta de dominio, época, commitment de génesis, emisor, clave y política;
-- idempotencia para la misma autorización y descriptor;
-- conflicto ante una inicialización distinta para un dominio ya registrado;
-- ninguna inicialización automática ante `NOT_FOUND` durante recuperación;
-- evidencia verificable del proveedor y protección contra replay;
-- capacidad de leer el ancla vigente y avanzar por CAS monotónico;
-- `UNKNOWN` o indisponibilidad mantienen el dominio cerrado.
+El perfil LOCAL puede verificar autenticidad disponible, estructura, dominio, época, secuencias, continuidad interna, inventarios y recibos según sus mecanismos implementados. No puede demostrar que el head recuperado sea el último que existió antes de una restauración coherente del conjunto local.
 
-No se permite implementar este contrato con otra tabla dentro del mismo archivo SQLite, un archivo junto al backup, una clave almacenada en la misma base ni una variable de entorno que pueda restaurarse junto con ella. Eso no crea independencia del dominio de rollback.
+Por ello:
 
-## 5. Secuencia de activación propuesta
+- el estado recuperado debe declarar explícitamente `LOCAL`;
+- no se afirmará anti-rollback externo;
+- una restauración que pueda preceder a un Forget, invalidación o fencing requerido no puede exponer la memoria ni reabrir la ruta protegida sin reconciliación contra una fuente independiente aprobada;
+- integridad local del backup no equivale a prueba de frescura;
+- no se permite que un backup restaure automáticamente la autoridad para admitir lecturas o emitir contenido.
 
-El protocolo futuro debe ser recuperable ante fallos entre el proveedor externo y SQLite. No se presupone una transacción distribuida:
+Estas restricciones preservan ME-03K-B y Memory Contract §9.5. Trust Anchor opcional no convierte Forget ni sus garantías en opcionales.
 
-1. Construir el descriptor canónico y obtener aprobación explícita del propietario.
-2. Verificar la aprobación con el componente independiente. Cualquier resultado distinto de `VERIFIED` aborta.
-3. Inicializar el ancla externa en estado de génesis mediante create-if-absent. Repetir exactamente la misma solicitud debe devolver el mismo resultado; un descriptor distinto debe producir conflicto.
-4. Crear/verificar el dominio SQLite en estado cerrado. La operación no abre el gate.
-5. Añadir, en una futura UoW, el evento autenticado de bootstrap como primer evento del dominio. El reducer deberá exigir secuencia inicial, ausencia de admisiones/operaciones previas y coincidencia exacta con el descriptor.
-6. Avanzar el ancla externa mediante CAS hasta el commitment del evento de bootstrap.
-7. Volver a leer y verificar el ancla externa vigente y el journal autenticado.
-8. Solo entonces, mediante una operación de gate dedicada, abrir el gate si evento, ancla, descriptor, época, política y proyección coinciden exactamente.
+## 7. Criterios de aceptación
 
-El gate permanece cerrado durante todos los pasos intermedios. Si el proceso cae después de cualquier paso, el reintento debe reconciliar el estado exacto; nunca debe inferir éxito por ausencia de error o por una fila local.
+### Perfil LOCAL — baseline actual
 
-### Fallos y reintentos
+- [ ] Existe una evidencia de acción directa del propietario verificable y ligada al descriptor exacto.
+- [ ] La verificación local usa una frontera confiable y no acepta resultados fabricados por el caller.
+- [ ] El evento de génesis está autenticado con los puertos locales configurados.
+- [ ] Evento, idempotencia, head y gate se confirman en una sola UoW.
+- [ ] Replay idéntico es idempotente; descriptor distinto y reinicialización se rechazan.
+- [ ] La recuperación devuelve un resultado tipado LOCAL y declara la ausencia de anti-rollback externo.
+- [ ] Restauraciones con incertidumbre sobre Forget/fencing/cierres permanecen bloqueadas hasta reconciliación independiente.
+- [ ] Se prueban fallos, rollback, concurrencia, reinicio y resultados ambiguos.
 
-| Situación | Resultado requerido |
-|---|---|
-| Autorización ausente, inválida o vencida | Rechazar; gate cerrado |
-| Proveedor externo no disponible | Estado desconocido; gate cerrado |
-| Ancla ya inicializada con el mismo descriptor | Replay idempotente; continuar verificando |
-| Ancla inicializada con descriptor distinto | Conflicto; no modificar |
-| Dominio SQLite incompatible | Rechazar; no cambiar época ni política |
-| Evento de bootstrap confirmado, ancla aún en génesis | No admitir; reintentar CAS exacto |
-| Ancla avanzada, gate local aún cerrado | Verificar ambos lados y completar apertura exacta |
-| Backup anterior al evento con ancla ya avanzada | Rechazar por rollback |
-| Journal local por delante del ancla | Estado no confirmado; gate cerrado |
-| Ancla ausente tras bootstrap previo | No recrearla automáticamente; intervención de recuperación autenticada |
+### Perfil ANCHORED — etapa final
 
-## 6. Evento de journal futuro
+- [ ] Proveedor externo independiente con create-if-absent y CAS monotónico.
+- [ ] Autorización y evidencia verificables fuera del dominio SQLite.
+- [ ] Reconciliación de fallos entre ancla y journal.
+- [ ] Backup antiguo rechazado contra el ancla vigente.
+- [ ] Indisponibilidad o discrepancia mantiene el gate cerrado, sin fallback.
 
-Cuando se implemente, el evento de génesis deberá ser un tipo explícito, no una variante de `RECOVERY_RECONCILED`. El diseño del evento deberá fijar:
+## 8. Relación con ME-D4O-B–E
 
-- uso exclusivo como primer registro del dominio;
-- `sequence = 1`, época y dominio exactos;
-- descriptor y commitment de génesis;
-- identificador de autorización verificada;
-- identidad/rol del propietario autorizante;
-- referencia verificable de la inicialización externa;
-- política, emisor y clave;
-- ID de operación e idempotencia estables.
+La ausencia del proveedor ANCHORED **no bloquea el desarrollo del baseline LOCAL** de admisión, egress, lifecycle ni composición. Estas fases pueden implementarse y probarse bajo las garantías locales, sin habilitar runtime protegido antes de que el bootstrap LOCAL y las pruebas requeridas estén completos.
 
-El reducer rechazará el evento si existe cualquier transición anterior, admisión, emisión, cierre o evidencia de que el dominio ya fue utilizado. El evento no debe permitir reinicializar un dominio existente ni elevar época.
+La autorización directa del propietario y su evidencia tipada siguen siendo una dependencia contractual para implementar la activación LOCAL. Debe resolverse reutilizando/alineando los contratos de identidad/CAM; no se sustituye por Trust Anchor externo.
 
-La transición del gate debe ocurrir únicamente después de la verificación externa final. El evento por sí solo no autoriza la apertura.
-
-## 7. Relación con el perfil local y el perfil anclado
-
-El perfil local actual puede validar autenticidad disponible y continuidad interna, pero no demuestra que una base restaurada sea la más reciente. No se cambiará esa afirmación.
-
-El bootstrap autenticado descrito aquí requiere una autoridad externa anti-rollback. No debe introducirse una ancla ficticia en `VerifiedLocalConsistencyRecoveryState` ni degradarse silenciosamente a perfil local cuando el proveedor externo no está disponible.
-
-La decisión ME-03K-C de postergar la implementación real del Trust Anchor hasta la etapa final sigue vigente. Este diseño no revoca esa decisión ni autoriza desplegar ahora un proveedor improvisado.
-
-## 8. Criterios de aceptación antes de escribir código
-
-- [ ] Existe un proveedor de autorización de propietario independiente y verificable.
-- [ ] Existe custodia de claves y política de confianza aprobadas.
-- [ ] Existe un proveedor de ancla externo con inicialización create-if-absent y CAS monotónico.
-- [ ] Se documenta dónde reside el ancla y por qué no comparte el dominio de rollback de SQLite.
-- [ ] Se define el formato canónico/versionado del descriptor y commitment de génesis.
-- [ ] Se define la reconciliación de fallos en cada frontera externa/local.
-- [ ] Se especifica el evento y las reglas del reducer sin permitir reinicialización.
-- [ ] Se especifican pruebas de replay, conflicto, backup antiguo, pérdida del proveedor, commit ambiguo, concurrencia y reinicio.
-- [ ] El gate se mantiene cerrado ante toda incertidumbre.
-
-Hasta que estos criterios estén satisfechos, ME-D4O-B (admisión durable), ME-D4O-C (egress durable), ME-D4O-D (lifecycle) y ME-D4O-E (composición completa) no deben habilitar operaciones protegidas.
+Ninguna fase puede afirmar anti-rollback externo ni permitir restauraciones de memoria no reconciliadas.
 
 ## 9. Estado
 
-ME-D4O-A queda definido a nivel de contrato y protocolo. **No se añadió código, evento, migración, proveedor de ancla, proveedor de autorización ni apertura del gate.** La siguiente tarea segura es resolver y aprobar las dos dependencias externas de confianza, o mantener el bootstrap bloqueado hasta la etapa del proyecto en que se implementará el perfil anclado.
+ME-D4O-A queda corregido para reflejar los perfiles aprobados. No se añadió código, evento, migración, proveedor externo, autorización local concreta ni apertura del gate. El baseline LOCAL puede continuar por etapas; la habilitación operativa queda condicionada a su bootstrap autenticado, atomicidad y validación. El perfil ANCHORED permanece postergado.
