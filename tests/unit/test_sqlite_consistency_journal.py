@@ -1,5 +1,6 @@
 """Integration tests for the SQLite K01 append identity contract."""
 from dataclasses import replace
+import sqlite3
 from datetime import timedelta
 import tempfile
 import unittest
@@ -704,6 +705,74 @@ class SQLiteConsistencyJournalTests(unittest.TestCase):
             created_at=NOW,
         )
         return head_commitment, checkpoint
+
+    def test_commit_checkpoint_in_uses_callers_unit_of_work(self):
+        head_commitment, checkpoint = self._checkpoint_request_at_current_head()
+
+        with self.database.unit_of_work() as unit_of_work:
+            result = self.journal.commit_checkpoint_in(
+                unit_of_work, self.position(1), head_commitment, checkpoint
+            )
+            self.assertIs(result.status, CheckpointCommitStatus.COMMITTED)
+
+        with self.database.connection() as connection:
+            domain = connection.execute(
+                "SELECT head_sequence FROM consistency_domains WHERE domain_id='domain-a'"
+            ).fetchone()
+            stored = connection.execute(
+                "SELECT COUNT(*) FROM checkpoints WHERE checkpoint_id=?",
+                (CHECKPOINT_ID,),
+            ).fetchone()[0]
+        self.assertEqual(domain["head_sequence"], 2)
+        self.assertEqual(stored, 1)
+
+    def test_commit_checkpoint_in_failure_rolls_back_composed_mutations(self):
+        head_commitment, checkpoint = self._checkpoint_request_at_current_head()
+        with self.database.write_transaction() as connection:
+            connection.execute("CREATE TABLE checkpoint_uow_probe (value TEXT NOT NULL)")
+            connection.execute(
+                """
+                CREATE TRIGGER reject_checkpoint_marker
+                BEFORE INSERT ON journal_entries
+                WHEN NEW.record_kind='checkpoint_committed'
+                BEGIN
+                    SELECT RAISE(ABORT, 'injected checkpoint marker failure');
+                END
+                """
+            )
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            with self.database.unit_of_work() as unit_of_work:
+                connection = unit_of_work._connection_for(self.database)
+                connection.execute(
+                    "INSERT INTO checkpoint_uow_probe(value) VALUES ('must-rollback')"
+                )
+                self.journal.commit_checkpoint_in(
+                    unit_of_work, self.position(1), head_commitment, checkpoint
+                )
+
+        with self.database.connection() as connection:
+            probe_count = connection.execute(
+                "SELECT COUNT(*) FROM checkpoint_uow_probe"
+            ).fetchone()[0]
+            checkpoint_count = connection.execute(
+                "SELECT COUNT(*) FROM checkpoints"
+            ).fetchone()[0]
+            marker_count = connection.execute(
+                "SELECT COUNT(*) FROM journal_entries WHERE record_kind='checkpoint_committed'"
+            ).fetchone()[0]
+            operation_count = connection.execute(
+                "SELECT COUNT(*) FROM journal_operations WHERE append_id=?",
+                (f"checkpoint-append:{CHECKPOINT_ID}",),
+            ).fetchone()[0]
+            head = connection.execute(
+                "SELECT head_sequence FROM consistency_domains WHERE domain_id='domain-a'"
+            ).fetchone()[0]
+        self.assertEqual(probe_count, 0)
+        self.assertEqual(checkpoint_count, 0)
+        self.assertEqual(marker_count, 0)
+        self.assertEqual(operation_count, 0)
+        self.assertEqual(head, 1)
 
     def test_commit_checkpoint_atomically_persists_root_marker_and_head(self):
         head_commitment, checkpoint = self._checkpoint_request_at_current_head()
