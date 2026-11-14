@@ -13,12 +13,7 @@ from atlas.adapters.sqlite.consistency_journal import SQLiteConsistencyJournal
 from atlas.adapters.sqlite.database import SQLiteDatabase
 from atlas.adapters.sqlite.migrations import SQLITE_MIGRATIONS
 from atlas.memory.checkpoint_coordinator import LocalCheckpointCoordinator
-from atlas.memory.journal import (
-    CheckpointCommitStatus,
-    ConsistencyPosition,
-    ConsistencyRecordKind,
-    ConsistencyTransition,
-)
+from atlas.memory.journal import CheckpointCommitStatus, ConsistencyPosition
 from atlas.memory.local_keys import ActiveLocalConsistencyKey
 from atlas.memory.local_recovery_verifier import LocalConsistencyRecoveryVerifier
 from atlas.memory.local_trust_policy import (
