@@ -92,6 +92,14 @@ class OllamaStreamingTests(unittest.TestCase):
         with self.assertRaises(OllamaResponseError):
             provider.generate_stream(self._llm_request(), lambda _token: None)
 
+    def test_provider_rejects_stream_without_final_event(self):
+        transport = FakeStreamingTransport([
+            {"message": {"role": "assistant", "content": "Respuesta parcial"}}
+        ])
+        provider = OllamaProvider(transport=transport)
+        with self.assertRaises(OllamaResponseError):
+            provider.generate_stream(self._llm_request(), lambda _token: None)
+
     def test_generator_and_service_preserve_streamed_response(self):
         provider = FakeStreamingProvider()
         generator = OllamaResponseGenerator(provider)
