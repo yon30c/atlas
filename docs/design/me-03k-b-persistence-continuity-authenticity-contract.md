@@ -129,14 +129,14 @@ Debe vincular:
 - dominio, época y secuencia exacta;
 - referencia inmutable de la proyección base;
 - compromiso autenticado de esa proyección;
-- referencia/posición del ancla externa;
+- referencia/posición del Trust Anchor externo, cuando se utilice el perfil anclado;
 - versión de esquema/reducer;
 - tombstones e idempotency records aún vigentes;
 - inventario de operaciones, admisiones, endpoints, cierres e invalidaciones no terminales.
 
 La compactación solo puede descartar entradas cuyo efecto esté representado íntegramente en un checkpoint verificado y cuya eliminación no destruya evidencia necesaria para idempotencia, replay, auditoría, recuperación o Forget.
 
-Un checkpoint sin baseline autenticado, sin ancla vigente o sin proyección verificable produce `UNKNOWN` y mantiene el gate cerrado. El reducer puro no autentica checkpoints; esta responsabilidad pertenece al adaptador/verificador antes de entregar `ConsistencyRecoveryState` al reducer.
+Un checkpoint sin baseline autenticado o sin proyección verificable produce `UNKNOWN` y mantiene el gate cerrado. En perfil anclado también requiere un ancla vigente; en perfil local requiere la continuidad interna verificable disponible y debe declarar la ausencia de anti-rollback externo. El reducer puro no autentica checkpoints; esta responsabilidad pertenece al adaptador/verificador antes de entregar el estado verificado correspondiente al reducer.
 
 ## 7. Recibos autenticados
 
@@ -199,7 +199,7 @@ Además de append y recuperación, el adaptador debe permitir resolver resultado
 
 1. Buscar operación por dominio/época/operation_id.
 2. Resolver idempotency key contra solicitud canónica esperada.
-3. Obtener posición/época/ancla actuales autenticadas.
+3. Obtener posición/época actuales autenticadas y, únicamente en perfil anclado, el estado del Trust Anchor.
 4. Cargar proyección y entradas/recibos correlacionados de una admisión.
 5. Obtener estado exacto del cierre de recuperación y su recibo global.
 6. Distinguir ausencia demostrada de indisponibilidad/estado desconocido.
@@ -219,7 +219,8 @@ Las consultas no deben devolver contenido de memoria. Sus respuestas deben ser c
 | Recibo inválido, revocado o replayado | Rechazo; no avanzar estado |
 | Inventario incompleto | PENDING/BLOCKED; no suprimir/reabrir prematuramente |
 | Resultado ambiguo de cierre/apertura | Gate cerrado hasta prueba exacta |
-| Pérdida de ancla o continuidad | Dominio bloqueado; recuperación manual/procedimiento explícito |
+| Pérdida de continuidad local verificable | Dominio bloqueado; recuperación manual/procedimiento explícito |
+| Pérdida o indisponibilidad del Trust Anchor en perfil anclado | Dominio bloqueado; no degradar a perfil local |
 
 ## 11. Requisitos de prueba obligatorios
 
@@ -229,7 +230,7 @@ El adaptador deberá demostrar con pruebas K01–K07 y fallos inyectados:
 - replay de clave idempotente con misma solicitud y conflicto con solicitud distinta;
 - timeout después de commit y consulta exacta del resultado;
 - autenticidad de cadena, detección de alteración/reordenamiento y truncamiento detectable;
-- restauración de checkpoint antiguo frente a ancla externa más nueva (solo conformidad del perfil anclado, postergada);
+- restauración de checkpoint antiguo frente a ancla externa más nueva (solo perfil anclado, postergado);
 - revocación/rotación de claves y validación de recibos históricos;
 - duplicación/replay de recibos y binding incorrecto;
 - caída en cada frontera de cierre, fencing, finalización y apertura;
@@ -258,7 +259,7 @@ ME-03K-B se considera contractualmente cerrado cuando:
 
 1. Los puertos de journal y autoridad representan todas las operaciones de consulta/ambigüedad descritas.
 2. En perfil local, el adaptador valida autenticidad disponible, continuidad interna y estructura antes de entregar estado al reducer, declarando explícitamente que no demuestra anti-rollback externo. En perfil anclado, valida además la continuidad contra el Trust Anchor vigente.
-3. El gate no puede abrirse por una consulta eventual ni por un recibo no verificado.
+3. El gate no puede abrirse por una consulta eventual ni por un recibo no verificado; el estado de recuperación debe indicar el perfil local o anclado.
 4. Checkpoints, claves idempotentes, tombstones y recibos tienen ciclo de vida durable definido.
 5. La misma autoridad serializa lecturas, Forget, invalidación, egress y recuperación.
 6. K01–K07 pueden ejecutarse sin cambiar las expectativas por proveedor.
