@@ -8,7 +8,7 @@ from atlas.authorization.identity_binding import (
     AtlasIdentityBindingAdapter,
     IdentitySubjectBindingPort,
 )
-from atlas.authorization.memory_metadata_resolver import MemoryMetadataResolver
+from atlas.memory.metadata_resolver import MemoryMetadataResolver
 from atlas.authorization.models import (
     AuthorizationDecision,
     AuthorizationRequest,
