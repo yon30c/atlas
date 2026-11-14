@@ -32,6 +32,7 @@ from atlas.memory.recovery import (
     execute_recovery_fencing,
 )
 from atlas.ports.consistency_journal import ConsistencyJournalPort
+from atlas.ports.recovery_gate import RecoveryGatePort
 
 
 class RecoveryCoordinatorStatus(str, Enum):
@@ -55,6 +56,7 @@ class RecoveryJournalCoordinator:
     def __init__(
         self,
         journal: ConsistencyJournalPort,
+        recovery_gate: RecoveryGatePort,
         fencer: object,
         verifier: object,
         *,
@@ -70,7 +72,10 @@ class RecoveryJournalCoordinator:
             raise ContractError("id_factory y clock deben ser invocables")
         if not isinstance(domain_id, str) or not domain_id.strip():
             raise ContractError("domain_id debe ser no vacío")
+        if not callable(getattr(recovery_gate, "close_recovery_gate", None)):
+            raise ContractError("recovery_gate debe implementar RecoveryGatePort")
         self._journal = journal
+        self._recovery_gate = recovery_gate
         self._fencer = fencer
         self._verifier = verifier
         self._domain_id = domain_id
@@ -93,6 +98,30 @@ class RecoveryJournalCoordinator:
         )
         try:
             commit = self._journal.append_transition(expected, transition)
+            if (
+                commit is None
+                or commit.record_id != transition.record_id
+                or commit.position.consistency_domain_id != state.domain_id
+                or commit.position.authority_epoch != state.authority_epoch
+                or commit.position.sequence != state.head_sequence + 1
+            ):
+                return False
+            loaded = self._load()
+            return bool(
+                loaded is not None
+                and loaded[0].head_sequence == commit.position.sequence
+            )
+        except Exception:
+            return False
+
+    def _close_gate(
+        self, state: object, transition: ConsistencyTransition
+    ) -> bool:
+        expected = ConsistencyPosition(
+            state.domain_id, state.authority_epoch, state.head_sequence
+        )
+        try:
+            commit = self._recovery_gate.close_recovery_gate(expected, transition)
             if (
                 commit is None
                 or commit.record_id != transition.record_id
@@ -171,7 +200,7 @@ class RecoveryJournalCoordinator:
             route_ids=routes,
             affected_admission_ids=affected,
         )
-        if transition is None or not self._append(state, transition):
+        if transition is None or not self._close_gate(state, transition):
             return None
         return plan.operation_id, generation
 
