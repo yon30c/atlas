@@ -13,7 +13,7 @@ La rama `feature/atlas-functional-f1` incorpora una primera experiencia conversa
 - Contexto explícito por solicitud y marcas de tiempo UTC.
 - Inicio mediante `python -m atlas` o el comando `atlas` tras instalar el paquete.
 
-Esta etapa **todavía no conecta un LLM, memoria, herramientas, agentes ni Atlas Broker**. La respuesta actual es deliberadamente informativa y declara esa limitación; no simula comprensión generativa ni ejecución de tareas.
+Los contratos neutrales para proveedores de modelos (`LLMProvider`, `LLMRequest`, `LLMResponse` y `LLMMessage`) ya están definidos en `atlas.ports.llm`. No dependen de un SDK ni de un proveedor concreto y no conceden capacidad para ejecutar herramientas.\n\nEsta etapa **todavía no conecta un LLM, memoria, herramientas, agentes ni Atlas Broker**. La respuesta actual es deliberadamente informativa y declara esa limitación; no simula comprensión generativa ni ejecución de tareas.
 
 ## Ejecución local
 
@@ -42,4 +42,4 @@ PYTHONPATH=src python -m unittest \
 
 ## Próximas etapas
 
-Avanzar incrementalmente: validar la composición local, definir el proveedor de modelo detrás de una interfaz neutral y, posteriormente, integrar memoria y herramientas bajo autorización explícita. Ninguna de estas capacidades futuras debe considerarse implementada hasta contar con código y pruebas verificadas.
+Avanzar incrementalmente: adaptar un proveedor local (primero Ollama) al contrato neutral, probarlo mediante transporte inyectable y, posteriormente, integrar memoria y herramientas bajo autorización explícita. Ninguna de estas capacidades futuras debe considerarse implementada hasta contar con código y pruebas verificadas.
