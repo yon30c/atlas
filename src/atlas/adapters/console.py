@@ -65,11 +65,11 @@ def run_console(
             response = streaming_responder(content, emit)
             if response.kind is AssistantResponseKind.ERROR:
                 if streamed:
-                    write_fn("\\nAtlas> " + response.content + "\\n")
+                    write_fn("\nAtlas> " + response.content + "\n")
                 else:
-                    write_fn(response.content + "\\n")
+                    write_fn(response.content + "\n")
             else:
-                write_fn("\\n")
+                write_fn("\n")
         else:
             response = runtime.respond(content)
             output_fn(f"Atlas> {response.content}")
