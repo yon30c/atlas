@@ -34,6 +34,13 @@ class ConsistencyTrustContractTests(unittest.TestCase):
             anchor_revision=9,
             issued_at=self.now,
         )
+        self.checkpoint = ConsistencyCheckpoint(
+            checkpoint_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074501",
+            position=ConsistencyPosition("atlas-main", 4, 3),
+            state_reference="state-reference",
+            integrity_reference="integrity-reference",
+            created_at=self.now,
+        )
         self.envelope = AuthenticatedConsistencyEnvelope(
             object_kind="checkpoint",
             envelope_version=1,
@@ -88,6 +95,10 @@ class ConsistencyTrustContractTests(unittest.TestCase):
                 expected_domain_id="atlas-main",
                 expected_authority_epoch=4,
                 expected_position=ConsistencyPosition("atlas-main", 4, 2),
+                checkpoint=replace(
+                    self.checkpoint,
+                    position=ConsistencyPosition("atlas-main", 4, 2),
+                ),
                 anchor=self.anchor,
                 envelope=self.envelope,
                 trust_policy_version="policy-v2",
@@ -101,6 +112,7 @@ class ConsistencyTrustContractTests(unittest.TestCase):
                 expected_domain_id="atlas-main",
                 expected_authority_epoch=4,
                 expected_position=ConsistencyPosition("atlas-main", 4, 3),
+                checkpoint=self.checkpoint,
                 anchor=self.anchor,
                 envelope=wrong,
                 trust_policy_version="policy-v2",
