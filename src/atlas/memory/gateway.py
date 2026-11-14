@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import secrets
 from threading import RLock
 
-from atlas.authorization.models import AuthorizationDecision, AuthorizationResult
+from atlas.memory.authorization import MemoryMemoryAuthorizationDecision, MemoryMemoryAuthorizationResult
 from atlas.memory.context import MemoryRequestContext
 from atlas.memory.consistency import (
     AuthorizationSnapshot,
@@ -129,8 +129,8 @@ class MemoryGatewayService:
                 context, memory_id, now, version_id
             )
             if (
-                not isinstance(result, AuthorizationResult)
-                or result.decision is not AuthorizationDecision.ALLOW
+                not isinstance(result, MemoryAuthorizationResult)
+                or result.decision is not MemoryAuthorizationDecision.ALLOW
             ):
                 return None
 
