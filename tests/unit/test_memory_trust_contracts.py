@@ -8,6 +8,7 @@ from atlas.memory.journal import (
     ConsistencyPosition,
     ConsistencyRecoveryState,
 )
+from atlas.memory.receipt_verification import TerminalReceiptKind, TerminalReceiptVerificationRequest
 from atlas.memory.trust import (
     AuthenticatedConsistencyEnvelope,
     ConsistencyCheckpointVerificationRequest,
@@ -208,6 +209,7 @@ class ConsistencyTrustContractTests(unittest.TestCase):
     def test_expired_anchor_is_rejected(self):
         expired = replace(
             self.anchor,
+            issued_at=datetime(2026, 11, 13, 10, 0, tzinfo=timezone.utc),
             valid_until=datetime(2026, 11, 13, 11, 59, tzinfo=timezone.utc),
         )
         with self.assertRaises(ContractError):
@@ -320,15 +322,25 @@ class ConsistencyTrustContractTests(unittest.TestCase):
             )
 
     def test_receipt_trust_context_requires_utc_time_and_exact_purpose(self):
-        context = ReceiptTrustContext(
+        request = TerminalReceiptVerificationRequest(
             consistency_domain_id="atlas-main",
             authority_epoch=4,
+            operation_id="read:admission-1",
+            admission_id="admission-1",
+            receipt_id="receipt-1",
+            kind=TerminalReceiptKind.ADMISSION_CANCELLED,
+            generation=4,
+        )
+        context = ReceiptTrustContext(
+            request=request,
             canonical_request_reference="request-canonical-17",
             trust_policy_version="policy-v2",
             verification_time=self.now,
             purpose="terminal-admission-reconciliation",
         )
         self.assertEqual(context.purpose, "terminal-admission-reconciliation")
+        self.assertTrue(context.binds(request))
+        self.assertFalse(context.binds(replace(request, receipt_id="receipt-2")))
 
 
 if __name__ == "__main__":
