@@ -123,6 +123,47 @@ def verify_recovery_chain(state: Any, key_port: Any, trust_policy_version: str) 
 
 
 
+def verify_recovery_chain_with_policy(state: Any, key_port: Any, trust_policy: Any) -> bool:
+    """Verify the local chain against the independent server-configured allowlist.
+
+    The policy is deliberately supplied by trusted composition, never restored
+    from the recovery state. This adds issuer, role, key-reference, schema,
+    reducer, envelope and canonicalization allowlists to cryptographic checks.
+    It still makes no external anti-rollback or inventory-completeness claim.
+    """
+    from atlas.memory.local_trust_policy import LocalConsistencyTrustPolicy
+
+    if not isinstance(trust_policy, LocalConsistencyTrustPolicy):
+        return False
+    if not isinstance(state, __import__(
+        "atlas.memory.journal", fromlist=["ConsistencyRecoveryState"]
+    ).ConsistencyRecoveryState):
+        return False
+    if (
+        state.domain_id != trust_policy.consistency_domain_id
+        or not trust_policy.supports_canonicalization(CANONICALIZATION_VERSION)
+    ):
+        return False
+
+    records = []
+    if state.checkpoint is not None:
+        records.append(("checkpoint", state.checkpoint))
+    records.extend(("journal_entry", entry) for entry in state.entries)
+
+    if not records:
+        return False
+    for object_kind, record in records:
+        envelope = record.envelope
+        if (
+            envelope is None
+            or envelope.object_kind != object_kind
+            or not trust_policy.authorizes_envelope(envelope)
+        ):
+            return False
+    return verify_recovery_chain(state, key_port, trust_policy.policy_version)
+
+
+
 def _validate_key(key: bytes) -> None:
     if not isinstance(key, bytes) or len(key) != KEY_LENGTH_BYTES:
         raise ContractError("la clave HMAC local debe contener exactamente 32 bytes")
