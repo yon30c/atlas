@@ -159,3 +159,13 @@ La unidad está ligada a la instancia exacta de `SQLiteDatabase`, solo permanece
 **Límite de esta fase:** `SQLiteConsistencyJournal` todavía utiliza `write_transaction()` por su cuenta. No existe aún un método journal que acepte esta unidad de trabajo, y la autoridad del Recovery Gate no está implementada. Por tanto, no es posible realizar todavía una operación atómica compuesta entre gate y journal. La API nueva no debe utilizarse para simular esa integración.
 
 La implementación se añadió, pero no se ejecutaron pruebas ni build. Los tests unitarios nuevos cubren commit, rollback, ownership, anidamiento y compatibilidad; quedan pendientes de ejecución por el propietario.
+
+
+## ME-D4L — append del journal dentro de SQLiteUnitOfWork
+
+- `SQLiteConsistencyJournal.append_transition_in(unit_of_work, ...)` reutiliza la conexión activa de una unidad de trabajo propiedad de la misma instancia `SQLiteDatabase`.
+- La operación interna no abre, confirma ni revierte transacciones. Conserva la validación de dominio/época, idempotencia, canonicalización, firma del envelope, persistencia de entrada/operación y CAS del head.
+- Los fallos inesperados de firma o persistencia se propagan desde la operación interna para que el propietario de la unidad de trabajo revierta todas las mutaciones compuestas.
+- `append_transition(...)` conserva su firma y contrato anterior: abre su propia unidad de trabajo y convierte fallos ordinarios en `None`.
+- La integración cubre únicamente `append_transition`. `create_local_domain`, `commit_checkpoint` y otras operaciones todavía administran sus propias transacciones; no deben combinarse suponiendo atomicidad con una UoW externa.
+- Se añadieron pruebas para reutilización de UoW y rollback de una mutación acompañante ante fallo del signer. **No ejecutadas**.
