@@ -28,6 +28,8 @@ from unit.test_memory_unresolved_admission_recovery import (
     make_recovery_journal,
 )
 
+from tests.fakes.receipt_trust import FakeReceiptTrustContextFactory
+
 NOW = datetime(2026, 11, 13, 19, 30, tzinfo=timezone.utc)
 
 
@@ -82,6 +84,11 @@ class CompletionVerifier:
             verified_at=NOW,
             receipt=receipt,
         )
+
+    def verify_recovery_completion_with_context(self, request, receipt, trust_context):
+        if not trust_context.binds_recovery_completion(request, receipt):
+            return None
+        return self.verify_recovery_completion(request, receipt)
 
 
 class AtomicRecoveryGate(CoordinatorRecoveryGateFake):
@@ -147,6 +154,7 @@ class RecoveryCompletionCoordinatorTests(unittest.TestCase):
         admission_finalizer = AdmissionFinalizer()
         admission_coordinator = RecoveryAdmissionFinalizationCoordinator(
             self.journal, admission_finalizer, self.terminal_verifier,
+            trust_context_factory=FakeReceiptTrustContextFactory(),
             domain_id="consistency-domain",
             id_factory=lambda: next(ids), clock=lambda: NOW,
         )
@@ -162,6 +170,7 @@ class RecoveryCompletionCoordinatorTests(unittest.TestCase):
             self.completion_finalizer,
             self.completion_verifier,
             self.terminal_verifier,
+            trust_context_factory=FakeReceiptTrustContextFactory(),
             domain_id="consistency-domain",
             id_factory=lambda: next(ids),
             clock=lambda: NOW,
