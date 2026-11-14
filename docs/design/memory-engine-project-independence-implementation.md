@@ -169,3 +169,39 @@ Por instrucción del propietario, no se ejecutaron pruebas ni builds durante ME-
 - Se actualizó test_memory_recovery_completion.py para inyectar explícitamente el puerto verified_recovery y el contexto de confianza requeridos desde ME-D4G.
 - Limitación real: el repositorio todavía no contiene una implementación concreta de ProtectedMemoryRecoveryAuthorityPort enlazada a SQLite. Por tanto, ME-D4H proporciona la raíz contractual y falla cerrado ante una autoridad no vinculada; no declara que exista ya una autoridad SQLite operativa ni activa el runtime.
 - No se ejecutaron pruebas ni build.
+
+
+## ME-D4I — inspección de frontera transaccional SQLite
+
+**Estado: inspección completada; diseño de implementación pendiente. No se implementó la autoridad concreta.**
+
+### Evidencia confirmada en la rama
+
+- `SQLiteDatabase.write_transaction()` abre una conexión nueva por operación, aplica `BEGIN IMMEDIATE`, confirma al salir y revierte ante excepción. La conexión configura `foreign_keys=ON`, `synchronous=FULL`, `busy_timeout` y el archivo utiliza WAL.
+- `CORE_SCHEMA_V1` ya incluye en `consistency_domains` los campos `recovery_gate_state` (por defecto `closed`), `active_recovery_operation_id`, `active_recovery_generation` y `recovery_receipt_id`. El esquema tiene por tanto espacio para persistir el estado del gate; no demuestra que exista una autoridad que lo gobierne.
+- `SQLiteConsistencyJournal.append_transition()` realiza su propia llamada a `self._database.write_transaction()`. `commit_checkpoint()` también abre su propia transacción. Las operaciones de journal no reciben una conexión/transacción externa.
+- En el código de `SQLiteConsistencyJournal` inspeccionado no hay referencias operativas a `recovery_gate_state`, `active_recovery_operation_id`, `active_recovery_generation` ni `recovery_receipt_id`. El journal persiste transiciones y compromisos, pero no sincroniza el estado durable del gate.
+- `ProtectedMemoryRecoveryAuthorityPort` sigue siendo un Protocol compuesto por `ProtectedMemoryConsistencyPort` y `RecoveryGatePort`. No se encontró una implementación concreta SQLite de ese protocolo.
+- ME-D4H ya exige identidad de la misma instancia de journal en la raíz de composición, pero esa comprobación de identidad no comparte conexiones ni demuestra atomicidad.
+
+### Conclusión
+
+SQLite proporciona una primitiva local razonable para serializar escritores en el servidor único aprobado. Sin embargo, la arquitectura actual no permite que una implementación externa al journal actualice el gate y llame después a `append_transition()` como si fueran una sola operación: serían dos transacciones independientes, con una ventana de inconsistencia y posibilidad de resultado ambiguo.
+
+Por tanto, **no es seguro implementar la autoridad mediante composición de llamadas actuales**. No se debe utilizar un lock de proceso como sustituto de la transacción SQLite: no cubriría reinicios ni otros procesos.
+
+### Diseño requerido antes de implementar
+
+1. Introducir una frontera transaccional explícita compartida, por ejemplo una unidad de trabajo SQLite que entregue una conexión activa bajo `BEGIN IMMEDIATE`. La autoridad y el journal deben operar sobre esa misma conexión y transacción.
+2. Separar métodos internos que acepten una conexión ya abierta (por ejemplo, append dentro de transacción) de métodos públicos que abren su propia unidad de trabajo. Evitar transacciones anidadas o commits internos.
+3. En una sola transacción, validar dominio/época/posición e idempotencia, comprobar el gate, aplicar la mutación de autoridad y persistir la transición autenticada, la operación/idempotency record y el nuevo head. Si una parte falla, revertir todo.
+4. Persistir y reconstruir el estado del gate desde la misma fuente autoritativa. Los campos de gate no pueden convertirse en una segunda verdad separada del journal: las invariantes entre estado materializado y transición deben verificarse en cada apertura/reinicio.
+5. Definir resolución exacta de resultado ambiguo por `operation_id`, `idempotency_key` y solicitud canónica, bajo la misma autoridad transaccional. `UNKNOWN` o conflicto mantiene el gate cerrado.
+6. Diseñar por separado el límite de egress. Una transacción SQLite no puede incluir de forma atómica la aceptación irrevocable de un transporte remoto. La solución deberá demostrar fencing e idempotencia en el receptor o una estrategia durable equivalente; no basta con hacer commit y luego enviar.
+7. Añadir pruebas de concurrencia multiproceso y fallos inyectados para admisión vs cierre, egress vs invalidación/Forget, cierre vs reinicio, y reconciliación/apertura vs reintento. Estas pruebas quedan pendientes y no se ejecutaron en esta fase.
+
+### Próximo paso técnico
+
+Diseñar la API concreta de unidad de trabajo y el refactor mínimo de `SQLiteConsistencyJournal` para que sus operaciones internas puedan reutilizar una conexión transaccional sin perder firma, canonicalización, CAS, idempotencia ni semántica de errores. Solo después de revisar ese diseño se implementará la autoridad SQLite. No se modifica todavía el esquema, no se añaden migraciones y no se activa ningún runtime.
+
+**Validación:** no se ejecutaron pruebas ni build, de acuerdo con la instrucción vigente del propietario.
