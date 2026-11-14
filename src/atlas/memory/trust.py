@@ -128,6 +128,11 @@ class TrustAnchorAdvanceRequest:
         if new.authority_epoch == old.authority_epoch:
             if new.maximum_committed_sequence < old.maximum_committed_sequence:
                 raise ContractError("la secuencia del ancla no puede retroceder")
+            if (
+                new.maximum_committed_sequence == old.maximum_committed_sequence
+                and new.authenticated_state_commitment != old.authenticated_state_commitment
+            ):
+                raise ContractError("no puede cambiar el commitment sin avanzar secuencia")
             if self.epoch_handoff_reference is not None:
                 raise ContractError("handoff no aplica dentro de la misma época")
         elif new.authority_epoch == old.authority_epoch + 1:
@@ -241,7 +246,7 @@ class CheckpointVerificationStatus(str, Enum):
 class VerifiedConsistencyCheckpoint:
     checkpoint: ConsistencyCheckpoint
     anchor: ConsistencyTrustAnchor
-    authenticated_state_commitment: str
+    checkpoint_commitment: str
     verification_id: str
     verifier_id: str
     trust_policy_version: str
@@ -253,7 +258,7 @@ class VerifiedConsistencyCheckpoint:
         if not isinstance(self.anchor, ConsistencyTrustAnchor):
             raise ContractError("anchor debe ser ConsistencyTrustAnchor")
         for field in (
-            "authenticated_state_commitment", "verification_id",
+            "checkpoint_commitment", "verification_id",
             "verifier_id", "trust_policy_version",
         ):
             _required(getattr(self, field), field)
