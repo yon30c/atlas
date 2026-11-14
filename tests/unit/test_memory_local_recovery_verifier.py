@@ -211,6 +211,25 @@ class LocalConsistencyRecoveryVerifierTests(unittest.TestCase):
         result = self.verifier.verify_recovery_state(state, self.context)
         self.assertIs(result.status, ConsistencyRecoveryVerificationStatus.UNAVAILABLE)
 
+    def test_reports_missing_historical_key_as_unavailable(self):
+        class MissingKey:
+            def load_key(inner_self, key_reference):
+                return None
+
+        self.verifier = LocalConsistencyRecoveryVerifier(
+            trust_policy=self.policy,
+            key_port=MissingKey(),
+            inventory_verifier=self.inventory,
+            verifier_id="local-recovery-verifier",
+        )
+        result = self.verifier.verify_recovery_state(
+            build_recovery_state(), self.context
+        )
+        self.assertIs(
+            result.status,
+            ConsistencyRecoveryVerificationStatus.UNAVAILABLE,
+        )
+
     def test_rejects_invalid_chain_commitment(self):
         state = build_recovery_state()
         result = self.verifier.verify_recovery_state(
