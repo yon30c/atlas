@@ -6,6 +6,7 @@ from atlas.authorization.models import AuthorizationDecision, AuthorizationResul
 from atlas.core.context import OperationContext
 from atlas.core.enums import DelegationMode
 from atlas.core.identity import Identity, IdentityKind, IdentityStatus
+from atlas.memory.authorization import MemoryAuthorizationDecision, MemoryAuthorizationResult
 from atlas.memory.context import MemoryRequestContext
 from atlas.memory.models import MemoryId, MemoryVersionId
 
@@ -22,8 +23,8 @@ class AtlasMemoryAuthorizationAdapter:
         self._service = service
 
     @staticmethod
-    def _deny() -> AuthorizationResult:
-        return AuthorizationResult(AuthorizationDecision.DENY)
+    def _deny() -> MemoryAuthorizationResult:
+        return MemoryAuthorizationResult(MemoryAuthorizationDecision.DENY)
 
     def authorize_read(
         self,
@@ -31,7 +32,7 @@ class AtlasMemoryAuthorizationAdapter:
         memory_id: MemoryId,
         now: datetime,
         version_id: MemoryVersionId | None = None,
-    ) -> AuthorizationResult:
+    ) -> MemoryAuthorizationResult:
         if not isinstance(context, MemoryRequestContext):
             return self._deny()
         try:
@@ -61,6 +62,11 @@ class AtlasMemoryAuthorizationAdapter:
             )
         except (TypeError, ValueError):
             return self._deny()
-        return self._service.authorize_read(
+        result = self._service.authorize_read(
             atlas_context, memory_id, now, version_id
         )
+        if result.decision is AuthorizationDecision.ALLOW:
+            return MemoryAuthorizationResult(
+                MemoryAuthorizationDecision.ALLOW, result.snapshot
+            )
+        return self._deny()
