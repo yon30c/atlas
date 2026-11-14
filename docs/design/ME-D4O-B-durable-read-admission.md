@@ -112,7 +112,41 @@ Las pruebas no se ejecutan en esta etapa; se reservarán para la validación aco
 - Composición completa `ProtectedMemoryRecoveryAuthorityPort`.
 - Activación de runtime protegido, despliegue, migraciones o cambios de servicio.
 
-## 9. Criterio de salida
+## 10. Inspección de implementación y dependencias faltantes
+
+La inspección de código en la rama confirmó:
+
+- `SQLiteConsistencyJournal.append_transition_in(...)` ya permite insertar `READ_ADMITTED v2` dentro de una UoW externa.
+- `SQLiteUnitOfWork` ya proporciona `BEGIN IMMEDIATE`, ownership exacto y rollback compuesto.
+- `LocalConsistencyRecoveryVerifier` produce `VerifiedLocalConsistencyRecoveryState` con proyección semántica, pero el dominio vacío sin evento de génesis no puede producir una proyección VERIFIED operativa.
+- `ConsistencyJournalReducer` rechaza READ_ADMITTED durante recuperación activa, después de Forget aplicable y antes de reconciliar invalidaciones aplicables.
+- `MemoryMetadataResolver` resuelve memoria, versión, proyecto y entorno exactos; `IdentitySubjectBindingPort` resuelve binding autenticado; CAM obtiene Grants desde `GrantRepository`.
+- No existe todavía un puerto de registro confiable de rutas de entrega ni una frontera común que permita a la autoridad comprobar que todos los IDs de ruta están registrados.
+- No existe un contrato de lectura/revalidación de revisiones que garantice orden coherente entre los cambios de metadatos/identidad/Grant y sus eventos de invalidación en el journal.
+- `LocalSQLiteRecoveryGateAdapter` es gate-only; no hay autoridad SQLite que implemente actualmente `admit_read`.
+
+### Consecuencia de diseño
+
+No se debe añadir una implementación que acepte como confiables las rutas del caller, que compare revisiones solo con el snapshot CAM original o que lea el estado del journal sin verificación independiente.
+
+Antes del adaptador SQLite de admisión se deben definir e implementar dos fronteras confiables:
+
+1. **Route Registry Port:** resolución/validación de todos los route IDs contra configuración confiable, con rechazo total ante IDs desconocidos o registro no disponible.
+2. **Revision Validation Port:** validación actual y coherente de las revisiones MEMORY, MEMORY_VERSION, IDENTITY y, para PROJECT, PROJECT, ENVIRONMENT y GRANT. Debe definir cómo se serializa el cambio de revisión con la invalidación durable; una consulta puntual no basta para eliminar la carrera entre validación y append.
+
+La validación de revisiones no debe asumir que una lectura de varios repositorios independientes es atómica. Si los authorities no pueden compartir transacción, el contrato debe especificar una secuencia monotónica de invalidación/fencing que haga imposible emitir con una revisión obsoleta.
+
+### Orden actualizado de implementación
+
+1. Definir contratos neutrales y resultados fail-closed para Route Registry y Revision Validation.
+2. Implementar adaptadores Atlas sobre las fuentes autoritativas existentes y documentar sus garantías de orden.
+3. Implementar el coordinador SQLite de admisión: verified projection → BEGIN IMMEDIATE → head/CAS exactos → validaciones → idempotencia → append en UoW.
+4. Componerlo con la autoridad única y el Recovery Gate sin declarar aún completa la autoridad de egress/Forget.
+5. Mantener runtime protegido deshabilitado hasta bootstrap LOCAL, composición total y pruebas de servidor.
+
+No se ejecutan pruebas/build/CI en esta etapa, según lo acordado.
+
+## 11. Criterio de salida
 
 D4O-B solo se considera implementado cuando la admisión durable está ligada al snapshot CAM exacto, se serializa con cierres e invalidaciones en la misma autoridad SQLite, es idempotente, se recupera sin restaurar capacidades y falla cerrado ante cualquier evidencia incompleta.
 
