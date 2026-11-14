@@ -277,3 +277,25 @@ La inspección de la implementación SQLite encontró que un dominio nuevo inici
 Se documentó el diseño ME-D4O y la secuencia A–E: bootstrap autenticado; admisión durable; egress durable; lifecycle/Forget/invalidation; composición de autoridad completa. Se detuvo la implementación de admisión/egress hasta resolver el contrato de bootstrap. No se modificó esquema ni runtime. No se ejecutaron pruebas/build/CI.
 
 Diseño: [ME-D4O — bootstrap seguro e integración](ME-D4O-sqlite-authority-bootstrap-and-integration.md).
+
+
+## ME-D4O — corrección de perfiles por Trust Anchor opcional
+
+**Decisión aplicada — 14 de noviembre de 2026.**
+
+La revisión de ME-03K-B, ME-03K-C y Contrato de diseño Atlas v1 §20.6 confirmó que Trust Anchor externo es opcional y su implementación queda postergada hasta la etapa final. El baseline de las etapas actuales es LOCAL, en un único servidor.
+
+Se corrigió la interpretación anterior que había convertido el proveedor externo en requisito previo para ME-D4O-B–E:
+
+- ME-D4O-A ahora define bootstrap por perfil. El baseline LOCAL no requiere Trust Anchor externo, pero sí exige autorización explícita y verificable del propietario, evento de génesis autenticado localmente y atomicidad de evento/head/idempotencia/gate en una misma SQLiteUnitOfWork.
+- El perfil ANCHORED queda opt-in y futuro. Si se selecciona, la ausencia o discrepancia del proveedor mantiene el gate cerrado; nunca hay fallback automático a LOCAL.
+- ME-D4O-B (admisión), D4O-C (egress), D4O-D (lifecycle/Forget/invalidation) y D4O-E (composición) pueden desarrollarse para LOCAL sin implementar ahora el proveedor externo.
+- Esto no habilita runtime protegido: el bootstrap LOCAL requiere resolver la evidencia de acción directa del propietario, aún pendiente en docs/contracts/memory.md §8, y completar atomicidad, composición y pruebas.
+- El perfil LOCAL no demuestra anti-rollback externo. Las restauraciones que puedan preceder a Forget, fencing o cierres requeridos permanecen bloqueadas hasta reconciliación contra una fuente independiente aprobada. La integridad del backup no basta.
+- La aceptación remota de egress continúa requiriendo idempotencia/fencing verificable en el receptor; SQLite no atomiza el transporte.
+
+Documentos corregidos:
+- [ME-D4O-A — bootstrap por perfil](ME-D4O-A-authenticated-domain-bootstrap.md).
+- [ME-D4O — integración de autoridad SQLite por perfiles](ME-D4O-sqlite-authority-bootstrap-and-integration.md).
+
+No se modificó código, esquema, migraciones ni runtime. No se ejecutaron pruebas, build ni CI.
