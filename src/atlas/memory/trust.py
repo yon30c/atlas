@@ -284,6 +284,23 @@ class ConsistencyRecoveryVerificationResult:
 
 
 @dataclass(frozen=True, slots=True)
+class ConsistencyRecoveryTrustContext:
+    consistency_domain_id: str
+    authority_epoch: int
+    trust_policy_version: str
+    verification_time: datetime
+    purpose: str
+
+    def __post_init__(self) -> None:
+        for field in (
+            "consistency_domain_id", "trust_policy_version", "purpose",
+        ):
+            _required(getattr(self, field), field)
+        _positive(self.authority_epoch, "authority_epoch")
+        _utc(self.verification_time, "verification_time")
+
+
+@dataclass(frozen=True, slots=True)
 class ReceiptTrustContext:
     consistency_domain_id: str
     authority_epoch: int
