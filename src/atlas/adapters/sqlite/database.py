@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import hashlib
 from pathlib import Path
 import sqlite3
+from threading import local
 from typing import Iterator, Sequence
 
 from atlas.core.errors import ContractError
@@ -34,6 +35,36 @@ class SQLiteMigration:
         return hashlib.sha256(self.sql.encode("utf-8")).hexdigest()
 
 
+class SQLiteUnitOfWork:
+    """Active transaction handle owned by exactly one SQLiteDatabase.
+
+    The underlying connection is intentionally exposed only through the
+    database-private ownership check used by infrastructure adapters.
+    """
+
+    __slots__ = ("_owner", "_connection", "_active")
+
+    def __init__(
+        self,
+        owner: "SQLiteDatabase",
+        connection: sqlite3.Connection,
+    ) -> None:
+        self._owner = owner
+        self._connection = connection
+        self._active = True
+
+    def _connection_for(self, owner: "SQLiteDatabase") -> sqlite3.Connection:
+        """Return the connection only to the exact owning database while active."""
+        if owner is not self._owner:
+            raise ContractError("SQLiteUnitOfWork pertenece a otra instancia de base de datos")
+        if not self._active or not self._connection.in_transaction:
+            raise ContractError("SQLiteUnitOfWork ya no está activa")
+        return self._connection
+
+    def _deactivate(self) -> None:
+        self._active = False
+
+
 class SQLiteDatabase:
     """File-backed SQLite database configured for durable local transactions.
 
@@ -56,6 +87,7 @@ class SQLiteDatabase:
             raise ContractError("busy_timeout_ms debe ser un entero no negativo")
         self._path = resolved
         self._busy_timeout_ms = busy_timeout_ms
+        self._transaction_state = local()
 
     @property
     def path(self) -> Path:
@@ -193,13 +225,45 @@ class SQLiteDatabase:
         return len(ordered)
 
     @contextmanager
-    def write_transaction(self) -> Iterator[sqlite3.Connection]:
-        """Acquire SQLite's writer reservation before reading mutable authority state."""
-        with self.connection() as connection:
+    def unit_of_work(self) -> Iterator[SQLiteUnitOfWork]:
+        """Open one owned BEGIN IMMEDIATE transaction for composed local mutations.
+
+        The context manager alone controls commit, rollback and connection
+        lifetime. A unit of work cannot be nested on the same thread or reused
+        after its context has exited.
+        """
+        if getattr(self._transaction_state, "active", False):
+            raise ContractError("SQLiteUnitOfWork anidada no está permitida")
+        self._transaction_state.active = True
+        connection = None
+        unit = None
+        try:
+            connection = self._open()
             connection.execute("BEGIN IMMEDIATE")
+            unit = SQLiteUnitOfWork(self, connection)
             try:
-                yield connection
-                connection.commit()
-            except Exception:
+                yield unit
+            except BaseException:
                 connection.rollback()
                 raise
+            else:
+                try:
+                    connection.commit()
+                except BaseException:
+                    try:
+                        connection.rollback()
+                    except sqlite3.Error:
+                        pass
+                    raise
+        finally:
+            if unit is not None:
+                unit._deactivate()
+            if connection is not None:
+                connection.close()
+            self._transaction_state.active = False
+
+    @contextmanager
+    def write_transaction(self) -> Iterator[sqlite3.Connection]:
+        """Compatibility wrapper yielding the legacy raw connection API."""
+        with self.unit_of_work() as unit:
+            yield unit._connection_for(self)
