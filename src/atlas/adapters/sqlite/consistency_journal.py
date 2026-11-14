@@ -540,6 +540,9 @@ class SQLiteConsistencyJournal:
         Unexpected persistence failures propagate so the owner can roll back
         every mutation composed in the same transaction.
         """
+        if not isinstance(unit_of_work, SQLiteUnitOfWork):
+            raise ContractError("unit_of_work debe ser SQLiteUnitOfWork")
+        connection = unit_of_work._connection_for(self._database)
         unavailable = CheckpointCommitResult(CheckpointCommitStatus.UNAVAILABLE)
         conflict = CheckpointCommitResult(CheckpointCommitStatus.CONFLICT)
         if (
