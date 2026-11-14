@@ -282,6 +282,15 @@ class UnresolvedAdmissionRecoveryTests(unittest.TestCase):
             FakeTerminalVerifier()
         ))
 
+    def test_fencer_wrong_fenced_sequence_receipt_fails_closed(self):
+        plan = build_recovery_fence_plan(
+            make_projection(make_admission("read-1", 2)), 3
+        )
+        self.assertIsNone(execute_recovery_fencing(
+            plan, FakeEndpointFencer(mismatch_field="fenced_through_sequence"),
+            FakeTerminalVerifier()
+        ))
+
     def test_unconfirmed_endpoint_fence_fails_closed(self):
         plan = build_recovery_fence_plan(
             make_projection(make_admission("read-1", 2)), 3
