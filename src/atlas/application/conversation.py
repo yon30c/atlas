@@ -44,16 +44,29 @@ class ConversationHistoryStore(Protocol):
 
 
 class InMemoryConversationHistory:
-    """Historial en memoria, aislado por conversación y limitado por turnos."""
+    """Historial aislado por conversación, limitado por turnos y caracteres."""
 
-    def __init__(self, max_turns: int = 8) -> None:
+    _TRUNCATION_MARKER = "\n[...contenido histórico truncado...]"
+
+    def __init__(
+        self,
+        max_turns: int = 8,
+        max_message_chars: int = 2000,
+    ) -> None:
         if (
             isinstance(max_turns, bool)
             or not isinstance(max_turns, int)
             or max_turns < 1
         ):
             raise ContractError("max_turns debe ser un entero positivo")
+        if (
+            isinstance(max_message_chars, bool)
+            or not isinstance(max_message_chars, int)
+            or max_message_chars <= len(self._TRUNCATION_MARKER)
+        ):
+            raise ContractError("max_message_chars debe ser un entero mayor que el marcador")
         self._max_messages = max_turns * 2
+        self._max_message_chars = max_message_chars
         self._histories: dict[str, list[ConversationMessage]] = {}
         self._lock = RLock()
 
@@ -61,6 +74,14 @@ class InMemoryConversationHistory:
     def _validate_conversation_id(conversation_id: str) -> None:
         if not isinstance(conversation_id, str) or not conversation_id.strip():
             raise ContractError("conversation_id debe ser una cadena no vacía")
+
+    def _bound_content(self, content: str) -> str:
+        if not isinstance(content, str) or not content.strip():
+            raise ContractError("el contenido histórico debe ser una cadena no vacía")
+        if len(content) <= self._max_message_chars:
+            return content
+        prefix_length = self._max_message_chars - len(self._TRUNCATION_MARKER)
+        return content[:prefix_length] + self._TRUNCATION_MARKER
 
     def get_history(self, conversation_id: str) -> tuple[ConversationMessage, ...]:
         self._validate_conversation_id(conversation_id)
@@ -74,9 +95,13 @@ class InMemoryConversationHistory:
         assistant_content: str,
     ) -> None:
         self._validate_conversation_id(conversation_id)
-        user_message = ConversationMessage(ConversationMessageRole.USER, user_content)
+        user_message = ConversationMessage(
+            ConversationMessageRole.USER,
+            self._bound_content(user_content),
+        )
         assistant_message = ConversationMessage(
-            ConversationMessageRole.ASSISTANT, assistant_content
+            ConversationMessageRole.ASSISTANT,
+            self._bound_content(assistant_content),
         )
         with self._lock:
             history = self._histories.setdefault(conversation_id, [])
