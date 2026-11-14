@@ -15,7 +15,10 @@ from atlas.memory.journal import (
     JournalCommit,
 )
 from atlas.memory.recovery_completion import VerifiedRecoveryCompletionReceipt
-from atlas.memory.trust import ConsistencyRecoveryVerificationStatus
+from atlas.memory.trust import (
+    ConsistencyRecoveryVerificationResult,
+    ConsistencyRecoveryVerificationStatus,
+)
 from atlas.ports.recovery_gate import RecoveryGatePort
 
 
@@ -56,7 +59,8 @@ class LocalSQLiteRecoveryGateAdapter(RecoveryGatePort):
         except Exception:
             return None
         if (
-            result.status is not ConsistencyRecoveryVerificationStatus.VERIFIED
+            not isinstance(result, ConsistencyRecoveryVerificationResult)
+            or result.status is not ConsistencyRecoveryVerificationStatus.VERIFIED
             or result.verified_local_state is None
         ):
             return None
