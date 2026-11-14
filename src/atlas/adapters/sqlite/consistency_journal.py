@@ -516,10 +516,17 @@ class SQLiteConsistencyJournal:
                 )
                 marker_record = connection.execute(
                     """
-                    SELECT 1 FROM journal_entries
+                    SELECT sequence FROM journal_entries
                     WHERE domain_id=? AND authority_epoch=? AND record_id=?
                     """,
                     (domain_id, epoch, checkpoint_id),
+                ).fetchone()
+                operation_record = connection.execute(
+                    """
+                    SELECT sequence, record_id FROM journal_entries
+                    WHERE domain_id=? AND authority_epoch=? AND operation_id=?
+                    """,
+                    (domain_id, epoch, operation_id),
                 ).fetchone()
                 checkpoint_at_position = connection.execute(
                     """
@@ -533,12 +540,17 @@ class SQLiteConsistencyJournal:
                     persisted_checkpoint is not None
                     or persisted_marker is not None
                     or marker_record is not None
+                    or operation_record is not None
                     or checkpoint_at_position is not None
                 ):
                     if (
                         persisted_checkpoint is None
                         or persisted_marker is None
                         or marker_record is None
+                        or operation_record is None
+                        or operation_record["record_id"] != checkpoint_id
+                        or operation_record["sequence"] != expected_position.sequence + 1
+                        or marker_record["sequence"] != expected_position.sequence + 1
                         or persisted_checkpoint["domain_id"] != domain_id
                         or persisted_checkpoint["authority_epoch"] != epoch
                         or persisted_checkpoint["sequence"] != expected_position.sequence
@@ -605,6 +617,11 @@ class SQLiteConsistencyJournal:
                         or persisted_marker["record_id"] != checkpoint_id
                         or persisted_marker["sequence"] != expected_position.sequence + 1
                         or domain["head_sequence"] < expected_position.sequence + 1
+                        or (
+                            domain["head_sequence"] == expected_position.sequence + 1
+                            and domain["head_commitment"]
+                                != stored_marker_envelope.object_commitment
+                        )
                     ):
                         return conflict
                     return CheckpointCommitResult(
@@ -622,6 +639,7 @@ class SQLiteConsistencyJournal:
                 if (
                     checkpoint_at_position is not None
                     or marker_record is not None
+                    or operation_record is not None
                     or domain["head_sequence"] != expected_position.sequence
                     or domain["head_commitment"] != expected_head_commitment
                 ):
