@@ -52,6 +52,14 @@ class HmacLocalConsistencySignerTests(unittest.TestCase):
         self.assertEqual(signed.key_reference, "local-key-v1")
         self.assertTrue(verify_envelope(signed, self.object_value, self.key))
 
+    def test_non_envelope_input_is_rejected(self):
+        provider = FakeActiveKeyProvider(
+            ActiveLocalConsistencyKey("local-key-v1", self.key)
+        )
+        signer = HmacLocalConsistencySigner(provider)
+        with self.assertRaises(ContractError):
+            signer.sign_envelope(None, self.object_value)
+
     def test_missing_active_key_aborts_signing(self):
         signer = HmacLocalConsistencySigner(FakeActiveKeyProvider(None))
         with self.assertRaises(OSError):
