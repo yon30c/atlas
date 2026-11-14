@@ -161,3 +161,17 @@ Esta entrega no modifica `SQLiteConsistencyJournal`: sus métodos siguen abriend
 - commit_checkpoint(...) conserva la API pública y delega en una UoW propia. Ante una excepción transaccional devuelve UNKNOWN; los estados de conflicto y signer no disponible siguen siendo resultados explícitos.
 - Se añadieron pruebas de éxito dentro de UoW externa y rollback de una mutación acompañante junto con checkpoint/marker/operation/head ante fallo inyectado del marcador. No se ejecutaron.
 - La operación de checkpoint ahora comparte la frontera transaccional local cuando se invoca explícitamente con una UoW. No hay todavía autoridad SQLite concreta para Recovery Gate, ni integración de gate/egress.
+
+## ME-D4N — primera implementación del Recovery Gate SQLite
+
+Estado: adaptador RecoveryGatePort implementado; validación pendiente.
+
+- LocalSQLiteRecoveryGateAdapter usa exclusivamente la SQLiteUnitOfWork del mismo SQLiteDatabase del journal.
+- Cierre: RECOVERY_CLOSED y gate cerrado se confirman en un solo commit.
+- Reapertura: RECOVERY_RECONCILED y gate abierto se confirman en un solo commit después de comprobar VerifiedRecoveryCompletionReceipt y el inventario terminal exacto.
+- Las operaciones de restauración del gate se basan únicamente en una proyección local VERIFIED y vuelven a comprobar el head dentro de BEGIN IMMEDIATE.
+- Se añadió una composición gate-only para RecoveryJournalCoordinator. No satisface todavía ProtectedMemoryRecoveryAuthorityPort, porque admisión y egress no están implementados sobre la misma unidad de trabajo.
+- No se añadió migración; la proyección del gate ya estaba presente en el esquema V1.
+- Tests nuevos cubren cierre/reapertura, rollback, receipt binding y concurrencia; no se ejecutaron.
+
+El adaptador local no proporciona anti-rollback externo. No activar Gateway ni egress protegido a partir de esta fase. Véase [ME-D4N](ME-D4N-sqlite-recovery-gate.md).
