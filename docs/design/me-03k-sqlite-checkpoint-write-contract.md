@@ -1,8 +1,8 @@
 # ME-03K — Durable SQLite checkpoint write contract
 
-**Status:** design contract; implementation not started.  
+**Status:** writer implementation added on the feature branch; coordinator and owner validation remain pending.  
 **Target branch:** `feature/me-03k-local-profile`.  
-**Scope:** atomically persist an authenticated checkpoint and its matching journal marker, preserving the read contract in `me-03k-sqlite-checkpoint-read-contract.md`.  
+**Scope:** atomically persist an authenticated checkpoint and its matching journal marker, preserving the read contract in `me-03k-sqlite-checkpoint-read-contract.md`. The current implementation is the low-level SQLite writer; it does not yet orchestrate independent projection publication or verification.  
 **Non-goals:** schema migration unless implementation proves the existing schema insufficient; external Trust Anchor; anti-rollback guarantees; production activation; Broker changes.
 
 ## 1. Purpose and invariants
@@ -105,6 +105,17 @@ The writer MUST NOT call the ordinary `append_transition()` after inserting the 
 
 No write may occur before the projection has passed independent verification and durable read-back.
 
+### 4.1 Current implementation boundary
+
+`SQLiteConsistencyJournal.commit_checkpoint(expected_position, expected_head_commitment, checkpoint)` is implemented on the feature branch.
+
+It accepts only a checkpoint without a caller-supplied envelope and requires the exact expected position plus the previously verified head commitment. After acquiring `BEGIN IMMEDIATE`, it re-reads the local domain and current head. It signs both envelopes before the first database write, then inserts the checkpoint row, marker row and K01 operation row, followed by a conditional head update in the same transaction.
+
+The checkpoint envelope is an independent root (`previous_commitment = null`). The marker is at `N + 1` and links to the checkpoint envelope commitment. The stable append locator is `checkpoint-append:<checkpoint_id>`, distinct from `checkpoint:<checkpoint_id>` as the operation correlation ID.
+
+The writer returns typed `COMMITTED`, `REPLAYED`, `CONFLICT`, `UNAVAILABLE` or `UNKNOWN` results. An exact retry resolves from the persisted checkpoint and marker without signing or writing again. Changed references, timestamp, position, transition, operation identity or envelope policy metadata conflict. A transaction exception is reported as `UNKNOWN` so the caller can retry with the same checkpoint identity.
+
+This low-level method deliberately does not accept an arbitrary projection as proof. The future coordinator must call it only after publishing the projection independently and resolving the exact request as `VerifiedCheckpointProjection`. No projection-store call occurs while the SQLite writer lock is held.
 ## 5. Idempotency and uncertain outcomes
 
 The checkpoint identity is stable across retries. The marker operation identity remains `checkpoint:<checkpoint_id>`; its journal `append_id` is a distinct append-attempt identifier, consistent with K01's separation of append identity and semantic operation identity.
@@ -177,7 +188,7 @@ Add focused tests for:
 2. Existing normal journal prefix is not used as the marker predecessor after checkpoint compaction.
 3. Checkpoint row, marker row, operation row and head update are all visible together after commit.
 4. Injected failure after each persistence step rolls back every row and leaves the old head unchanged.
-5. Signer failure causes no partial persistence.
+5. Signer failure causes no partial persistence (both envelopes are signed before the first write).
 6. Projection unavailable, unverified, wrong-domain, wrong-epoch, wrong-position or failed read-back causes no SQLite mutation.
 7. Concurrent append advances the head after projection creation; checkpoint detects stale position and returns conflict without writing.
 8. Exact retry returns REPLAYED and does not advance the head.
@@ -186,6 +197,8 @@ Add focused tests for:
 11. Marker fields exactly satisfy the existing checkpoint read contract.
 12. A subsequent `load_recovery_state_result()` reconstructs the checkpoint and suffix; the existing independent recovery verifier and reducer path can consume the result.
 13. No schema migration is needed, or a separately approved minimal migration is fully tested.
+
+The feature-branch writer tests currently cover successful persistence and read-back, exact replay, changed-reference conflict, stale position, mismatched head commitment, second-signature failure, and an injected marker-insert failure that must roll back the checkpoint row. The independent projection coordinator and full recovery-verifier integration remain pending.
 
 All tests are owner-run on Debian. Do not run tests/builds in GitHub or deploy as part of this work.
 
