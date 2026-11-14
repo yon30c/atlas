@@ -112,7 +112,7 @@ Las pruebas no se ejecutan en esta etapa; se reservarán para la validación aco
 - Composición completa `ProtectedMemoryRecoveryAuthorityPort`.
 - Activación de runtime protegido, despliegue, migraciones o cambios de servicio.
 
-## 10. Inspección de implementación y dependencias faltantes
+## 9. Inspección de implementación y dependencias faltantes
 
 La inspección de código en la rama confirmó:
 
@@ -146,7 +146,7 @@ La validación de revisiones no debe asumir que una lectura de varios repositori
 
 No se ejecutan pruebas/build/CI en esta etapa, según lo acordado.
 
-## 11. Criterio de salida
+## 10. Criterio de salida
 
 D4O-B solo se considera implementado cuando la admisión durable está ligada al snapshot CAM exacto, se serializa con cierres e invalidaciones en la misma autoridad SQLite, es idempotente, se recupera sin restaurar capacidades y falla cerrado ante cualquier evidencia incompleta.
 
