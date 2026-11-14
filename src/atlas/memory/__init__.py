@@ -1,4 +1,5 @@
 """Modelos y validación pura de memoria; el acceso pasa por MemoryGateway."""
+from atlas.memory.authorization import MemoryAuthorizationDecision, MemoryAuthorizationResult
 from atlas.memory.context import MemoryRequestContext
 from atlas.memory.models import (
     Memory,
@@ -139,6 +140,8 @@ from atlas.memory.validation import (
 )
 
 __all__ = [
+    "MemoryAuthorizationDecision",
+    "MemoryAuthorizationResult",
     "MemoryRequestContext",
     "AuthenticatedConsistencyEnvelope",
     "LocalConsistencyTrustPolicy",
