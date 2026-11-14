@@ -1,5 +1,6 @@
 """Integration tests for immutable filesystem checkpoint projection storage."""
 from datetime import datetime, timezone
+import os
 import tempfile
 from pathlib import Path
 import unittest
@@ -135,6 +136,21 @@ class FilesystemCheckpointProjectionStoreTests(unittest.TestCase):
         self.store.publish_checkpoint_projection(self.artifacts)
         result = self.store.resolve_checkpoint_projection(wrong_request)
         self.assertIs(result.status, LocalVerificationStatus.REJECTED)
+
+    def test_preexisting_storage_directory_with_permissive_mode_is_rejected(self):
+        insecure_root = Path(self.temporary.name) / "insecure-checkpoint-store"
+        insecure_root.mkdir()
+        state_dir = insecure_root / "state"
+        state_dir.mkdir(mode=0o700)
+        os.chmod(state_dir, 0o755)
+
+        with self.assertRaises(ContractError):
+            FilesystemCheckpointProjectionStore(insecure_root)
+
+    def test_reopening_store_accepts_private_existing_directories(self):
+        reopened = FilesystemCheckpointProjectionStore(self.root)
+        self.assertTrue(reopened._state_dir.is_dir())
+        self.assertTrue(reopened._manifest_dir.is_dir())
 
     def test_relative_or_missing_root_is_rejected(self):
         with self.assertRaises(ContractError):
