@@ -380,3 +380,23 @@ Esta entrega define los contratos y sus DTOs inmutables, con validación estruct
 El verificador concreto solo podrá emitir `VERIFIED` cuando ambos puertos hayan respondido `VERIFIED`, la proyección base se haya combinado/reproducido semánticamente hasta el head, la política independiente haya autorizado todos los envelopes y versiones, y todas las evidencias se hayan ligado al mismo estado recuperado. Cualquier `REJECTED`, `UNAVAILABLE`, discrepancia o evidencia incompleta mantiene el gate cerrado.
 
 El perfil local continúa sin anti-rollback externo. Ninguno de estos puertos puede inferir que el backup es el más reciente.
+
+
+## 19. Verificación de cadena ligada a la política local independiente
+
+**Estado: IMPLEMENTADO EN RAMA FEATURE — requiere validación del propietario en Debian.**
+
+Se añade `verify_recovery_chain_with_policy(state, key_port, trust_policy)` como frontera criptográfica que combina la verificación HMAC/continuidad existente con la allowlist local aprobada en §17.
+
+Antes de resolver claves o aceptar la cadena, exige:
+- una instancia explícita de `LocalConsistencyTrustPolicy` suministrada por composición confiable;
+- coincidencia exacta del dominio recuperado con el dominio de la política;
+- autorización de cada envelope por el triple exacto `(object_kind, issuer_id, issuer_role)`;
+- referencia de clave, versión de envelope, esquema, reducer y política permitidos;
+- soporte explícito de la versión de canonicalización utilizada por el verificador.
+
+Después delega en `verify_recovery_chain` la validación HMAC, el commitment del objeto, el enlace `previous_commitment`, la continuidad del checkpoint/journal y la coincidencia del commitment/head final.
+
+La función devuelve falso ante política ausente o incompatible, cadena vacía, envelope no autorizado, canonicalización no permitida, clave no disponible o fallo criptográfico. No modifica ni reemplaza el helper anterior, que permanece disponible para compatibilidad y diagnósticos; el helper anterior no debe confundirse con la nueva verificación ligada a política.
+
+Se añaden pruebas para autorización exacta, par emisor/rol no autorizado, canonicalización no permitida y dominio distinto. La función **no prueba completitud de inventarios, autenticidad de recibos/tombstones, frescura anti-rollback ni replay semántico desde checkpoint**. No abre el recovery gate ni autoriza lecturas protegidas.
