@@ -157,3 +157,15 @@ Por instrucción del propietario, no se ejecutaron pruebas ni builds durante ME-
 - No se ejecutaron pruebas ni build.
 
 **Composición:** crear una única fuente local de journal; pasar una capacidad de escritura (`append_transition`) al coordinador y el puerto `verified_recovery` procedente de `compose_local_sqlite_journal_ports(journal)`. Ambos deben corresponder al mismo journal subyacente. El coordinador no puede inferir ni fabricar esa relación; la raíz de composición es responsable de garantizarla.
+
+
+## Implementado en ME-D4H — raíz de composición de recuperación SQLite
+
+- Se añadió LocalSQLiteRecoveryAuthorityPort, que combina la autoridad protegida de runtime con RecoveryGatePort y declara la identidad exacta de su SQLiteConsistencyJournal.
+- Se añadió compose_local_sqlite_recovery_coordinator(...). La función crea los puertos de persistencia y recuperación verificada desde una sola instancia SQLite e inyecta esas dos capacidades separadas en RecoveryJournalCoordinator.
+- La composición exige que consistency_authority.consistency_journal sea exactamente journal y valida las capacidades de admisión, Forget, invalidación, egress y cierre/restauración del Recovery Gate. Una autoridad incompleta o vinculada a otro journal se rechaza.
+- El objeto de composición devuelve la misma instancia consistency_authority. El consumidor debe inyectar esa instancia exacta también en MemoryGatewayService; no debe construir una segunda autoridad para el Gateway ni para recuperación.
+- El contrato de la autoridad exige que cierre del gate y persistencia de RECOVERY_CLOSED sean atómicos con admisiones/egress. La propiedad de identidad enlaza la composición local al journal, pero no sustituye la implementación ni las pruebas de atomicidad de la autoridad.
+- Se actualizó test_memory_recovery_completion.py para inyectar explícitamente el puerto verified_recovery y el contexto de confianza requeridos desde ME-D4G.
+- Limitación real: el repositorio todavía no contiene una implementación concreta de ProtectedMemoryRecoveryAuthorityPort enlazada a SQLite. Por tanto, ME-D4H proporciona la raíz contractual y falla cerrado ante una autoridad no vinculada; no declara que exista ya una autoridad SQLite operativa ni activa el runtime.
+- No se ejecutaron pruebas ni build.
