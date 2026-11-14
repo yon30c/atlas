@@ -19,7 +19,8 @@ from atlas.memory.envelope import AuthenticatedConsistencyEnvelope
 from atlas.memory.journal import (
     ConsistencyPosition, ConsistencyRecordKind, ConsistencyTransition,
     JournalCommit, JournalEntry, JournalOperationResolution,
-    JournalOperationResolutionStatus, consistency_transition_request_projection,
+    JournalOperationResolutionStatus, ConsistencyRecoveryState, ConsistencyCheckpoint,
+    consistency_transition_request_projection,
 )
 from atlas.memory.local_auth import (
     CANONICALIZATION_VERSION, ENVELOPE_VERSION, canonical_json_bytes,
@@ -427,3 +428,131 @@ class SQLiteConsistencyJournal:
                 unknown, append_id, idempotency_key, expected_position,
                 expected_transition, None, None,
             )
+
+
+    @staticmethod
+    def _envelope_from_row(row: sqlite3.Row, *, object_kind: str, object_id: str,
+                           domain_id: str, epoch: int, sequence: int,
+                           schema_version: int) -> AuthenticatedConsistencyEnvelope:
+        return AuthenticatedConsistencyEnvelope(
+            object_kind=object_kind,
+            envelope_version=row["envelope_version"],
+            consistency_domain_id=domain_id,
+            authority_epoch=epoch,
+            sequence=sequence,
+            object_id=object_id,
+            schema_version=schema_version,
+            reducer_version=row["reducer_version"],
+            previous_commitment=row["previous_commitment"],
+            object_commitment=row["object_commitment"],
+            issuer_id=row["issuer_id"],
+            issuer_role=row["issuer_role"],
+            key_reference=row["key_reference"],
+            trust_policy_version=row["trust_policy_version"],
+            issued_at=_parse_datetime(row["issued_at"]),
+            authentication_evidence=row["authentication_evidence"],
+        )
+
+    def load_recovery_state(
+        self, domain_id: str,
+    ) -> ConsistencyRecoveryState | None:
+        """Load a structurally coherent journal snapshot for diagnostics only.
+
+        This method does not authenticate records and must never feed the
+        operational reducer. Checkpoint-backed histories are intentionally
+        unavailable until durable checkpoint projection loading is implemented.
+        """
+        if not isinstance(domain_id, str) or not domain_id.strip():
+            return None
+        try:
+            with self._database.connection() as connection:
+                connection.execute("BEGIN")
+                domain = connection.execute(
+                    "SELECT * FROM consistency_domains WHERE domain_id=?",
+                    (domain_id,),
+                ).fetchone()
+                if (
+                    domain is None
+                    or domain["profile"] != "local"
+                    or domain["trust_policy_version"] != self._trust_policy_version
+                ):
+                    return None
+
+                # Do not silently ignore checkpoint state or claim a complete
+                # replay when its trusted projection has not yet been loaded.
+                checkpoint_count = connection.execute(
+                    "SELECT COUNT(*) FROM checkpoints WHERE domain_id=?",
+                    (domain_id,),
+                ).fetchone()[0]
+                if checkpoint_count:
+                    return None
+
+                epoch = domain["authority_epoch"]
+                head = domain["head_sequence"]
+                if head < 1 or not isinstance(domain["head_commitment"], str):
+                    return None
+
+                rows = connection.execute(
+                    """
+                    SELECT * FROM journal_entries
+                    WHERE domain_id=? AND authority_epoch=?
+                    ORDER BY sequence ASC
+                    """,
+                    (domain_id, epoch),
+                ).fetchall()
+                operation_count = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM journal_operations
+                    WHERE domain_id=? AND authority_epoch=?
+                    """,
+                    (domain_id, epoch),
+                ).fetchone()[0]
+                if len(rows) != head or operation_count != head:
+                    return None
+
+                entries = []
+                expected_sequence = 1
+                previous_commitment = None
+                for row in rows:
+                    sequence = row["sequence"]
+                    if sequence != expected_sequence:
+                        return None
+                    transition = _transition_from_bytes(
+                        bytes(row["transition_canonical"])
+                    )
+                    if (
+                        row["record_id"] != transition.record_id
+                        or row["operation_id"] != transition.operation_id
+                        or row["record_kind"] != transition.record_kind.value
+                        or row["schema_version"] != transition.schema_version
+                    ):
+                        return None
+                    envelope = self._envelope_from_row(
+                        row,
+                        object_kind="journal_entry",
+                        object_id=transition.record_id,
+                        domain_id=domain_id,
+                        epoch=epoch,
+                        sequence=sequence,
+                        schema_version=transition.schema_version,
+                    )
+                    if envelope.previous_commitment != previous_commitment:
+                        return None
+                    position = ConsistencyPosition(domain_id, epoch, sequence)
+                    entries.append(JournalEntry(position, transition, envelope))
+                    previous_commitment = envelope.object_commitment
+                    expected_sequence += 1
+
+                if (
+                    expected_sequence - 1 != head
+                    or previous_commitment != domain["head_commitment"]
+                ):
+                    return None
+
+                connection.commit()
+                return ConsistencyRecoveryState(
+                    domain_id, epoch, None, tuple(entries), head,
+                    domain["head_commitment"],
+                )
+        except Exception:
+            return None
