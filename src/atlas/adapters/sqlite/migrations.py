@@ -126,4 +126,56 @@ CORE_SCHEMA_V1 = SQLiteMigration(
 )
 
 
-SQLITE_MIGRATIONS = (CORE_SCHEMA_V1,)
+# The v2 migration adds operation_id to the exact journal commit foreign key.
+# A unique parent index supplies SQLite's required composite candidate key;
+# rebuilding only the child table keeps journal_entries and all v1 evidence intact.
+CORE_SCHEMA_V2 = SQLiteMigration(
+    version=2,
+    name="journal_operation_exact_commit",
+    sql="""
+    CREATE UNIQUE INDEX journal_entries_operation_commit_unique
+        ON journal_entries(
+            domain_id, authority_epoch, sequence, record_id, operation_id
+        );
+
+    CREATE TABLE journal_operations_v2 (
+        domain_id TEXT NOT NULL,
+        authority_epoch INTEGER NOT NULL CHECK (authority_epoch > 0),
+        operation_id TEXT NOT NULL CHECK (length(trim(operation_id)) > 0),
+        idempotency_key TEXT,
+        request_canonical BLOB NOT NULL CHECK (length(request_canonical) > 0),
+        request_digest TEXT NOT NULL CHECK (length(request_digest) = 64),
+        sequence INTEGER NOT NULL CHECK (sequence > 0),
+        record_id TEXT NOT NULL CHECK (length(trim(record_id)) > 0),
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (domain_id, authority_epoch, operation_id),
+        FOREIGN KEY (
+            domain_id, authority_epoch, sequence, record_id, operation_id
+        )
+        REFERENCES journal_entries(
+            domain_id, authority_epoch, sequence, record_id, operation_id
+        )
+        ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    INSERT INTO journal_operations_v2 (
+        domain_id, authority_epoch, operation_id, idempotency_key,
+        request_canonical, request_digest, sequence, record_id, created_at
+    )
+    SELECT
+        domain_id, authority_epoch, operation_id, idempotency_key,
+        request_canonical, request_digest, sequence, record_id, created_at
+    FROM journal_operations;
+
+    DROP INDEX journal_operations_idempotency_unique;
+    DROP TABLE journal_operations;
+    ALTER TABLE journal_operations_v2 RENAME TO journal_operations;
+
+    CREATE UNIQUE INDEX journal_operations_idempotency_unique
+        ON journal_operations(domain_id, authority_epoch, idempotency_key)
+        WHERE idempotency_key IS NOT NULL;
+    """,
+)
+
+
+SQLITE_MIGRATIONS = (CORE_SCHEMA_V1, CORE_SCHEMA_V2)
