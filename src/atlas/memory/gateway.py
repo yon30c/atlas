@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import secrets
 from threading import RLock
 
-from atlas.memory.authorization import MemoryMemoryAuthorizationDecision, MemoryMemoryAuthorizationResult
+from atlas.memory.authorization import MemoryAuthorizationDecision, MemoryAuthorizationResult
 from atlas.memory.context import MemoryRequestContext
 from atlas.memory.consistency import (
     AuthorizationSnapshot,
