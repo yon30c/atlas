@@ -18,6 +18,14 @@ from atlas.memory.journal_reducer import (
     EndpointProjectionStatus,
 )
 from atlas.memory.models import MemoryScopeKind
+from atlas.memory.journal import (
+    ConsistencyPosition,
+    ConsistencyRecordKind,
+    ConsistencyRecoveryState,
+    ConsistencyTransition,
+    JournalEntry,
+)
+from atlas.memory.journal_reducer import ConsistencyJournalReducer
 from atlas.memory.receipt_verification import (
     ReceiptVerificationResult,
     ReceiptVerificationStatus,
@@ -377,6 +385,174 @@ class UnresolvedAdmissionRecoveryTests(unittest.TestCase):
             for item in build_recovery_fence_requests(plan)
         ))
 
+
+
+def make_recovery_journal(*, include_reconcile=True, include_egress=False):
+    admission_id = "journal-recovery-admission"
+    operation_id = "recovery:consistency-domain:4:5"
+    routes = frozenset({"assistant-response", "api-response"})
+    revisions = AuthorizationRevisionSet(
+        memory_revision=AuthorityRevision(AuthorityKind.MEMORY, MEMORY, 1),
+        version_revision=AuthorityRevision(AuthorityKind.MEMORY_VERSION, VERSION, 1),
+        identity_revision=AuthorityRevision(AuthorityKind.IDENTITY, "identity-1", 1),
+    )
+    transitions = [
+        ConsistencyTransition(
+            record_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074510",
+            schema_version=2,
+            record_kind=ConsistencyRecordKind.READ_ADMITTED,
+            operation_id=f"read:{admission_id}",
+            occurred_at=NOW,
+            request_id="request-recovery",
+            actor_identity_id="identity-1",
+            subject_user_id="owner-1",
+            owner_id="owner-1",
+            memory_id=MEMORY,
+            version_id=VERSION,
+            snapshot_id="snapshot-recovery",
+            revisions=revisions,
+            admission_id=admission_id,
+            generation=2,
+            route_ids=routes,
+            scope_kind=MemoryScopeKind.PRIVATE,
+        ),
+        ConsistencyTransition(
+            record_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074511",
+            schema_version=1,
+            record_kind=ConsistencyRecordKind.RECOVERY_CLOSED,
+            operation_id=operation_id,
+            occurred_at=NOW,
+            generation=5,
+            affected_admission_ids=frozenset({admission_id}),
+            route_ids=routes,
+        ),
+    ]
+    if include_egress:
+        transitions.append(ConsistencyTransition(
+            record_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074512",
+            schema_version=1,
+            record_kind=ConsistencyRecordKind.EGRESS_COMMITTED,
+            operation_id=f"read:{admission_id}",
+            occurred_at=NOW,
+            admission_id=admission_id,
+            endpoint_id="assistant-response",
+            generation=2,
+            emission_id="stale-emission",
+            emission_sequence=1,
+            receipt_id="stale-egress-receipt",
+        ))
+    if include_reconcile:
+        for index, endpoint_id in enumerate(sorted(routes), start=13):
+            transitions.append(ConsistencyTransition(
+                record_id=f"018bcfe5-7b3a-7cc2-98c4-dc0c0c0745{index:02x}",
+                schema_version=1,
+                record_kind=ConsistencyRecordKind.ENDPOINT_FENCED,
+                operation_id=operation_id,
+                occurred_at=NOW,
+                admission_id=admission_id,
+                endpoint_id=endpoint_id,
+                generation=5,
+                receipt_id=f"fence-receipt-{endpoint_id}",
+            ))
+        transitions.append(ConsistencyTransition(
+            record_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074515",
+            schema_version=1,
+            record_kind=ConsistencyRecordKind.ADMISSION_RECONCILED,
+            operation_id=operation_id,
+            occurred_at=NOW,
+            admission_id=admission_id,
+            generation=5,
+            receipt_id="admission-terminal-receipt",
+            admission_terminal_status=ReadAdmissionStatus.CANCELLED,
+        ))
+        transitions.append(ConsistencyTransition(
+            record_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074516",
+            schema_version=1,
+            record_kind=ConsistencyRecordKind.RECOVERY_RECONCILED,
+            operation_id=operation_id,
+            occurred_at=NOW,
+            generation=5,
+            receipt_id="recovery-terminal-receipt",
+            affected_admission_ids=frozenset({admission_id}),
+            route_ids=routes,
+        ))
+    entries = tuple(
+        JournalEntry(
+            ConsistencyPosition("consistency-domain", 4, sequence),
+            transition,
+        )
+        for sequence, transition in enumerate(transitions, start=1)
+    )
+    return ConsistencyRecoveryState(
+        domain_id="consistency-domain",
+        authority_epoch=4,
+        checkpoint=None,
+        entries=entries,
+        head_sequence=len(entries),
+        continuity_reference="verified-chain-reference",
+    )
+
+
+class RecoveryJournalReducerTests(unittest.TestCase):
+    def test_recovery_closed_marks_all_pending_admissions_unresolved(self):
+        projection = ConsistencyJournalReducer().reduce(
+            make_recovery_journal(include_reconcile=False)
+        )
+        self.assertIs(projection.admissions[0].status, ReadAdmissionStatus.UNRESOLVED)
+        self.assertEqual(len(projection.recovery_closures), 1)
+        self.assertFalse(projection.recovery_closures[0].reconciled)
+
+    def test_egress_after_recovery_closed_is_rejected(self):
+        with self.assertRaises(ContractError):
+            ConsistencyJournalReducer().reduce(
+                make_recovery_journal(include_reconcile=False, include_egress=True)
+            )
+
+    def test_all_endpoint_fences_reconcile_admission_and_recovery(self):
+        projection = ConsistencyJournalReducer().reduce(make_recovery_journal())
+        self.assertIs(projection.admissions[0].status, ReadAdmissionStatus.CANCELLED)
+        self.assertTrue(projection.recovery_closures[0].reconciled)
+        self.assertEqual(
+            projection.recovery_closures[0].terminal_receipt_id,
+            "recovery-terminal-receipt",
+        )
+
+    def test_recovery_cannot_reconcile_before_every_endpoint_is_fenced(self):
+        journal = make_recovery_journal()
+        transitions = tuple(
+            entry.transition for entry in journal.entries
+            if entry.transition.record_kind is not ConsistencyRecordKind.ENDPOINT_FENCED
+            or entry.transition.endpoint_id == "assistant-response"
+        )
+        entries = tuple(
+            JournalEntry(
+                ConsistencyPosition("consistency-domain", 4, sequence),
+                transition,
+            )
+            for sequence, transition in enumerate(transitions, start=1)
+        )
+        with self.assertRaises(ContractError):
+            ConsistencyJournalReducer().reduce(replace(
+                journal, entries=entries, head_sequence=len(entries)
+            ))
+
+    def test_recovery_close_must_cover_exact_admission_and_route_inventories(self):
+        journal = make_recovery_journal(include_reconcile=False)
+        transitions = list(entry.transition for entry in journal.entries)
+        transitions[1] = replace(
+            transitions[1], affected_admission_ids=frozenset()
+        )
+        entries = tuple(
+            JournalEntry(
+                ConsistencyPosition("consistency-domain", 4, sequence),
+                transition,
+            )
+            for sequence, transition in enumerate(transitions, start=1)
+        )
+        with self.assertRaises(ContractError):
+            ConsistencyJournalReducer().reduce(replace(
+                journal, entries=entries, head_sequence=len(entries)
+            ))
 
 if __name__ == "__main__":
     unittest.main()
