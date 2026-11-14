@@ -21,6 +21,7 @@ from atlas.memory.receipt_verification import ReceiptVerificationStatus
 from unit.test_memory_unresolved_admission_recovery import (
     CoordinatorJournalFake,
     CoordinatorRecoveryGateFake,
+    CoordinatorVerifiedRecoveryFake,
     FakeTerminalVerifier,
     GateAwareEndpointFencer,
     RecoveryJournalCoordinator,
@@ -149,6 +150,8 @@ class RecoveryCompletionCoordinatorTests(unittest.TestCase):
         )
         recovery = RecoveryJournalCoordinator(
             self.journal, self.gate, self.endpoint_fencer, self.terminal_verifier,
+            trust_context_factory=FakeReceiptTrustContextFactory(),
+            verified_recovery=CoordinatorVerifiedRecoveryFake(self.journal),
             domain_id="consistency-domain",
             id_factory=lambda: next(ids), clock=lambda: NOW,
         )
