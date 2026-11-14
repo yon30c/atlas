@@ -38,11 +38,24 @@ Convertir Memory Engine en un componente reutilizable por Atlas y por aplicacion
 - La separación mantiene la custodia fuera del journal: el núcleo recibe referencias opacas y no material de clave. La verificación continúa separada de la firma.
 - No se modificaron canonicalización JSON, HMAC-SHA-256, envelopes, allowlists, checkpoints, reducer, estados de recuperación ni garantías anti-rollback.
 
+## Implementado en ME-D4B — contratos neutrales de proyección y recuperación
+
+- Se añadió `atlas.memory.ports.recovery`, que define contratos neutrales para posiciones, checkpoints, estados y proyecciones mediante protocolos estructurales; no importa modelos del journal Atlas, SQLite ni el reducer.
+- Los DTO neutrales `CheckpointProjectionRequest/Result`, `VerifiedCheckpointProjection`, `RecoveryInventoryRequest/Result` y `VerifiedRecoveryInventories` enlazan cada atestación con el dominio, época, secuencia, referencias exactas y versión de política solicitada.
+- Se añadieron `CheckpointProjectionPort` y `RecoveryInventoryVerifierPort` al paquete neutral de puertos.
+- `LocalCheckpointProjectionAdapter` y `LocalRecoveryInventoryAdapter` traducen entre los contratos neutrales y los DTO históricos del perfil local. La validación histórica de evidencia sigue ejecutándose antes de convertirla; evidencia malformada o discordante se rechaza.
+- `LocalConsistencyRecoveryVerifier` y `LocalCheckpointCoordinator` consumen ahora los contratos neutrales. El reducer sigue recibiendo la proyección concreta del adaptador local, sin aceptar proyecciones arbitrarias.
+- Los contratos antiguos de `atlas.ports.local_consistency_recovery` permanecen disponibles para los adaptadores y consumidores existentes.
+
+**Composición local:** construir una instancia de cada adaptador local y compartir la misma instancia de `LocalCheckpointProjectionAdapter` entre `LocalConsistencyRecoveryVerifier`, el journal y `LocalCheckpointCoordinator`. La instancia compartida mantiene la comprobación de identidad del resolver. El adaptador de inventarios se inyecta en el verificador de recuperación.
+
+**Límite de confianza:** que un objeto satisfaga el protocolo neutral no demuestra por sí solo que la evidencia sea auténtica. La confianza depende de los puertos concretos configurados en la raíz de composición. En el perfil local, los adaptadores delegan en los verificadores locales existentes y validan el enlace exacto antes de devolver `VERIFIED`.
+
 ## Alcance pendiente de ME-D4
 
-- Los contratos de proyección de checkpoints e inventarios de recuperación siguen acoplados a DTO del journal local.
+- Los modelos neutrales de proyección son estructurales y transportan la proyección concreta del consumidor; aún no existe un reducer neutral reutilizable. El reducer y las políticas de replay siguen ligados al perfil Atlas/local.
 - `LocalConsistencyTrustPolicy`, `LocalConsistencyRecoveryVerifier`, `LocalCheckpointCoordinator` y `SQLiteConsistencyJournal` siguen siendo componentes del perfil local/Atlas.
-- La extracción de estos elementos requiere separar primero los modelos neutrales de posición, transición, checkpoint y evidencia verificada; no se debe sustituirlos por `object`, ni aceptar evidencia creada por el consumidor sin verificar su correspondencia exacta.
+- La extracción de posición, transición, journal y checkpoint como modelos de dominio neutrales sigue pendiente. No se debe sustituirlos por `object`, ni aceptar evidencia creada por el consumidor sin verificar su correspondencia exacta.
 - El perfil local sigue sin ofrecer protección anti-rollback externa. Ninguna extracción de puertos cambia esa limitación.
 
 ## Límite de confianza obligatorio
@@ -65,14 +78,14 @@ Esta entrega es incremental, no la finalización de la independencia.
 
 ## Próximas fases
 
-1. Completar ME-D4 separando modelos neutrales de consistencia y contratos de recuperación/checkpoints.
+1. Completar ME-D4 separando modelos neutrales de posición, transición, journal, checkpoint y reducer; validar la composición local.
 2. Implementar repositorios persistentes para Memory, MemoryVersion y MemoryProposal.
 3. Completar propuesta, aprobación/rechazo explícitos, Forget operativo e integración con AtlasCore.
 4. Añadir pruebas de conformidad con al menos dos consumidores distintos y pruebas negativas de aislamiento.
 
 ## Validación pendiente
 
-Por instrucción del propietario, no se ejecutaron pruebas ni builds durante ME-D1, ME-D2, ME-D3 ni ME-D4A. La compatibilidad con fakes y consumidores actuales, imports, construcción de paquetes y casos negativos quedan pendientes de la fase de pruebas.
+Por instrucción del propietario, no se ejecutaron pruebas ni builds durante ME-D1, ME-D2, ME-D3, ME-D4A ni ME-D4B. La compatibilidad con fakes y consumidores actuales, imports, construcción de paquetes y casos negativos quedan pendientes de la fase de pruebas.
 
 ## No incluido
 
