@@ -144,3 +144,16 @@ Por instrucción del propietario, no se ejecutaron pruebas ni builds durante ME-
 - No se cambian los scopes PRIVATE/PROJECT, sus reglas de visibilidad ni las decisiones de aprobación.
 - No se crea una base de datos de contenido ni se cambia infraestructura de producción.
 - No se declara completada la independencia hasta validar al menos un segundo consumidor sin dependencias de AtlasCore.
+
+
+## Implementado en ME-D4G — RecoveryJournalCoordinator separa lectura verificada y escritura
+
+- Se añadió el puerto consumidor `VerifiedRecoveryStatePort`, cuya única capacidad es cargar un resultado de recuperación autenticado.
+- `RecoveryJournalCoordinator` recibe ahora `verified_recovery` como dependencia explícita. Su método `_load` consulta ese puerto y nunca solicita recuperación verificada al journal de escritura.
+- Se redujo el contrato del journal requerido por este coordinador a `RecoveryJournalWritePort`, que expone únicamente `append_transition`. La coordinación conserva la escritura durable del cierre del gate y de cada fencing.
+- El coordinador continúa exigiendo un resultado `VERIFIED`, un estado presente y el dominio exacto antes de alimentar el reducer. Las excepciones, los estados no verificados y los dominios discordantes siguen bloqueando la recuperación.
+- Las pruebas existentes de recuperación inyectan un fake de lectura verificada separado del fake de escritura. La prueba de indisponibilidad sigue simulando el fallo en la fuente de evidencia.
+- No se cambiaron el reducer, los modelos persistidos, las transiciones, la secuencia de cierre/fencing, los recibos, ni la política de recuperación. El reducer y la orquestación siguen siendo específicos del perfil Atlas/local.
+- No se ejecutaron pruebas ni build.
+
+**Composición:** crear una única fuente local de journal; pasar una capacidad de escritura (`append_transition`) al coordinador y el puerto `verified_recovery` procedente de `compose_local_sqlite_journal_ports(journal)`. Ambos deben corresponder al mismo journal subyacente. El coordinador no puede inferir ni fabricar esa relación; la raíz de composición es responsable de garantizarla.
