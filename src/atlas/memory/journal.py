@@ -376,6 +376,65 @@ class JournalCommit:
             raise ContractError("replayed debe ser bool")
 
 
+
+class JournalOperationResolutionStatus(str, Enum):
+    COMMITTED_EXACT = "committed_exact"
+    NOT_COMMITTED = "not_committed"
+    CONFLICT = "conflict"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True, slots=True)
+class JournalOperationResolution:
+    """Resultado inequívoco (o explícitamente desconocido) de una escritura incierta."""
+
+    status: JournalOperationResolutionStatus
+    operation_id: str
+    idempotency_key: str | None
+    expected_position: ConsistencyPosition
+    current_position: ConsistencyPosition | None
+    commit: JournalCommit | None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.status, JournalOperationResolutionStatus):
+            raise ContractError("status debe ser JournalOperationResolutionStatus")
+        _required(self.operation_id, "operation_id")
+        if self.idempotency_key is not None:
+            _required(self.idempotency_key, "idempotency_key")
+        if not isinstance(self.expected_position, ConsistencyPosition):
+            raise ContractError("expected_position debe ser ConsistencyPosition")
+        if self.current_position is not None and not isinstance(
+            self.current_position, ConsistencyPosition
+        ):
+            raise ContractError("current_position debe ser ConsistencyPosition")
+        if self.commit is not None and not isinstance(self.commit, JournalCommit):
+            raise ContractError("commit debe ser JournalCommit")
+        if self.status is JournalOperationResolutionStatus.COMMITTED_EXACT:
+            if self.commit is None or self.current_position is None:
+                raise ContractError("COMMITTED_EXACT requiere commit y posición actual")
+            if (
+                self.commit.position.consistency_domain_id
+                != self.expected_position.consistency_domain_id
+                or self.commit.position.authority_epoch
+                != self.expected_position.authority_epoch
+                or self.commit.position.sequence <= self.expected_position.sequence
+            ):
+                raise ContractError("commit no corresponde al dominio/época/orden esperado")
+        elif self.commit is not None:
+            raise ContractError("solo COMMITTED_EXACT puede incluir commit")
+        if self.status is JournalOperationResolutionStatus.NOT_COMMITTED:
+            if self.current_position is None:
+                raise ContractError("NOT_COMMITTED requiere posición actual demostrada")
+            if (
+                self.current_position.consistency_domain_id
+                != self.expected_position.consistency_domain_id
+                or self.current_position.authority_epoch
+                != self.expected_position.authority_epoch
+            ):
+                raise ContractError("NOT_COMMITTED requiere misma autoridad y época")
+        if self.status is JournalOperationResolutionStatus.UNKNOWN and self.commit is not None:
+            raise ContractError("UNKNOWN no puede afirmar un commit")
+
 @dataclass(frozen=True, slots=True)
 class JournalEntry:
     position: ConsistencyPosition
