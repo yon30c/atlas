@@ -280,7 +280,14 @@ class LocalCheckpointCoordinator:
             evidence = require_verified_checkpoint_projection(request, resolution)
         except ContractError:
             return self._conflict()
-        if evidence.projection != projection:
+        if (
+            evidence.projection != projection
+            or evidence.schema_version != 1
+            or evidence.reducer_version != self._reducer_version
+            or evidence.trust_policy_version != self._trust_policy.policy_version
+            or evidence.state_commitment != artifacts.state_commitment
+            or evidence.integrity_commitment != artifacts.integrity_commitment
+        ):
             return self._conflict()
 
         try:
