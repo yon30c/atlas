@@ -116,6 +116,7 @@ from atlas.memory.local_auth import (
     object_commitment,
     verify_envelope,
     verify_recovery_chain,
+    verify_recovery_chain_with_policy,
 )
 from atlas.memory.local_trust_policy import (
     LocalConsistencyTrustPolicy,
@@ -144,6 +145,7 @@ __all__ = [
     "object_commitment",
     "verify_envelope",
     "verify_recovery_chain",
+    "verify_recovery_chain_with_policy",
     "RecoveryEndpointFenceReceipt",
     "RecoveryEndpointFenceRequest",
     "RecoveryFencePlan",
