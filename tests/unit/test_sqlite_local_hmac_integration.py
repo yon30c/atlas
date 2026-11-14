@@ -321,5 +321,64 @@ class SQLiteLocalHmacIntegrationTests(unittest.TestCase):
         self.assertIsNone(result.verified_local_state)
 
 
+    def test_verified_read_preserves_missing_historical_key_as_unavailable(self):
+        policy = LocalConsistencyTrustPolicy(
+            policy_version="local-policy-v1",
+            consistency_domain_id="atlas-local",
+            issuer_authorizations=frozenset({
+                LocalIssuerAuthorization(
+                    "journal_entry", "atlas-journal", "consistency-journal"
+                ),
+            }),
+            allowed_key_references=frozenset({"local-key-v1"}),
+            allowed_envelope_versions=frozenset({1}),
+            allowed_canonicalization_versions=frozenset({1}),
+            allowed_schema_versions=frozenset({1}),
+            allowed_reducer_versions=frozenset({"reducer-v1"}),
+        )
+
+        class MissingHistoricalKey:
+            def load_key(inner_self, key_reference):
+                return None
+
+        class InventoryMustNotRun:
+            def verify_recovery_inventories(inner_self, request):
+                raise AssertionError("inventory must not run before key verification")
+
+        verifier = LocalConsistencyRecoveryVerifier(
+            trust_policy=policy,
+            key_port=MissingHistoricalKey(),
+            inventory_verifier=InventoryMustNotRun(),
+            verifier_id="sqlite-local-verifier",
+        )
+        provider = FakeActiveKeyProvider(
+            ActiveLocalConsistencyKey("local-key-v1", self.key)
+        )
+        journal = SQLiteConsistencyJournal(
+            self.database,
+            HmacLocalConsistencySigner(provider),
+            reducer_version="reducer-v1",
+            issuer_id="atlas-journal",
+            issuer_role="consistency-journal",
+            key_reference="local-key-v1",
+            trust_policy_version="local-policy-v1",
+            recovery_verifier=verifier,
+            recovery_trust_policy=policy,
+        )
+        self.assertTrue(journal.create_local_domain("atlas-local", 1))
+        self.assertIsNotNone(journal.append_transition(
+            ConsistencyPosition("atlas-local", 1, 0),
+            "missing-history-key",
+            read_admitted(record_id=RECORD_1),
+        ))
+
+        result = journal.load_verified_recovery_state("atlas-local")
+
+        self.assertIs(
+            result.status, ConsistencyRecoveryVerificationStatus.UNAVAILABLE
+        )
+        self.assertIsNone(result.verified_local_state)
+
+
 if __name__ == "__main__":
     unittest.main()
