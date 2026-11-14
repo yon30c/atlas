@@ -1,15 +1,16 @@
-"""Vinculación fail-closed entre actores USER y sujetos autenticados."""
+"""Vinculación de identidad de Atlas sobre el contrato neutral de Memory Engine."""
 from dataclasses import dataclass
 from typing import Protocol
 
 from atlas.core.context import OperationContext
 from atlas.core.errors import ContractError
 from atlas.core.identity import IdentityKind, IdentityStatus
+from atlas.memory.identity import MemoryIdentityBinding, MemoryIdentityBindingPort
 
 
 @dataclass(frozen=True, slots=True)
 class AuthenticatedUserSubject:
-    """Vinculación emitida por una frontera de identidad confiable."""
+    """Contrato legado de Atlas; se conserva por compatibilidad."""
 
     actor_identity_id: str
     subject_user_id: str
@@ -28,7 +29,7 @@ class AuthenticatedUserSubject:
 
 
 class IdentitySubjectBindingPort(Protocol):
-    """Resuelve la vinculación desde evidencia autenticada, no del contexto."""
+    """Puerto legado de Atlas; la fuente debe ser autoritativa."""
 
     def resolve_user_subject(
         self,
@@ -37,11 +38,39 @@ class IdentitySubjectBindingPort(Protocol):
         """Devuelve la vinculación verificada para el actor indicado."""
 
 
+class AtlasIdentityBindingAdapter(MemoryIdentityBindingPort):
+    """Adapta el contrato histórico de Atlas al contrato neutral del motor."""
+
+    def __init__(self, legacy_port: IdentitySubjectBindingPort) -> None:
+        self._legacy_port = legacy_port
+
+    def resolve_subject(self, actor_identity_id: str) -> MemoryIdentityBinding | None:
+        if not callable(getattr(self._legacy_port, "resolve_user_subject", None)):
+            return None
+        try:
+            binding = self._legacy_port.resolve_user_subject(actor_identity_id)
+        except Exception:
+            return None
+        if not isinstance(binding, AuthenticatedUserSubject):
+            return None
+        if binding.actor_identity_id != actor_identity_id:
+            return None
+        try:
+            return MemoryIdentityBinding(
+                actor_identity_id=binding.actor_identity_id,
+                subject_id=binding.subject_user_id,
+                is_active=binding.is_active,
+                revision=binding.revision,
+            )
+        except (TypeError, ValueError):
+            return None
+
+
 def resolve_authenticated_user_binding(
     context: OperationContext,
     binding_port: IdentitySubjectBindingPort,
 ) -> AuthenticatedUserSubject | None:
-    """Devuelve la vinculación completa y versionada desde la fuente confiable."""
+    """Compatibilidad: valida identidad y devuelve el binding Atlas original."""
     if not isinstance(context, OperationContext):
         return None
     if context.actor.kind is not IdentityKind.USER:
