@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Protocol
 
-from atlas.memory.authorization import MemoryMemoryAuthorizationResult
+from atlas.memory.authorization import MemoryAuthorizationResult
 from atlas.memory.context import MemoryRequestContext
 from atlas.memory.models import MemoryId, MemoryVersionId
 
