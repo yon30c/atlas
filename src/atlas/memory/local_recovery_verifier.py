@@ -19,16 +19,14 @@ from atlas.memory.trust import (
     VerifiedLocalConsistencyRecoveryState,
 )
 from atlas.memory.ports.consistency_keys import MemoryConsistencyKeyPort
-from atlas.ports.local_consistency_recovery import (
-    CheckpointProjectionResolution,
-    LocalCheckpointProjectionRequest,
-    LocalConsistencyCheckpointProjectionPort,
-    LocalConsistencyInventoryVerificationRequest,
-    LocalConsistencyInventoryVerificationResult,
-    LocalConsistencyInventoryVerifierPort,
-    LocalVerificationStatus,
+from atlas.memory.ports.recovery import (
+    CheckpointProjectionPort,
+    CheckpointProjectionRequest,
+    RecoveryInventoryRequest,
+    RecoveryInventoryVerifierPort,
+    RecoveryVerificationStatus,
     require_verified_checkpoint_projection,
-    require_verified_local_inventories,
+    require_verified_recovery_inventories,
 )
 
 
@@ -40,9 +38,9 @@ class LocalConsistencyRecoveryVerifier:
         *,
         trust_policy: LocalConsistencyTrustPolicy,
         key_port: MemoryConsistencyKeyPort,
-        inventory_verifier: LocalConsistencyInventoryVerifierPort,
+        inventory_verifier: RecoveryInventoryVerifierPort,
         verifier_id: str,
-        checkpoint_projection_port: LocalConsistencyCheckpointProjectionPort | None = None,
+        checkpoint_projection_port: CheckpointProjectionPort | None = None,
         reducer: ConsistencyJournalReducer | None = None,
     ) -> None:
         if not isinstance(trust_policy, LocalConsistencyTrustPolicy):
@@ -62,7 +60,7 @@ class LocalConsistencyRecoveryVerifier:
         return self._trust_policy
 
     @property
-    def checkpoint_projection_port(self) -> LocalConsistencyCheckpointProjectionPort | None:
+    def checkpoint_projection_port(self) -> CheckpointProjectionPort | None:
         """Expose the exact resolver instance used by operational recovery."""
         return self._checkpoint_projection_port
 
@@ -111,7 +109,7 @@ class LocalConsistencyRecoveryVerifier:
             if self._checkpoint_projection_port is None:
                 return self._result(ConsistencyRecoveryVerificationStatus.UNAVAILABLE)
             try:
-                request = LocalCheckpointProjectionRequest(
+                request = CheckpointProjectionRequest(
                     checkpoint=state.checkpoint,
                     consistency_domain_id=state.domain_id,
                     authority_epoch=state.authority_epoch,
@@ -124,17 +122,17 @@ class LocalConsistencyRecoveryVerifier:
                 )
             except Exception:
                 return self._result(ConsistencyRecoveryVerificationStatus.UNAVAILABLE)
-            if not isinstance(resolution, CheckpointProjectionResolution):
+            if not hasattr(resolution, "status"):
                 return self._result(ConsistencyRecoveryVerificationStatus.REJECTED)
-            if resolution.status is LocalVerificationStatus.UNAVAILABLE:
+            if resolution.status is RecoveryVerificationStatus.UNAVAILABLE:
                 return self._result(ConsistencyRecoveryVerificationStatus.UNAVAILABLE)
-            if resolution.status is LocalVerificationStatus.REJECTED:
+            if resolution.status is RecoveryVerificationStatus.REJECTED:
                 return self._result(ConsistencyRecoveryVerificationStatus.REJECTED)
             try:
                 base_projection = require_verified_checkpoint_projection(
                     request, resolution
                 ).projection
-            except ContractError:
+            except (ContractError, ValueError, TypeError, AttributeError):
                 return self._result(ConsistencyRecoveryVerificationStatus.REJECTED)
 
         try:
@@ -143,13 +141,13 @@ class LocalConsistencyRecoveryVerifier:
                 if state.checkpoint is not None
                 else self._reducer.reduce(state)
             )
-        except ContractError:
+        except (ContractError, ValueError, TypeError, AttributeError):
             return self._result(ConsistencyRecoveryVerificationStatus.REJECTED)
         except Exception:
             return self._result(ConsistencyRecoveryVerificationStatus.REJECTED)
 
         try:
-            inventory_request = LocalConsistencyInventoryVerificationRequest(
+            inventory_request = RecoveryInventoryRequest(
                 state=state,
                 projection=projection,
                 trust_policy_version=self._trust_policy.policy_version,
@@ -160,15 +158,15 @@ class LocalConsistencyRecoveryVerifier:
         except Exception:
             return self._result(ConsistencyRecoveryVerificationStatus.UNAVAILABLE)
         if not isinstance(
-            inventory_result, LocalConsistencyInventoryVerificationResult
+            inventory_result, object
         ):
             return self._result(ConsistencyRecoveryVerificationStatus.REJECTED)
-        if inventory_result.status is LocalVerificationStatus.UNAVAILABLE:
+        if inventory_result.status is RecoveryVerificationStatus.UNAVAILABLE:
             return self._result(ConsistencyRecoveryVerificationStatus.UNAVAILABLE)
-        if inventory_result.status is LocalVerificationStatus.REJECTED:
+        if inventory_result.status is RecoveryVerificationStatus.REJECTED:
             return self._result(ConsistencyRecoveryVerificationStatus.REJECTED)
         try:
-            inventories = require_verified_local_inventories(
+            inventories = require_verified_recovery_inventories(
                 inventory_request, inventory_result
             )
         except ContractError:
