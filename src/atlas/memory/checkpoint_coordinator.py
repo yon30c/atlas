@@ -60,6 +60,18 @@ class LocalCheckpointCoordinator:
             raise ContractError("projection_publisher debe implementar publish_checkpoint_projection")
         if not callable(getattr(projection_resolver, "resolve_checkpoint_projection", None)):
             raise ContractError("projection_resolver debe implementar resolve_checkpoint_projection")
+        if getattr(journal, "reducer_version", None) != reducer_version:
+            raise ContractError("reducer_version no coincide con el journal")
+        if getattr(journal, "trust_policy_version", None) != getattr(
+            trust_policy, "policy_version", None
+        ):
+            raise ContractError("trust_policy_version no coincide con el journal")
+        if getattr(journal, "recovery_trust_policy", None) is not trust_policy:
+            raise ContractError("el journal debe usar exactamente trust_policy")
+        if getattr(journal, "checkpoint_projection_port", None) is not projection_resolver:
+            raise ContractError(
+                "el journal debe usar el mismo resolver de proyecciones que el coordinador"
+            )
         if not isinstance(trust_policy, LocalConsistencyTrustPolicy):
             raise ContractError("trust_policy debe ser LocalConsistencyTrustPolicy")
         if not isinstance(reducer_version, str) or not reducer_version.strip():
