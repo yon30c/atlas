@@ -5,9 +5,10 @@ import unittest
 
 from atlas.core.errors import ContractError
 from atlas.memory.local_auth import (
-    authenticate_envelope, canonical_json_bytes, object_commitment, verify_envelope,
+    authenticate_envelope, canonical_json_bytes, journal_entry_payload,
+    object_commitment, verify_envelope, verify_recovery_chain,
 )
-from atlas.memory.trust import AuthenticatedConsistencyEnvelope
+from atlas.memory.envelope import AuthenticatedConsistencyEnvelope
 
 
 class CanonicalJsonTests(unittest.TestCase):
@@ -73,3 +74,45 @@ class LocalHmacTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RecoveryChainTests(unittest.TestCase):
+    def test_authenticated_entry_chain_and_wrong_policy(self):
+        from atlas.memory.journal import (
+            ConsistencyPosition, ConsistencyRecordKind, ConsistencyRecoveryState,
+            ConsistencyTransition, JournalEntry,
+        )
+        now = datetime(2026, 11, 13, 12, 0, tzinfo=timezone.utc)
+        key = b"z" * 32
+        transition = ConsistencyTransition(
+            record_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074601",
+            schema_version=1, record_kind=ConsistencyRecordKind.RECOVERY_CLOSED,
+            operation_id="recovery:1", occurred_at=now, generation=1,
+        )
+        position = ConsistencyPosition("chain-domain", 1, 1)
+        plain = JournalEntry(position, transition)
+        unsigned = AuthenticatedConsistencyEnvelope(
+            object_kind="journal_entry", envelope_version=1,
+            consistency_domain_id="chain-domain", authority_epoch=1, sequence=1,
+            object_id=transition.record_id, schema_version=1, reducer_version="reducer-v1",
+            previous_commitment=None, object_commitment="0" * 64,
+            issuer_id="local-issuer", issuer_role="consistency-journal",
+            key_reference="key-1", trust_policy_version="policy-v1",
+            issued_at=now, authentication_evidence="pending",
+        )
+        signed = authenticate_envelope(unsigned, journal_entry_payload(plain), key)
+        entry = replace(plain, envelope=signed)
+        state = ConsistencyRecoveryState(
+            domain_id="chain-domain", authority_epoch=1, checkpoint=None,
+            entries=(entry,), head_sequence=1, continuity_reference=signed.object_commitment,
+        )
+
+        class Keys:
+            def load_key(self, key_reference):
+                return key if key_reference == "key-1" else None
+
+        self.assertTrue(verify_recovery_chain(state, Keys(), "policy-v1"))
+        self.assertFalse(verify_recovery_chain(state, Keys(), "wrong-policy"))
+        self.assertFalse(verify_recovery_chain(
+            replace(state, continuity_reference="wrong"), Keys(), "policy-v1"
+        ))
