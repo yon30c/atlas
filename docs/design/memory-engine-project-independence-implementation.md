@@ -72,6 +72,20 @@ Convertir Memory Engine en un componente reutilizable por Atlas y por aplicacion
 
 **Composición:** construir el `SQLiteConsistencyJournal` como hasta ahora para los flujos operativos de recuperación local. Cuando un consumidor necesite la interfaz neutral de persistencia, envolver esa misma instancia con `LocalSQLiteConsistencyJournalAdapter`. No sustituir el journal concreto inyectado en el coordinador/verificador de recuperación por el adaptador neutral.
 
+
+
+## Implementado en ME-D4E — composición separada de persistencia y recuperación verificada
+
+- Se añadió `LocalSQLiteVerifiedRecoveryAdapter` en `atlas.adapters.sqlite.local_journal_composition`. Expone únicamente `load_verified_recovery_state` y delega en el verificador local configurado dentro de la instancia SQLite.
+- El adaptador solo acepta evidencia del perfil local: si un resultado declara `VERIFIED` sin `verified_local_state`, lo convierte en `REJECTED`. Un resultado inesperado se convierte en `UNAVAILABLE`.
+- Se añadió `LocalSQLiteConsistencyJournalPorts`, que agrupa el puerto neutral de persistencia y el puerto local de recuperación verificada. Su construcción exige que ambos adaptadores envuelvan exactamente la misma instancia de `SQLiteConsistencyJournal`.
+- `compose_local_sqlite_journal_ports(journal)` falla si el journal no tiene configurada la pareja `recovery_verifier` + `recovery_trust_policy`. No crea políticas, claves, resolvers ni evidencia de confianza por su cuenta.
+- La interfaz neutral de persistencia sigue sin ofrecer `load_verified_recovery_state`; la interfaz local de confianza no ofrece lectura estructural ni acceso directo al reducer.
+- No se sustituyeron todavía los journals concretos inyectados en `LocalCheckpointCoordinator`, `RecoveryCoordinator` u otros flujos operativos. Esos consumidores continúan usando el objeto SQLite concreto porque también dependen de metadatos de issuer/key, compare-and-swap de checkpoint y otras operaciones locales. La migración de cada consumidor requiere un contrato compuesto explícito y pruebas de conformidad; no se hace por sustitución automática.
+- No se modificaron persistencia, migraciones, serialización, canonicalización, HMAC, allowlists, reducer, estados de recuperación ni semántica anti-rollback.
+
+**Composición local recomendada para nuevos consumidores:** crear una sola instancia de `SQLiteConsistencyJournal` con signer y verificador/política locales; pasarla a `compose_local_sqlite_journal_ports`; inyectar `ports.persistence` solo donde se necesite persistencia neutral y `ports.verified_recovery` solo donde se requiera un resultado autenticado local. Los consumidores que todavía necesiten operaciones específicas de Atlas/local deben continuar recibiendo el journal concreto hasta que exista un puerto explícito para esas operaciones.
+
 ## Alcance pendiente de ME-D4
 
 - El nuevo contrato del journal es neutral, pero `SQLiteConsistencyJournal` todavía utiliza los DTO Atlas/local y no se ha adaptado al puerto genérico.
