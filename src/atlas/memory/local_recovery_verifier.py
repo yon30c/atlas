@@ -22,7 +22,9 @@ from atlas.memory.ports.consistency_keys import MemoryConsistencyKeyPort
 from atlas.memory.ports.recovery import (
     CheckpointProjectionPort,
     CheckpointProjectionRequest,
+    CheckpointProjectionResult,
     RecoveryInventoryRequest,
+    RecoveryInventoryResult,
     RecoveryInventoryVerifierPort,
     RecoveryVerificationStatus,
     require_verified_checkpoint_projection,
@@ -122,7 +124,7 @@ class LocalConsistencyRecoveryVerifier:
                 )
             except Exception:
                 return self._result(ConsistencyRecoveryVerificationStatus.UNAVAILABLE)
-            if not hasattr(resolution, "status"):
+            if not isinstance(resolution, CheckpointProjectionResult):
                 return self._result(ConsistencyRecoveryVerificationStatus.REJECTED)
             if resolution.status is RecoveryVerificationStatus.UNAVAILABLE:
                 return self._result(ConsistencyRecoveryVerificationStatus.UNAVAILABLE)
@@ -157,9 +159,7 @@ class LocalConsistencyRecoveryVerifier:
             )
         except Exception:
             return self._result(ConsistencyRecoveryVerificationStatus.UNAVAILABLE)
-        if not isinstance(
-            inventory_result, object
-        ):
+        if not isinstance(inventory_result, RecoveryInventoryResult):
             return self._result(ConsistencyRecoveryVerificationStatus.REJECTED)
         if inventory_result.status is RecoveryVerificationStatus.UNAVAILABLE:
             return self._result(ConsistencyRecoveryVerificationStatus.UNAVAILABLE)
@@ -169,7 +169,7 @@ class LocalConsistencyRecoveryVerifier:
             inventories = require_verified_recovery_inventories(
                 inventory_request, inventory_result
             )
-        except ContractError:
+        except (ContractError, ValueError, TypeError, AttributeError):
             return self._result(ConsistencyRecoveryVerificationStatus.REJECTED)
 
         if not projection.receipt_ids.issubset(inventories.verified_receipt_ids):
