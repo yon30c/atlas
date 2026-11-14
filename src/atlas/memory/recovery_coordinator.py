@@ -196,6 +196,21 @@ class RecoveryJournalCoordinator:
             return active.operation_id, active.generation
         if any(not item.reconciled for item in projection.recovery_closures):
             return None
+
+        admissions_by_id = {
+            item.admission_id: item for item in projection.admissions
+        }
+        if any(not item.reconciled for item in projection.invalidations):
+            return None
+        if any(
+            admission_id not in admissions_by_id
+            or admissions_by_id[admission_id].status.value
+            not in ("completed", "cancelled")
+            for closure in projection.forget_closures
+            for admission_id in closure.affected_admission_ids
+        ):
+            return None
+
         generations = (
             [item.generation for item in projection.admissions]
             + [item.generation for item in projection.forget_closures]
@@ -251,16 +266,28 @@ class RecoveryJournalCoordinator:
                 RecoveryCoordinatorStatus.BLOCKED, operation_id, generation, (), ()
             )
 
-        endpoint_status = {
-            (admission.admission_id, endpoint.endpoint_id): endpoint.status
+        endpoint_projection = {
+            (admission.admission_id, endpoint.endpoint_id): endpoint
             for admission in projection.admissions
             for endpoint in admission.endpoints
         }
         for admission in plan.admissions:
             for endpoint in admission.endpoint_sequences:
                 key = (admission.admission_id, endpoint.endpoint_id)
-                if endpoint_status.get(key) is EndpointProjectionStatus.FENCED:
+                current_endpoint = endpoint_projection.get(key)
+                if (
+                    current_endpoint is not None
+                    and current_endpoint.status is EndpointProjectionStatus.FENCED
+                    and current_endpoint.terminal_operation_id == operation_id
+                    and current_endpoint.terminal_generation == generation
+                ):
                     recorded.append(key)
+                    continue
+                if (
+                    current_endpoint is not None
+                    and current_endpoint.status is EndpointProjectionStatus.FENCED
+                ):
+                    pending.append(key)
                     continue
                 single = UnresolvedAdmissionRecovery(
                     admission_id=admission.admission_id,
@@ -309,6 +336,8 @@ class RecoveryJournalCoordinator:
             projection = final[1]
             all_fenced = all(
                 endpoint.status is EndpointProjectionStatus.FENCED
+                and endpoint.terminal_operation_id == operation_id
+                and endpoint.terminal_generation == generation
                 for admission in projection.admissions
                 if admission.admission_id in {
                     item.admission_id
