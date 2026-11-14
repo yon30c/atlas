@@ -11,7 +11,7 @@ Convertir Memory Engine en un componente reutilizable por Atlas y por aplicacion
 
 - `atlas.memory.context.MemoryRequestContext`: contexto neutral para transportar atributos de una solicitud desde un consumidor.
 - `atlas.memory.authorization.MemoryAuthorizationDecision` y `MemoryAuthorizationResult`: resultado de autorización propio del dominio Memory Engine.
-- `atlas.ports.memory_authorization.MemoryAuthorizationPort`: contrato que desacopla el Gateway de la implementación concreta de CAM.
+- `atlas.ports.memory_authorization.MemoryAuthorizationPort`: contrato que desacopla el Gateway de la implementación concreta de CAM Atlas.
 - `atlas.adapters.atlas_memory_authorization.AtlasMemoryAuthorizationAdapter`: adaptador de compatibilidad con CAM Atlas.
 - `MemoryGatewayService` depende del puerto y contexto neutrales, no directamente de `MemoryAuthorizationService` ni de `OperationContext`.
 
@@ -51,11 +51,20 @@ Convertir Memory Engine en un componente reutilizable por Atlas y por aplicacion
 
 **Límite de confianza:** que un objeto satisfaga el protocolo neutral no demuestra por sí solo que la evidencia sea auténtica. La confianza depende de los puertos concretos configurados en la raíz de composición. En el perfil local, los adaptadores delegan en los verificadores locales existentes y validan el enlace exacto antes de devolver `VERIFIED`.
 
+## Implementado en ME-D4C — contrato neutral del journal
+
+- Se añadió `atlas.memory.ports.journal` con protocolos estructurales para posición, transición, commit, resolución de operaciones, entrada, checkpoint y estado de recuperación.
+- `ConsistencyJournalPort` es genérico y parametrizado por los modelos inmutables del consumidor. Así, Memory Engine no obliga a una aplicación externa a importar `ConsistencyPosition`, `ConsistencyTransition`, envelopes o DTO del perfil Atlas.
+- El contrato distingue carga estructural de recuperación operativa: `load_recovery_state` es solo diagnóstico. La autenticidad, continuidad, inventarios y anti-rollback deben verificarse mediante puertos de confianza separados.
+- Los contratos se exportan desde `atlas.memory.ports`. La implementación SQLite y los modelos históricos no se sustituyeron en esta entrega; su adaptación al nuevo puerto queda pendiente de un adaptador de perfil local.
+- No se cambiaron la forma canónica de idempotencia, el esquema persistido, las migraciones, la firma, el reducer ni la política de recuperación.
+
 ## Alcance pendiente de ME-D4
 
+- El nuevo contrato del journal es neutral, pero `SQLiteConsistencyJournal` todavía utiliza los DTO Atlas/local y no se ha adaptado al puerto genérico.
 - Los modelos neutrales de proyección son estructurales y transportan la proyección concreta del consumidor; aún no existe un reducer neutral reutilizable. El reducer y las políticas de replay siguen ligados al perfil Atlas/local.
 - `LocalConsistencyTrustPolicy`, `LocalConsistencyRecoveryVerifier`, `LocalCheckpointCoordinator` y `SQLiteConsistencyJournal` siguen siendo componentes del perfil local/Atlas.
-- La extracción de posición, transición, journal y checkpoint como modelos de dominio neutrales sigue pendiente. No se debe sustituirlos por `object`, ni aceptar evidencia creada por el consumidor sin verificar su correspondencia exacta.
+- La extracción de validadores y modelos concretos de transición/replay como modelos de dominio neutrales sigue pendiente. No se debe sustituirlos por `object`, ni aceptar evidencia creada por el consumidor sin verificar su correspondencia exacta.
 - El perfil local sigue sin ofrecer protección anti-rollback externa. Ninguna extracción de puertos cambia esa limitación.
 
 ## Límite de confianza obligatorio
@@ -72,20 +81,21 @@ Esta entrega es incremental, no la finalización de la independencia.
 
 - CAM, Grants, evaluación de permisos y construcción de snapshots siguen siendo Atlas.
 - Los modelos de dominio y validadores generales aún conservan dependencias de tipos/errores de `atlas.core`.
-- La política local de confianza, los modelos del journal, el reducer y el orquestador de recuperación siguen ligados al perfil Atlas/local. Los puertos de custodia de claves y firma ya tienen contratos neutrales, pero los puertos de proyección/inventario y los adaptadores de persistencia aún usan modelos del perfil local.
+- La política local de confianza, los modelos del journal, el reducer y el orquestador de recuperación siguen ligados al perfil Atlas/local. Los puertos de custodia de claves, firma, proyección/inventario y journal ya tienen contratos neutrales, pero los adaptadores de persistencia siguen usando modelos del perfil local.
 - La persistencia del contenido de memorias, versiones y propuestas no está implementada; SQLite continúa persistiendo el diario/control de consistencia.
 - Los servicios operativos de propuestas, revisión y Forget no están completos.
 
 ## Próximas fases
 
-1. Completar ME-D4 separando modelos neutrales de posición, transición, journal, checkpoint y reducer; validar la composición local.
-2. Implementar repositorios persistentes para Memory, MemoryVersion y MemoryProposal.
-3. Completar propuesta, aprobación/rechazo explícitos, Forget operativo e integración con AtlasCore.
-4. Añadir pruebas de conformidad con al menos dos consumidores distintos y pruebas negativas de aislamiento.
+1. Adaptar el perfil local/SQLite al contrato neutral del journal mediante una frontera explícita, preservando sus DTO y compatibilidad históricos.
+2. Separar modelos neutrales de transición/replay y diseñar un reducer reutilizable sin debilitar la verificación de evidencia.
+3. Implementar repositorios persistentes para Memory, MemoryVersion y MemoryProposal.
+4. Completar propuesta, aprobación/rechazo explícitos, Forget operativo e integración con AtlasCore.
+5. Añadir pruebas de conformidad con al menos dos consumidores distintos y pruebas negativas de aislamiento.
 
 ## Validación pendiente
 
-Por instrucción del propietario, no se ejecutaron pruebas ni builds durante ME-D1, ME-D2, ME-D3, ME-D4A ni ME-D4B. La compatibilidad con fakes y consumidores actuales, imports, construcción de paquetes y casos negativos quedan pendientes de la fase de pruebas.
+Por instrucción del propietario, no se ejecutaron pruebas ni builds durante ME-D1, ME-D2, ME-D3, ME-D4A, ME-D4B ni ME-D4C. La compatibilidad con fakes y consumidores actuales, imports, construcción de paquetes y casos negativos quedan pendientes de la fase de pruebas.
 
 ## No incluido
 
