@@ -79,3 +79,21 @@ Pruebas previstas para el propietario:
 - Después de las pruebas unitarias, suite completa.
 
 No ejecutar despliegues, crear directorios operativos ni seleccionar una ruta persistente de producción como parte de esta fase.
+
+
+## 7. Evidencia de proyección para el coordinador
+
+La verificación local completa ya produce la proyección reducida junto con
+`VerifiedLocalConsistencyRecoveryState`. El campo `projection` se incluye
+solo después de verificar cadena HMAC, política, resolución de checkpoint
+(si existe), replay semántico e inventarios. La evidencia comprueba que la
+proyección coincide con dominio, época, head y versión de metadatos de replay.
+
+Esto evita que un coordinador vuelva a reducir datos estructurales por su
+cuenta o use una proyección que no sea el resultado de la ruta de recuperación
+verificada. El coordinador de escritura deberá exigir esta evidencia y volver
+a comprobar dominio, época, secuencia y commitment dentro de la transacción
+SQLite antes de insertar el nuevo checkpoint.
+
+La proyección adjunta no añade anti-rollback externo ni convierte el almacén
+filesystem en autoridad de confianza.
