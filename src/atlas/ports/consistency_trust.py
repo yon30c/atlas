@@ -3,6 +3,7 @@ from enum import Enum
 from typing import Protocol
 
 from atlas.memory.trust import (
+    CheckpointVerificationResult,
     ConsistencyCheckpointVerificationRequest,
     ConsistencyRecoveryVerificationResult,
     ConsistencyTrustAnchor,
@@ -46,7 +47,7 @@ class ConsistencyCheckpointVerifierPort(Protocol):
     def verify_checkpoint(
         self,
         request: ConsistencyCheckpointVerificationRequest,
-    ) -> ConsistencyRecoveryVerificationResult:
+    ) -> CheckpointVerificationResult:
         """Return VERIFIED only after issuer, key, policy, anchor and chain checks."""
 
 
