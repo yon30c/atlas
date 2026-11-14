@@ -494,9 +494,12 @@ class LocalSQLiteRecoveryGateAdapter(RecoveryGatePort):
                 if not self._domain_row_matches(row, state):
                     raise _AbortGateTransaction()
                 if (
+                    row["active_recovery_operation_id"] is not None
+                    or row["active_recovery_generation"] is not None
+                ):
+                    raise _AbortGateTransaction()
+                if (
                     row["recovery_gate_state"] == "open"
-                    and row["active_recovery_operation_id"] is None
-                    and row["active_recovery_generation"] is None
                     and row["recovery_receipt_id"] == receipt_id
                 ):
                     return True
