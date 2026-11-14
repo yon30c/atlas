@@ -5,6 +5,8 @@ from atlas.assistant import (
     AssistantRequest,
     AssistantResponse,
     AssistantResponseKind,
+    ConversationMessage,
+    ConversationMessageRole,
 )
 from atlas.core.errors import ContractError
 from tests.fixtures.contexts import user_context
@@ -16,18 +18,24 @@ class AssistantConversationModelTests(unittest.TestCase):
         self.now = datetime.now(timezone.utc)
 
     def test_request_preserves_context_and_optional_conversation_data(self):
+        history = (
+            ConversationMessage(ConversationMessageRole.USER, "Hola"),
+            ConversationMessage(ConversationMessageRole.ASSISTANT, "¡Hola!"),
+        )
         request = AssistantRequest(
             request_id=self.context.request_id,
             context=self.context,
-            content="Hola, Atlas",
+            content="¿Qué recuerdas?",
             received_at=self.now,
             conversation_id="conversation-1",
             attachments=("file-ref-1",),
+            history=history,
         )
 
         self.assertEqual(request.context, self.context)
         self.assertEqual(request.conversation_id, "conversation-1")
         self.assertEqual(request.attachments, ("file-ref-1",))
+        self.assertEqual(request.history, history)
 
     def test_request_rejects_context_with_different_request_id(self):
         with self.assertRaises(ContractError):
@@ -55,6 +63,19 @@ class AssistantConversationModelTests(unittest.TestCase):
                 received_at=self.now,
                 attachments=("valid-ref", " "),
             )
+
+    def test_request_rejects_invalid_history(self):
+        with self.assertRaises(ContractError):
+            AssistantRequest(
+                request_id=self.context.request_id,
+                context=self.context,
+                content="Hola",
+                received_at=self.now,
+                history=("not-a-message",),
+            )
+
+        with self.assertRaises(ContractError):
+            ConversationMessage("user", "Hola")
 
     def test_request_rejects_non_utc_offset(self):
         with self.assertRaises(ContractError):
