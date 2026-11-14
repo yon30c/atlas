@@ -37,6 +37,12 @@ from atlas.memory.recovery_coordinator import (
     RecoveryCoordinatorStatus,
     RecoveryJournalCoordinator,
 )
+from atlas.memory.trust import (
+    ConsistencyRecoveryVerificationResult,
+    ConsistencyRecoveryVerificationStatus,
+    ConsistencyTrustAnchor,
+    VerifiedConsistencyRecoveryState,
+)
 from atlas.memory.recovery import (
     RecoveryEndpointFenceReceipt,
     RecoveryFencePlan,
@@ -578,6 +584,37 @@ class CoordinatorJournalFake:
     def load_recovery_state(self, domain_id):
         return self.state if domain_id == self.state.domain_id else None
 
+    def load_verified_recovery_state(self, domain_id):
+        if domain_id != self.state.domain_id:
+            return ConsistencyRecoveryVerificationResult(
+                ConsistencyRecoveryVerificationStatus.UNAVAILABLE
+            )
+        anchor = ConsistencyTrustAnchor(
+            anchor_id=f"test-anchor:{self.state.head_sequence}",
+            consistency_domain_id=self.state.domain_id,
+            authority_epoch=self.state.authority_epoch,
+            maximum_committed_sequence=self.state.head_sequence,
+            authenticated_state_commitment=self.state.continuity_reference,
+            issuer_id="test-trust-authority",
+            key_reference="test-key",
+            trust_policy_version="test-policy-v1",
+            anchor_revision=max(1, self.state.head_sequence + 1),
+            issued_at=NOW,
+        )
+        verified = VerifiedConsistencyRecoveryState(
+            state=self.state,
+            anchor=anchor,
+            authenticated_state_commitment=anchor.authenticated_state_commitment,
+            verification_id=f"test-verification:{self.state.head_sequence}",
+            verifier_id="test-verifier",
+            trust_policy_version="test-policy-v1",
+            verified_at=NOW,
+        )
+        return ConsistencyRecoveryVerificationResult(
+            ConsistencyRecoveryVerificationStatus.VERIFIED,
+            verified,
+        )
+
     def append_transition(self, expected_position, transition):
         if (
             expected_position.consistency_domain_id != self.state.domain_id
@@ -758,7 +795,11 @@ class RecoveryJournalCoordinatorTests(unittest.TestCase):
         )
 
     def test_unverifiable_journal_blocks_before_closure_or_endpoint_contact(self):
-        self.journal.load_recovery_state = lambda domain_id: None
+        self.journal.load_verified_recovery_state = lambda domain_id: (
+            ConsistencyRecoveryVerificationResult(
+                ConsistencyRecoveryVerificationStatus.UNAVAILABLE
+            )
+        )
         result = self.coordinator.run()
         self.assertIs(result.status, RecoveryCoordinatorStatus.BLOCKED)
         self.assertFalse(self.gate.closed)
