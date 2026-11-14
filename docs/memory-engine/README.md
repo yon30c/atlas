@@ -202,10 +202,12 @@ Diseño y límites: [ME-D4N — Recovery Gate SQLite](../design/ME-D4N-sqlite-re
 
 ## ME-D4O — bootstrap e integración de autoridad SQLite
 
-La inspección confirmó un bloqueo previo a la admisión durable: `consistency_domains.recovery_gate_state` nace `closed`, pero el contrato actual solo permite abrirlo tras un `RECOVERY_RECONCILED` verificado. No existe evento/puerto de bootstrap inicial, y el coordinador de recovery no abre un dominio vacío.
+La inspección confirmó que `consistency_domains.recovery_gate_state` nace `closed` y no existe evento/puerto de bootstrap inicial. No se debe solucionar con UPDATE manual ni default abierto.
 
-No se debe solucionar con UPDATE manual ni default abierto. El diseño ME-D4O divide el trabajo en: (A) contrato de bootstrap autenticado; (B) admisión durable; (C) egress durable; (D) lifecycle de admisiones/Forget/invalidation; (E) composición completa `ProtectedMemoryRecoveryAuthorityPort`.
+El Trust Anchor externo es opcional y su implementación queda postergada hasta la etapa final. El baseline actual es LOCAL, sin proveedor externo, y debe declarar que no demuestra anti-rollback. El contrato ME-D4O-A fue corregido para definir bootstrap LOCAL autenticado y reservar el proveedor externo para el perfil ANCHORED futuro.
 
-**Estado:** ME-D4O-A define el protocolo de bootstrap autenticado, pero sigue sin implementación porque faltan el proveedor independiente de autorización del propietario y el Trust Anchor con inicialización autenticada. No se añadió evento ni apertura del gate. Admisión/egress permanecen bloqueados. Véase [ME-D4O-A](../design/ME-D4O-A-authenticated-domain-bootstrap.md). Pruebas/build/CI siguen pendientes y no se ejecutaron.
+ME-D4O se divide en: (A) bootstrap por perfil; (B) admisión durable; (C) egress durable; (D) lifecycle de admisiones/Forget/invalidation; (E) composición completa `ProtectedMemoryRecoveryAuthorityPort`. B–E pueden desarrollarse para LOCAL sin implementar el Trust Anchor, pero no habilitan runtime protegido antes de completar bootstrap, autoridad, atomicidad y validación.
 
-Véase [ME-D4O — bootstrap seguro e integración](../design/ME-D4O-sqlite-authority-bootstrap-and-integration.md).
+La evidencia de acción directa del propietario para bootstrap LOCAL debe alinearse con identidad/CAM y sigue pendiente según `docs/contracts/memory.md` §8. Las restauraciones que puedan preceder a Forget, fencing o cierres requeridos permanecen bloqueadas hasta reconciliación independiente aprobada. No se afirma anti-rollback externo ni se permite fallback automático de ANCHORED a LOCAL.
+
+Véase [ME-D4O-A — bootstrap por perfil](../design/ME-D4O-A-authenticated-domain-bootstrap.md) y [ME-D4O — integración por perfiles](../design/ME-D4O-sqlite-authority-bootstrap-and-integration.md). Pruebas/build/CI siguen pendientes y no se ejecutaron.
