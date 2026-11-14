@@ -102,11 +102,12 @@ Validar el contexto de sesión con la suite completa y una conversación local r
 
 ## Memory Engine — persistencia local (en desarrollo)
 
-El perfil SQLite del Memory Engine tiene migraciones, journal local y un adaptador gate-only que hace atómicos RECOVERY_CLOSED/RECOVERY_RECONCILED con la proyección del Recovery Gate. Todavía no existe una autoridad común que incluya admisión y egress protegido. No debe activarse como servicio de memoria persistente ni utilizarse para egress protegido.
+El perfil SQLite del Memory Engine tiene migraciones, journal local y un adaptador gate-only que hace atómicos RECOVERY_CLOSED/RECOVERY_RECONCILED con la proyección del Recovery Gate. Todavía no existe una autoridad común que incluya admisión y egress protegido. ME-D4O identificó además que el dominio nuevo nace con gate cerrado y carece de bootstrap autenticado; no debe activarse como servicio de memoria persistente ni utilizarse para egress protegido.
 
 - [README de Memory Engine: configuración SQLite, journal y límites](docs/memory-engine/README.md)
 - [ME-D4J: diseño de unidad de trabajo SQLite compartida](docs/design/ME-D4J-sqlite-unit-of-work.md)
 - [ME-D4N: adaptador SQLite del Recovery Gate y límites](docs/design/ME-D4N-sqlite-recovery-gate.md)
+- [ME-D4O: bootstrap seguro e integración de autoridad SQLite](docs/design/ME-D4O-sqlite-authority-bootstrap-and-integration.md)
 - [Registro de implementación e independencia](docs/design/memory-engine-project-independence-implementation.md)
 
 La guía explica cómo preparar el archivo SQLite, aplicar migraciones y configurar las dependencias explícitas del journal. La autoridad transaccional, la implementación completa de Forget/egress y sus pruebas de concurrencia siguen pendientes.
