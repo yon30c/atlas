@@ -59,6 +59,19 @@ Convertir Memory Engine en un componente reutilizable por Atlas y por aplicacion
 - Los contratos se exportan desde `atlas.memory.ports`. La implementación SQLite y los modelos históricos no se sustituyeron en esta entrega; su adaptación al nuevo puerto queda pendiente de un adaptador de perfil local.
 - No se cambiaron la forma canónica de idempotencia, el esquema persistido, las migraciones, la firma, el reducer ni la política de recuperación.
 
+
+
+## Implementado en ME-D4D — adaptador del journal SQLite local
+
+- Se refinó `atlas.memory.ports.journal.ConsistencyJournalPort`: el commit de checkpoint ahora conserva explícitamente el `expected_continuity_reference` y devuelve un resultado de checkpoint que incluye el checkpoint autenticado y el commit del marcador.
+- Se añadió `LocalSQLiteConsistencyJournalAdapter` en `atlas.adapters.sqlite.local_consistency_journal`. Traduce la firma neutral del checkpoint a la firma interna SQLite (`expected_position`, compromiso esperado de cabecera, checkpoint), y delega append, resolución y lectura estructural sin reconstruir ni modificar DTO persistidos.
+- El adaptador no expone `load_verified_recovery_state`. La recuperación operativa continúa exclusivamente en el journal local concreto, que pasa por `LocalConsistencyRecoveryVerifier`.
+- `load_recovery_state` sigue siendo diagnóstico y no una fuente autorizada para reducer, admisión ni egress.
+- El journal SQLite no ofrece actualmente una operación completa de inventario de recibos por admisión. Por ello, el adaptador devuelve `None` para `load_endpoint_receipts`, incluso cuando se proporciona una admisión válida. No devuelve una tupla vacía ni afirma que no existan recibos.
+- La escritura de checkpoint mantiene el compare-and-swap contra la posición y el compromiso previo exactos; el marcador y el checkpoint continúan en una transacción atómica. No se cambiaron tablas, migraciones, canonicalización, envelopes ni HMAC.
+
+**Composición:** construir el `SQLiteConsistencyJournal` como hasta ahora para los flujos operativos de recuperación local. Cuando un consumidor necesite la interfaz neutral de persistencia, envolver esa misma instancia con `LocalSQLiteConsistencyJournalAdapter`. No sustituir el journal concreto inyectado en el coordinador/verificador de recuperación por el adaptador neutral.
+
 ## Alcance pendiente de ME-D4
 
 - El nuevo contrato del journal es neutral, pero `SQLiteConsistencyJournal` todavía utiliza los DTO Atlas/local y no se ha adaptado al puerto genérico.
