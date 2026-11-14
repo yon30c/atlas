@@ -571,355 +571,355 @@ class SQLiteConsistencyJournal:
         if not isinstance(unit_of_work, SQLiteUnitOfWork):
             raise ContractError("unit_of_work debe ser SQLiteUnitOfWork")
         connection = unit_of_work._connection_for(self._database)
-            domain = connection.execute(
-                "SELECT * FROM consistency_domains WHERE domain_id=?",
-                (domain_id,),
-            ).fetchone()
+        domain = connection.execute(
+            "SELECT * FROM consistency_domains WHERE domain_id=?",
+            (domain_id,),
+        ).fetchone()
+        if (
+            domain is None
+            or domain["authority_epoch"] != epoch
+            or domain["profile"] != "local"
+            or domain["trust_policy_version"] != self._trust_policy_version
+        ):
+            return conflict
+
+        persisted_checkpoint = connection.execute(
+            "SELECT * FROM checkpoints WHERE checkpoint_id=?",
+            (checkpoint_id,),
+        ).fetchone()
+        persisted_marker = self._load_append(
+            connection, domain_id, epoch, append_id=append_id
+        )
+        marker_record = connection.execute(
+            """
+            SELECT sequence FROM journal_entries
+            WHERE domain_id=? AND authority_epoch=? AND record_id=?
+            """,
+            (domain_id, epoch, checkpoint_id),
+        ).fetchone()
+        operation_record = connection.execute(
+            """
+            SELECT sequence, record_id FROM journal_entries
+            WHERE domain_id=? AND authority_epoch=? AND operation_id=?
+            """,
+            (domain_id, epoch, operation_id),
+        ).fetchone()
+        checkpoint_at_position = connection.execute(
+            """
+            SELECT checkpoint_id FROM checkpoints
+            WHERE domain_id=? AND authority_epoch=? AND sequence=?
+            """,
+            (domain_id, epoch, expected_position.sequence),
+        ).fetchone()
+
+        if (
+            persisted_checkpoint is not None
+            or persisted_marker is not None
+            or marker_record is not None
+            or operation_record is not None
+            or checkpoint_at_position is not None
+        ):
             if (
-                domain is None
-                or domain["authority_epoch"] != epoch
-                or domain["profile"] != "local"
-                or domain["trust_policy_version"] != self._trust_policy_version
+                persisted_checkpoint is None
+                or persisted_marker is None
+                or marker_record is None
+                or operation_record is None
+                or operation_record["record_id"] != checkpoint_id
+                or operation_record["sequence"] != expected_position.sequence + 1
+                or marker_record["sequence"] != expected_position.sequence + 1
+                or persisted_checkpoint["domain_id"] != domain_id
+                or persisted_checkpoint["authority_epoch"] != epoch
+                or persisted_checkpoint["sequence"] != expected_position.sequence
+                or persisted_checkpoint["state_reference"] != checkpoint.state_reference
+                or persisted_checkpoint["integrity_reference"] != checkpoint.integrity_reference
+                or _parse_datetime(persisted_checkpoint["created_at"]) != checkpoint.created_at
+                or checkpoint_at_position is None
+                or checkpoint_at_position["checkpoint_id"] != checkpoint_id
             ):
                 return conflict
 
-            persisted_checkpoint = connection.execute(
-                "SELECT * FROM checkpoints WHERE checkpoint_id=?",
-                (checkpoint_id,),
-            ).fetchone()
-            persisted_marker = self._load_append(
-                connection, domain_id, epoch, append_id=append_id
+            stored_checkpoint = self._checkpoint_from_row(
+                persisted_checkpoint, domain_id=domain_id, epoch=epoch
             )
-            marker_record = connection.execute(
-                """
-                SELECT sequence FROM journal_entries
-                WHERE domain_id=? AND authority_epoch=? AND record_id=?
-                """,
-                (domain_id, epoch, checkpoint_id),
-            ).fetchone()
-            operation_record = connection.execute(
-                """
-                SELECT sequence, record_id FROM journal_entries
-                WHERE domain_id=? AND authority_epoch=? AND operation_id=?
-                """,
-                (domain_id, epoch, operation_id),
-            ).fetchone()
-            checkpoint_at_position = connection.execute(
-                """
-                SELECT checkpoint_id FROM checkpoints
-                WHERE domain_id=? AND authority_epoch=? AND sequence=?
-                """,
-                (domain_id, epoch, expected_position.sequence),
-            ).fetchone()
-
+            stored_transition = _transition_from_bytes(
+                bytes(persisted_marker["transition_canonical"])
+            )
+            stored_marker_envelope = self._envelope_from_row(
+                persisted_marker,
+                object_kind="journal_entry",
+                object_id=checkpoint_id,
+                domain_id=domain_id,
+                epoch=epoch,
+                sequence=persisted_marker["sequence"],
+                schema_version=persisted_marker["schema_version"],
+            )
+            checkpoint_envelope = stored_checkpoint.envelope
             if (
-                persisted_checkpoint is not None
-                or persisted_marker is not None
-                or marker_record is not None
-                or operation_record is not None
-                or checkpoint_at_position is not None
-            ):
-                if (
-                    persisted_checkpoint is None
-                    or persisted_marker is None
-                    or marker_record is None
-                    or operation_record is None
-                    or operation_record["record_id"] != checkpoint_id
-                    or operation_record["sequence"] != expected_position.sequence + 1
-                    or marker_record["sequence"] != expected_position.sequence + 1
-                    or persisted_checkpoint["domain_id"] != domain_id
-                    or persisted_checkpoint["authority_epoch"] != epoch
-                    or persisted_checkpoint["sequence"] != expected_position.sequence
-                    or persisted_checkpoint["state_reference"] != checkpoint.state_reference
-                    or persisted_checkpoint["integrity_reference"] != checkpoint.integrity_reference
-                    or _parse_datetime(persisted_checkpoint["created_at"]) != checkpoint.created_at
-                    or checkpoint_at_position is None
-                    or checkpoint_at_position["checkpoint_id"] != checkpoint_id
-                ):
-                    return conflict
-
-                stored_checkpoint = self._checkpoint_from_row(
-                    persisted_checkpoint, domain_id=domain_id, epoch=epoch
-                )
-                stored_transition = _transition_from_bytes(
-                    bytes(persisted_marker["transition_canonical"])
-                )
-                stored_marker_envelope = self._envelope_from_row(
-                    persisted_marker,
-                    object_kind="journal_entry",
-                    object_id=checkpoint_id,
-                    domain_id=domain_id,
-                    epoch=epoch,
-                    sequence=persisted_marker["sequence"],
-                    schema_version=persisted_marker["schema_version"],
-                )
-                checkpoint_envelope = stored_checkpoint.envelope
-                if (
-                    checkpoint_envelope is None
-                    or checkpoint_envelope.previous_commitment is not None
-                    or checkpoint_envelope.envelope_version != ENVELOPE_VERSION
-                    or checkpoint_envelope.schema_version != 1
-                    or checkpoint_envelope.reducer_version != self._reducer_version
-                    or checkpoint_envelope.issuer_id != self._issuer_id
-                    or checkpoint_envelope.issuer_role != self._issuer_role
-                    or checkpoint_envelope.key_reference != self._key_reference
-                    or checkpoint_envelope.trust_policy_version != self._trust_policy_version
-                    or object_commitment(checkpoint_payload(stored_checkpoint))
-                        != checkpoint_envelope.object_commitment
-                    or stored_marker_envelope.envelope_version != ENVELOPE_VERSION
-                    or stored_marker_envelope.schema_version != 1
-                    or stored_marker_envelope.reducer_version != self._reducer_version
-                    or stored_marker_envelope.issuer_id != self._issuer_id
-                    or stored_marker_envelope.issuer_role != self._issuer_role
-                    or stored_marker_envelope.key_reference != self._key_reference
-                    or stored_marker_envelope.trust_policy_version != self._trust_policy_version
-                    or stored_marker_envelope.issued_at != checkpoint_envelope.issued_at
-                    or stored_marker_envelope.previous_commitment
-                        != checkpoint_envelope.object_commitment
-                    or object_commitment(journal_entry_payload(
-                        JournalEntry(
-                            ConsistencyPosition(
-                                domain_id, epoch, persisted_marker["sequence"]
-                            ),
-                            stored_transition,
-                        )
-                    )) != stored_marker_envelope.object_commitment
-                    or stored_transition != marker
-                    or bytes(persisted_marker["request_canonical"]) != request_bytes
-                    or persisted_marker["request_digest"] != request_digest
-                    or persisted_marker["append_id"] != append_id
-                    or persisted_marker["operation_id"] != operation_id
-                    or persisted_marker["idempotency_key"] is not None
-                    or persisted_marker["record_id"] != checkpoint_id
-                    or persisted_marker["sequence"] != expected_position.sequence + 1
-                    or domain["head_sequence"] < expected_position.sequence + 1
-                    or (
-                        domain["head_sequence"] == expected_position.sequence + 1
-                        and domain["head_commitment"]
-                            != stored_marker_envelope.object_commitment
-                    )
-                ):
-                    return conflict
-                return CheckpointCommitResult(
-                    CheckpointCommitStatus.REPLAYED,
-                    stored_checkpoint,
-                    JournalCommit(
+                checkpoint_envelope is None
+                or checkpoint_envelope.previous_commitment is not None
+                or checkpoint_envelope.envelope_version != ENVELOPE_VERSION
+                or checkpoint_envelope.schema_version != 1
+                or checkpoint_envelope.reducer_version != self._reducer_version
+                or checkpoint_envelope.issuer_id != self._issuer_id
+                or checkpoint_envelope.issuer_role != self._issuer_role
+                or checkpoint_envelope.key_reference != self._key_reference
+                or checkpoint_envelope.trust_policy_version != self._trust_policy_version
+                or object_commitment(checkpoint_payload(stored_checkpoint))
+                    != checkpoint_envelope.object_commitment
+                or stored_marker_envelope.envelope_version != ENVELOPE_VERSION
+                or stored_marker_envelope.schema_version != 1
+                or stored_marker_envelope.reducer_version != self._reducer_version
+                or stored_marker_envelope.issuer_id != self._issuer_id
+                or stored_marker_envelope.issuer_role != self._issuer_role
+                or stored_marker_envelope.key_reference != self._key_reference
+                or stored_marker_envelope.trust_policy_version != self._trust_policy_version
+                or stored_marker_envelope.issued_at != checkpoint_envelope.issued_at
+                or stored_marker_envelope.previous_commitment
+                    != checkpoint_envelope.object_commitment
+                or object_commitment(journal_entry_payload(
+                    JournalEntry(
                         ConsistencyPosition(
                             domain_id, epoch, persisted_marker["sequence"]
                         ),
-                        checkpoint_id,
-                        True,
-                    ),
+                        stored_transition,
+                    )
+                )) != stored_marker_envelope.object_commitment
+                or stored_transition != marker
+                or bytes(persisted_marker["request_canonical"]) != request_bytes
+                or persisted_marker["request_digest"] != request_digest
+                or persisted_marker["append_id"] != append_id
+                or persisted_marker["operation_id"] != operation_id
+                or persisted_marker["idempotency_key"] is not None
+                or persisted_marker["record_id"] != checkpoint_id
+                or persisted_marker["sequence"] != expected_position.sequence + 1
+                or domain["head_sequence"] < expected_position.sequence + 1
+                or (
+                    domain["head_sequence"] == expected_position.sequence + 1
+                    and domain["head_commitment"]
+                        != stored_marker_envelope.object_commitment
                 )
-
-            if (
-                checkpoint_at_position is not None
-                or marker_record is not None
-                or operation_record is not None
-                or domain["head_sequence"] != expected_position.sequence
-                or domain["head_commitment"] != expected_head_commitment
             ):
                 return conflict
-
-            sequence = expected_position.sequence
-            marker_sequence = sequence + 1
-            issued_at = datetime.now(timezone.utc)
-            unsigned_checkpoint_envelope = AuthenticatedConsistencyEnvelope(
-                object_kind="checkpoint",
-                envelope_version=ENVELOPE_VERSION,
-                consistency_domain_id=domain_id,
-                authority_epoch=epoch,
-                sequence=sequence,
-                object_id=checkpoint_id,
-                schema_version=1,
-                reducer_version=self._reducer_version,
-                previous_commitment=None,
-                object_commitment="pending",
-                issuer_id=self._issuer_id,
-                issuer_role=self._issuer_role,
-                key_reference=self._key_reference,
-                trust_policy_version=self._trust_policy_version,
-                issued_at=issued_at,
-                authentication_evidence="pending",
-            )
-            try:
-                signed_checkpoint_envelope = self._signer.sign_envelope(
-                    unsigned_checkpoint_envelope,
-                    checkpoint_payload(checkpoint),
-                )
-            except Exception:
-                return unavailable
-            expected_checkpoint_commitment = object_commitment(
-                checkpoint_payload(checkpoint)
-            )
-            if (
-                not isinstance(signed_checkpoint_envelope, AuthenticatedConsistencyEnvelope)
-                or signed_checkpoint_envelope.object_kind != "checkpoint"
-                or signed_checkpoint_envelope.envelope_version != ENVELOPE_VERSION
-                or signed_checkpoint_envelope.consistency_domain_id != domain_id
-                or signed_checkpoint_envelope.authority_epoch != epoch
-                or signed_checkpoint_envelope.sequence != sequence
-                or signed_checkpoint_envelope.object_id != checkpoint_id
-                or signed_checkpoint_envelope.schema_version != 1
-                or signed_checkpoint_envelope.reducer_version != self._reducer_version
-                or signed_checkpoint_envelope.previous_commitment is not None
-                or signed_checkpoint_envelope.object_commitment != expected_checkpoint_commitment
-                or signed_checkpoint_envelope.issuer_id != self._issuer_id
-                or signed_checkpoint_envelope.issuer_role != self._issuer_role
-                or signed_checkpoint_envelope.key_reference != self._key_reference
-                or signed_checkpoint_envelope.trust_policy_version != self._trust_policy_version
-                or signed_checkpoint_envelope.issued_at != issued_at
-                or not signed_checkpoint_envelope.authentication_evidence
-            ):
-                return unavailable
-
-            signed_checkpoint = ConsistencyCheckpoint(
-                checkpoint_id=checkpoint_id,
-                position=expected_position,
-                state_reference=checkpoint.state_reference,
-                integrity_reference=checkpoint.integrity_reference,
-                created_at=checkpoint.created_at,
-                envelope=signed_checkpoint_envelope,
-            )
-            marker_position = ConsistencyPosition(
-                domain_id, epoch, marker_sequence
-            )
-            unsigned_marker_envelope = AuthenticatedConsistencyEnvelope(
-                object_kind="journal_entry",
-                envelope_version=ENVELOPE_VERSION,
-                consistency_domain_id=domain_id,
-                authority_epoch=epoch,
-                sequence=marker_sequence,
-                object_id=checkpoint_id,
-                schema_version=1,
-                reducer_version=self._reducer_version,
-                previous_commitment=signed_checkpoint_envelope.object_commitment,
-                object_commitment="pending",
-                issuer_id=self._issuer_id,
-                issuer_role=self._issuer_role,
-                key_reference=self._key_reference,
-                trust_policy_version=self._trust_policy_version,
-                issued_at=issued_at,
-                authentication_evidence="pending",
-            )
-            unsigned_entry = JournalEntry(marker_position, marker)
-            try:
-                signed_marker_envelope = self._signer.sign_envelope(
-                    unsigned_marker_envelope,
-                    journal_entry_payload(unsigned_entry),
-                )
-            except Exception:
-                return unavailable
-            expected_marker_commitment = object_commitment(
-                journal_entry_payload(unsigned_entry)
-            )
-            if (
-                not isinstance(signed_marker_envelope, AuthenticatedConsistencyEnvelope)
-                or signed_marker_envelope.object_kind != "journal_entry"
-                or signed_marker_envelope.envelope_version != ENVELOPE_VERSION
-                or signed_marker_envelope.consistency_domain_id != domain_id
-                or signed_marker_envelope.authority_epoch != epoch
-                or signed_marker_envelope.sequence != marker_sequence
-                or signed_marker_envelope.object_id != checkpoint_id
-                or signed_marker_envelope.schema_version != 1
-                or signed_marker_envelope.reducer_version != self._reducer_version
-                or signed_marker_envelope.previous_commitment
-                    != signed_checkpoint_envelope.object_commitment
-                or signed_marker_envelope.object_commitment != expected_marker_commitment
-                or signed_marker_envelope.issuer_id != self._issuer_id
-                or signed_marker_envelope.issuer_role != self._issuer_role
-                or signed_marker_envelope.key_reference != self._key_reference
-                or signed_marker_envelope.trust_policy_version != self._trust_policy_version
-                or signed_marker_envelope.issued_at != issued_at
-                or not signed_marker_envelope.authentication_evidence
-            ):
-                return unavailable
-
-            connection.execute(
-                """
-                INSERT INTO checkpoints (
-                    checkpoint_id, domain_id, authority_epoch, sequence,
-                    state_reference, integrity_reference, created_at,
-                    envelope_version, schema_version, reducer_version,
-                    previous_commitment, object_commitment, issuer_id, issuer_role,
-                    key_reference, trust_policy_version, issued_at,
-                    authentication_evidence
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    checkpoint_id, domain_id, epoch, sequence,
-                    checkpoint.state_reference, checkpoint.integrity_reference,
-                    _utc_text(checkpoint.created_at),
-                    signed_checkpoint_envelope.envelope_version, 1,
-                    signed_checkpoint_envelope.reducer_version,
-                    signed_checkpoint_envelope.previous_commitment,
-                    signed_checkpoint_envelope.object_commitment,
-                    signed_checkpoint_envelope.issuer_id,
-                    signed_checkpoint_envelope.issuer_role,
-                    signed_checkpoint_envelope.key_reference,
-                    signed_checkpoint_envelope.trust_policy_version,
-                    _utc_text(signed_checkpoint_envelope.issued_at),
-                    signed_checkpoint_envelope.authentication_evidence,
+            return CheckpointCommitResult(
+                CheckpointCommitStatus.REPLAYED,
+                stored_checkpoint,
+                JournalCommit(
+                    ConsistencyPosition(
+                        domain_id, epoch, persisted_marker["sequence"]
+                    ),
+                    checkpoint_id,
+                    True,
                 ),
             )
 
-            connection.execute(
-                """
-                INSERT INTO journal_entries (
-                    domain_id, authority_epoch, sequence, record_id, operation_id,
-                    record_kind, schema_version, transition_canonical,
-                    envelope_version, reducer_version, previous_commitment,
-                    object_commitment, issuer_id, issuer_role, key_reference,
-                    trust_policy_version, issued_at, authentication_evidence
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    domain_id, epoch, marker_sequence, checkpoint_id,
-                    operation_id, marker.record_kind.value, marker.schema_version,
-                    canonical_json_bytes(marker),
-                    signed_marker_envelope.envelope_version,
-                    signed_marker_envelope.reducer_version,
-                    signed_marker_envelope.previous_commitment,
-                    signed_marker_envelope.object_commitment,
-                    signed_marker_envelope.issuer_id,
-                    signed_marker_envelope.issuer_role,
-                    signed_marker_envelope.key_reference,
-                    signed_marker_envelope.trust_policy_version,
-                    _utc_text(signed_marker_envelope.issued_at),
-                    signed_marker_envelope.authentication_evidence,
-                ),
+        if (
+            checkpoint_at_position is not None
+            or marker_record is not None
+            or operation_record is not None
+            or domain["head_sequence"] != expected_position.sequence
+            or domain["head_commitment"] != expected_head_commitment
+        ):
+            return conflict
+
+        sequence = expected_position.sequence
+        marker_sequence = sequence + 1
+        issued_at = datetime.now(timezone.utc)
+        unsigned_checkpoint_envelope = AuthenticatedConsistencyEnvelope(
+            object_kind="checkpoint",
+            envelope_version=ENVELOPE_VERSION,
+            consistency_domain_id=domain_id,
+            authority_epoch=epoch,
+            sequence=sequence,
+            object_id=checkpoint_id,
+            schema_version=1,
+            reducer_version=self._reducer_version,
+            previous_commitment=None,
+            object_commitment="pending",
+            issuer_id=self._issuer_id,
+            issuer_role=self._issuer_role,
+            key_reference=self._key_reference,
+            trust_policy_version=self._trust_policy_version,
+            issued_at=issued_at,
+            authentication_evidence="pending",
+        )
+        try:
+            signed_checkpoint_envelope = self._signer.sign_envelope(
+                unsigned_checkpoint_envelope,
+                checkpoint_payload(checkpoint),
             )
-            connection.execute(
-                """
-                INSERT INTO journal_operations (
-                    domain_id, authority_epoch, append_id, operation_id,
-                    idempotency_key, request_canonical, request_digest,
-                    sequence, record_id, created_at
-                ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)
-                """,
-                (
-                    domain_id, epoch, append_id, operation_id,
-                    request_bytes, request_digest, marker_sequence,
-                    checkpoint_id, _utc_text(issued_at),
-                ),
+        except Exception:
+            return unavailable
+        expected_checkpoint_commitment = object_commitment(
+            checkpoint_payload(checkpoint)
+        )
+        if (
+            not isinstance(signed_checkpoint_envelope, AuthenticatedConsistencyEnvelope)
+            or signed_checkpoint_envelope.object_kind != "checkpoint"
+            or signed_checkpoint_envelope.envelope_version != ENVELOPE_VERSION
+            or signed_checkpoint_envelope.consistency_domain_id != domain_id
+            or signed_checkpoint_envelope.authority_epoch != epoch
+            or signed_checkpoint_envelope.sequence != sequence
+            or signed_checkpoint_envelope.object_id != checkpoint_id
+            or signed_checkpoint_envelope.schema_version != 1
+            or signed_checkpoint_envelope.reducer_version != self._reducer_version
+            or signed_checkpoint_envelope.previous_commitment is not None
+            or signed_checkpoint_envelope.object_commitment != expected_checkpoint_commitment
+            or signed_checkpoint_envelope.issuer_id != self._issuer_id
+            or signed_checkpoint_envelope.issuer_role != self._issuer_role
+            or signed_checkpoint_envelope.key_reference != self._key_reference
+            or signed_checkpoint_envelope.trust_policy_version != self._trust_policy_version
+            or signed_checkpoint_envelope.issued_at != issued_at
+            or not signed_checkpoint_envelope.authentication_evidence
+        ):
+            return unavailable
+
+        signed_checkpoint = ConsistencyCheckpoint(
+            checkpoint_id=checkpoint_id,
+            position=expected_position,
+            state_reference=checkpoint.state_reference,
+            integrity_reference=checkpoint.integrity_reference,
+            created_at=checkpoint.created_at,
+            envelope=signed_checkpoint_envelope,
+        )
+        marker_position = ConsistencyPosition(
+            domain_id, epoch, marker_sequence
+        )
+        unsigned_marker_envelope = AuthenticatedConsistencyEnvelope(
+            object_kind="journal_entry",
+            envelope_version=ENVELOPE_VERSION,
+            consistency_domain_id=domain_id,
+            authority_epoch=epoch,
+            sequence=marker_sequence,
+            object_id=checkpoint_id,
+            schema_version=1,
+            reducer_version=self._reducer_version,
+            previous_commitment=signed_checkpoint_envelope.object_commitment,
+            object_commitment="pending",
+            issuer_id=self._issuer_id,
+            issuer_role=self._issuer_role,
+            key_reference=self._key_reference,
+            trust_policy_version=self._trust_policy_version,
+            issued_at=issued_at,
+            authentication_evidence="pending",
+        )
+        unsigned_entry = JournalEntry(marker_position, marker)
+        try:
+            signed_marker_envelope = self._signer.sign_envelope(
+                unsigned_marker_envelope,
+                journal_entry_payload(unsigned_entry),
             )
-            updated = connection.execute(
-                """
-                UPDATE consistency_domains
-                SET head_sequence=?, head_commitment=?, updated_at=?
-                WHERE domain_id=? AND authority_epoch=? AND head_sequence=?
-                  AND head_commitment=?
-                """,
-                (
-                    marker_sequence, signed_marker_envelope.object_commitment,
-                    _utc_text(issued_at), domain_id, epoch, sequence,
-                    expected_head_commitment,
-                ),
+        except Exception:
+            return unavailable
+        expected_marker_commitment = object_commitment(
+            journal_entry_payload(unsigned_entry)
+        )
+        if (
+            not isinstance(signed_marker_envelope, AuthenticatedConsistencyEnvelope)
+            or signed_marker_envelope.object_kind != "journal_entry"
+            or signed_marker_envelope.envelope_version != ENVELOPE_VERSION
+            or signed_marker_envelope.consistency_domain_id != domain_id
+            or signed_marker_envelope.authority_epoch != epoch
+            or signed_marker_envelope.sequence != marker_sequence
+            or signed_marker_envelope.object_id != checkpoint_id
+            or signed_marker_envelope.schema_version != 1
+            or signed_marker_envelope.reducer_version != self._reducer_version
+            or signed_marker_envelope.previous_commitment
+                != signed_checkpoint_envelope.object_commitment
+            or signed_marker_envelope.object_commitment != expected_marker_commitment
+            or signed_marker_envelope.issuer_id != self._issuer_id
+            or signed_marker_envelope.issuer_role != self._issuer_role
+            or signed_marker_envelope.key_reference != self._key_reference
+            or signed_marker_envelope.trust_policy_version != self._trust_policy_version
+            or signed_marker_envelope.issued_at != issued_at
+            or not signed_marker_envelope.authentication_evidence
+        ):
+            return unavailable
+
+        connection.execute(
+            """
+            INSERT INTO checkpoints (
+                checkpoint_id, domain_id, authority_epoch, sequence,
+                state_reference, integrity_reference, created_at,
+                envelope_version, schema_version, reducer_version,
+                previous_commitment, object_commitment, issuer_id, issuer_role,
+                key_reference, trust_policy_version, issued_at,
+                authentication_evidence
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                checkpoint_id, domain_id, epoch, sequence,
+                checkpoint.state_reference, checkpoint.integrity_reference,
+                _utc_text(checkpoint.created_at),
+                signed_checkpoint_envelope.envelope_version, 1,
+                signed_checkpoint_envelope.reducer_version,
+                signed_checkpoint_envelope.previous_commitment,
+                signed_checkpoint_envelope.object_commitment,
+                signed_checkpoint_envelope.issuer_id,
+                signed_checkpoint_envelope.issuer_role,
+                signed_checkpoint_envelope.key_reference,
+                signed_checkpoint_envelope.trust_policy_version,
+                _utc_text(signed_checkpoint_envelope.issued_at),
+                signed_checkpoint_envelope.authentication_evidence,
+            ),
+        )
+
+        connection.execute(
+            """
+            INSERT INTO journal_entries (
+                domain_id, authority_epoch, sequence, record_id, operation_id,
+                record_kind, schema_version, transition_canonical,
+                envelope_version, reducer_version, previous_commitment,
+                object_commitment, issuer_id, issuer_role, key_reference,
+                trust_policy_version, issued_at, authentication_evidence
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                domain_id, epoch, marker_sequence, checkpoint_id,
+                operation_id, marker.record_kind.value, marker.schema_version,
+                canonical_json_bytes(marker),
+                signed_marker_envelope.envelope_version,
+                signed_marker_envelope.reducer_version,
+                signed_marker_envelope.previous_commitment,
+                signed_marker_envelope.object_commitment,
+                signed_marker_envelope.issuer_id,
+                signed_marker_envelope.issuer_role,
+                signed_marker_envelope.key_reference,
+                signed_marker_envelope.trust_policy_version,
+                _utc_text(signed_marker_envelope.issued_at),
+                signed_marker_envelope.authentication_evidence,
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO journal_operations (
+                domain_id, authority_epoch, append_id, operation_id,
+                idempotency_key, request_canonical, request_digest,
+                sequence, record_id, created_at
+            ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)
+            """,
+            (
+                domain_id, epoch, append_id, operation_id,
+                request_bytes, request_digest, marker_sequence,
+                checkpoint_id, _utc_text(issued_at),
+            ),
+        )
+        updated = connection.execute(
+            """
+            UPDATE consistency_domains
+            SET head_sequence=?, head_commitment=?, updated_at=?
+            WHERE domain_id=? AND authority_epoch=? AND head_sequence=?
+              AND head_commitment=?
+            """,
+            (
+                marker_sequence, signed_marker_envelope.object_commitment,
+                _utc_text(issued_at), domain_id, epoch, sequence,
+                expected_head_commitment,
+            ),
+        )
+        if updated.rowcount != 1:
+            raise sqlite3.IntegrityError(
+                "checkpoint head CAS failed; transaction rolled back"
             )
-            if updated.rowcount != 1:
-                raise sqlite3.IntegrityError(
-                    "checkpoint head CAS failed; transaction rolled back"
-                )
         return CheckpointCommitResult(
             CheckpointCommitStatus.COMMITTED,
             signed_checkpoint,
