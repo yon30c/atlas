@@ -12,6 +12,7 @@ from atlas.memory.consistency import (
     AuthorizationRevisionSet,
     ReadAdmissionStatus,
 )
+from atlas.memory.envelope import AuthenticatedConsistencyEnvelope
 from atlas.memory.identifiers import validate_atlas_id
 from atlas.memory.models import MemoryScopeKind
 
@@ -463,12 +464,23 @@ class JournalOperationResolution:
 class JournalEntry:
     position: ConsistencyPosition
     transition: ConsistencyTransition
+    envelope: AuthenticatedConsistencyEnvelope | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.position, ConsistencyPosition):
             raise ContractError("position debe ser ConsistencyPosition")
         if not isinstance(self.transition, ConsistencyTransition):
             raise ContractError("transition debe ser ConsistencyTransition")
+        if self.envelope is not None:
+            if not isinstance(self.envelope, AuthenticatedConsistencyEnvelope):
+                raise ContractError("envelope debe ser AuthenticatedConsistencyEnvelope")
+            if (self.envelope.object_kind != "journal_entry"
+                    or self.envelope.object_id != self.transition.record_id
+                    or self.envelope.consistency_domain_id != self.position.consistency_domain_id
+                    or self.envelope.authority_epoch != self.position.authority_epoch
+                    or self.envelope.sequence != self.position.sequence
+                    or self.envelope.schema_version != self.transition.schema_version):
+                raise ContractError("envelope no corresponde a la entrada exacta del journal")
 
 
 @dataclass(frozen=True, slots=True)
@@ -478,6 +490,7 @@ class ConsistencyCheckpoint:
     state_reference: str
     integrity_reference: str
     created_at: datetime
+    envelope: AuthenticatedConsistencyEnvelope | None = None
 
     def __post_init__(self) -> None:
         validate_atlas_id(self.checkpoint_id, "checkpoint_id")
@@ -486,6 +499,15 @@ class ConsistencyCheckpoint:
         _required(self.state_reference, "state_reference")
         _required(self.integrity_reference, "integrity_reference")
         _utc(self.created_at, "created_at")
+        if self.envelope is not None:
+            if not isinstance(self.envelope, AuthenticatedConsistencyEnvelope):
+                raise ContractError("envelope debe ser AuthenticatedConsistencyEnvelope")
+            if (self.envelope.object_kind != "checkpoint"
+                    or self.envelope.object_id != self.checkpoint_id
+                    or self.envelope.consistency_domain_id != self.position.consistency_domain_id
+                    or self.envelope.authority_epoch != self.position.authority_epoch
+                    or self.envelope.sequence != self.position.sequence):
+                raise ContractError("envelope no corresponde al checkpoint exacto")
 
 
 @dataclass(frozen=True, slots=True)
