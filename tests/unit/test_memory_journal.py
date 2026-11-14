@@ -18,6 +18,9 @@ from atlas.memory.journal import (
     ConsistencyTransition,
     JournalCommit,
     JournalEntry,
+    JournalOperationResolution,
+    JournalOperationResolutionStatus,
+    consistency_transition_request_projection,
 )
 
 NOW = datetime(2026, 11, 13, 12, 0, tzinfo=timezone.utc)
@@ -696,3 +699,51 @@ class ConsistencyJournalModelTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+    def test_semantic_projection_ignores_regenerated_technical_fields(self):
+        original = read_admitted(idempotency_key="same-request-key")
+        retry = replace(
+            original,
+            record_id=RECORD_2,
+            occurred_at=NOW + timedelta(seconds=30),
+            request_id="new-transport-request",
+            correlation_id="new-correlation",
+        )
+        self.assertEqual(
+            consistency_transition_request_projection(DOMAIN, 1, original),
+            consistency_transition_request_projection(DOMAIN, 1, retry),
+        )
+
+    def test_semantic_projection_preserves_business_effect_fields(self):
+        original = read_admitted(idempotency_key="same-request-key")
+        changed = replace(
+            original,
+            route_ids=frozenset({"assistant-response"}),
+        )
+        self.assertNotEqual(
+            consistency_transition_request_projection(DOMAIN, 1, original),
+            consistency_transition_request_projection(DOMAIN, 1, changed),
+        )
+
+    def test_resolution_accepts_original_commit_with_regenerated_request_metadata(self):
+        committed = read_admitted(idempotency_key="same-request-key")
+        expected = replace(
+            committed,
+            record_id=RECORD_2,
+            occurred_at=NOW + timedelta(seconds=45),
+            request_id="retry-request",
+            correlation_id="retry-correlation",
+        )
+        result = JournalOperationResolution(
+            status=JournalOperationResolutionStatus.COMMITTED_EXACT,
+            operation_id=expected.operation_id,
+            idempotency_key=expected.idempotency_key,
+            expected_position=position(0),
+            expected_transition=expected,
+            current_position=position(2),
+            commit=JournalCommit(position(1), committed.record_id, True),
+            committed_transition=committed,
+        )
+        self.assertEqual(result.commit.record_id, RECORD_1)
+        self.assertEqual(result.committed_transition, committed)
