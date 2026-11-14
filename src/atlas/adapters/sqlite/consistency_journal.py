@@ -280,6 +280,7 @@ class SQLiteConsistencyJournal:
                     or signed.issuer_role != self._issuer_role
                     or signed.key_reference != self._key_reference
                     or signed.trust_policy_version != self._trust_policy_version
+                    or signed.issued_at != unsigned.issued_at
                     or signed.object_commitment != expected_commitment
                     or not signed.authentication_evidence
                 ):
@@ -334,7 +335,9 @@ class SQLiteConsistencyJournal:
                 if updated.rowcount != 1:
                     raise sqlite3.IntegrityError("head CAS failed; append transaction rolled back")
             return JournalCommit(position, transition.record_id, False)
-        except (sqlite3.Error, ContractError, OSError, RuntimeError, ValueError):
+        except Exception:
+            # The signer port defines failure by exception, not by a closed
+            # exception taxonomy. Any ordinary failure aborts the transaction.
             return None
 
     def resolve_append(
