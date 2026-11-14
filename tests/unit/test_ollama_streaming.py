@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import unittest
 from unittest.mock import patch
 
-from atlas.adapters.ollama import OllamaProvider
+from atlas.adapters.ollama import OllamaProvider, OllamaResponseError
 from atlas.adapters.ollama_assistant import OllamaResponseGenerator
 from atlas.assistant.models import AssistantRequest, AssistantResponseKind
 from atlas.assistant.service import AssistantService
@@ -89,7 +89,7 @@ class OllamaStreamingTests(unittest.TestCase):
     def test_provider_rejects_error_event_during_stream(self):
         transport = FakeStreamingTransport([{"error": "model not found"}])
         provider = OllamaProvider(transport=transport)
-        with self.assertRaises(Exception):
+        with self.assertRaises(OllamaResponseError):
             provider.generate_stream(self._llm_request(), lambda _token: None)
 
     def test_generator_and_service_preserve_streamed_response(self):
