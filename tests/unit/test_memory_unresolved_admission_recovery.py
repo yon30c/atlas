@@ -608,6 +608,26 @@ class CoordinatorRecoveryGateFake:
     def __init__(self, journal):
         self.journal = journal
         self.closed = False
+        self.restoration_calls = []
+
+    def ensure_recovery_gate_closed(self, operation_id, generation):
+        self.restoration_calls.append((operation_id, generation))
+        try:
+            projection = ConsistencyJournalReducer().reduce(self.journal.state)
+        except ContractError:
+            return False
+        active = tuple(
+            item for item in projection.recovery_closures
+            if not item.reconciled
+        )
+        if (
+            len(active) != 1
+            or active[0].operation_id != operation_id
+            or active[0].generation != generation
+        ):
+            return False
+        self.closed = True
+        return True
 
     def close_recovery_gate(self, expected_position, transition):
         if self.closed or transition.record_kind is not ConsistencyRecordKind.RECOVERY_CLOSED:
@@ -710,6 +730,31 @@ class RecoveryJournalCoordinatorTests(unittest.TestCase):
         self.assertEqual(
             self.fencer.calls.count(("journal-recovery-admission", "api-response")),
             2,
+        )
+
+    def test_restart_restores_persisted_gate_before_resuming_remaining_endpoints(self):
+        self.fencer.fail_once_endpoint = "api-response"
+        first = self.coordinator.run()
+        self.assertIs(first.status, RecoveryCoordinatorStatus.PENDING)
+
+        restarted_gate = CoordinatorRecoveryGateFake(self.journal)
+        restarted_fencer = GateAwareEndpointFencer(restarted_gate)
+        restarted = RecoveryJournalCoordinator(
+            self.journal,
+            restarted_gate,
+            restarted_fencer,
+            self.verifier,
+            domain_id="consistency-domain",
+            id_factory=lambda: next(self.ids),
+            clock=lambda: NOW,
+        )
+        result = restarted.run()
+        self.assertIs(result.status, RecoveryCoordinatorStatus.FENCING_RECORDED)
+        self.assertTrue(restarted_gate.closed)
+        self.assertEqual(len(restarted_gate.restoration_calls), 1)
+        self.assertEqual(
+            restarted_fencer.calls,
+            [("journal-recovery-admission", "api-response")],
         )
 
     def test_unverifiable_journal_blocks_before_closure_or_endpoint_contact(self):
