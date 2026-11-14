@@ -543,6 +543,8 @@ El registro se mantiene separado de EventStore y SecurityAudit. EventStore no se
 
 Este documento es una propuesta técnica de diseño y no cambia CT-04, CT-05, EventStore, SecurityAudit ni los contratos normativos.
 
+**Decisión posterior — 13 de noviembre de 2026:** Trust Anchor externo es opcional y su implementación queda postergada hasta la etapa final de Atlas. El baseline local verifica la continuidad interna disponible, pero no demuestra anti-rollback frente a una restauración coherente del conjunto local. La garantía de no reintroducir memorias olvidadas tras restaurar backups requiere una fuente independiente de supresión/continuidad o reconciliación explícita; sin ella, la restauración afectada permanece bloqueada. Esta decisión se desarrolla en ME-03K-B/C y en `Contrato-de-diseno-Atlas-v1.md` §20.6.
+
 Se incorporó una primera capa sin infraestructura:
 
 - `src/atlas/memory/journal.py`: modelos puros de `ConsistencyPosition`, `ConsistencyTransition`, `JournalCommit`, `JournalEntry`, `ConsistencyCheckpoint` y `ConsistencyRecoveryState`, con validación de secuencia, época, dominio, IDs y revisiones exactas en READ_ADMITTED.
