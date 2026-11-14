@@ -13,7 +13,6 @@ from atlas.memory.journal import (
     JournalCommit,
     JournalEntry,
     JournalOperationResolution,
-    ConsistencyTransition,
 )
 
 
