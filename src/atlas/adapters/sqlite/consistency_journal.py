@@ -655,4 +655,9 @@ class SQLiteConsistencyJournal:
                 ConsistencyRecoveryVerificationStatus.UNAVAILABLE
             )
 
-        return self._recovery_verifier.verify_recovery_state(state, context)
+        try:
+            return self._recovery_verifier.verify_recovery_state(state, context)
+        except Exception:
+            return ConsistencyRecoveryVerificationResult(
+                ConsistencyRecoveryVerificationStatus.UNAVAILABLE
+            )
