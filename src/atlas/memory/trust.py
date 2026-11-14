@@ -50,6 +50,7 @@ class ConsistencyTrustAnchor:
     issuer_id: str
     key_reference: str
     trust_policy_version: str
+    authentication_evidence: str
     anchor_revision: int
     issued_at: datetime
     valid_until: datetime | None = None
@@ -58,6 +59,7 @@ class ConsistencyTrustAnchor:
         for field in (
             "anchor_id", "consistency_domain_id", "authenticated_state_commitment",
             "issuer_id", "key_reference", "trust_policy_version",
+            "authentication_evidence",
         ):
             _required(getattr(self, field), field)
         _positive(self.authority_epoch, "authority_epoch")
@@ -393,7 +395,7 @@ class ReceiptTrustContext:
     trust_policy_version: str
     verification_time: datetime
     purpose: str
-    expected_receipt_id: str | None = None
+    expected_receipt_id: str
     admission_id: str | None = None
     endpoint_id: str | None = None
     generation: int | None = None
