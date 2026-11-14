@@ -29,11 +29,15 @@ class LLMContractTests(unittest.TestCase):
         self.assertEqual(request.max_tokens, 256)
 
     def test_rejects_invalid_messages(self):
-        invalid_values = ((), [], ("Hola",), (LLMMessage("user", "Hola"),))
+        invalid_values = ((), [], ("Hola",), ("not-a-message",))
         for messages in invalid_values:
             with self.subTest(messages=messages):
                 with self.assertRaises(ContractError):
                     LLMRequest(model="local-model", messages=messages)
+
+    def test_rejects_invalid_message_role(self):
+        with self.assertRaises(ContractError):
+            LLMMessage("user", "Hola")
 
     def test_rejects_blank_model_and_message_content(self):
         with self.assertRaises(ContractError):
