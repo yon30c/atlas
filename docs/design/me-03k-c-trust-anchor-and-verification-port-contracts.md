@@ -319,3 +319,33 @@ La canonicalización del contenido excluye el propio envelope. Para una entrada 
 `verify_recovery_chain` verifica los envelopes del checkpoint y de todas las entradas recuperadas, exige continuidad exacta de commitments y comprueba que el commitment final coincide con `continuity_reference` y `head_sequence`. El checkpoint retenido actúa como raíz autenticada de la porción de journal conservada; las entradas posteriores enlazan con su commitment. Una cadena vacía no se considera evidencia autenticada. La clave se resuelve por `LocalConsistencyKeyPort`; clave ausente, envelope ausente, política distinta o cualquier fallo criptográfico rechaza la cadena.
 
 Este helper es una primera frontera criptográfica local; **no sustituye aún al verificador ME-03K completo**: no autentica la autoridad real del emisor, no prueba inventarios externos de recibos/tombstones, no garantiza frescura anti-rollback y no demuestra que el conjunto restaurado sea el último backup coherente. No debe usarse por sí solo para abrir el recovery gate ni autorizar lecturas protegidas.
+
+
+## 17. Decisión del propietario — política local independiente de confianza
+
+**Estado: APROBADO — 14 de noviembre de 2026.**
+
+La recuperación local utilizará una política de confianza independiente del journal, checkpoint y backup restaurados. La política procede de configuración confiable del servidor y se inyecta en la composición del verificador; nunca se reconstruye a partir de claims recuperados.
+
+La política contiene allowlists explícitas para:
+
+1. Pares exactos `(object_kind, issuer_id, issuer_role)`, diferenciados entre `checkpoint` y `journal_entry`. No se usan listas independientes de emisores y roles que creen autorizaciones cruzadas accidentales.
+2. Versiones permitidas de envelope, canonicalización, esquema y reducer.
+3. Referencias de claves permitidas, además de resolver cada clave histórica mediante `LocalConsistencyKeyPort`.
+4. Una versión exacta de política, que debe coincidir con la declarada y autenticada por cada envelope.
+
+Las allowlists incompletas o vacías son errores de configuración. Un claim del journal no puede ampliar, reemplazar ni actualizar la política. La clave debe pertenecer simultáneamente a la allowlist confiable y estar disponible en el almacén de claves; cualquier ausencia o discrepancia falla cerrado.
+
+El primer incremento implementa el modelo inmutable `LocalConsistencyTrustPolicy` y las autorizaciones exactas `LocalIssuerAuthorization`. Esto define la fuente y estructura de confianza, pero **todavía no implementa el verificador completo ni autoriza recovery**.
+
+### Frontera pendiente antes de emitir VERIFIED
+
+La inspección de código confirma que `ConsistencyJournalReducer.reduce()` rechaza deliberadamente cualquier checkpoint porque aún no recibe una proyección base validada. El checkpoint solo contiene referencias opacas `state_reference` e `integrity_reference`; no existe en el contrato actual un puerto que resuelva y valide esa proyección base. Además, el reducer valida relaciones semánticas e IDs de recibos/tombstones, pero eso no demuestra por sí solo que los inventarios externos recuperados estén completos ni que cada recibo terminal esté autenticado contra su fuente.
+
+Por tanto, el verificador local no debe emitir `VERIFIED` hasta que se definan e integren:
+- un resolver independiente para la proyección base de checkpoint, vinculada criptográficamente al checkpoint;
+- verificadores de inventario que prueben integridad y completitud de recibos, tombstones y referencias recuperadas;
+- replay semántico del journal desde la proyección base hasta el head, con versiones de reducer autorizadas;
+- comprobaciones de operaciones pendientes/no terminales y cierre coherente del conjunto recuperado.
+
+El perfil local continúa sin anti-rollback externo y no prueba que el backup restaurado sea el más reciente. Hasta cerrar esas fronteras, el recovery gate permanece cerrado.
