@@ -37,9 +37,9 @@ PYTHONPATH=src python -m unittest \
   tests.unit.test_assistant_conversation_models \
   tests.unit.test_assistant_service \
   tests.unit.test_assistant_console \
-  tests.unit.test_local_console_composition -v
+  tests.unit.test_local_console_composition \\\n  tests.unit.test_llm_contracts \\\n  tests.unit.test_ollama_adapter -v
 ```
 
 ## Próximas etapas
 
-Avanzar incrementalmente: adaptar un proveedor local (primero Ollama) al contrato neutral, probarlo mediante transporte inyectable y, posteriormente, integrar memoria y herramientas bajo autorización explícita. Ninguna de estas capacidades futuras debe considerarse implementada hasta contar con código y pruebas verificadas.
+Avanzar incrementalmente: conectar el adaptador Ollama ya probado al servicio conversacional y, posteriormente, integrar memoria y herramientas bajo autorización explícita. Ninguna de estas capacidades futuras debe considerarse implementada hasta contar con código y pruebas verificadas.
