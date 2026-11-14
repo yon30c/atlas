@@ -7,7 +7,7 @@ El motor vuelve a delegar la decisión de acceso en su puerto de autorización.
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from atlas.memory.errors import MemoryMemoryContractError
+from atlas.memory.errors import MemoryContractError
 
 
 def _required(value: object, field: str) -> None:
