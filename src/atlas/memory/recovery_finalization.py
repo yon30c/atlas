@@ -43,6 +43,7 @@ class RecoveryAdmissionFinalizationRequest:
     operation_id: str
     admission_id: str
     generation: int
+    route_ids: frozenset[str]
     endpoint_receipts: tuple[VerifiedTerminalReceipt, ...]
 
     def __post_init__(self) -> None:
@@ -52,6 +53,8 @@ class RecoveryAdmissionFinalizationRequest:
             raise ContractError("authority_epoch debe ser positivo")
         if isinstance(self.generation, bool) or not isinstance(self.generation, int) or self.generation < 1:
             raise ContractError("generation debe ser positiva")
+        if not isinstance(self.route_ids, frozenset) or not self.route_ids:
+            raise ContractError("route_ids debe ser frozenset no vacío")
         if not isinstance(self.endpoint_receipts, tuple) or not self.endpoint_receipts:
             raise ContractError("endpoint_receipts debe ser una tupla no vacía")
         endpoints = []
@@ -79,6 +82,8 @@ class RecoveryAdmissionFinalizationRequest:
             endpoints.append(receipt.endpoint_id)
             receipt_ids.add(receipt.receipt_id)
             verification_ids.add(receipt.verification_id)
+        if frozenset(endpoints) != self.route_ids:
+            raise ContractError("endpoint_receipts debe cubrir exactamente route_ids")
 
 
 @dataclass(frozen=True, slots=True)
@@ -283,6 +288,7 @@ class RecoveryAdmissionFinalizationCoordinator:
                 operation_id=closure.operation_id,
                 admission_id=admission_id,
                 generation=closure.generation,
+                route_ids=admission.route_ids,
                 endpoint_receipts=endpoint_receipts,
             )
             try:
