@@ -157,6 +157,21 @@ class CheckpointProjectionCodecTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             decode_projection(encode_projection(self.projection) + b" ")
 
+    def test_manifest_rejects_boolean_version_fields(self):
+        from dataclasses import replace
+
+        artifacts = build_checkpoint_projection_artifacts(
+            self.projection,
+            checkpoint_id="checkpoint-1",
+            schema_version=1,
+            reducer_version="reducer-v1",
+            trust_policy_version="local-policy-v1",
+        )
+        with self.assertRaises(ContractError):
+            replace(artifacts.manifest, manifest_version=True)
+        with self.assertRaises(ContractError):
+            replace(artifacts.manifest, canonicalization_version=True)
+
     def test_manifest_round_trip_is_canonical(self):
         artifacts = build_checkpoint_projection_artifacts(
             self.projection,
@@ -188,6 +203,29 @@ class CheckpointProjectionCodecTests(unittest.TestCase):
         self.assertNotEqual(artifacts.state_commitment, artifacts.integrity_commitment)
         self.assertTrue(artifacts.state_reference.startswith("sha256:"))
         self.assertTrue(artifacts.integrity_reference.startswith("sha256:"))
+
+    def test_artifact_decoder_rejects_wrong_checkpoint_references(self):
+        artifacts = build_checkpoint_projection_artifacts(
+            self.projection,
+            checkpoint_id="checkpoint-1",
+            schema_version=1,
+            reducer_version="reducer-v1",
+            trust_policy_version="local-policy-v1",
+        )
+        with self.assertRaises(ContractError):
+            decode_checkpoint_projection_artifacts(
+                artifacts.state_bytes,
+                artifacts.manifest_bytes,
+                expected_state_reference="sha256:" + ("0" * 64),
+                expected_integrity_reference=artifacts.integrity_reference,
+            )
+        with self.assertRaises(ContractError):
+            decode_checkpoint_projection_artifacts(
+                artifacts.state_bytes,
+                artifacts.manifest_bytes,
+                expected_state_reference=artifacts.state_reference,
+                expected_integrity_reference="sha256:" + ("0" * 64),
+            )
 
     def test_artifact_decoder_rejects_state_tampering(self):
         artifacts = build_checkpoint_projection_artifacts(
