@@ -442,5 +442,22 @@ class SQLiteConsistencyJournalTests(unittest.TestCase):
         self.assertIs(result.status, ConsistencyRecoveryVerificationStatus.UNAVAILABLE)
 
 
+    def test_typed_recovery_load_rejects_tampered_idempotency_projection_digest(self):
+        transition = read_admitted(record_id=RECORD_1)
+        self.assertIsNotNone(
+            self.journal.append_transition(self.position(0), "tampered-digest", transition)
+        )
+        with self.database.write_transaction() as connection:
+            connection.execute(
+                "UPDATE journal_operations SET request_digest=? "
+                "WHERE domain_id='domain-a' AND sequence=1",
+                ("0" * 64,),
+            )
+
+        result = self.journal.load_recovery_state_result("domain-a")
+        self.assertIs(result.status, ConsistencyRecoveryLoadStatus.REJECTED)
+        self.assertIsNone(result.state)
+
+
 if __name__ == "__main__":
     unittest.main()
