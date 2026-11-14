@@ -5,7 +5,7 @@ entre procesos o transportes reales.
 """
 import threading
 import unittest
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 
 from atlas.core.errors import ContractError
@@ -21,6 +21,7 @@ from atlas.memory.consistency import (
     EndpointDeliveryStatus,
     EndpointFenceReceipt,
     InvalidationReceipt,
+    ReadAdmission,
     ReadAdmission,
     ReadAdmissionStatus,
     ReadTarget,
@@ -99,6 +100,18 @@ class FakeVerifiedForgetAuthorization:
         self.owner_id = owner_id
 
 
+@dataclass(frozen=True, slots=True)
+class RecoveredAdmissionState:
+    admission_id: str
+    snapshot_id: str
+    target: ReadTarget | None
+    generation: int
+    route_ids: frozenset[str]
+    status: ReadAdmissionStatus
+    admitted_at: datetime
+    terminal_evidence_id: str | None = None
+
+
 class FakeReadConsistencyAndEgress:
     """Fake atómico, determinista y de proceso único para probar los contratos."""
 
@@ -130,6 +143,7 @@ class FakeReadConsistencyAndEgress:
         self.forget_idempotency = {}
         self.idempotency_tombstones = set()
         self.forget_closures = {}
+        self.recovery_pending = False
 
     def export_forget_recovery(self, operation_id):
         with self._lock:
@@ -148,29 +162,51 @@ class FakeReadConsistencyAndEgress:
 
     @classmethod
     def restore_from_journal_projection(cls, projection):
-        """Test-only recovery consumer for closed memory gates."""
-        from atlas.memory.journal_reducer import ConsistencyProjection
+        """Test-only recovery consumer; never restores an old emitter as active."""
+        from atlas.memory.journal_reducer import (
+            ConsistencyProjection,
+            reconstruct_read_target,
+        )
 
         if not isinstance(projection, ConsistencyProjection):
             return None
         terminal = (ReadAdmissionStatus.COMPLETED, ReadAdmissionStatus.CANCELLED)
-        # The current journal projection does not yet carry every ReadTarget
-        # field needed to rebuild a live admission. Never silently drop one.
-        if any(admission.status not in terminal for admission in projection.admissions):
-            return None
         if any(not invalidation.reconciled for invalidation in projection.invalidations):
             return None
-        admission_ids = {admission.admission_id for admission in projection.admissions}
+        admission_ids = {item.admission_id for item in projection.admissions}
         if any(
             not closure.affected_admission_ids.issubset(admission_ids)
             for closure in projection.forget_closures
         ):
             return None
+
+        unresolved = tuple(
+            item for item in projection.admissions if item.status not in terminal
+        )
+        pending_recoveries = tuple(
+            item for item in projection.recovery_closures if not item.reconciled
+        )
+        if unresolved:
+            if len(pending_recoveries) != 1:
+                return None
+            closure = pending_recoveries[0]
+            unresolved_ids = frozenset(item.admission_id for item in unresolved)
+            expected_routes = frozenset(
+                route for item in unresolved for route in item.route_ids
+            )
+            if (
+                unresolved_ids != closure.affected_admission_ids
+                or expected_routes != closure.route_ids
+                or any(item.status is not ReadAdmissionStatus.UNRESOLVED for item in unresolved)
+                or any(closure.generation <= item.generation for item in unresolved)
+            ):
+                return None
+        elif pending_recoveries:
+            return None
+
         restored = cls()
         with restored._lock:
             for closure in projection.forget_closures:
-                # FORGET_CLOSED already closes the gate; FORGET_SUPPRESSED is
-                # a later logical milestone, not the point at which reads stop.
                 restored.suppressed_memories.add(closure.memory_id)
                 restored.generation = max(restored.generation, closure.generation)
             for invalidation in projection.invalidations:
@@ -181,6 +217,27 @@ class FakeReadConsistencyAndEgress:
             restored.idempotency_tombstones.update(
                 record.idempotency_key for record in projection.idempotency_records
             )
+            if unresolved:
+                restored.recovery_pending = True
+                restored.generation = max(restored.generation, closure.generation)
+                restored.operations[closure.operation_id] = {
+                    "affected": closure.affected_admission_ids,
+                    "pending": True,
+                    "kind": "recovery",
+                    "generation": closure.generation,
+                }
+                for item in unresolved:
+                    restored.admissions[item.admission_id] = RecoveredAdmissionState(
+                        admission_id=item.admission_id,
+                        snapshot_id=item.snapshot_id,
+                        target=reconstruct_read_target(item),
+                        generation=item.generation,
+                        route_ids=item.route_ids,
+                        status=ReadAdmissionStatus.UNRESOLVED,
+                        admitted_at=item.admitted_at,
+                    )
+                    # The active generation is advanced; old capabilities cannot emit.
+                    restored.admission_generations[item.admission_id] = closure.generation
         return restored
 
     @classmethod
@@ -250,7 +307,7 @@ class FakeReadConsistencyAndEgress:
                 or now.utcoffset().total_seconds() != 0
             ):
                 return None
-            if snapshot.memory_id in self.suppressed_memories:
+            if self.recovery_pending or snapshot.memory_id in self.suppressed_memories:
                 return None
             if snapshot.grant_expires_at is not None and now >= snapshot.grant_expires_at:
                 return None
@@ -624,6 +681,8 @@ class FakeReadConsistencyAndEgress:
                     unresolved.add(admission_id)
             if not unresolved:
                 operation["pending"] = False
+                if operation.get("kind") == "recovery":
+                    self.recovery_pending = False
             return ReconciliationResult(
                 operation_id, frozenset(resolved), frozenset(unresolved)
             )
@@ -752,7 +811,7 @@ class FakeReadConsistencyAndEgress:
                 admission.admission_id not in self.admissions
                 or operation is None
                 or not operation["pending"]
-                or operation.get("kind") not in ("invalidation", "forget")
+                or operation.get("kind") not in ("invalidation", "forget", "recovery")
                 or admission.admission_id not in operation["affected"]
                 or not self._same_admission(
                     self.admissions.get(admission.admission_id), admission
