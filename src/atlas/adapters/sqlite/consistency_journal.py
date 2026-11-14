@@ -83,7 +83,7 @@ def _transition_from_bytes(raw: bytes) -> ConsistencyTransition:
 
 
 class SQLiteConsistencyJournal:
-    """Single-host durable K01 append/reconciliation adapter."""
+    """Single-host K01 journal with explicitly gated local recovery reads."""
 
     def __init__(
         self,
