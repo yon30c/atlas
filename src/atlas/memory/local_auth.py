@@ -96,7 +96,7 @@ def verify_recovery_chain(state: Any, key_port: Any, trust_policy_version: str) 
         records.append(("checkpoint", state.checkpoint, checkpoint_payload(state.checkpoint)))
     records.extend(("journal_entry", entry, journal_entry_payload(entry)) for entry in state.entries)
     if not records:
-        return state.head_sequence == 0 and state.checkpoint is None and not state.entries
+        return False
 
     previous = None
     for kind, record, payload in records:
