@@ -1,6 +1,17 @@
 """Modelos y validación pura de memoria; el acceso pasa por MemoryGateway."""
 from atlas.memory.authorization import MemoryAuthorizationDecision, MemoryAuthorizationResult
 from atlas.memory.context import MemoryRequestContext
+from atlas.memory.metadata import (
+    EnvironmentMetadata,
+    MemoryVersionMetadata,
+    ProjectMetadata,
+)
+from atlas.memory.metadata_resolver import MemoryMetadataResolver
+from atlas.memory.ports.metadata import (
+    EnvironmentMetadataPort,
+    MemoryMetadataPort,
+    ProjectMetadataPort,
+)
 from atlas.memory.identity import (
     MemoryIdentityBinding,
     MemoryIdentityBindingPort,
@@ -151,6 +162,13 @@ __all__ = [
     "MemoryIdentityBinding",
     "MemoryIdentityBindingPort",
     "resolve_authenticated_memory_binding",
+    "EnvironmentMetadata",
+    "MemoryVersionMetadata",
+    "ProjectMetadata",
+    "MemoryMetadataResolver",
+    "EnvironmentMetadataPort",
+    "MemoryMetadataPort",
+    "ProjectMetadataPort",
     "AuthenticatedConsistencyEnvelope",
     "LocalConsistencyTrustPolicy",
     "LocalIssuerAuthorization",
