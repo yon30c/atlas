@@ -306,3 +306,16 @@ Para la autenticación local de envelopes se adopta:
 El código inicial añade primitivas puras de canonicalización, commitment, autenticación/verificación HMAC y un puerto de resolución de claves. No implementa almacenamiento físico de claves, rotación/revocación, autorización de emisores, persistencia de envelopes ni un verificador completo de recuperación. Tampoco conecta todavía estos envelopes a cada JournalEntry/ConsistencyCheckpoint ni recorre la cadena, inventarios, tombstones y operaciones pendientes. Por tanto, estas primitivas **no equivalen a una recuperación local verificada** y no autorizan lecturas protegidas, Forget físico ni restauraciones operativas.
 
 La implementación concreta del puerto de claves, su ubicación, permisos, política de backup/recuperación y retención histórica quedan pendientes de diseño. La clave no debe guardarse junto al journal ni incluirse en sus respaldos ordinarios. El perfil local continúa sin protección anti-rollback externo.
+
+
+## 16. Integración del envelope con el journal
+
+Los modelos `JournalEntry` y `ConsistencyCheckpoint` incorporan un envelope autenticado opcional para mantener compatibilidad de lectura/diagnóstico con datos históricos. La ausencia de envelope no convierte un registro en confiable: `verify_recovery_chain` rechaza cualquier registro recuperado que no tenga envelope.
+
+El tipo `AuthenticatedConsistencyEnvelope` reside en `memory.envelope`, independiente de `trust.py`, para que los modelos del journal puedan referenciarlo sin dependencias circulares.
+
+La canonicalización del contenido excluye el propio envelope. Para una entrada se autentican `position` y `transition`; para un checkpoint se autentican identificador, posición, referencias y fecha. El envelope autentica además tipo, dominio, época, secuencia, identificador, versiones, emisor, rol, referencia de clave, política, fecha de emisión y commitment del predecesor.
+
+`verify_recovery_chain` verifica los envelopes del checkpoint y de todas las entradas recuperadas, exige continuidad exacta de commitments y comprueba que el commitment final coincide con `continuity_reference` y `head_sequence`. La clave se resuelve por `LocalConsistencyKeyPort`; clave ausente, envelope ausente, política distinta o cualquier fallo criptográfico rechaza la cadena.
+
+Este helper es una primera frontera criptográfica local; **no sustituye aún al verificador ME-03K completo**: no autentica la autoridad real del emisor, no prueba inventarios externos de recibos/tombstones, no garantiza frescura anti-rollback y no demuestra que el conjunto restaurado sea el último backup coherente. No debe usarse por sí solo para abrir el recovery gate ni autorizar lecturas protegidas.
