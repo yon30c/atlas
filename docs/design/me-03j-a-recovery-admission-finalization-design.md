@@ -44,3 +44,9 @@ Las pruebas usan journal, finalizador y verificador falsos. No prueban persisten
 ## Límite y siguiente subetapa
 
 Aunque todas las admisiones puedan quedar `CANCELLED`, el dominio debe seguir cerrado. La subetapa ME-03J-B debe obtener/verificar una evidencia terminal global y combinar `RECOVERY_RECONCILED` con la reapertura del gate en una única operación serializada y durable. Un append ordinario seguido de una apertura separada no es aceptable.
+
+## Estado de implementación
+
+Se añadieron `RecoveryAdmissionFinalizationCoordinator`, `RecoveryAdmissionFinalizerPort` y seis pruebas específicas. El estado `ADMISSIONS_TERMINAL` significa únicamente que las admisiones afectadas quedaron CANCELLED con bindings exactos; no significa que la recuperación global esté reconciliada ni que el gate esté abierto.
+
+La validación CI del commit más reciente todavía no está disponible en la evidencia consultada. No se declara la suite aprobada hasta observar el resultado de GitHub Actions.
