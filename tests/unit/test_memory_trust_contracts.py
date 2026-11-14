@@ -67,7 +67,7 @@ class ConsistencyTrustContractTests(unittest.TestCase):
             checkpoint=checkpoint,
             entries=(),
             head_sequence=head_sequence,
-            continuity_reference="structural-reference",
+            continuity_reference="control-state-commitment",
         )
 
     def test_valid_checkpoint_verification_request_binds_domain_epoch_and_anchor(self):
