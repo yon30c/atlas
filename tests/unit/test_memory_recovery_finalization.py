@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from atlas.memory.consistency import ReadAdmissionStatus
 from atlas.memory.journal import ConsistencyRecordKind
+from atlas.memory.journal_reducer import ConsistencyJournalReducer
 from atlas.memory.receipt_verification import (
     ReceiptVerificationStatus,
 )
@@ -96,9 +97,7 @@ class RecoveryAdmissionFinalizationTests(unittest.TestCase):
             ),
             1,
         )
-        projection = __import__(
-            "atlas.memory.journal_reducer", fromlist=["ConsistencyJournalReducer"]
-        ).ConsistencyJournalReducer().reduce(self.journal.state)
+        projection = ConsistencyJournalReducer().reduce(self.journal.state)
         admission = projection.admissions[0]
         self.assertIs(admission.status, ReadAdmissionStatus.CANCELLED)
         self.assertEqual(admission.terminal_operation_id, "recovery:consistency-domain:4:5")
