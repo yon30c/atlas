@@ -86,6 +86,20 @@ Convertir Memory Engine en un componente reutilizable por Atlas y por aplicacion
 
 **Composición local recomendada para nuevos consumidores:** crear una sola instancia de `SQLiteConsistencyJournal` con signer y verificador/política locales; pasarla a `compose_local_sqlite_journal_ports`; inyectar `ports.persistence` solo donde se necesite persistencia neutral y `ports.verified_recovery` solo donde se requiera un resultado autenticado local. Los consumidores que todavía necesiten operaciones específicas de Atlas/local deben continuar recibiendo el journal concreto hasta que exista un puerto explícito para esas operaciones.
 
+
+
+## Implementado en ME-D4F — LocalCheckpointCoordinator usa puerto de recuperación explícito
+
+- Se añadió el protocolo local de consumidor `LocalVerifiedRecoveryPort` en `memory/checkpoint_coordinator.py`. Su única capacidad es `load_verified_recovery_state(domain_id)`.
+- `LocalCheckpointCoordinator` ahora exige `verified_recovery` como dependencia keyword-only. Ya no consulta `journal.load_verified_recovery_state`.
+- El journal conserva las capacidades locales necesarias para este flujo: metadatos de issuer/role/key, validación de política y `commit_checkpoint` con compare-and-swap sobre la posición y continuidad exactas.
+- La evidencia de recuperación se obtiene exclusivamente del puerto inyectado y sigue exigiendo `ConsistencyRecoveryVerificationResult.VERIFIED`, `VerifiedLocalConsistencyRecoveryState` y coincidencia de la versión de política.
+- Las pruebas de `test_checkpoint_coordinator.py` fueron actualizadas para inyectar `LocalSQLiteVerifiedRecoveryAdapter` construido sobre la misma instancia de journal.
+- No se migró todavía el commit del checkpoint al puerto neutral: el contrato neutral actual no representa issuer/key metadata ni toda la semántica local de CAS. Tampoco se cambió el reducer ni el formato de persistencia.
+- No se ejecutaron pruebas ni build.
+
+**Composición de checkpoint local:** crear el journal local y sus verificadores; crear `LocalSQLiteVerifiedRecoveryAdapter(journal)` o usar `compose_local_sqlite_journal_ports(journal).verified_recovery`; inyectar ese puerto en `LocalCheckpointCoordinator`. Mantener el mismo journal local para la escritura atómica del checkpoint.
+
 ## Alcance pendiente de ME-D4
 
 - El nuevo contrato del journal es neutral, pero `SQLiteConsistencyJournal` todavía utiliza los DTO Atlas/local y no se ha adaptado al puerto genérico.
