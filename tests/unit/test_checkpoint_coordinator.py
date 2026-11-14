@@ -12,6 +12,9 @@ from atlas.adapters.filesystem_checkpoint_projection_store import (
 from atlas.adapters.local_hmac_signer import HmacLocalConsistencySigner
 from atlas.adapters.sqlite.consistency_journal import SQLiteConsistencyJournal
 from atlas.adapters.sqlite.database import SQLiteDatabase
+from atlas.adapters.sqlite.local_journal_composition import (
+    LocalSQLiteVerifiedRecoveryAdapter,
+)
 from atlas.adapters.sqlite.migrations import SQLITE_MIGRATIONS
 from atlas.memory.checkpoint_coordinator import LocalCheckpointCoordinator
 from atlas.memory.journal import CheckpointCommitStatus, ConsistencyPosition
@@ -165,11 +168,13 @@ class LocalCheckpointCoordinatorTests(unittest.TestCase):
         )
         self.assertIsNotNone(self.first_commit)
 
+        self.recovery_port = LocalSQLiteVerifiedRecoveryAdapter(self.journal)
         self.coordinator = LocalCheckpointCoordinator(
             self.journal,
             self.store,
             self.store,
             self.policy,
+            verified_recovery=self.recovery_port,
             reducer_version=REDUCER_VERSION,
         )
 
@@ -272,6 +277,7 @@ class LocalCheckpointCoordinatorTests(unittest.TestCase):
             RacingPublisher(),
             self.store,
             self.policy,
+            verified_recovery=self.recovery_port,
             reducer_version=REDUCER_VERSION,
         )
 
@@ -328,6 +334,7 @@ class LocalCheckpointCoordinatorTests(unittest.TestCase):
             FailingPublisher(),
             self.store,
             self.policy,
+            verified_recovery=self.recovery_port,
             reducer_version=REDUCER_VERSION,
         )
 
