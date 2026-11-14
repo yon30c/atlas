@@ -5,8 +5,8 @@ This module never restores a read capability or authorizes content delivery.
 from dataclasses import dataclass
 
 from atlas.core.errors import ContractError
+from atlas.memory.consistency import ReadTarget
 from atlas.memory.journal_reducer import (
-    AdmissionProjection,
     ConsistencyProjection,
     reconstruct_read_target,
 )
@@ -49,7 +49,7 @@ class UnresolvedAdmissionRecovery:
     old_generation: int
     route_ids: frozenset[str]
     endpoint_sequences: tuple[RecoveryEndpointSequence, ...]
-    target: object | None
+    target: ReadTarget | None
     recoverable: bool
 
     def __post_init__(self) -> None:
@@ -307,6 +307,7 @@ def execute_recovery_fencing(
             or raw_receipt.endpoint_id != request.endpoint_id
             or raw_receipt.previous_generation != request.previous_generation
             or raw_receipt.generation != request.generation
+            or raw_receipt.fenced_through_sequence != request.last_committed_sequence
         ):
             return None
         verification_request = TerminalReceiptVerificationRequest(
