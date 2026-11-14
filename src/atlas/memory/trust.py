@@ -25,6 +25,11 @@ def _positive(value: object, field: str) -> None:
         raise ContractError(f"{field} debe ser un entero positivo")
 
 
+def _non_negative(value: object, field: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ContractError(f"{field} debe ser un entero no negativo")
+
+
 def _utc(value: object, field: str) -> None:
     if (
         not isinstance(value, datetime)
