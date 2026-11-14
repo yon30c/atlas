@@ -10,7 +10,7 @@ import json
 import sqlite3
 from typing import Any
 
-from atlas.adapters.sqlite.database import SQLiteDatabase
+from atlas.adapters.sqlite.database import SQLiteDatabase, SQLiteUnitOfWork
 from atlas.core.errors import ContractError
 from atlas.memory.consistency import (
     AuthorityKind, AuthorityRevision, AuthorizationRevisionSet, ReadAdmissionStatus,
@@ -246,159 +246,182 @@ class SQLiteConsistencyJournal:
         append_id: str,
         transition: ConsistencyTransition,
     ) -> JournalCommit | None:
+        """Append using an owned transaction while preserving the legacy result contract."""
+        try:
+            with self._database.unit_of_work() as unit_of_work:
+                return self.append_transition_in(
+                    unit_of_work, expected_position, append_id, transition
+                )
+        except Exception:
+            # The public API historically reports ordinary persistence/signing
+            # failures as None. The in-transaction API deliberately propagates
+            # them so a composed caller can roll back its whole unit of work.
+            return None
+
+    def append_transition_in(
+        self,
+        unit_of_work: SQLiteUnitOfWork,
+        expected_position: ConsistencyPosition,
+        append_id: str,
+        transition: ConsistencyTransition,
+    ) -> JournalCommit | None:
+        """Append on a caller-owned active transaction without committing it.
+
+        Unexpected persistence or signer failures propagate to the unit-of-work
+        owner. Returning None remains reserved for invalid requests, conflicts,
+        stale positions, or rejected signatures.
+        """
+        if not isinstance(unit_of_work, SQLiteUnitOfWork):
+            raise ContractError("unit_of_work debe ser SQLiteUnitOfWork")
+        connection = unit_of_work._connection_for(self._database)
         if (
             not isinstance(expected_position, ConsistencyPosition)
             or not isinstance(append_id, str) or not append_id.strip()
             or not isinstance(transition, ConsistencyTransition)
         ):
             return None
+
         domain_id = expected_position.consistency_domain_id
         epoch = expected_position.authority_epoch
         request_bytes = self._request_bytes(domain_id, epoch, transition)
         request_digest = hashlib.sha256(request_bytes).hexdigest()
         now = _utc_text(datetime.now(timezone.utc))
-        try:
-            with self._database.write_transaction() as connection:
-                domain = connection.execute(
-                    "SELECT * FROM consistency_domains WHERE domain_id=?", (domain_id,)
-                ).fetchone()
-                if (
-                    domain is None or domain["authority_epoch"] != epoch
-                    or domain["profile"] != "local"
-                    or domain["trust_policy_version"] != self._trust_policy_version
-                ):
-                    return None
-
-                by_key = (
-                    self._load_append(
-                        connection, domain_id, epoch,
-                        idempotency_key=transition.idempotency_key,
-                    )
-                    if transition.idempotency_key is not None else None
-                )
-                by_append = self._load_append(
-                    connection, domain_id, epoch, append_id=append_id
-                )
-                if by_key is not None and by_append is not None and (
-                    (by_key["sequence"], by_key["record_id"])
-                    != (by_append["sequence"], by_append["record_id"])
-                ):
-                    return None
-                existing = by_key or by_append
-                if existing is not None:
-                    if (
-                        bytes(existing["request_canonical"]) != request_bytes
-                        or existing["idempotency_key"] != transition.idempotency_key
-                        or (by_append is not None and by_append["append_id"] != append_id)
-                    ):
-                        return None
-                    return self._row_commit(existing, replayed=True)
-
-                if expected_position.sequence != domain["head_sequence"]:
-                    return None
-                if transition.record_id == "" or transition.operation_id == "":
-                    return None
-
-                sequence = domain["head_sequence"] + 1
-                position = self._position(domain_id, epoch, sequence)
-                unsigned = AuthenticatedConsistencyEnvelope(
-                    object_kind="journal_entry",
-                    envelope_version=ENVELOPE_VERSION,
-                    consistency_domain_id=domain_id,
-                    authority_epoch=epoch,
-                    sequence=sequence,
-                    object_id=transition.record_id,
-                    schema_version=transition.schema_version,
-                    reducer_version=self._reducer_version,
-                    previous_commitment=domain["head_commitment"],
-                    object_commitment="pending",
-                    issuer_id=self._issuer_id,
-                    issuer_role=self._issuer_role,
-                    key_reference=self._key_reference,
-                    trust_policy_version=self._trust_policy_version,
-                    issued_at=datetime.now(timezone.utc),
-                    authentication_evidence="pending",
-                )
-                unsigned_entry = JournalEntry(position, transition)
-                signed = self._signer.sign_envelope(
-                    unsigned, journal_entry_payload(unsigned_entry)
-                )
-                if not isinstance(signed, AuthenticatedConsistencyEnvelope):
-                    return None
-                expected_commitment = object_commitment(journal_entry_payload(unsigned_entry))
-                if (
-                    signed.object_kind != unsigned.object_kind
-                    or signed.envelope_version != unsigned.envelope_version
-                    or signed.consistency_domain_id != domain_id
-                    or signed.authority_epoch != epoch
-                    or signed.sequence != sequence
-                    or signed.object_id != transition.record_id
-                    or signed.schema_version != transition.schema_version
-                    or signed.reducer_version != self._reducer_version
-                    or signed.previous_commitment != domain["head_commitment"]
-                    or signed.issuer_id != self._issuer_id
-                    or signed.issuer_role != self._issuer_role
-                    or signed.key_reference != self._key_reference
-                    or signed.trust_policy_version != self._trust_policy_version
-                    or signed.issued_at != unsigned.issued_at
-                    or signed.object_commitment != expected_commitment
-                    or not signed.authentication_evidence
-                ):
-                    return None
-                entry = JournalEntry(position, transition, signed)
-                transition_bytes = canonical_json_bytes(transition)
-                connection.execute(
-                    """
-                    INSERT INTO journal_entries (
-                        domain_id, authority_epoch, sequence, record_id, operation_id,
-                        record_kind, schema_version, transition_canonical,
-                        envelope_version, reducer_version, previous_commitment,
-                        object_commitment, issuer_id, issuer_role, key_reference,
-                        trust_policy_version, issued_at, authentication_evidence
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        domain_id, epoch, sequence, transition.record_id,
-                        transition.operation_id, transition.record_kind.value,
-                        transition.schema_version, transition_bytes,
-                        signed.envelope_version, signed.reducer_version,
-                        signed.previous_commitment, signed.object_commitment,
-                        signed.issuer_id, signed.issuer_role, signed.key_reference,
-                        signed.trust_policy_version, _utc_text(signed.issued_at),
-                        signed.authentication_evidence,
-                    ),
-                )
-                connection.execute(
-                    """
-                    INSERT INTO journal_operations (
-                        domain_id, authority_epoch, append_id, operation_id, idempotency_key,
-                        request_canonical, request_digest, sequence, record_id, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        domain_id, epoch, append_id, transition.operation_id,
-                        transition.idempotency_key, request_bytes, request_digest,
-                        sequence, transition.record_id, now,
-                    ),
-                )
-                updated = connection.execute(
-                    """
-                    UPDATE consistency_domains
-                    SET head_sequence=?, head_commitment=?, updated_at=?
-                    WHERE domain_id=? AND authority_epoch=? AND head_sequence=?
-                    """,
-                    (
-                        sequence, signed.object_commitment, now, domain_id, epoch,
-                        expected_position.sequence,
-                    ),
-                )
-                if updated.rowcount != 1:
-                    raise sqlite3.IntegrityError("head CAS failed; append transaction rolled back")
-            return JournalCommit(position, transition.record_id, False)
-        except Exception:
-            # The signer port defines failure by exception, not by a closed
-            # exception taxonomy. Any ordinary failure aborts the transaction.
+        domain = connection.execute(
+            "SELECT * FROM consistency_domains WHERE domain_id=?", (domain_id,)
+        ).fetchone()
+        if (
+            domain is None or domain["authority_epoch"] != epoch
+            or domain["profile"] != "local"
+            or domain["trust_policy_version"] != self._trust_policy_version
+        ):
             return None
+
+        by_key = (
+            self._load_append(
+                connection, domain_id, epoch,
+                idempotency_key=transition.idempotency_key,
+            )
+            if transition.idempotency_key is not None else None
+        )
+        by_append = self._load_append(
+            connection, domain_id, epoch, append_id=append_id
+        )
+        if by_key is not None and by_append is not None and (
+            (by_key["sequence"], by_key["record_id"])
+            != (by_append["sequence"], by_append["record_id"])
+        ):
+            return None
+        existing = by_key or by_append
+        if existing is not None:
+            if (
+                bytes(existing["request_canonical"]) != request_bytes
+                or existing["idempotency_key"] != transition.idempotency_key
+                or (by_append is not None and by_append["append_id"] != append_id)
+            ):
+                return None
+            return self._row_commit(existing, replayed=True)
+
+        if expected_position.sequence != domain["head_sequence"]:
+            return None
+        if transition.record_id == "" or transition.operation_id == "":
+            return None
+
+        sequence = domain["head_sequence"] + 1
+        position = self._position(domain_id, epoch, sequence)
+        unsigned = AuthenticatedConsistencyEnvelope(
+            object_kind="journal_entry",
+            envelope_version=ENVELOPE_VERSION,
+            consistency_domain_id=domain_id,
+            authority_epoch=epoch,
+            sequence=sequence,
+            object_id=transition.record_id,
+            schema_version=transition.schema_version,
+            reducer_version=self._reducer_version,
+            previous_commitment=domain["head_commitment"],
+            object_commitment="pending",
+            issuer_id=self._issuer_id,
+            issuer_role=self._issuer_role,
+            key_reference=self._key_reference,
+            trust_policy_version=self._trust_policy_version,
+            issued_at=datetime.now(timezone.utc),
+            authentication_evidence="pending",
+        )
+        unsigned_entry = JournalEntry(position, transition)
+        signed = self._signer.sign_envelope(
+            unsigned, journal_entry_payload(unsigned_entry)
+        )
+        if not isinstance(signed, AuthenticatedConsistencyEnvelope):
+            return None
+        expected_commitment = object_commitment(journal_entry_payload(unsigned_entry))
+        if (
+            signed.object_kind != unsigned.object_kind
+            or signed.envelope_version != unsigned.envelope_version
+            or signed.consistency_domain_id != domain_id
+            or signed.authority_epoch != epoch
+            or signed.sequence != sequence
+            or signed.object_id != transition.record_id
+            or signed.schema_version != transition.schema_version
+            or signed.reducer_version != self._reducer_version
+            or signed.previous_commitment != domain["head_commitment"]
+            or signed.issuer_id != self._issuer_id
+            or signed.issuer_role != self._issuer_role
+            or signed.key_reference != self._key_reference
+            or signed.trust_policy_version != self._trust_policy_version
+            or signed.issued_at != unsigned.issued_at
+            or signed.object_commitment != expected_commitment
+            or not signed.authentication_evidence
+        ):
+            return None
+
+        transition_bytes = canonical_json_bytes(transition)
+        connection.execute(
+            """
+            INSERT INTO journal_entries (
+                domain_id, authority_epoch, sequence, record_id, operation_id,
+                record_kind, schema_version, transition_canonical,
+                envelope_version, reducer_version, previous_commitment,
+                object_commitment, issuer_id, issuer_role, key_reference,
+                trust_policy_version, issued_at, authentication_evidence
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                domain_id, epoch, sequence, transition.record_id,
+                transition.operation_id, transition.record_kind.value,
+                transition.schema_version, transition_bytes,
+                signed.envelope_version, signed.reducer_version,
+                signed.previous_commitment, signed.object_commitment,
+                signed.issuer_id, signed.issuer_role, signed.key_reference,
+                signed.trust_policy_version, _utc_text(signed.issued_at),
+                signed.authentication_evidence,
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO journal_operations (
+                domain_id, authority_epoch, append_id, operation_id, idempotency_key,
+                request_canonical, request_digest, sequence, record_id, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                domain_id, epoch, append_id, transition.operation_id,
+                transition.idempotency_key, request_bytes, request_digest,
+                sequence, transition.record_id, now,
+            ),
+        )
+        updated = connection.execute(
+            """
+            UPDATE consistency_domains
+            SET head_sequence=?, head_commitment=?, updated_at=?
+            WHERE domain_id=? AND authority_epoch=? AND head_sequence=?
+            """,
+            (
+                sequence, signed.object_commitment, now, domain_id, epoch,
+                expected_position.sequence,
+            ),
+        )
+        if updated.rowcount != 1:
+            raise sqlite3.IntegrityError("head CAS failed; append transaction rolled back")
+        return JournalCommit(position, transition.record_id, False)
 
     def resolve_append(
         self,
