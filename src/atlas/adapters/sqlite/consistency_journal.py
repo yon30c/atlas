@@ -569,8 +569,23 @@ class SQLiteConsistencyJournal:
                     if (
                         checkpoint_envelope is None
                         or checkpoint_envelope.previous_commitment is not None
+                        or checkpoint_envelope.envelope_version != ENVELOPE_VERSION
+                        or checkpoint_envelope.schema_version != 1
+                        or checkpoint_envelope.reducer_version != self._reducer_version
+                        or checkpoint_envelope.issuer_id != self._issuer_id
+                        or checkpoint_envelope.issuer_role != self._issuer_role
+                        or checkpoint_envelope.key_reference != self._key_reference
+                        or checkpoint_envelope.trust_policy_version != self._trust_policy_version
                         or object_commitment(checkpoint_payload(stored_checkpoint))
                             != checkpoint_envelope.object_commitment
+                        or stored_marker_envelope.envelope_version != ENVELOPE_VERSION
+                        or stored_marker_envelope.schema_version != 1
+                        or stored_marker_envelope.reducer_version != self._reducer_version
+                        or stored_marker_envelope.issuer_id != self._issuer_id
+                        or stored_marker_envelope.issuer_role != self._issuer_role
+                        or stored_marker_envelope.key_reference != self._key_reference
+                        or stored_marker_envelope.trust_policy_version != self._trust_policy_version
+                        or stored_marker_envelope.issued_at != checkpoint_envelope.issued_at
                         or stored_marker_envelope.previous_commitment
                             != checkpoint_envelope.object_commitment
                         or object_commitment(journal_entry_payload(
