@@ -307,3 +307,23 @@ Se agregaron `RECOVERY_CLOSED` y `RECOVERY_RECONCILED`:
 - CI [#43532495188](https://github.com/yon30c/atlas/actions/runs/43532495188): Python 3.10, 3.11, 3.12 y 3.13, todos exitosos.
 
 **Límite vigente:** esto valida modelos, reducer y fakes. No existe todavía un coordinador durable que confirme `RECOVERY_CLOSED` antes de contactar endpoints y que escriba de forma atómica todos los recibos verificados, las reconciliaciones y el cierre final. No hay fencing real de procesos/transporte ni recuperación distribuida demostrada. No habilitar producción.
+
+
+## 19. ME-03I — Coordinador journal-first y reanudación tras reinicio
+
+Se añadió `docs/design/me-03i-journal-first-recovery-coordinator-design.md`.
+
+Implementación:
+- `src/atlas/ports/recovery_gate.py`: frontera para cerrar el gate y persistir `RECOVERY_CLOSED` como una sola operación lógica; también exige restaurar/confirmar el cierre exacto después de reinicio.
+- `src/atlas/memory/recovery_coordinator.py`: coordinador que carga y reduce journal verificable, cierra el gate antes de contactar endpoints, verifica cada fence, registra cada `ENDPOINT_FENCED` y reanuda omitiendo endpoints ya confirmados.
+- Los resultados distinguen `FENCING_RECORDED`, `PENDING` y `BLOCKED`. Incluso `FENCING_RECORDED` mantiene admisiones UNRESOLVED y el gate cerrado; no emite reconciliaciones terminales.
+
+Pruebas añadidas a `tests/unit/test_memory_unresolved_admission_recovery.py`:
+- gate durable cerrado antes del primer contacto;
+- progreso parcial persistido y reanudación sin duplicar el cierre ni repetir endpoints confirmados;
+- restauración del gate desde el journal tras reinicio antes de continuar;
+- journal no verificable bloquea la operación.
+
+CI [#43533291237](https://github.com/yon30c/atlas/actions/runs/43533291237): Python 3.10–3.13, todos exitosos.
+
+**Límite:** los tests usan fakes de proceso único. No hay adaptador durable, gate de runtime, fencing real, recibo terminal de admisión ni reapertura del gate. La implementación no marca admisiones CANCELLED y no emite `RECOVERY_RECONCILED`. Se requiere una etapa posterior de finalización terminal independiente y atómica antes de poder abrir el gate.
