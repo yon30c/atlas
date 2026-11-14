@@ -249,6 +249,16 @@ class SQLiteLocalHmacIntegrationTests(unittest.TestCase):
         self.assertFalse(
             result.verified_local_state.external_anti_rollback_protected
         )
+        self.assertIsNotNone(result.verified_local_state.projection)
+        self.assertEqual(
+            result.verified_local_state.projection.domain_id, "atlas-local"
+        )
+        self.assertEqual(
+            result.verified_local_state.projection.head_sequence, 1
+        )
+        self.assertEqual(
+            len(result.verified_local_state.projection.admissions), 1
+        )
 
     def test_verified_read_rejects_tampered_hmac_envelope(self):
         policy = LocalConsistencyTrustPolicy(
