@@ -43,7 +43,7 @@ When checkpoints exist:
 
 The reader does not load or trust the pre-checkpoint journal prefix. The independently verified checkpoint projection replaces that prefix for semantic replay.
 
-Malformed or contradictory persisted state returns `REJECTED`. Missing domain or SQLite read failure returns `UNAVAILABLE`. No partial recovery state is returned.
+Malformed or contradictory persisted state returns `REJECTED`. A missing domain, an empty domain with no durable rows, or SQLite read failure returns `UNAVAILABLE`. No partial recovery state is returned.
 
 ## 3. Trust and replay boundary
 
@@ -73,6 +73,7 @@ A missing projection port or unavailable projection source remains `UNAVAILABLE`
 - rejection when the checkpoint state reference no longer matches its commit marker;
 - rejection when the checkpoint commit marker is missing;
 - rejection when a marker exists without a checkpoint row;
-- successful verified recovery through the configured checkpoint projection port, followed by replay and inventory verification.
+- successful verified recovery through the configured checkpoint projection port, followed by replay and inventory verification;
+- rejection of a tampered checkpoint HMAC before the projection port is invoked.
 
 These tests require owner-run execution on Debian. No tests, deployment, service restart, Docker operation, or production mutation are performed by this change.
