@@ -70,6 +70,7 @@ class InMemoryConsistencyJournalFake:
         self.checkpoint = None
         self.idempotency = {}
         self.record_ids = {}
+        self.append_ids = {}
 
     def _position(self):
         return ConsistencyPosition(self.domain, self.epoch, self.sequence)
@@ -79,10 +80,17 @@ class InMemoryConsistencyJournalFake:
             self.domain, self.epoch, transition
         )
 
-    def append_transition(self, expected_position, transition):
-        if not isinstance(transition, ConsistencyTransition):
-            return None
-        if not isinstance(expected_position, ConsistencyPosition):
+    def append_transition(self, expected_position, append_id, transition=None):
+        # Compatibility for direct legacy test calls; production callers use
+        # the explicit three-argument append contract.
+        if transition is None:
+            transition = append_id
+            append_id = f"append:{transition.record_id}"
+        if (
+            not isinstance(append_id, str) or not append_id.strip()
+            or not isinstance(transition, ConsistencyTransition)
+            or not isinstance(expected_position, ConsistencyPosition)
+        ):
             return None
         if (
             expected_position.consistency_domain_id != self.domain
@@ -90,18 +98,30 @@ class InMemoryConsistencyJournalFake:
         ):
             return None
 
-        if transition.idempotency_key is not None:
-            existing = self.idempotency.get(transition.idempotency_key)
-            if existing is not None:
-                canonical, commit = existing
-                if canonical != self._canonical(transition):
-                    return None
-                return replace(commit, replayed=True)
+        canonical = self._canonical(transition)
+        by_append = self.append_ids.get(append_id)
+        by_key = (
+            self.idempotency.get(transition.idempotency_key)
+            if transition.idempotency_key is not None else None
+        )
+        if by_append is not None and by_key is not None and by_append[1] != by_key[1]:
+            return None
+        existing = by_key or by_append
+        if existing is not None:
+            if isinstance(existing, tuple) and len(existing) == 3:
+                existing_canonical, commit, existing_key = existing
+            else:
+                existing_canonical, commit = existing
+                existing_key = transition.idempotency_key
+            if (
+                existing_canonical != canonical
+                or existing_key != transition.idempotency_key
+            ):
+                return None
+            return replace(commit, replayed=True)
 
         existing_record = self.record_ids.get(transition.record_id)
-        if existing_record is not None:
-            return None
-        if expected_position != self._position():
+        if existing_record is not None or expected_position != self._position():
             return None
 
         self.sequence += 1
@@ -110,10 +130,11 @@ class InMemoryConsistencyJournalFake:
         commit = JournalCommit(position, transition.record_id, False)
         self.entries.append(entry)
         self.record_ids[transition.record_id] = entry
+        self.append_ids[append_id] = (
+            canonical, commit, transition.idempotency_key
+        )
         if transition.idempotency_key is not None:
-            self.idempotency[transition.idempotency_key] = (
-                self._canonical(transition), commit
-            )
+            self.idempotency[transition.idempotency_key] = (canonical, commit)
         return commit
 
     def load_recovery_state(self, domain_id):
