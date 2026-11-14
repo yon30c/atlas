@@ -1,0 +1,176 @@
+"""Integration tests for the SQLite K01 append identity contract."""
+from dataclasses import replace
+from datetime import timedelta
+import tempfile
+import unittest
+from pathlib import Path
+
+from atlas.adapters.sqlite.consistency_journal import SQLiteConsistencyJournal
+from atlas.adapters.sqlite.database import SQLiteDatabase
+from atlas.adapters.sqlite.migrations import SQLITE_MIGRATIONS
+from atlas.memory.journal import (
+    ConsistencyPosition,
+    JournalOperationResolutionStatus,
+)
+from atlas.memory.local_auth import object_commitment
+from unit.test_memory_journal import NOW, RECORD_1, RECORD_2, read_admitted
+
+
+class FakeSigner:
+    """Test-only envelope signer; does not represent production key custody."""
+
+    def sign_envelope(self, envelope, object_value):
+        return replace(
+            envelope,
+            object_commitment=object_commitment(object_value),
+            authentication_evidence="test-authentication-evidence",
+        )
+
+
+class SQLiteConsistencyJournalTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.database = SQLiteDatabase(Path(self.temp_dir.name) / "atlas.sqlite")
+        self.database.apply_migrations(SQLITE_MIGRATIONS)
+        self.journal = SQLiteConsistencyJournal(
+            self.database,
+            FakeSigner(),
+            reducer_version="reducer-v1",
+            issuer_id="issuer-test",
+            issuer_role="service",
+            key_reference="key-test",
+            trust_policy_version="policy-v1",
+        )
+        self.assertTrue(self.journal.create_local_domain("domain-a", 1))
+
+    @staticmethod
+    def position(sequence):
+        return ConsistencyPosition("domain-a", 1, sequence)
+
+    def test_semantic_replay_with_new_append_and_record_ids_returns_original_commit(self):
+        original = read_admitted(record_id=RECORD_1, idempotency_key="semantic-key")
+        retry = read_admitted(
+            record_id=RECORD_2,
+            idempotency_key="semantic-key",
+            occurred_at=NOW + timedelta(seconds=30),
+        )
+        first = self.journal.append_transition(self.position(0), "append-first", original)
+        replay = self.journal.append_transition(self.position(0), "append-retry", retry)
+
+        self.assertIsNotNone(first)
+        self.assertIsNotNone(replay)
+        self.assertEqual(first.record_id, RECORD_1)
+        self.assertEqual(replay.record_id, RECORD_1)
+        self.assertFalse(first.replayed)
+        self.assertTrue(replay.replayed)
+        self.assertEqual(replay.position.sequence, 1)
+
+    def test_same_append_id_and_semantics_without_key_replays_original_commit(self):
+        original = read_admitted(record_id=RECORD_1)
+        retry = replace(
+            original,
+            record_id=RECORD_2,
+            occurred_at=NOW + timedelta(seconds=20),
+        )
+        first = self.journal.append_transition(self.position(0), "stable-append", original)
+        replay = self.journal.append_transition(self.position(0), "stable-append", retry)
+
+        self.assertIsNotNone(first)
+        self.assertIsNotNone(replay)
+        self.assertEqual(replay.record_id, RECORD_1)
+        self.assertTrue(replay.replayed)
+
+    def test_reused_idempotency_key_with_different_semantics_conflicts(self):
+        original = read_admitted(record_id=RECORD_1, idempotency_key="semantic-key")
+        changed = replace(
+            original,
+            record_id=RECORD_2,
+            route_ids=frozenset({"different-business-effect"}),
+        )
+        first = self.journal.append_transition(self.position(0), "append-first", original)
+        conflict = self.journal.append_transition(self.position(0), "append-retry", changed)
+
+        self.assertIsNotNone(first)
+        self.assertIsNone(conflict)
+
+    def test_operation_id_can_be_reused_for_distinct_appends(self):
+        first_transition = read_admitted(record_id=RECORD_1)
+        second_transition = replace(
+            first_transition,
+            record_id=RECORD_2,
+            snapshot_id="snapshot-2",
+        )
+        first = self.journal.append_transition(
+            self.position(0), "append-one", first_transition
+        )
+        second = self.journal.append_transition(
+            self.position(1), "append-two", second_transition
+        )
+
+        self.assertIsNotNone(first)
+        self.assertIsNotNone(second)
+        self.assertEqual(first.position.sequence, 1)
+        self.assertEqual(second.position.sequence, 2)
+
+    def test_resolve_append_finds_exact_commit_by_append_id(self):
+        transition = read_admitted(record_id=RECORD_1, idempotency_key="resolve-key")
+        self.journal.append_transition(self.position(0), "append-resolve", transition)
+
+        result = self.journal.resolve_append(
+            "domain-a", 1, "append-resolve", "resolve-key",
+            transition, self.position(0),
+        )
+
+        self.assertIs(result.status, JournalOperationResolutionStatus.COMMITTED_EXACT)
+        self.assertEqual(result.commit.record_id, RECORD_1)
+        self.assertEqual(result.committed_transition, transition)
+
+    def test_resolve_append_finds_semantic_replay_with_regenerated_append_id(self):
+        original = read_admitted(record_id=RECORD_1, idempotency_key="resolve-key")
+        retry = read_admitted(
+            record_id=RECORD_2,
+            idempotency_key="resolve-key",
+            occurred_at=NOW + timedelta(seconds=10),
+        )
+        self.journal.append_transition(self.position(0), "append-original", original)
+
+        result = self.journal.resolve_append(
+            "domain-a", 1, "append-retry", "resolve-key",
+            retry, self.position(0),
+        )
+
+        self.assertIs(result.status, JournalOperationResolutionStatus.COMMITTED_EXACT)
+        self.assertEqual(result.commit.record_id, RECORD_1)
+        self.assertEqual(result.committed_transition, original)
+
+    def test_resolve_append_rejects_two_locators_that_point_to_different_commits(self):
+        first = read_admitted(record_id=RECORD_1, idempotency_key="key-one")
+        second = replace(
+            first,
+            record_id=RECORD_2,
+            idempotency_key="key-two",
+            snapshot_id="snapshot-two",
+        )
+        self.journal.append_transition(self.position(0), "append-one", first)
+        self.journal.append_transition(self.position(1), "append-two", second)
+
+        result = self.journal.resolve_append(
+            "domain-a", 1, "append-one", "key-two", second, self.position(1)
+        )
+
+        self.assertIs(result.status, JournalOperationResolutionStatus.CONFLICT)
+        self.assertIsNone(result.commit)
+
+    def test_resolve_append_reports_not_committed_only_when_both_locators_are_absent(self):
+        transition = read_admitted(record_id=RECORD_1, idempotency_key="absent-key")
+        result = self.journal.resolve_append(
+            "domain-a", 1, "absent-append", "absent-key",
+            transition, self.position(0),
+        )
+        self.assertIs(result.status, JournalOperationResolutionStatus.NOT_COMMITTED)
+        self.assertEqual(result.current_position.sequence, 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
