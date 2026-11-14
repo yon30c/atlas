@@ -24,6 +24,8 @@ from unit.test_memory_unresolved_admission_recovery import (
     make_recovery_journal,
 )
 
+from tests.fakes.receipt_trust import FakeReceiptTrustContextFactory
+
 NOW = datetime(2026, 11, 13, 19, 0, tzinfo=timezone.utc)
 
 
@@ -64,6 +66,7 @@ class RecoveryAdmissionFinalizationTests(unittest.TestCase):
             self.gate,
             self.fencer,
             self.verifier,
+            trust_context_factory=FakeReceiptTrustContextFactory(),
             domain_id="consistency-domain",
             id_factory=lambda: next(self.ids),
             clock=lambda: NOW,
