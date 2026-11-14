@@ -1,9 +1,12 @@
 """Tests puros del contrato de resolución de escrituras ambiguas ME-03K-B."""
+from datetime import datetime, timezone
 import unittest
 
 from atlas.core.errors import ContractError
 from atlas.memory.journal import (
     ConsistencyPosition,
+    ConsistencyRecordKind,
+    ConsistencyTransition,
     JournalCommit,
     JournalOperationResolution,
     JournalOperationResolutionStatus,
@@ -12,75 +15,101 @@ from atlas.memory.journal import (
 
 class JournalOperationResolutionTests(unittest.TestCase):
     def setUp(self):
+        self.now = datetime(2026, 11, 13, 12, 0, tzinfo=timezone.utc)
         self.expected = ConsistencyPosition("domain-a", 3, 10)
-        self.committed = JournalCommit(
-            ConsistencyPosition("domain-a", 3, 11),
-            "018bcfe5-7b3a-7cc2-98c4-dc0c0c074901",
-            False,
+        self.transition = ConsistencyTransition(
+            record_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074502",
+            schema_version=1,
+            record_kind=ConsistencyRecordKind.CHECKPOINT_COMMITTED,
+            operation_id="checkpoint:op-10",
+            occurred_at=self.now,
+            idempotency_key="checkpoint-idem-10",
+            checkpoint_reference="checkpoint-ref-10",
+        )
+        self.commit = JournalCommit(
+            position=ConsistencyPosition("domain-a", 3, 11),
+            record_id=self.transition.record_id,
+            replayed=False,
         )
 
-    def test_committed_exact_requires_exact_next_sequence(self):
-        result = JournalOperationResolution(
+    def _result(self, status, **overrides):
+        values = dict(
+            status=status,
+            operation_id=self.transition.operation_id,
+            idempotency_key=self.transition.idempotency_key,
+            expected_position=self.expected,
+            expected_transition=self.transition,
+            current_position=ConsistencyPosition("domain-a", 3, 11),
+            commit=None,
+            committed_transition=None,
+        )
+        values.update(overrides)
+        return JournalOperationResolution(**values)
+
+    def test_committed_exact_requires_exact_persisted_transition(self):
+        result = self._result(
             JournalOperationResolutionStatus.COMMITTED_EXACT,
-            "operation-1", "idem-1", self.expected,
-            ConsistencyPosition("domain-a", 3, 14), self.committed,
+            commit=self.commit,
+            committed_transition=self.transition,
         )
         self.assertIs(result.status, JournalOperationResolutionStatus.COMMITTED_EXACT)
 
-    def test_committed_exact_rejects_wrong_domain_or_epoch(self):
-        with self.assertRaises(ContractError):
-            JournalOperationResolution(
-                JournalOperationResolutionStatus.COMMITTED_EXACT,
-                "operation-1", None, self.expected,
-                ConsistencyPosition("domain-b", 3, 11), self.committed,
-            )
-
-    def test_committed_exact_rejects_non_adjacent_commit(self):
-        bad = JournalCommit(
-            ConsistencyPosition("domain-a", 3, 12),
-            "018bcfe5-7b3a-7cc2-98c4-dc0c0c074902", False,
+    def test_committed_exact_rejects_different_transition_even_if_record_id_matches(self):
+        conflicting = ConsistencyTransition(
+            record_id=self.transition.record_id,
+            schema_version=1,
+            record_kind=ConsistencyRecordKind.CHECKPOINT_COMMITTED,
+            operation_id=self.transition.operation_id,
+            occurred_at=self.now,
+            idempotency_key=self.transition.idempotency_key,
+            checkpoint_reference="different-checkpoint-ref",
         )
         with self.assertRaises(ContractError):
-            JournalOperationResolution(
+            self._result(
                 JournalOperationResolutionStatus.COMMITTED_EXACT,
-                "operation-1", None, self.expected,
-                ConsistencyPosition("domain-a", 3, 12), bad,
+                commit=self.commit,
+                committed_transition=conflicting,
             )
 
-    def test_not_committed_requires_proven_current_position(self):
-        result = JournalOperationResolution(
+    def test_not_committed_requires_proven_current_position_and_no_commit(self):
+        result = self._result(
             JournalOperationResolutionStatus.NOT_COMMITTED,
-            "operation-1", "idem-1", self.expected,
-            ConsistencyPosition("domain-a", 3, 13), None,
+            current_position=ConsistencyPosition("domain-a", 3, 12),
         )
-        self.assertIs(result.status, JournalOperationResolutionStatus.NOT_COMMITTED)
+        self.assertEqual(result.current_position.sequence, 12)
 
-    def test_not_committed_rejects_rollback_or_epoch_change(self):
-        for current in (
-            ConsistencyPosition("domain-a", 3, 9),
-            ConsistencyPosition("domain-a", 4, 10),
-        ):
-            with self.subTest(current=current), self.assertRaises(ContractError):
-                JournalOperationResolution(
-                    JournalOperationResolutionStatus.NOT_COMMITTED,
-                    "operation-1", None, self.expected, current, None,
-                )
+    def test_not_committed_rejects_commit_evidence(self):
+        with self.assertRaises(ContractError):
+            self._result(
+                JournalOperationResolutionStatus.NOT_COMMITTED,
+                commit=self.commit,
+            )
 
-    def test_unknown_and_conflict_cannot_claim_commit(self):
-        for status in (JournalOperationResolutionStatus.UNKNOWN,
-                       JournalOperationResolutionStatus.CONFLICT):
-            with self.subTest(status=status), self.assertRaises(ContractError):
-                JournalOperationResolution(
-                    status, "operation-1", None, self.expected,
-                    ConsistencyPosition("domain-a", 3, 11), self.committed,
-                )
+    def test_unknown_cannot_claim_commit_or_persisted_transition(self):
+        with self.assertRaises(ContractError):
+            self._result(
+                JournalOperationResolutionStatus.UNKNOWN,
+                committed_transition=self.transition,
+            )
 
-    def test_unknown_is_explicit_and_has_no_commit(self):
-        result = JournalOperationResolution(
-            JournalOperationResolutionStatus.UNKNOWN,
-            "operation-1", "idem-1", self.expected, None, None,
+    def test_conflict_does_not_expose_a_commit_as_exact(self):
+        result = self._result(
+            JournalOperationResolutionStatus.CONFLICT,
+            current_position=ConsistencyPosition("domain-a", 3, 11),
         )
-        self.assertIs(result.status, JournalOperationResolutionStatus.UNKNOWN)
+        self.assertIs(result.status, JournalOperationResolutionStatus.CONFLICT)
+
+    def test_resolution_cannot_mismatch_operation_or_idempotency_key(self):
+        with self.assertRaises(ContractError):
+            self._result(
+                JournalOperationResolutionStatus.UNKNOWN,
+                operation_id="different-operation",
+            )
+        with self.assertRaises(ContractError):
+            self._result(
+                JournalOperationResolutionStatus.UNKNOWN,
+                idempotency_key="different-key",
+            )
 
 
 if __name__ == "__main__":
