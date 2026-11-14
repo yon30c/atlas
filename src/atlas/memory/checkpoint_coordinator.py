@@ -64,6 +64,10 @@ class LocalCheckpointCoordinator:
             raise ContractError("projection_publisher debe implementar publish_checkpoint_projection")
         if not callable(getattr(projection_resolver, "resolve_checkpoint_projection", None)):
             raise ContractError("projection_resolver debe implementar resolve_checkpoint_projection")
+        for name in ("issuer_id", "issuer_role", "key_reference"):
+            value = getattr(journal, name, None)
+            if not isinstance(value, str) or not value.strip():
+                raise ContractError(f"journal.{name} debe ser una cadena no vacía")
         if getattr(journal, "reducer_version", None) != reducer_version:
             raise ContractError("reducer_version no coincide con el journal")
         if getattr(journal, "trust_policy_version", None) != getattr(
