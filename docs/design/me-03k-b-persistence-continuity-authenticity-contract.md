@@ -246,3 +246,11 @@ ME-03K-B se considera contractualmente cerrado cuando:
 6. K01–K07 pueden ejecutarse sin cambiar las expectativas por proveedor.
 
 Este cierre de diseño no equivale a implementación ni conformidad operativa. No autoriza activar lecturas protegidas o Forget físico.
+
+## 14. Contrato tipado complementario
+
+Los tipos y puertos que hacen exigibles las garantías de ancla externa, verificación de checkpoint/estado, contexto de confianza, autenticidad de recibos y resolución de operaciones ambiguas se especifican en `me-03k-c-trust-anchor-and-verification-port-contracts.md`.
+
+ME-03K-B y ME-03K-C deben leerse conjuntamente. El journal no entrega un estado desnudo al reducer: la recuperación debe demostrar autenticidad y continuidad desde un ancla externa vigente. Los recibos tipados no son por sí mismos evidencia autenticada. El finalizador y el verificador permanecen separados.
+
+El cierre de ambos contratos sigue siendo diseño; los puertos y modelos existentes aún requieren alineación de tipos antes de iniciar adaptadores durables.
