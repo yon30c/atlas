@@ -96,12 +96,16 @@ class OllamaProvider:
         transport: JsonHttpTransport | None = None,
     ) -> None:
         self._base_url = self._validate_base_url(base_url)
-        if (
-            isinstance(timeout, bool)
-            or not isinstance(timeout, (int, float))
-            or not math.isfinite(timeout)
-            or timeout <= 0
-        ):
+        try:
+            valid_timeout = (
+                not isinstance(timeout, bool)
+                and isinstance(timeout, (int, float))
+                and math.isfinite(timeout)
+                and timeout > 0
+            )
+        except (OverflowError, TypeError):
+            valid_timeout = False
+        if not valid_timeout:
             raise ContractError("timeout debe ser un número finito positivo")
         if transport is not None and not callable(
             getattr(transport, "post_json", None)
@@ -109,7 +113,9 @@ class OllamaProvider:
             raise ContractError("transport debe implementar post_json()")
 
         self._timeout = float(timeout)
-        self._transport = transport or UrllibJsonTransport()
+        self._transport = (
+            transport if transport is not None else UrllibJsonTransport()
+        )
 
     @staticmethod
     def _validate_base_url(base_url: str) -> str:
