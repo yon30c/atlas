@@ -309,6 +309,99 @@ class LocalSQLiteRecoveryGateAdapterTests(unittest.TestCase):
         self.assertIsNone(row["active_recovery_generation"])
         self.assertEqual(row["recovery_receipt_id"], receipt.receipt_id)
 
+    def test_reconcile_projection_failure_rolls_back_terminal_journal_event(self):
+        self._complete_recovery()
+        receipt = RecoveryCompletionReceipt(
+            consistency_domain_id=DOMAIN,
+            authority_epoch=EPOCH,
+            operation_id=RECOVERY_OPERATION,
+            generation=2,
+            affected_admission_ids=ADMISSIONS,
+            route_ids=ROUTES,
+            receipt_id="recovery-terminal-receipt",
+        )
+        verified = VerifiedRecoveryCompletionReceipt(
+            verification_id="verified-recovery",
+            issuer_id="trusted-recovery-finalizer",
+            verified_at=NOW,
+            receipt=receipt,
+        )
+        transition = ConsistencyTransition(
+            record_id=RECOVERY_RECONCILED_ID,
+            schema_version=1,
+            record_kind=ConsistencyRecordKind.RECOVERY_RECONCILED,
+            operation_id=RECOVERY_OPERATION,
+            occurred_at=NOW,
+            generation=2,
+            receipt_id=receipt.receipt_id,
+            route_ids=ROUTES,
+            affected_admission_ids=ADMISSIONS,
+        )
+        before = self.journal.load_recovery_state(DOMAIN).head_sequence
+        self.adapter._update_projection = lambda *args, **kwargs: False
+        result = self.adapter.reconcile_and_open_recovery_gate(
+            self._current_position(), transition, verified
+        )
+        self.assertIsNone(result)
+        state = self.journal.load_recovery_state(DOMAIN)
+        self.assertEqual(state.head_sequence, before)
+        self.assertFalse(
+            any(
+                entry.transition.record_kind is ConsistencyRecordKind.RECOVERY_RECONCILED
+                for entry in state.entries
+            )
+        )
+        with self.database.connection() as connection:
+            row = connection.execute(
+                "SELECT recovery_gate_state, active_recovery_operation_id, "
+                "active_recovery_generation FROM consistency_domains WHERE domain_id=?",
+                (DOMAIN,),
+            ).fetchone()
+        self.assertEqual(row["recovery_gate_state"], "closed")
+        self.assertEqual(row["active_recovery_operation_id"], RECOVERY_OPERATION)
+        self.assertEqual(row["active_recovery_generation"], 2)
+
+    def test_reconcile_rejects_receipt_with_wrong_inventory(self):
+        self._complete_recovery()
+        receipt = RecoveryCompletionReceipt(
+            consistency_domain_id=DOMAIN,
+            authority_epoch=EPOCH,
+            operation_id=RECOVERY_OPERATION,
+            generation=2,
+            affected_admission_ids=frozenset({"other-admission"}),
+            route_ids=ROUTES,
+            receipt_id="wrong-inventory-receipt",
+        )
+        verified = VerifiedRecoveryCompletionReceipt(
+            verification_id="verified-recovery",
+            issuer_id="trusted-recovery-finalizer",
+            verified_at=NOW,
+            receipt=receipt,
+        )
+        transition = ConsistencyTransition(
+            record_id=RECOVERY_RECONCILED_ID,
+            schema_version=1,
+            record_kind=ConsistencyRecordKind.RECOVERY_RECONCILED,
+            operation_id=RECOVERY_OPERATION,
+            occurred_at=NOW,
+            generation=2,
+            receipt_id=receipt.receipt_id,
+            route_ids=ROUTES,
+            affected_admission_ids=ADMISSIONS,
+        )
+        before = self.journal.load_recovery_state(DOMAIN).head_sequence
+        self.assertIsNone(
+            self.adapter.reconcile_and_open_recovery_gate(
+                self._current_position(), transition, verified
+            )
+        )
+        self.assertEqual(self.journal.load_recovery_state(DOMAIN).head_sequence, before)
+        self.assertFalse(
+            self.adapter.ensure_recovery_gate_open(
+                RECOVERY_OPERATION, 2, receipt.receipt_id
+            )
+        )
+
     def test_ensure_open_restores_only_the_latest_reconciled_closure(self):
         self._complete_recovery()
         receipt = RecoveryCompletionReceipt(
