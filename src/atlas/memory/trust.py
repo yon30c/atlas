@@ -146,6 +146,19 @@ class ConsistencyCheckpointVerificationRequest:
             raise ContractError("envelope no coincide con la solicitud exacta")
         if self.expected_position.sequence < self.anchor.maximum_committed_sequence:
             raise ContractError("checkpoint anterior al ancla externa vigente")
+        if self.anchor.trust_policy_version != self.trust_policy_version:
+            raise ContractError("política de confianza no coincide con el ancla")
+        if self.anchor.issued_at > self.verification_time:
+            raise ContractError("ancla emitida después del instante de verificación")
+        if self.anchor.valid_until is not None and self.verification_time >= self.anchor.valid_until:
+            raise ContractError("ancla expirada")
+        if self.envelope.issued_at > self.verification_time:
+            raise ContractError("envelope emitido después del instante de verificación")
+        if (
+            self.expected_position.sequence == self.anchor.maximum_committed_sequence
+            and self.envelope.object_commitment != self.anchor.authenticated_state_commitment
+        ):
+            raise ContractError("checkpoint no coincide con el commitment del ancla")
 
 
 @dataclass(frozen=True, slots=True)
