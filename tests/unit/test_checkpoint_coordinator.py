@@ -194,6 +194,18 @@ class LocalCheckpointCoordinatorTests(unittest.TestCase):
         )
         self.assertIs(first.status, CheckpointCommitStatus.COMMITTED)
 
+        later = replace(
+            read_admitted(record_id=RECORD_2),
+            operation_id="read:admission-2",
+            admission_id="admission-2",
+        )
+        later_commit = self.journal.append_transition(
+            ConsistencyPosition("atlas-local", 1, 2),
+            "coordinator-post-checkpoint-append",
+            later,
+        )
+        self.assertIsNotNone(later_commit)
+
         retried = self.coordinator.commit_checkpoint(
             CHECKPOINT_ID, self.first_commit.position, NOW
         )
@@ -201,7 +213,7 @@ class LocalCheckpointCoordinatorTests(unittest.TestCase):
         self.assertIs(retried.status, CheckpointCommitStatus.REPLAYED)
         self.assertTrue(retried.marker_commit.replayed)
         self.assertEqual(self._checkpoint_count(), 1)
-        self.assertEqual(self._head(), 2)
+        self.assertEqual(self._head(), 3)
 
     def test_same_id_with_changed_timestamp_is_conflict(self):
         first = self.coordinator.commit_checkpoint(
