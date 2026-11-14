@@ -4,8 +4,8 @@ from datetime import datetime, timedelta
 
 from atlas.authorization.models import (
     AuthorizationDecision,
+    AuthorizationEvaluation,
     AuthorizationRequest,
-    AuthorizationResult,
     Grant,
 )
 from atlas.core.errors import ContractError
@@ -20,21 +20,21 @@ class AuthorizationEvaluator:
         request: AuthorizationRequest,
         grants: Iterable[Grant],
         now: datetime,
-    ) -> AuthorizationResult:
+    ) -> AuthorizationEvaluation:
         if not isinstance(request, AuthorizationRequest):
             raise ContractError("request debe ser AuthorizationRequest")
         self._validate_utc(now)
 
         if request.context.actor.status != IdentityStatus.ACTIVE:
-            return AuthorizationResult(AuthorizationDecision.DENY)
+            return AuthorizationEvaluation(AuthorizationDecision.DENY)
 
         for grant in grants:
             if not isinstance(grant, Grant):
                 raise ContractError("Todos los elementos deben ser Grant")
             if self._matches(request, grant, now):
-                return AuthorizationResult(AuthorizationDecision.ALLOW)
+                return AuthorizationEvaluation(AuthorizationDecision.ALLOW, grant)
 
-        return AuthorizationResult(AuthorizationDecision.DENY)
+        return AuthorizationEvaluation(AuthorizationDecision.DENY)
 
     @staticmethod
     def _matches(
@@ -47,10 +47,10 @@ class AuthorizationEvaluator:
             (
                 grant.subject_identity_id == context.actor.identity_id,
                 grant.owner_user_id == request.resource_owner_id,
-                grant.owner_user_id == context.user_id,
                 grant.project_id == context.project_id,
                 grant.environment == context.environment,
                 grant.resource_type == request.resource_type,
+                request.resource_id in grant.resource_ids,
                 request.action in grant.actions,
                 grant.issued_at <= now < grant.expires_at,
                 grant.revoked_at is None or grant.revoked_at > now,

@@ -3,7 +3,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 from atlas.authorization.grant_management import GrantManagementService
-from atlas.authorization.models import Grant
+from atlas.authorization.models import Grant, GrantResourceScope
 from atlas.core.context import OperationContext
 from atlas.core.errors import (
     AuthorizationError,
@@ -67,7 +67,7 @@ class GrantManagementTests(unittest.TestCase):
             subject_identity_id="agent-001",
             project_id="atlas",
             environment="development",
-            resource_type="files",
+            resource_scope=GrantResourceScope("files", frozenset({"file-001"})),
             actions=frozenset({"read"}),
             issued_at=NOW,
             expires_at=NOW + timedelta(days=7),
@@ -154,6 +154,7 @@ class GrantManagementTests(unittest.TestCase):
             revoked_at,
         )
         self.assertEqual(revoked_grant.revoked_at, revoked_at)
+        self.assertEqual(revoked_grant.revision, self.grant.revision + 1)
         self.assertEqual(
             self.repository.get(self.grant.grant_id),
             revoked_grant,

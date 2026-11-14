@@ -1,6 +1,6 @@
 # Memory Engine — contrato técnico e invariantes
 
-**Estado:** diseño técnico consolidado; decisiones de diseño confirmadas por el propietario. Parámetros operativos de retención y detalles de implementación permanecen pendientes.  
+**Estado:** diseño técnico consolidado; decisiones de dominio detalladas en DM-01 (`docs/design/domain-model-specification-dm-01.md`). Parámetros de infraestructura, autenticación y operación de supresión permanecen pendientes.  
 **Base normativa:** `Contrato-de-diseno-Atlas-v1.md`, revisión 2, especialmente §§ 3, 9, 14.5 y 15.  
 **Alcance:** especificación de dominio y fronteras para la Fase 1.  
 **Implementación:** no incluida. Este documento no declara capacidades implementadas ni aprueba parámetros que el contrato vigente deja pendientes.
@@ -70,10 +70,10 @@ Invariantes:
 - En memoria privada, la ausencia de `project_id` en el contexto de operación es válida solo cuando el scope `PRIVATE` está explícito. No implica acceso global.
 - En memoria de proyecto, un `project_id` ausente, ambiguo o diferente del scope produce denegación.
 - Un scope ausente, mal formado o ambiguo produce denegación; nunca se interpreta como acceso global.
-- Una memoria de proyecto no se convierte en privada ni viceversa mediante una actualización ordinaria. Un cambio de scope requiere una operación explícita, revisada y autorizada; el mecanismo concreto queda pendiente.
+- Una memoria de proyecto no se convierte en privada ni viceversa mediante una actualización ordinaria. Transferencia de propietario y reclasificación de scope no están soportadas en v1; cualquier migración futura será un flujo separado conforme a DM-01 §9.3.7.
 - La autorización de acceso no se deriva de `owner_id` por sí solo; toda operación protegida debe pasar por Memory Gateway y CAM.
 
-**PENDIENTE:** formato definitivo de los identificadores y política para transferir o reclasificar una memoria entre scopes.
+**Resuelto en DM-01:** IDs generados por Atlas usan UUIDv7 canónico; IDs externos se mantienen opacos. Transferencia de propietario y reclasificación de scope no están soportadas en v1. Ver DM-01 §§9.3.6–9.3.7.
 
 ### 3.2 Memory y MemoryVersion
 
@@ -121,7 +121,7 @@ La representación física puede variar, pero debe preservar estas propiedades.
 
 Una `MemoryProposal` identifica de forma inequívoca si solicita crear una nueva identidad lógica o una nueva versión de una memoria existente. Debe mantener referencias a la propuesta, la memoria objetivo cuando exista y la versión creada para revisión. La propuesta no altera directamente una versión aprobada. Toda propuesta admitida al proceso de revisión genera una versión `pending_review`; mientras permanezca pendiente, la versión aprobada anterior continúa siendo la vigente. La aprobación y sustitución se realizan atómicamente conforme a §3.3.
 
-La clasificación de memoria tendrá un catálogo propio que deberá definirse antes de implementar las políticas de clasificación. El catálogo de clasificación de eventos del contrato principal no se reutiliza por inferencia.
+La clasificación de memoria utiliza el catálogo cerrado INTERNAL, CONFIDENTIAL y RESTRICTED, con orden y reglas de herencia definidos en DM-01 §9.3.5. El catálogo de clasificación de eventos no se reutiliza por inferencia.
 
 ### 3.3 Estados y transiciones
 
@@ -159,7 +159,7 @@ No se agregan estados nuevos al ciclo de vida aprobado. Los estados operativos d
 
 La procedencia no constituye autorización. Una referencia de origen no permite saltarse CAM ni el scope de la memoria.
 
-**PENDIENTE:** esquema definitivo, retención de referencias y tratamiento de fuentes que desaparecen o dejan de ser accesibles.
+**Resuelto en DM-01:** esquema mínimo de ProvenanceContext, catálogo SourceKind y referencias opacas están definidos en §9.3.10; retención histórica y tratamiento de referencias se definen en §9.3.8. No se copia el contenido de fuentes por defecto.
 
 ## 5. Memory Gateway: frontera obligatoria
 
@@ -234,7 +234,7 @@ Reglas:
 - La propuesta pendiente no se incluye en recuperación de conocimiento aprobado.
 - Las decisiones deben asociarse a la versión exacta revisada; cambios de contenido posteriores invalidan esa revisión y requieren nueva propuesta.
 
-La forma técnica de capturar una aprobación directa y verificable queda pendiente de integrar con el futuro flujo de identidad/autenticación y aprobación. No se debe simular mediante un booleano controlado por el propio Assistant.
+El contrato del puerto OwnerDecisionVerifier y de OwnerDecisionProof está definido en DM-01 §9.3.4. Sigue pendiente seleccionar e integrar el emisor de autenticación confiable capaz de producir esa prueba. No se debe simular mediante un booleano controlado por el propio Assistant.
 
 ## 7. Olvido y eliminación verificable
 
@@ -421,13 +421,28 @@ La confirmación de las reglas anteriores no cierra los detalles operativos que 
 - Inventario de almacenes, índices, réplicas, cachés y sistemas derivados que participan en supresión.
 - Plazos de propagación y criterios verificables para declarar una supresión completada.
 - Representación técnica del registro de supresión y su reconciliación durante restauraciones/importaciones.
-- Mecanismo verificable para acreditar que una decisión fue iniciada directamente por el propietario.
-- Semántica exacta de autorizaciones por tipo para operaciones colectivas, separada de las autorizaciones por recurso concreto.
-- Política de retención de versiones históricas y límites de metadatos/contenido expuestos por índices.
+- Proveedor/emisor de autenticación confiable capaz de emitir la prueba definida por OwnerDecisionVerifier en DM-01 §9.3.4; si no existe, approve/reject/forget permanecen deshabilitados.
+- Límites de metadatos/contenido expuestos por índices y política operativa de inventario/supresión; la política de dominio de retención histórica sin TTL automático está definida en DM-01 §9.3.8.
 
 Estos parámetros no autorizan a relajar las invariantes confirmadas ni a declarar implementada una capacidad todavía inexistente.
 
 ### 13.7 Alcance que permanece aplazado
 
 SecurityAudit continúa postergado. Cognee, Telegram, scheduler, RLM, despliegues, integración con producción y modificaciones de Broker/Registry v2 permanecen fuera del alcance de esta fase. Este documento consolida diseño; no autoriza cambios en esos sistemas ni afirma que las capacidades descritas estén implementadas.
+
+## 14. Resoluciones técnicas complementarias de DM-01
+
+El documento `docs/design/domain-model-specification-dm-01.md`, en su revisión vigente de la rama de diseño, desarrolla y cierra decisiones de dominio que este contrato había dejado como parámetros técnicos. Para evitar duplicar especificaciones, se aplican estas referencias:
+
+- **Autorización de versiones:** Grant sobre la memoria lógica exacta; versión como subrecurso exacto validado contra el padre (DM-01 §9.3.1).
+- **Metadatos confiables:** puertos tipados de memoria, proyecto y entorno, sin usar el Registry del Broker como autoridad de memoria (DM-01 §9.3.2).
+- **Prueba directa del propietario:** contrato de OwnerDecisionProof y OwnerDecisionVerifier definido; proveedor de autenticación aún por seleccionar (DM-01 §9.3.4).
+- **Clasificación:** catálogo INTERNAL, CONFIDENTIAL y RESTRICTED, y reglas de herencia (DM-01 §9.3.5).
+- **IDs:** UUIDv7 para IDs generados por Atlas; IDs externos opacos (DM-01 §9.3.6).
+- **Transferencias/reclasificación:** no soportadas en v1 (DM-01 §9.3.7).
+- **Retención histórica y procedencia:** sin TTL automático durante la vida de la memoria; referencias mínimas y opacas (DM-01 §§9.3.8 y 9.3.10).
+- **Propuestas:** transacción lógica atómica e idempotencia por clave de envío (DM-01 §9.3.9).
+- **Operaciones colectivas:** deshabilitadas por tipo en v1 (DM-01 §9.3.11).
+
+Estas resoluciones no seleccionan proveedor de autenticación, almacenamiento, adaptadores, retención física de backups ni inventario de destinos. Cuando DM-01 deja esos elementos como pendientes operativos, este contrato no los da por resueltos. El contrato normativo principal y CT-01 a CT-08 mantienen precedencia.
 
