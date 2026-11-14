@@ -17,7 +17,9 @@ Los contratos neutrales para proveedores de modelos (`LLMProvider`, `LLMRequest`
 
 El adaptador `OllamaProvider` implementa el contrato usando la API local `/api/chat`, transporte HTTP de la biblioteca estándar e inyección de transporte para pruebas. Solo acepta endpoints HTTP en `localhost` o direcciones loopback; no admite proveedores remotos.
 
-El adaptador está implementado, pero **todavía no está conectado a la consola ni al servicio conversacional**. Tampoco están conectados memoria, herramientas, agentes ni Atlas Broker. La respuesta actual de la consola sigue siendo deliberadamente informativa y no simula comprensión generativa ni ejecución de tareas.
+El puente `OllamaResponseGenerator` conecta el puerto LLM con el contrato de generación que consume `AssistantService`. Convierte cada solicitud conversacional en mensajes de sistema y usuario, devuelve la respuesta del modelo y traduce fallos conocidos de Ollama en respuestas de tipo `ERROR`, sin propagar detalles internos del proveedor al usuario. El puente no incorpora historial, memoria, herramientas ni permisos.
+
+La integración está cubierta por pruebas unitarias con un proveedor simulado; no requiere un servidor Ollama activo. **La consola todavía no está configurada para seleccionar ni activar el modelo**. Tampoco están conectados memoria, herramientas, agentes ni Atlas Broker.
 
 ## Ejecución local
 
@@ -43,9 +45,10 @@ PYTHONPATH=src python -m unittest \
   tests.unit.test_assistant_console \
   tests.unit.test_local_console_composition \
   tests.unit.test_llm_contracts \
-  tests.unit.test_ollama_adapter \\\n  tests.unit.test_ollama_assistant -v
+  tests.unit.test_ollama_adapter \
+  tests.unit.test_ollama_assistant -v
 ```
 
 ## Próximas etapas
 
-Conectar el adaptador Ollama al servicio conversacional y, posteriormente, integrar memoria y herramientas bajo autorización explícita. Ninguna de estas capacidades futuras debe considerarse implementada hasta contar con código y pruebas verificadas.
+Configurar la selección explícita del modelo local y conectar la consola al puente Ollama. Posteriormente, integrar memoria y herramientas bajo autorización explícita. Ninguna de estas capacidades futuras debe considerarse implementada hasta contar con código y pruebas verificadas.
