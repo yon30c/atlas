@@ -49,6 +49,8 @@ class RecoveryCompletionRequest:
             raise ContractError("generation debe ser positiva")
         if not isinstance(self.affected_admission_ids, frozenset) or not self.affected_admission_ids:
             raise ContractError("affected_admission_ids debe ser frozenset no vacío")
+        for admission_id in self.affected_admission_ids:
+            _required(admission_id, "affected_admission_ids")
         if not isinstance(self.route_ids, frozenset) or not self.route_ids:
             raise ContractError("route_ids debe ser frozenset no vacío")
         for route_id in self.route_ids:
@@ -106,8 +108,14 @@ class RecoveryCompletionReceipt:
             raise ContractError("generation debe ser positiva")
         if not isinstance(self.affected_admission_ids, frozenset) or not self.affected_admission_ids:
             raise ContractError("affected_admission_ids debe ser frozenset no vacío")
-        if not isinstance(self.route_ids, frozenset):
-            raise ContractError("route_ids debe ser frozenset")
+        if not isinstance(self.affected_admission_ids, frozenset) or not self.affected_admission_ids:
+            raise ContractError("affected_admission_ids debe ser frozenset no vacío")
+        for admission_id in self.affected_admission_ids:
+            _required(admission_id, "affected_admission_ids")
+        if not isinstance(self.route_ids, frozenset) or not self.route_ids:
+            raise ContractError("route_ids debe ser frozenset no vacío")
+        for route_id in self.route_ids:
+            _required(route_id, "route_ids")
 
 
 @dataclass(frozen=True, slots=True)
