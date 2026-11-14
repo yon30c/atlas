@@ -363,6 +363,70 @@ class ConsistencyTransition:
                 raise ContractError("EGRESS_COMMITTED requiere recibo durable del endpoint")
 
 
+REQUEST_PROJECTION_VERSION = 1
+_REQUEST_PROJECTION_EXCLUDED_FIELDS = frozenset({
+    "record_id",
+    "operation_id",
+    "occurred_at",
+    "request_id",
+    "correlation_id",
+    "idempotency_key",
+})
+
+
+def consistency_transition_request_projection(
+    consistency_domain_id: str,
+    authority_epoch: int,
+    transition: ConsistencyTransition,
+) -> dict[str, object]:
+    """Return the explicit v1 semantic request projection for idempotency.
+
+    Technical invocation/transport identifiers are intentionally excluded.
+    Business identifiers and authorization/effect fields remain included.
+    The per-kind allowlist is closed by _TRANSITION_FIELDS_BY_KIND.
+    """
+    _required(consistency_domain_id, "consistency_domain_id")
+    _positive(authority_epoch, "authority_epoch")
+    if not isinstance(transition, ConsistencyTransition):
+        raise ContractError("transition debe ser ConsistencyTransition")
+
+    allowed_fields = _TRANSITION_FIELDS_BY_KIND[transition.record_kind]
+    if (
+        transition.record_kind is ConsistencyRecordKind.READ_ADMITTED
+        and transition.schema_version == 1
+    ):
+        allowed_fields = allowed_fields - frozenset({
+            "scope_kind", "scope_project_id"
+        })
+
+    semantic_fields = allowed_fields - _REQUEST_PROJECTION_EXCLUDED_FIELDS
+    return {
+        "request_projection_version": REQUEST_PROJECTION_VERSION,
+        "consistency_domain_id": consistency_domain_id,
+        "authority_epoch": authority_epoch,
+        "record_kind": transition.record_kind,
+        "schema_version": transition.schema_version,
+        "semantic_fields": {
+            field: getattr(transition, field)
+            for field in sorted(semantic_fields)
+        },
+    }
+
+
+def same_semantic_transition(
+    consistency_domain_id: str,
+    authority_epoch: int,
+    expected: ConsistencyTransition,
+    committed: ConsistencyTransition,
+) -> bool:
+    """Compare two transitions by their versioned semantic request projection."""
+    return consistency_transition_request_projection(
+        consistency_domain_id, authority_epoch, expected
+    ) == consistency_transition_request_projection(
+        consistency_domain_id, authority_epoch, committed
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class JournalCommit:
     position: ConsistencyPosition
@@ -440,7 +504,12 @@ class JournalOperationResolution:
                 or self.current_position.authority_epoch
                 != self.expected_position.authority_epoch
                 or self.current_position.sequence < self.commit.position.sequence
-                or self.committed_transition != self.expected_transition
+                or not same_semantic_transition(
+                    self.expected_position.consistency_domain_id,
+                    self.expected_position.authority_epoch,
+                    self.expected_transition,
+                    self.committed_transition,
+                )
                 or self.commit.record_id != self.committed_transition.record_id
             ):
                 raise ContractError("commit/transición/posición no corresponden exactamente a la solicitud")
