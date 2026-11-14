@@ -1,32 +1,70 @@
 """Punto de composición para ejecutar Atlas en una terminal local."""
 
+import os
 from typing import Callable
 
 from atlas.adapters.console import run_console
+from atlas.adapters.ollama import OllamaProvider
+from atlas.adapters.ollama_assistant import OllamaResponseGenerator
 from atlas.adapters.system_clock import SystemClock
 from atlas.assistant.local_console import (
     LocalConsoleRequestFactory,
     LocalModeResponseGenerator,
 )
 from atlas.assistant.service import AssistantService
+from atlas.ports.llm import LLMProvider
+
+
+DEFAULT_MODEL = "gemma4:e2b"
+DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
 
 
 def main(
     *,
     input_fn: Callable[[str], str] = input,
     output_fn: Callable[[str], None] = print,
+    write_fn: Callable[[str], None] | None = None,
     user_id: str | None = None,
+    provider: LLMProvider | None = None,
+    model: str | None = None,
+    ollama_url: str | None = None,
 ) -> None:
-    """Construye las dependencias locales e inicia la conversación."""
+    """Inicia Atlas con Gemma local y streaming habilitado por defecto.
+
+    ATLAS_MODEL y ATLAS_OLLAMA_URL permiten cambiar el modelo o el endpoint.
+    El adaptador rechaza cualquier endpoint que no sea loopback.
+    ATLAS_MODE=offline conserva el modo informativo sin proveedor LLM.
+    """
     clock = SystemClock()
     request_factory = LocalConsoleRequestFactory(clock, user_id=user_id)
+
+    if os.environ.get("ATLAS_MODE", "").strip().casefold() == "offline":
+        response_generator = LocalModeResponseGenerator()
+    else:
+        selected_model = (
+            model if model is not None else os.environ.get("ATLAS_MODEL", DEFAULT_MODEL)
+        )
+        selected_url = (
+            ollama_url
+            if ollama_url is not None
+            else os.environ.get("ATLAS_OLLAMA_URL", DEFAULT_OLLAMA_URL)
+        )
+        selected_provider = (
+            provider if provider is not None else OllamaProvider(base_url=selected_url)
+        )
+        response_generator = OllamaResponseGenerator(
+            provider=selected_provider,
+            model=selected_model,
+        )
+
     assistant = AssistantService(
-        response_generator=LocalModeResponseGenerator(),
+        response_generator=response_generator,
         clock=clock,
     )
-    run_console(
-        assistant,
-        request_factory,
-        input_fn=input_fn,
-        output_fn=output_fn,
-    )
+    console_options = {
+        "input_fn": input_fn,
+        "output_fn": output_fn,
+    }
+    if write_fn is not None:
+        console_options["write_fn"] = write_fn
+    run_console(assistant, request_factory, **console_options)
