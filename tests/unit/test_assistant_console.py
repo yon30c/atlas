@@ -1,4 +1,4 @@
-"""Pruebas del adaptador de consola."""
+"""Pruebas del adaptador de consola desacoplado de la aplicación."""
 
 from types import SimpleNamespace
 import unittest
@@ -6,22 +6,13 @@ import unittest
 from atlas.adapters.console import run_console
 
 
-class FakeRequestFactory:
+class FakeRuntime:
     def __init__(self):
         self.contents = []
 
-    def create(self, content):
+    def respond(self, content):
         self.contents.append(content)
-        return SimpleNamespace(content=content)
-
-
-class FakeResponder:
-    def __init__(self):
-        self.requests = []
-
-    def respond(self, request):
-        self.requests.append(request)
-        return SimpleNamespace(content=f"respuesta: {request.content}")
+        return SimpleNamespace(content=f"respuesta: {content}")
 
 
 class ConsoleAdapterTests(unittest.TestCase):
@@ -37,23 +28,20 @@ class ConsoleAdapterTests(unittest.TestCase):
                 raise value
             return value
 
-        factory = FakeRequestFactory()
-        responder = FakeResponder()
+        runtime = FakeRuntime()
         run_console(
-            responder,
-            factory,
+            runtime,
             input_fn=input_fn,
             output_fn=output.append,
         )
-        return factory, responder, prompts, output
+        return runtime, prompts, output
 
     def test_processes_multiple_messages_until_exit(self):
-        factory, responder, prompts, output = self.run_with_inputs(
+        runtime, prompts, output = self.run_with_inputs(
             ["Hola", "¿Qué puedes hacer?", "salir"]
         )
 
-        self.assertEqual(factory.contents, ["Hola", "¿Qué puedes hacer?"])
-        self.assertEqual(len(responder.requests), 2)
+        self.assertEqual(runtime.contents, ["Hola", "¿Qué puedes hacer?"])
         self.assertEqual(prompts, ["Tú> ", "Tú> ", "Tú> "])
         self.assertEqual(output[1:], [
             "Atlas> respuesta: Hola",
@@ -62,26 +50,21 @@ class ConsoleAdapterTests(unittest.TestCase):
         ])
 
     def test_ignores_empty_messages(self):
-        factory, responder, _, output = self.run_with_inputs(
-            ["", "   ", "Hola", "exit"]
-        )
+        runtime, _, output = self.run_with_inputs(["", "   ", "Hola", "exit"])
 
-        self.assertEqual(factory.contents, ["Hola"])
-        self.assertEqual(len(responder.requests), 1)
+        self.assertEqual(runtime.contents, ["Hola"])
         self.assertEqual(output[1], "Atlas> respuesta: Hola")
 
     def test_accepts_exit_command_case_insensitively(self):
-        factory, responder, _, output = self.run_with_inputs(["SALIR"])
+        runtime, _, output = self.run_with_inputs(["SALIR"])
 
-        self.assertEqual(factory.contents, [])
-        self.assertEqual(responder.requests, [])
+        self.assertEqual(runtime.contents, [])
         self.assertEqual(output[-1], "Atlas: hasta luego.")
 
     def test_finishes_gracefully_on_eof(self):
-        factory, responder, _, output = self.run_with_inputs([EOFError()])
+        runtime, _, output = self.run_with_inputs([EOFError()])
 
-        self.assertEqual(factory.contents, [])
-        self.assertEqual(responder.requests, [])
+        self.assertEqual(runtime.contents, [])
         self.assertEqual(output[-1], "Atlas: sesión finalizada.")
 
 
