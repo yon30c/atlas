@@ -18,7 +18,10 @@ from atlas.memory.journal import (
     ConsistencyRecordKind,
     JournalCommit,
 )
-from atlas.memory.local_trust_policy import LocalConsistencyTrustPolicy
+from atlas.memory.local_trust_policy import (
+    LocalConsistencyTrustPolicy,
+    LocalIssuerAuthorization,
+)
 from atlas.memory.trust import ConsistencyRecoveryVerificationStatus
 from atlas.ports.checkpoint_projection_store import (
     LocalCheckpointProjectionPublisherPort,
@@ -65,19 +68,11 @@ class LocalCheckpointCoordinator:
             raise ContractError("reducer_version no está permitida por trust_policy")
         if 1 not in trust_policy.allowed_schema_versions:
             raise ContractError("schema_version 1 debe estar permitida por trust_policy")
-        authorized_kinds = {
-            item.object_kind for item in trust_policy.issuer_authorizations
-        }
-        if not {"checkpoint", "journal_entry"}.issubset(authorized_kinds):
-            raise ContractError(
-                "trust_policy debe autorizar checkpoint y journal_entry"
-            )
-
+        self._trust_policy = trust_policy
+        self._reducer_version = reducer_version
         self._journal = journal
         self._publisher = projection_publisher
         self._resolver = projection_resolver
-        self._trust_policy = trust_policy
-        self._reducer_version = reducer_version
 
     @staticmethod
     def _conflict() -> CheckpointCommitResult:
@@ -178,6 +173,8 @@ class LocalCheckpointCoordinator:
         if verified is None:
             # This coordinator is deliberately restricted to the local profile.
             return self._conflict()
+        if verified.trust_policy_version != self._trust_policy.policy_version:
+            return self._conflict()
 
         state = verified.state
         if state.checkpoint is not None and state.checkpoint.checkpoint_id == checkpoint_id:
@@ -191,6 +188,18 @@ class LocalCheckpointCoordinator:
             or verified.authority_epoch != expected_position.authority_epoch
             or verified.head_sequence != expected_position.sequence
             or state.continuity_reference != verified.local_state_commitment
+            or not state.entries
+            or state.entries[-1].envelope is None
+        ):
+            return self._conflict()
+
+        latest_envelope = state.entries[-1].envelope
+        checkpoint_authorization = LocalIssuerAuthorization(
+            "checkpoint", latest_envelope.issuer_id, latest_envelope.issuer_role
+        )
+        if (
+            checkpoint_authorization not in self._trust_policy.issuer_authorizations
+            or latest_envelope.key_reference not in self._trust_policy.allowed_key_references
         ):
             return self._conflict()
 
