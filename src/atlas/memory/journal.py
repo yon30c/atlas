@@ -53,6 +53,8 @@ class ConsistencyRecordKind(str, Enum):
     ADMISSION_RECONCILED = "admission_reconciled"
     FORGET_SUPPRESSED = "forget_suppressed"
     INVALIDATION_RECONCILED = "invalidation_reconciled"
+    RECOVERY_CLOSED = "recovery_closed"
+    RECOVERY_RECONCILED = "recovery_reconciled"
     CHECKPOINT_COMMITTED = "checkpoint_committed"
 
 
@@ -96,6 +98,12 @@ _TRANSITION_FIELDS_BY_KIND = {
     ConsistencyRecordKind.INVALIDATION_RECONCILED: _COMMON_TRANSITION_FIELDS | frozenset({
         "authority_kind", "authority_id", "generation", "route_ids",
         "affected_admission_ids",
+    }),
+    ConsistencyRecordKind.RECOVERY_CLOSED: _COMMON_TRANSITION_FIELDS | frozenset({
+        "generation", "route_ids", "affected_admission_ids",
+    }),
+    ConsistencyRecordKind.RECOVERY_RECONCILED: _COMMON_TRANSITION_FIELDS | frozenset({
+        "generation", "receipt_id", "route_ids", "affected_admission_ids",
     }),
     ConsistencyRecordKind.CHECKPOINT_COMMITTED: _COMMON_TRANSITION_FIELDS | frozenset({
         "checkpoint_reference",
@@ -265,6 +273,10 @@ class ConsistencyTransition:
             ),
             ConsistencyRecordKind.INVALIDATION_RECONCILED: (
                 "authority_kind", "authority_id", "generation",
+            ),
+            ConsistencyRecordKind.RECOVERY_CLOSED: ("generation",),
+            ConsistencyRecordKind.RECOVERY_RECONCILED: (
+                "generation", "receipt_id",
             ),
             ConsistencyRecordKind.CHECKPOINT_COMMITTED: ("checkpoint_reference",),
         }
