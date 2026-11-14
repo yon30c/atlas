@@ -691,6 +691,21 @@ class ConsistencyJournalReducer:
                     active_recovery is None,
                     "ya existe una recuperación del dominio pendiente",
                 )
+                self._require(
+                    all(item["reconciled"] for item in invalidations.values()),
+                    "RECOVERY_CLOSED no puede adelantarse a una invalidación pendiente",
+                )
+                self._require(
+                    all(
+                        admissions[admission_id]["status"] in (
+                            ReadAdmissionStatus.COMPLETED,
+                            ReadAdmissionStatus.CANCELLED,
+                        )
+                        for closure in forgets.values()
+                        for admission_id in closure["affected_admission_ids"]
+                    ),
+                    "RECOVERY_CLOSED no puede adelantarse a un Forget pendiente",
+                )
                 expected_ids = frozenset(
                     admission_id
                     for admission_id, item in admissions.items()
