@@ -3,7 +3,11 @@
 from typing import Callable
 
 from atlas.adapters.ollama import OllamaError
-from atlas.assistant.models import AssistantRequest, AssistantResponseKind
+from atlas.assistant.models import (
+    AssistantRequest,
+    AssistantResponseKind,
+    ConversationMessageRole,
+)
 from atlas.core.errors import ContractError
 from atlas.ports.llm import (
     LLMMessage,
@@ -51,12 +55,21 @@ class OllamaResponseGenerator:
     def _build_request(self, request: AssistantRequest) -> LLMRequest:
         if not isinstance(request, AssistantRequest):
             raise ContractError("request debe ser AssistantRequest")
+
+        role_mapping = {
+            ConversationMessageRole.USER: LLMMessageRole.USER,
+            ConversationMessageRole.ASSISTANT: LLMMessageRole.ASSISTANT,
+        }
+        messages = [LLMMessage(LLMMessageRole.SYSTEM, self._system_prompt)]
+        messages.extend(
+            LLMMessage(role_mapping[item.role], item.content)
+            for item in request.history
+        )
+        messages.append(LLMMessage(LLMMessageRole.USER, request.content))
+
         return LLMRequest(
             model=self._model,
-            messages=(
-                LLMMessage(LLMMessageRole.SYSTEM, self._system_prompt),
-                LLMMessage(LLMMessageRole.USER, request.content),
-            ),
+            messages=tuple(messages),
             temperature=self._temperature,
             max_tokens=self._max_tokens,
         )
