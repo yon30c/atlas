@@ -225,6 +225,68 @@ class SQLiteConsistencyJournalTests(unittest.TestCase):
         self.assertEqual(domain["head_sequence"], 0)
         self.assertEqual(entries, 0)
 
+    def test_signer_cannot_change_authenticated_issue_time(self):
+        class TimestampMutatingSigner:
+            def sign_envelope(self, envelope, object_value):
+                return replace(
+                    envelope,
+                    issued_at=envelope.issued_at + timedelta(seconds=1),
+                    object_commitment=object_commitment(object_value),
+                    authentication_evidence="test-authentication-evidence",
+                )
+
+        journal = SQLiteConsistencyJournal(
+            self.database,
+            TimestampMutatingSigner(),
+            reducer_version="reducer-v1",
+            issuer_id="issuer-test",
+            issuer_role="service",
+            key_reference="key-test",
+            trust_policy_version="policy-v1",
+        )
+        result = journal.append_transition(
+            self.position(0), "append-mutated-time", read_admitted(record_id=RECORD_1)
+        )
+        self.assertIsNone(result)
+        with self.database.connection() as connection:
+            head = connection.execute(
+                "SELECT head_sequence FROM consistency_domains WHERE domain_id='domain-a'"
+            ).fetchone()[0]
+            count = connection.execute(
+                "SELECT COUNT(*) FROM journal_entries WHERE domain_id='domain-a'"
+            ).fetchone()[0]
+        self.assertEqual(head, 0)
+        self.assertEqual(count, 0)
+
+    def test_unexpected_signer_exception_fails_closed(self):
+        class UnexpectedFailingSigner:
+            def sign_envelope(self, envelope, object_value):
+                raise Exception("unexpected signer failure")
+
+        journal = SQLiteConsistencyJournal(
+            self.database,
+            UnexpectedFailingSigner(),
+            reducer_version="reducer-v1",
+            issuer_id="issuer-test",
+            issuer_role="service",
+            key_reference="key-test",
+            trust_policy_version="policy-v1",
+        )
+        result = journal.append_transition(
+            self.position(0), "append-unexpected-failure",
+            read_admitted(record_id=RECORD_1),
+        )
+        self.assertIsNone(result)
+        with self.database.connection() as connection:
+            head = connection.execute(
+                "SELECT head_sequence FROM consistency_domains WHERE domain_id='domain-a'"
+            ).fetchone()[0]
+            count = connection.execute(
+                "SELECT COUNT(*) FROM journal_entries WHERE domain_id='domain-a'"
+            ).fetchone()[0]
+        self.assertEqual(head, 0)
+        self.assertEqual(count, 0)
+
     def test_stale_position_does_not_append_or_advance_head(self):
         first = read_admitted(record_id=RECORD_1)
         second = replace(first, record_id=RECORD_2, snapshot_id="snapshot-stale")
