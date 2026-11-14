@@ -3,21 +3,21 @@
 import sys
 from typing import Callable, Protocol
 
-from atlas.assistant.models import AssistantRequest, AssistantResponse, AssistantResponseKind
+from atlas.assistant.models import AssistantResponse, AssistantResponseKind
 
 
-class AssistantResponder(Protocol):
-    """Contrato mínimo requerido por la interfaz de consola."""
+class AssistantRuntime(Protocol):
+    """Fachada de aplicación requerida por la interfaz de consola."""
 
-    def respond(self, request: AssistantRequest) -> AssistantResponse:
-        """Procesa una solicitud y devuelve su respuesta."""
+    def respond(self, content: str) -> AssistantResponse:
+        """Procesa el texto introducido y devuelve una respuesta."""
 
-
-class AssistantRequestFactory(Protocol):
-    """Construye solicitudes con el contexto local correspondiente."""
-
-    def create(self, content: str) -> AssistantRequest:
-        """Crea una solicitud a partir del texto introducido."""
+    def respond_streaming(
+        self,
+        content: str,
+        on_token: Callable[[str], None],
+    ) -> AssistantResponse:
+        """Procesa el texto y emite fragmentos conforme llegan."""
 
 
 def _write_stdout(content: str) -> None:
@@ -26,14 +26,13 @@ def _write_stdout(content: str) -> None:
 
 
 def run_console(
-    responder: AssistantResponder,
-    request_factory: AssistantRequestFactory,
+    runtime: AssistantRuntime,
     *,
     input_fn: Callable[[str], str] = input,
     output_fn: Callable[[str], None] = print,
     write_fn: Callable[[str], None] = _write_stdout,
 ) -> None:
-    """Ejecuta la conversación y muestra tokens conforme se reciben."""
+    """Ejecuta la conversación delegando la coordinación en AtlasCore."""
     output_fn("Atlas está listo. Escribe 'salir' para terminar.")
 
     while True:
@@ -52,8 +51,7 @@ def run_console(
             output_fn("Atlas: hasta luego.")
             return
 
-        request = request_factory.create(content)
-        streaming_responder = getattr(responder, "respond_streaming", None)
+        streaming_responder = getattr(runtime, "respond_streaming", None)
         if callable(streaming_responder):
             write_fn("Atlas> ")
             streamed: list[str] = []
@@ -64,14 +62,14 @@ def run_console(
                 streamed.append(token)
                 write_fn(token)
 
-            response = streaming_responder(request, emit)
+            response = streaming_responder(content, emit)
             if response.kind is AssistantResponseKind.ERROR:
                 if streamed:
-                    write_fn("\nAtlas> " + response.content + "\n")
+                    write_fn("\\nAtlas> " + response.content + "\\n")
                 else:
-                    write_fn(response.content + "\n")
+                    write_fn(response.content + "\\n")
             else:
-                write_fn("\n")
+                write_fn("\\n")
         else:
-            response = responder.respond(request)
+            response = runtime.respond(content)
             output_fn(f"Atlas> {response.content}")
