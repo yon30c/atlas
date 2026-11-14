@@ -230,6 +230,44 @@ class LocalConsistencyRecoveryVerifierTests(unittest.TestCase):
             ConsistencyRecoveryVerificationStatus.UNAVAILABLE,
         )
 
+    def test_reports_key_provider_exception_as_unavailable(self):
+        class UnavailableKey:
+            def load_key(inner_self, key_reference):
+                raise OSError("key store unavailable")
+
+        self.verifier = LocalConsistencyRecoveryVerifier(
+            trust_policy=self.policy,
+            key_port=UnavailableKey(),
+            inventory_verifier=self.inventory,
+            verifier_id="local-recovery-verifier",
+        )
+        result = self.verifier.verify_recovery_state(
+            build_recovery_state(), self.context
+        )
+        self.assertIs(
+            result.status,
+            ConsistencyRecoveryVerificationStatus.UNAVAILABLE,
+        )
+
+    def test_reports_malformed_historical_key_as_unavailable(self):
+        class MalformedKey:
+            def load_key(inner_self, key_reference):
+                return b"short"
+
+        self.verifier = LocalConsistencyRecoveryVerifier(
+            trust_policy=self.policy,
+            key_port=MalformedKey(),
+            inventory_verifier=self.inventory,
+            verifier_id="local-recovery-verifier",
+        )
+        result = self.verifier.verify_recovery_state(
+            build_recovery_state(), self.context
+        )
+        self.assertIs(
+            result.status,
+            ConsistencyRecoveryVerificationStatus.UNAVAILABLE,
+        )
+
     def test_rejects_invalid_chain_commitment(self):
         state = build_recovery_state()
         result = self.verifier.verify_recovery_state(
