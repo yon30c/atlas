@@ -72,10 +72,6 @@ class LocalHmacTests(unittest.TestCase):
             authenticate_envelope(self.envelope, {"record": "one"}, b"short")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class RecoveryChainTests(unittest.TestCase):
     def test_authenticated_entry_chain_and_wrong_policy(self):
         from atlas.memory.journal import (
@@ -116,3 +112,7 @@ class RecoveryChainTests(unittest.TestCase):
         self.assertFalse(verify_recovery_chain(
             replace(state, continuity_reference="wrong"), Keys(), "policy-v1"
         ))
+
+
+if __name__ == "__main__":
+    unittest.main()
