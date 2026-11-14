@@ -8,8 +8,8 @@ from atlas.memory.consistency import (
     AuthorizationRevisionSet,
     AuthorizationSnapshot,
     DeliveryRouteSet,
-    ConsistencyPosition,
 )
+from atlas.memory.journal import ConsistencyPosition
 from atlas.memory.models import (
     MemoryClassification,
     MemoryScope,
