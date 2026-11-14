@@ -113,7 +113,8 @@ Implemented:
 The ME-03G receipt contract was strengthened so an `ENDPOINT_FENCED` receipt must bind `fenced_through_sequence`. This prevents accepting a fence that advances generation but does not attest the last sequence already committed by the endpoint.
 
 Tests:
-- 24 focused tests in `tests/unit/test_memory_unresolved_admission_recovery.py`, including journal reducer closure/reconciliation cases;
+- 25 focused tests in `tests/unit/test_memory_unresolved_admission_recovery.py`, including journal reducer closure/reconciliation cases;
+- fake-authority recovery test in `tests/unit/test_memory_consistency_authority.py`: restored admission is UNRESOLVED, old-generation emission is rejected, new reads remain blocked until every endpoint acknowledges fencing, and only then can a fresh admission use the new generation;
 - ME-03G terminal receipt tests updated for fenced-through sequence binding.
 
-**Important boundary:** this is still a pure/model and fake-verifier stage. The reducer can replay recovery closure and reconciliation records, but no durable authority currently commits `RECOVERY_CLOSED` before endpoint contact, and no production coordinator appends the endpoint/admission receipts. The next integration slice must connect the verified batch to an atomic journal/authority workflow and prove stale-emitter rejection in the authority/egress fake. No production admission is marked CANCELLED by this implementation.
+**Important boundary:** this is still a pure/model and fake-verifier stage. The reducer can replay recovery closure and reconciliation records, but no durable authority currently commits `RECOVERY_CLOSED` before endpoint contact, and no production coordinator appends the endpoint/admission receipts. The next integration slice must connect the verified batch to an atomic journal/authority workflow and prove that the journal receipt IDs, verifier evidence and authority acknowledgements are committed together before the recovery gate opens. No production admission is marked CANCELLED by this implementation.
