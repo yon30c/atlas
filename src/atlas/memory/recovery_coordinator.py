@@ -21,6 +21,10 @@ from atlas.memory.journal_reducer import (
     ConsistencyProjection,
     EndpointProjectionStatus,
 )
+from atlas.memory.trust import (
+    ConsistencyRecoveryVerificationResult,
+    ConsistencyRecoveryVerificationStatus,
+)
 from atlas.memory.recovery import (
     RecoveryEndpointSequence,
     RecoveryFencePlan,
