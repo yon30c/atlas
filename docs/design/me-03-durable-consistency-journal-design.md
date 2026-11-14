@@ -251,7 +251,7 @@ El checkpoint no sustituye el registro histórico ni puede descartar evidencia n
 1. Iniciar en modo cerrado: no aceptar nuevas admisiones ni liberar contenido protegido.
 2. Cargar checkpoint y registros posteriores desde una fuente autenticada y verificable.
 3. Validar dominio, época, secuencias, unicidad de IDs, referencias, transiciones permitidas, generaciones y correlación.
-4. Detectar truncamiento, huecos no explicados, duplicados contradictorios, rollback o registros desconocidos.
+4. Detectar truncamiento detectable desde la evidencia disponible, huecos no explicados, duplicados contradictorios, retrocesos internos o registros desconocidos. Un backup coherente pero antiguo no puede identificarse en perfil local sin una referencia independiente; esa prueba queda para el perfil anclado opcional.
 5. Reconstruir cierres, invalidaciones, admisiones, compromisos de egress y claves de idempotencia.
 6. Reinstalar el fencing/generación más reciente antes de contactar endpoints.
 7. Recuperar como `UNRESOLVED` cualquier admisión cuya terminalidad no esté probada por recibos recuperables.
