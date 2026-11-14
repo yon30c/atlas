@@ -121,8 +121,8 @@ La inspección de código en la rama confirmó:
 - `LocalConsistencyRecoveryVerifier` produce `VerifiedLocalConsistencyRecoveryState` con proyección semántica, pero el dominio vacío sin evento de génesis no puede producir una proyección VERIFIED operativa.
 - `ConsistencyJournalReducer` rechaza READ_ADMITTED durante recuperación activa, después de Forget aplicable y antes de reconciliar invalidaciones aplicables.
 - `MemoryMetadataResolver` resuelve memoria, versión, proyecto y entorno exactos; `IdentitySubjectBindingPort` resuelve binding autenticado; CAM obtiene Grants desde `GrantRepository`.
-- No existe todavía un puerto de registro confiable de rutas de entrega ni una frontera común que permita a la autoridad comprobar que todos los IDs de ruta están registrados.
-- No existe un contrato de lectura/revalidación de revisiones que garantice orden coherente entre los cambios de metadatos/identidad/Grant y sus eventos de invalidación en el journal.
+- Antes de D4O-B no existía un puerto de registro confiable de rutas. Ahora existe el contrato neutral `DeliveryRouteRegistryPort`, pero aún no hay registro autoritativo ni adaptador Atlas que lo implemente.
+- Ahora existe el contrato neutral `RevisionValidationPort`, ligado a `ConsistencyPosition`. Aún no hay un adaptador que demuestre lectura coherente y orden invalidation-first entre Memory, Identity, Project, Environment y Grant.
 - `LocalSQLiteRecoveryGateAdapter` es gate-only; no hay autoridad SQLite que implemente actualmente `admit_read`.
 
 ### Consecuencia de diseño
@@ -144,7 +144,7 @@ La validación de revisiones no debe asumir que una lectura de varios repositori
 4. Componerlo con la autoridad única y el Recovery Gate sin declarar aún completa la autoridad de egress/Forget.
 5. Mantener runtime protegido deshabilitado hasta bootstrap LOCAL, composición total y pruebas de servidor.
 
-No se ejecutan pruebas/build/CI en esta etapa, según lo acordado.
+Las pruebas/build/CI quedan pendientes de ejecución desde el checkout de la rama.
 
 ## 10. Implementación contractual — 14 de noviembre de 2026
 
@@ -163,9 +163,9 @@ Se añadieron en la rama los siguientes contratos neutrales:
   - Expiración/revocación o estado no elegible se representa como `REJECTED`; evidencia incompleta o inaccesible como `UNAVAILABLE`.
   - `CURRENT`, `STALE` y `REJECTED` deben devolver la posición observada; el coordinador debe revalidarla contra el head dentro de la misma UoW antes del append.
 - Ambos contratos se exportan desde `atlas.memory`.
-- Se añadió `tests/unit/test_memory_authority_validation_ports.py` con 11 pruebas contractuales de resultados exactos, rutas parciales/duplicadas, fencing, revisiones y timestamps UTC.
+- Se añadió `tests/unit/test_memory_authority_validation_ports.py` con 12 pruebas contractuales de resultados exactos, rutas parciales/duplicadas, fencing, revisiones y timestamps UTC.
 
-**Límite deliberado:** estos cambios no implementan un registro real de rutas ni un adaptador de revisiones. La inspección actual no demuestra que los repositorios canónicos de Memory, Identity, Project, Environment y Grant compartan una transacción ni que todos sus caminos de mutación emitan primero invalidación durable. Una lectura puntual de revisiones, un lock de proceso o notificaciones eventuales no cierran esa carrera. Los dos nuevos puertos reciben la posición verificada esperada; el resultado debe referirse a esa misma posición y el coordinador volverá a comparar el head dentro de la UoW. Toda mutación de revisiones o rutas debe publicar primero su invalidación durable en la misma autoridad; si una fuente no puede demostrar ese orden, responderá `UNAVAILABLE`. El contrato de revisión exige invalidación-first y orden compartido; cualquier adaptador incapaz de demostrarlo debe responder `UNAVAILABLE`.
+**Límite deliberado:** estos cambios no implementan un registro real de rutas ni un adaptador de revisiones. La inspección actual no demuestra que los repositorios canónicos de Memory, Identity, Project, Environment y Grant compartan una transacción ni que todos sus caminos de mutación emitan primero invalidación durable. Una lectura puntual de revisiones, un lock de proceso o notificaciones eventuales no cierran esa carrera. Los dos nuevos puertos reciben la posición verificada esperada; el resultado debe referirse a esa misma posición y el coordinador volverá a comparar el head dentro de la UoW. Toda mutación de revisiones o rutas debe publicar primero su invalidación durable en la misma autoridad; si una fuente no puede demostrar ese orden, responderá `UNAVAILABLE`.
 
 No se ha implementado `admit_read`, no se ha abierto el Recovery Gate y no se ha habilitado runtime protegido. Las 11 pruebas contractuales están añadidas, pero no se ejecutaron: el repositorio no está montado en este entorno de ejecución. La autorización del usuario para probar queda vigente; se ejecutarán desde el checkout de esta rama antes de avanzar a adaptadores.
 
