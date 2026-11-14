@@ -59,6 +59,8 @@ from atlas.memory.journal import (
     ConsistencyTransition,
     JournalCommit,
     JournalEntry,
+    JournalOperationResolution,
+    JournalOperationResolutionStatus,
 )
 from atlas.memory.journal_reducer import (
     AdmissionProjection,
@@ -162,6 +164,8 @@ __all__ = [
     "ConsistencyTransition",
     "JournalCommit",
     "JournalEntry",
+    "JournalOperationResolution",
+    "JournalOperationResolutionStatus",
     "AdmissionProjection",
     "ConsistencyJournalReducer",
     "ConsistencyProjection",
