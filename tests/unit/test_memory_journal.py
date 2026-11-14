@@ -285,7 +285,9 @@ class ConsistencyJournalModelTests(unittest.TestCase):
     def test_fake_journal_replays_same_idempotent_request(self):
         journal = InMemoryConsistencyJournalFake()
         first_transition = read_admitted(idempotency_key="read-key-1")
-        first = journal.append_transition(position(0), first_transition)
+        first = journal.append_transition(
+            position(0), "append:read-admitted-1", first_transition
+        )
         later = ConsistencyTransition(
             record_id=RECORD_2,
             schema_version=1,
@@ -295,13 +297,17 @@ class ConsistencyJournalModelTests(unittest.TestCase):
             admission_id="admission-1",
             generation=1,
         )
-        journal.append_transition(first.position, later)
+        journal.append_transition(
+            first.position, "append:read-activated-1", later
+        )
         retry = read_admitted(
             record_id=RECORD_2,
             idempotency_key="read-key-1",
             occurred_at=NOW + timedelta(seconds=5),
         )
-        repeated = journal.append_transition(position(0), retry)
+        repeated = journal.append_transition(
+            position(0), "append:read-admitted-retry-1", retry
+        )
         self.assertEqual(repeated.position, first.position)
         self.assertEqual(repeated.record_id, first.record_id)
         self.assertTrue(repeated.replayed)
