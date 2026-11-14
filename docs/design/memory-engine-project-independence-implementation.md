@@ -222,3 +222,17 @@ Diseñar la API concreta de unidad de trabajo y el refactor mínimo de `SQLiteCo
 
 Documento de diseño: [ME-D4J — unidad de trabajo SQLite compartida](ME-D4J-sqlite-unit-of-work.md).
 Guía de configuración local: [Memory Engine README](../memory-engine/README.md).
+
+
+## ME-D4K — SQLiteUnitOfWork base
+
+**Estado: implementación añadida; pruebas pendientes.**
+
+- `SQLiteUnitOfWork` se vincula a la instancia propietaria de `SQLiteDatabase`; la conexión solo se obtiene mediante el chequeo interno de propietario y actividad.
+- `SQLiteDatabase.unit_of_work()` abre conexión configurada, ejecuta `BEGIN IMMEDIATE`, confirma al salir y revierte ante excepción.
+- Se rechaza anidamiento en el mismo hilo y uso del handle tras terminar su contexto.
+- `write_transaction()` conserva la interfaz anterior y delega el ciclo de vida transaccional en `unit_of_work()`.
+- Se exportó `SQLiteUnitOfWork` desde `atlas.adapters.sqlite`.
+- Tests nuevos cubren commit, rollback, propietario diferente, anidamiento y compatibilidad. No ejecutados.
+
+**Fuera de alcance:** journal todavía no acepta una unidad de trabajo externa; Recovery Gate authority SQLite sigue sin implementación. No se ha demostrado atomicidad compuesta gate+journal. No hubo cambios de esquema, migraciones ni runtime. No se ejecutaron pruebas ni build.
