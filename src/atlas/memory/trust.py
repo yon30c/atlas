@@ -413,7 +413,8 @@ class ReceiptTrustContext:
         if not isinstance(self.expected_receipt_kind, TrustedReceiptKind):
             raise ContractError("expected_receipt_kind debe ser TrustedReceiptKind")
         _utc(self.verification_time, "verification_time")
-        for field in ("expected_receipt_id", "admission_id", "endpoint_id"):
+        _required(self.expected_receipt_id, "expected_receipt_id")
+        for field in ("admission_id", "endpoint_id"):
             value = getattr(self, field)
             if value is not None:
                 _required(value, field)
@@ -458,6 +459,8 @@ class ReceiptTrustContext:
             _positive(self.previous_generation, "previous_generation")
             if self.generation <= self.previous_generation:
                 raise ContractError("fencing debe avanzar generación")
+            if self.fenced_through_sequence is None:
+                raise ContractError("ENDPOINT_FENCED requiere fenced_through_sequence")
             if self.final_sequence is not None:
                 raise ContractError("fencing no admite final_sequence")
         elif self.previous_generation is not None or self.fenced_through_sequence is not None:
