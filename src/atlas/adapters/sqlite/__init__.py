@@ -1,6 +1,6 @@
 """SQLite infrastructure for the single-server local profile."""
 
-from atlas.adapters.sqlite.database import SQLiteDatabase, SQLiteMigration
+from atlas.adapters.sqlite.database import SQLiteDatabase, SQLiteMigration, SQLiteUnitOfWork
 from atlas.adapters.sqlite.migrations import (
     SQLITE_MIGRATIONS, CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3,
 )
@@ -8,6 +8,7 @@ from atlas.adapters.sqlite.migrations import (
 __all__ = [
     "SQLiteDatabase",
     "SQLiteMigration",
+    "SQLiteUnitOfWork",
     "SQLITE_MIGRATIONS",
     "CORE_SCHEMA_V1",
     "CORE_SCHEMA_V2",
