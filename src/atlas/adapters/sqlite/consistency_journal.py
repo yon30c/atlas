@@ -332,7 +332,7 @@ class SQLiteConsistencyJournal:
                     ),
                 )
                 if updated.rowcount != 1:
-                    return None
+                    raise sqlite3.IntegrityError("head CAS failed; append transaction rolled back")
             return JournalCommit(position, transition.record_id, False)
         except (sqlite3.Error, ContractError, OSError, RuntimeError, ValueError):
             return None

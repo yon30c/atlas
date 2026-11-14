@@ -198,6 +198,51 @@ class SQLiteConsistencyJournalTests(unittest.TestCase):
         self.assertIs(result.status, JournalOperationResolutionStatus.CONFLICT)
         self.assertIsNone(result.commit)
 
+    def test_append_failure_from_signer_leaves_head_and_journal_unchanged(self):
+        class FailingSigner:
+            def sign_envelope(self, envelope, object_value):
+                raise OSError("signer unavailable")
+
+        journal = SQLiteConsistencyJournal(
+            self.database,
+            FailingSigner(),
+            reducer_version="reducer-v1",
+            issuer_id="issuer-test",
+            issuer_role="service",
+            key_reference="key-test",
+            trust_policy_version="policy-v1",
+        )
+        transition = read_admitted(record_id=RECORD_1)
+        result = journal.append_transition(self.position(0), "append-failed", transition)
+        self.assertIsNone(result)
+        with self.database.connection() as connection:
+            domain = connection.execute(
+                "SELECT head_sequence FROM consistency_domains WHERE domain_id='domain-a'"
+            ).fetchone()
+            entries = connection.execute(
+                "SELECT COUNT(*) FROM journal_entries WHERE domain_id='domain-a'"
+            ).fetchone()[0]
+        self.assertEqual(domain["head_sequence"], 0)
+        self.assertEqual(entries, 0)
+
+    def test_stale_position_does_not_append_or_advance_head(self):
+        first = read_admitted(record_id=RECORD_1)
+        second = replace(first, record_id=RECORD_2, snapshot_id="snapshot-stale")
+        self.assertIsNotNone(
+            self.journal.append_transition(self.position(0), "append-first", first)
+        )
+        stale = self.journal.append_transition(self.position(0), "append-second", second)
+        self.assertIsNone(stale)
+        with self.database.connection() as connection:
+            head = connection.execute(
+                "SELECT head_sequence FROM consistency_domains WHERE domain_id='domain-a'"
+            ).fetchone()[0]
+            count = connection.execute(
+                "SELECT COUNT(*) FROM journal_entries WHERE domain_id='domain-a'"
+            ).fetchone()[0]
+        self.assertEqual(head, 1)
+        self.assertEqual(count, 1)
+
     def test_resolve_append_reports_not_committed_only_when_both_locators_are_absent(self):
         transition = read_admitted(record_id=RECORD_1, idempotency_key="absent-key")
         result = self.journal.resolve_append(

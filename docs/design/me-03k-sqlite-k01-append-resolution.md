@@ -65,7 +65,7 @@ Dentro de una única transacción `BEGIN IMMEDIATE`:
 3. `SQLiteConsistencyJournal` consulta por `append_id` y `idempotency_key`, inserta `append_id` en `journal_operations` y conserva el commit original en replay semántico.
 4. Los consumidores de recuperación pasan un identificador estable para el mismo objeto de transición (`append:<record_id>`); un nuevo intento semántico con IDs regenerados se resuelve por `idempotency_key`.
 5. Los coordinadores aceptan un commit replayed anterior al head actual, pero nunca confunden ese resultado con un append nuevo.
-6. `operation_id` no se utiliza para lookup ni unicidad.
+6. `operation_id` no se utiliza como localizador ni tiene unicidad individual.
 7. La implementación todavía requiere validación completa en Debian.
 8. Mantener desactivada la custodia real mediante systemd credentials.
 
