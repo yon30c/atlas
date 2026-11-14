@@ -180,6 +180,32 @@ class RecoveryCompletionCoordinatorTests(unittest.TestCase):
             "recovery-terminal-receipt",
         )
 
+
+    def test_receipts_reject_empty_inventory_identifiers(self):
+        request = self.completion_finalizer.requests
+        self.coordinator.run()
+        valid = self.completion_finalizer.requests[-1]
+        with self.assertRaises(Exception):
+            RecoveryCompletionReceipt(
+                consistency_domain_id=valid.consistency_domain_id,
+                authority_epoch=valid.authority_epoch,
+                operation_id=valid.operation_id,
+                generation=valid.generation,
+                affected_admission_ids=frozenset({""}),
+                route_ids=valid.route_ids,
+                receipt_id="invalid-empty-admission",
+            )
+        with self.assertRaises(Exception):
+            RecoveryCompletionReceipt(
+                consistency_domain_id=valid.consistency_domain_id,
+                authority_epoch=valid.authority_epoch,
+                operation_id=valid.operation_id,
+                generation=valid.generation,
+                affected_admission_ids=valid.affected_admission_ids,
+                route_ids=frozenset({""}),
+                receipt_id="invalid-empty-route",
+            )
+
     def test_finalizer_wrong_inventory_keeps_gate_closed(self):
         self.completion_finalizer.wrong_binding = True
         result = self.coordinator.run()
