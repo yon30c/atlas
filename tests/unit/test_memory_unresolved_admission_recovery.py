@@ -117,7 +117,11 @@ class FakeEndpointFencer:
             "fenced_through_sequence": request.last_committed_sequence,
         }
         if self.mismatch_field:
-            values[self.mismatch_field] = "wrong-binding"
+            values[self.mismatch_field] = (
+                values[self.mismatch_field] + 1
+                if self.mismatch_field == "fenced_through_sequence"
+                else "wrong-binding"
+            )
         return RecoveryEndpointFenceReceipt(**values)
 
 
@@ -312,6 +316,15 @@ class UnresolvedAdmissionRecoveryTests(unittest.TestCase):
         self.assertIsNone(execute_recovery_fencing(
             plan, FakeEndpointFencer(),
             FakeTerminalVerifier(fail_after=1)
+        ))
+
+    def test_verifier_wrong_fenced_sequence_binding_fails_closed(self):
+        plan = build_recovery_fence_plan(
+            make_projection(make_admission("read-1", 2)), 3
+        )
+        self.assertIsNone(execute_recovery_fencing(
+            plan, FakeEndpointFencer(),
+            FakeTerminalVerifier(mismatch_field="fenced_through_sequence")
         ))
 
     def test_verifier_wrong_generation_binding_fails_closed(self):
