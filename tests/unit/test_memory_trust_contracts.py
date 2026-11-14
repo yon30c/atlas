@@ -47,7 +47,7 @@ class ConsistencyTrustContractTests(unittest.TestCase):
             consistency_domain_id="atlas-main",
             authority_epoch=4,
             sequence=3,
-            object_id="checkpoint-3",
+            object_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074501",
             schema_version=2,
             reducer_version="reducer-v1",
             previous_commitment="previous-control-commitment",
@@ -82,6 +82,7 @@ class ConsistencyTrustContractTests(unittest.TestCase):
             expected_domain_id="atlas-main",
             expected_authority_epoch=4,
             expected_position=ConsistencyPosition("atlas-main", 4, 3),
+            checkpoint=self.checkpoint,
             anchor=self.anchor,
             envelope=self.envelope,
             trust_policy_version="policy-v2",
@@ -126,6 +127,7 @@ class ConsistencyTrustContractTests(unittest.TestCase):
                 expected_domain_id="atlas-main",
                 expected_authority_epoch=4,
                 expected_position=ConsistencyPosition("atlas-main", 4, 3),
+                checkpoint=self.checkpoint,
                 anchor=self.anchor,
                 envelope=wrong,
                 trust_policy_version="policy-v2",
@@ -207,14 +209,7 @@ class ConsistencyTrustContractTests(unittest.TestCase):
             )
 
     def test_verified_state_rejects_commitment_mismatch(self):
-        state = ConsistencyRecoveryState(
-            domain_id="atlas-main",
-            authority_epoch=4,
-            checkpoint=None,
-            entries=(),
-            head_sequence=3,
-            continuity_reference="structural-reference",
-        )
+        state = self._state(3)
         with self.assertRaises(ContractError):
             VerifiedConsistencyRecoveryState(
                 state=state,
