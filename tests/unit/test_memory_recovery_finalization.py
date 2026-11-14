@@ -138,9 +138,7 @@ class RecoveryAdmissionFinalizationTests(unittest.TestCase):
         self.finalizer.raises = True
         result = self.coordinator.run()
         self.assertIs(result.status, RecoveryAdmissionFinalizationStatus.PENDING)
-        projection = __import__(
-            "atlas.memory.journal_reducer", fromlist=["ConsistencyJournalReducer"]
-        ).ConsistencyJournalReducer().reduce(self.journal.state)
+        projection = ConsistencyJournalReducer().reduce(self.journal.state)
         self.assertIs(projection.admissions[0].status, ReadAdmissionStatus.UNRESOLVED)
 
     def test_recovery_gate_remains_closed_after_admission_finalization(self):
