@@ -3,7 +3,11 @@ from datetime import datetime, timezone
 import unittest
 
 from atlas.core.errors import ContractError
-from atlas.memory.journal import ConsistencyPosition, ConsistencyRecoveryState
+from atlas.memory.journal import (
+    ConsistencyCheckpoint,
+    ConsistencyPosition,
+    ConsistencyRecoveryState,
+)
 from atlas.memory.trust import (
     AuthenticatedConsistencyEnvelope,
     ConsistencyCheckpointVerificationRequest,
@@ -47,6 +51,23 @@ class ConsistencyTrustContractTests(unittest.TestCase):
             trust_policy_version="policy-v2",
             issued_at=self.now,
             authentication_evidence="opaque-auth-evidence",
+        )
+
+    def _state(self, head_sequence):
+        checkpoint = ConsistencyCheckpoint(
+            checkpoint_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c074501",
+            position=ConsistencyPosition("atlas-main", 4, head_sequence),
+            state_reference="state-reference",
+            integrity_reference="integrity-reference",
+            created_at=self.now,
+        )
+        return ConsistencyRecoveryState(
+            domain_id="atlas-main",
+            authority_epoch=4,
+            checkpoint=checkpoint,
+            entries=(),
+            head_sequence=head_sequence,
+            continuity_reference="structural-reference",
         )
 
     def test_valid_checkpoint_verification_request_binds_domain_epoch_and_anchor(self):
@@ -116,14 +137,7 @@ class ConsistencyTrustContractTests(unittest.TestCase):
         self.assertEqual(self.envelope.authentication_evidence, "opaque-auth-evidence")
 
     def test_verified_state_requires_exact_anchor_position_and_commitment(self):
-        state = ConsistencyRecoveryState(
-            domain_id="atlas-main",
-            authority_epoch=4,
-            checkpoint=None,
-            entries=(),
-            head_sequence=3,
-            continuity_reference="structural-reference",
-        )
+        state = self._state(3)
         verified = VerifiedConsistencyRecoveryState(
             state=state,
             anchor=self.anchor,
@@ -136,14 +150,7 @@ class ConsistencyTrustContractTests(unittest.TestCase):
         self.assertEqual(verified.anchor.anchor_revision, 9)
 
     def test_verified_state_rejects_rollback_position(self):
-        state = ConsistencyRecoveryState(
-            domain_id="atlas-main",
-            authority_epoch=4,
-            checkpoint=None,
-            entries=(),
-            head_sequence=2,
-            continuity_reference="structural-reference",
-        )
+        state = self._state(2)
         with self.assertRaises(ContractError):
             VerifiedConsistencyRecoveryState(
                 state=state,
