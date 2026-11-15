@@ -121,11 +121,12 @@ La lista y el resultado de las pruebas deben corresponder al checkout concreto y
 
 ## Hoja de ruta inmediata
 
-1. Cerrar B1-B-02 resolviendo o aislando formalmente sus discrepancias contractuales D-01 a D-07.
-2. Completar B1-B-03A: contratos de owner, consumer_id, invalidación, consistency domains, inventario admissions/routes y Content Store.
-3. Completar B1-B-03B: diseño físico SQLite y plan incremental de migraciones, preservando schema v4.
-4. Validar el diseño físico contra contratos y escenarios de fallo/recuperación.
-5. Solicitar aprobación explícita antes de implementar migraciones, repositorios o cambios de runtime.
+1. **B1-B-03A — en curso:** D-01 tiene decisión de diseño aprobada (2026-11-15): `Memory.owner_id` permanece como `UserId/subject` y se relaciona con `owner_identity_id` mediante Identity Binding verificado y vigente. Su formalización normativa sigue pendiente.
+2. Cerrar D-02 a D-07: autoridad de `consumer_id`, invalidación por aprobación de versión, compatibilidad PRIVATE con D4O-F/G/H, inventario admissions/routes ME-03K, consistency domains/epochs y contrato lógico del Content Store.
+3. Registrar decisiones y próximos pasos en [B1-B-02](docs/design/b1-b02-logical-model-and-contract-consistency.md#11-registro-de-decisiones-y-continuidad-de-trabajo).
+4. Completar B1-B-03B: diseño físico SQLite y plan incremental de migraciones, preservando schema v4.
+5. Completar B1-B-03C: validar el diseño físico contra contratos y escenarios de fallo/recuperación.
+6. Solicitar aprobación explícita antes de implementar migraciones, repositorios o cambios de runtime.
 
 ## Límites de seguridad y alcance
 
