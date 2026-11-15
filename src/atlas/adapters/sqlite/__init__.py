@@ -5,7 +5,7 @@ from atlas.adapters.sqlite.authority_changes import SQLiteAuthorityChangeStore
 from atlas.adapters.sqlite.recovery_gate import LocalSQLiteRecoveryGateAdapter
 from atlas.adapters.sqlite.migrations import (
     SQLITE_MIGRATIONS, CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3,
-    CORE_SCHEMA_V4,
+    CORE_SCHEMA_V4, CORE_SCHEMA_V5,
 )
 
 __all__ = [
@@ -19,4 +19,5 @@ __all__ = [
     "CORE_SCHEMA_V2",
     "CORE_SCHEMA_V3",
     "CORE_SCHEMA_V4",
+    "CORE_SCHEMA_V5",
 ]

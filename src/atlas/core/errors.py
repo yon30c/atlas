@@ -17,5 +17,9 @@ class NotFoundError(AtlasError):
     """El recurso no existe o no es visible para el solicitante."""
 
 
+class IdentityConflictError(AtlasError):
+    """Conflicto de unicidad o integridad al crear una identidad canónica."""
+
+
 class ConcurrencyError(AtlasError):
     """Conflicto por modificación concurrente de un recurso."""
