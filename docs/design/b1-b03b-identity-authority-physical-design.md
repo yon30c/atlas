@@ -204,7 +204,7 @@ Rollback: antes del commit de una migración transaccional fallida, SQLite revie
 
 ## 9.1 Alcance del primer incremento de implementación
 
-El primer incremento autorizado se limita a la persistencia interna de `UserId` y `Identity(USER)`, su relación 1:1, restricciones SQLite, operaciones transaccionales y control de revisión/CAS, con pruebas de unicidad, concurrencia, conflicto CAS y rollback. Aunque el formato UUIDv4 de `binding_id` queda decidido para mantener coherencia del modelo futuro, los issuers, bindings externos, evidencia, replay y autenticación externa permanecen fuera de este incremento. Tampoco se implementa `PRIVATE_MEMORY_AUTHORIZATION` ni se amplía el alcance de la migración v5 de coordinación en este trabajo.
+El primer incremento autorizado se limita a la persistencia interna de `UserId` y `Identity(USER)`, su relación 1:1, restricciones SQLite, operaciones transaccionales y control de revisión/CAS, con pruebas de unicidad, concurrencia, conflicto CAS y rollback. Aunque el formato UUIDv4 de `binding_id` queda decidido para mantener coherencia del modelo futuro, los issuers, bindings externos, evidencia, replay y autenticación externa permanecen fuera de este incremento. Tampoco se implementa `PRIVATE_MEMORY_AUTHORIZATION` ni se modifican las tablas de coordinación de cambios de autoridad de v4.
 
 ## 9. Criterios de conformidad B1-B-03B
 
@@ -236,10 +236,9 @@ El primer incremento autorizado se limita a la persistencia interna de `UserId` 
 ### 10.2 Decisiones bloqueantes restantes
 
 1. Proveedor de secretos y representación segura/lookup del subject externo.
-3. Protocolo(s) de issuer y política de claves/rotación.
-4. Fuente canónica verificable de consumer_id.
-5. Política de recuperación de cuenta y protección del último método de acceso.
-6. Mapeo legacy verificable.
-7. Diseño y pruebas de la migración v5 sobre el código exacto de implementación.
+2. Protocolo(s) de issuer y política de claves/rotación.
+3. Fuente canónica verificable de consumer_id.
+4. Política de recuperación de cuenta y protección del último método de acceso.
+5. Mapeo legacy verificable.
 
-**Salida B1-B-03B:** modelo físico candidato y estrategia de migración definidos; implementación y activación permanecen bloqueadas por las decisiones anteriores y por aprobación específica de migración.
+**Salida B1-B-03B:** modelo físico y decisiones de identificadores aprobados para el primer incremento; la implementación está autorizada únicamente en la rama aislada de desarrollo y dentro del alcance de §9.1. Las decisiones pendientes de §10.2 bloquean los flujos externos correspondientes. Aplicar migraciones sobre una base real, activar autenticación externa o desplegar requiere verificaciones, respaldo/restauración probados y autorización específica.
