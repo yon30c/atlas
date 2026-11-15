@@ -1,6 +1,5 @@
 """Servicio de administración de Grants y orquestación de revocaciones."""
 
-from dataclasses import replace
 from datetime import datetime, timedelta
 
 from atlas.authorization.grant_revocation import (
@@ -151,10 +150,23 @@ class GrantManagementService:
             request_context_ref=context.request_id,
             requested_at=now,
         )
-        reservation = self._change_coordinator.reserve_change(intent)
+        try:
+            reservation = self._change_coordinator.reserve_change(intent)
+        except Exception as exc:
+            # El commit de la reserva puede haberse confirmado aunque se haya
+            # perdido la respuesta. Recuperar siempre por la misma clave.
+            recovered = self._change_coordinator.get_by_idempotency_key(
+                self._consumer_id,
+                idempotency_key,
+            )
+            if recovered is not None:
+                return self._to_grant_result(recovered, grant)
+            raise ContractError(
+                "Reserva indeterminada; reintentar con la misma idempotency_key"
+            ) from exc
         if reservation is None:
             raise ContractError(
-                "No se pudo reservar la operación de revocación; no se modificó el Grant"
+                "No se pudo reservar la operación; reintentar con la misma idempotency_key"
             )
         self._validate_reservation(reservation, intent)
 
@@ -186,13 +198,19 @@ class GrantManagementService:
         if evidence is None:
             return self._abort_unstarted(reservation, now, grant)
 
-        proof_result = self._proof_authorization.verify_and_consume(
-            request=authorization_request,
-            evidence=evidence,
-            operation_id=reservation.operation_id,
-            idempotency_key=idempotency_key,
-            now=now,
-        )
+        try:
+            proof_result = self._proof_authorization.verify_and_consume(
+                request=authorization_request,
+                evidence=evidence,
+                operation_id=reservation.operation_id,
+                idempotency_key=idempotency_key,
+                now=now,
+            )
+        except Exception:
+            # No abortar: el consumo pudo confirmarse y perderse su respuesta.
+            return self._blocked_result(reservation)
+        if not isinstance(proof_result, GrantRevocationAuthorizationResult):
+            return self._blocked_result(reservation)
         if not proof_result.authorized:
             if proof_result.status in (
                 GrantRevocationAuthorizationStatus.DENIED,
@@ -211,11 +229,15 @@ class GrantManagementService:
             proposed_revision=grant.revision + 1,
             consumed_at=now,
         )
-        change_result = self._change_coordinator.apply_change(
-            reservation,
-            authorization,
-            now,
-        )
+        try:
+            change_result = self._change_coordinator.apply_change(
+                reservation,
+                authorization,
+                now,
+            )
+        except Exception:
+            # Resolver el resultado durable; nunca inferir rollback por timeout.
+            change_result = None
         if change_result is None:
             change_result = self._change_coordinator.get_result(
                 reservation.operation_id
@@ -240,29 +262,29 @@ class GrantManagementService:
         result: AuthorityChangeResult,
         original_grant: Grant,
     ) -> GrantRevocationResult:
-        intent = AuthorityChangeIntent(
-            idempotency_key="result-validation",
-            consumer_id=self._consumer_id,
-            authority_kind=AuthorityKind.GRANT,
-            authority_id=original_grant.grant_id,
-            expected_revision=result.previous_revision,
-            proposed_revision=result.proposed_revision,
-            change_kind="revoke",
-            request_context_ref="result-validation",
-            requested_at=original_grant.issued_at,
-        )
+        if not isinstance(result, AuthorityChangeResult):
+            return self._blocked_for_grant(original_grant)
+
         if (
             result.authority_kind is not AuthorityKind.GRANT
             or result.authority_id != original_grant.grant_id
-            or result.previous_revision != original_grant.revision
-            and result.status is not AuthorityChangeStatus.COMPLETED
         ):
-            return GrantRevocationResult(
+            return self._blocked_for_grant(
+                original_grant,
                 operation_id=result.operation_id,
-                grant_id=original_grant.grant_id,
-                status=AuthorityChangeStatus.BLOCKED,
-                previous_revision=intent.expected_revision,
-                proposed_revision=intent.proposed_revision,
+                previous_revision=result.previous_revision,
+                proposed_revision=result.proposed_revision,
+            )
+
+        if (
+            result.status is not AuthorityChangeStatus.COMPLETED
+            and result.previous_revision != original_grant.revision
+        ):
+            return self._blocked_for_grant(
+                original_grant,
+                operation_id=result.operation_id,
+                previous_revision=result.previous_revision,
+                proposed_revision=result.proposed_revision,
             )
 
         revoked_grant = None
@@ -286,6 +308,24 @@ class GrantManagementService:
             previous_revision=result.previous_revision,
             proposed_revision=result.proposed_revision,
             revoked_grant=revoked_grant,
+        )
+
+    @staticmethod
+    def _blocked_for_grant(
+        grant: Grant,
+        *,
+        operation_id: str = "unresolved",
+        previous_revision: int | None = None,
+        proposed_revision: int | None = None,
+    ) -> GrantRevocationResult:
+        previous = previous_revision or grant.revision
+        proposed = proposed_revision or previous + 1
+        return GrantRevocationResult(
+            operation_id=operation_id,
+            grant_id=grant.grant_id,
+            status=AuthorityChangeStatus.BLOCKED,
+            previous_revision=previous,
+            proposed_revision=proposed,
         )
 
     @staticmethod
