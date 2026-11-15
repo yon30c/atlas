@@ -184,8 +184,8 @@ Hasta que estos puntos estén especificados, cualquier relación ambigua o no ve
 
 La decisión conceptual y los textos propuestos para DM-01 §§4.2 y 6.4, B1-A-06 §§2.1, 4.2 y 5, `identity.md` y `operation-context.md` han sido aprobados por el propietario. La separación entre VerifiedIdentityContext de Identity(USER) y la identidad del actor AGENT/SERVICE/WATCHER/SYSTEM también está aprobada.
 
-La consolidación documental de los cuatro contratos normativos se ha ejecutado en la rama `docs/b1-b02-logical-model-and-next-phase`. El cierre de B1-B-03A permanece condicionado a la verificación cruzada final de contenido, referencias, diff, rama y SHA de los siete documentos del paquete.
+La consolidación documental de los cuatro contratos normativos se ejecutó y verificó en la rama `docs/b1-b02-logical-model-and-next-phase`. Se verificaron los siete documentos del paquete, sus SHA, la coherencia de las secciones modificadas y el diff de la rama. La comparación con `docs/b1-a06-normative-consolidation` confirma 36 commits ahead y 0 behind en el momento de la verificación.
 
-Los criterios de cierre aprobados son acumulativos: decisiones y trazabilidad completas; enmiendas incorporadas; coherencia entre contratos; separación de autoridades; compatibilidad legacy; cuestiones pendientes delimitadas; y verificación documental final. Las cuestiones técnicas aplazadas no bloquean el cierre normativo si permanecen explícitas y los flujos dependientes siguen deshabilitados.
+Los siete criterios de cierre aprobados se consideran cumplidos. B1-B-03A queda **CERRADO NORMATIVAMENTE** en su alcance documental. Las cuestiones técnicas aplazadas permanecen explícitas y los flujos dependientes no quedan habilitados.
 
-No iniciar B1-B-03B ni modificar SQLite. No se autoriza implementación, migración, PR, merge ni despliegue por esta consolidación.
+No iniciar B1-B-03B ni modificar SQLite. No se autoriza implementación, migración, PR, merge ni despliegue por este cierre.
