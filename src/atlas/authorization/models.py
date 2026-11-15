@@ -247,3 +247,81 @@ class GrantRenewalRequest:
                 "decided_by_user_id debe ser una cadena no vacía"
             )
         _validate_utc_datetime(self.decided_at, "decided_at")
+
+
+@dataclass(frozen=True, slots=True)
+class GrantRevocationAuthorizationRequest:
+    """Solicitud CAM específica para revocar un Grant propio."""
+
+    request_id: str
+    actor_identity_id: str
+    owner_user_id: str
+    grant_id: str
+    expected_revision: int
+    requested_at: datetime
+
+    def __post_init__(self) -> None:
+        for field in (
+            "request_id",
+            "actor_identity_id",
+            "owner_user_id",
+            "grant_id",
+        ):
+            value = getattr(self, field)
+            if not isinstance(value, str) or not value.strip():
+                raise ContractError(f"{field} debe ser una cadena no vacía")
+
+        if (
+            isinstance(self.expected_revision, bool)
+            or not isinstance(self.expected_revision, int)
+            or self.expected_revision < 1
+        ):
+            raise ContractError("expected_revision debe ser un entero positivo")
+
+        _validate_utc_datetime(self.requested_at, "requested_at")
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedGrantRevocationAuthorization:
+    """Evidencia CAM verificable para una revocación concreta.
+
+    La instancia es un dato contractual, no prueba por sí misma su autenticidad.
+    El consumidor debe exigir verificación confiable antes de usarla.
+    """
+
+    proof_id: str
+    decision_id: str
+    request_id: str
+    actor_identity_id: str
+    owner_user_id: str
+    grant_id: str
+    expected_revision: int
+    issued_at: datetime
+    expires_at: datetime
+    issuer_id: str
+
+    def __post_init__(self) -> None:
+        for field in (
+            "proof_id",
+            "decision_id",
+            "request_id",
+            "actor_identity_id",
+            "owner_user_id",
+            "grant_id",
+            "issuer_id",
+        ):
+            value = getattr(self, field)
+            if not isinstance(value, str) or not value.strip():
+                raise ContractError(f"{field} debe ser una cadena no vacía")
+
+        if (
+            isinstance(self.expected_revision, bool)
+            or not isinstance(self.expected_revision, int)
+            or self.expected_revision < 1
+        ):
+            raise ContractError("expected_revision debe ser un entero positivo")
+
+        _validate_utc_datetime(self.issued_at, "issued_at")
+        _validate_utc_datetime(self.expires_at, "expires_at")
+        if self.expires_at <= self.issued_at:
+            raise ContractError("expires_at debe ser posterior a issued_at")
