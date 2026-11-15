@@ -122,14 +122,25 @@ La lista y el resultado de las pruebas deben corresponder al checkout concreto y
 
 ## Hoja de ruta inmediata
 
-1. **B1-B-03A — en curso:** D-01 y las decisiones A–G de B1-B-03A-02 están aprobadas (2026-11-15). Falta aprobar el texto normativo final de B1-B-03A-03 antes de actualizar B1-A-06, identity.md y operation-context.md.
-2. **Decisiones A–G aprobadas:** [B1-B-03A-02 — modelo lógico de UserId y bindings externos](docs/contracts/b1-b03a-02-canonical-user-and-external-identity-binding.md). Define Identity Authority como emisora, relación 1:1 UserId↔Identity(USER), múltiples bindings externos, linking/unlinking y compatibilidad legacy.
-3. **Enmienda normativa pendiente de aprobación final:** [B1-B-03A-03 — borrador de texto para B1-A-06, Identity y OperationContext](docs/contracts/b1-b03a-03-normative-amendment-draft-user-identity-binding.md).
-2. Cerrar D-02 a D-07: autoridad de `consumer_id`, invalidación por aprobación de versión, compatibilidad PRIVATE con D4O-F/G/H, inventario admissions/routes ME-03K, consistency domains/epochs y contrato lógico del Content Store.
-3. Registrar decisiones y próximos pasos en [B1-B-02](docs/design/b1-b02-logical-model-and-contract-consistency.md#11-registro-de-decisiones-y-continuidad-de-trabajo).
-4. Completar B1-B-03B: diseño físico SQLite y plan incremental de migraciones, preservando schema v4.
-5. Completar B1-B-03C: validar el diseño físico contra contratos y escenarios de fallo/recuperación.
-6. Solicitar aprobación explícita antes de implementar migraciones, repositorios o cambios de runtime.
+**B1-B-03A está CERRADO NORMATIVAMENTE** (15-11-2026). Sus enmiendas se incorporaron y verificaron en DM-01, B1-A-06, identity.md y operation-context.md. No implica implementación.
+
+Diseños técnicos elaborados en la rama `docs/b1-b03-identity-authority-roadmap`:
+
+1. **B1-B-03B — Diseño físico de Identity Authority / SQLite:** [documento](docs/design/b1-b03b-identity-authority-physical-design.md). Modelo relacional candidato, constraints, ownership, UoW, CAS, evolución v4→v5 y compatibilidad.
+2. **B1-B-03C — Ciclo de vida y seguridad de cuentas:** [documento](docs/design/b1-b03c-identity-lifecycle-and-account-security.md). Linking, unlink, cambio de proveedor, issuers, recovery y merge.
+3. **B1-B-03D — VerifiedIdentityContext y evidencia:** [documento](docs/design/b1-b03d-verified-identity-and-evidence.md). Validación criptográfica, nonce/replay, actor/delegación, auditoría y expiración.
+4. **B1-B-03E — Migración legacy y rollout:** [documento](docs/design/b1-b03e-legacy-migration-and-rollout.md). Inventario, mapping manifest, dry-run, backup/restore, cutover y reconciliación.
+
+### Estado real y bloqueos
+
+- El inventario confirmó SQLite schema v4, migraciones con checksums inmutables, Identity sin persistencia canónica completa y ausencia de PRIVATE_MEMORY_AUTHORIZATION en AuthorityKind/schema v4.
+- El diseño propone una migración v5 aditiva; no se modificaron migraciones ni bases de datos.
+- No se implementaron repositorios Identity/CAM, issuer adapters ni autenticación externa.
+- No se habilitaron linking, unlink, recovery, merge, VerifiedIdentityContext, Memory Gateway protegido ni Recovery Gate.
+- Permanecen pendientes decisiones de proveedor de secretos, representación protegida del subject, protocolo/issuer, fuente canónica de consumer_id, política de recuperación y mapping legacy.
+- La migración real requiere pruebas v1→v5 y v4→v5, preservación de filas/FKs/checksums, backup restaurable y autorización específica de ejecución.
+
+**Siguiente trabajo técnico:** cerrar los bloqueos de implementación y preparar la migración v5 en una rama de código aislada; ejecutar la suite completa y pruebas de upgrade/downgrade/recovery en DB temporal. No aplicar cambios a datos reales ni a componentes protegidos sin autorización de ejecución correspondiente.
 
 ## Límites de seguridad y alcance
 
