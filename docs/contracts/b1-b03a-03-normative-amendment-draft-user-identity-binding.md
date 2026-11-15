@@ -1,6 +1,6 @@
 # B1-B-03A-03 — Borrador de enmienda normativa: UserId e Identity Binding
 
-**Estado:** BORRADOR NORMATIVO — decisiones A–G aprobadas; §4.2 aprobada por el propietario el 15 de noviembre de 2026 con precisiones; §3 aprobada por el propietario el 15 de noviembre de 2026 con precisión sobre actor y delegación; §§4–6 pendientes de revisión y aprobación.  
+**Estado:** BORRADOR NORMATIVO — decisiones A–G aprobadas; propuestas para B1-A-06 §§4.2 y 5 aprobadas con precisiones; §6 y §7 aprobadas por el propietario el 15 de noviembre de 2026; propuestas para identity.md y operation-context.md (§§4–5 de este borrador) pendientes de revisión y aprobación.  
 **Fecha:** 15 de noviembre de 2026.  
 **Documento de decisión:** [B1-B-03A-02 — Modelo lógico de UserId canónico y bindings externos](b1-b03a-02-canonical-user-and-external-identity-binding.md).  
 **Alcance:** proponer texto coordinado para B1-A-06, identity.md y operation-context.md.  
@@ -53,8 +53,7 @@ No se fusionan identidades por coincidencia de atributos. Una fusión, si alguna
 
 Un binding no concede autorización, Grants, permisos PRIVATE, delegación ni propiedad. Toda operación protegida continúa sujeta a CAM y Consistency. Los cambios de binding, revocación o estado invalidan los contextos y admisiones dependientes mediante las revisiones, invalidación y fencing aplicables.
 
-
-## 2.1. Registro de aprobación de §4.2
+### 2.1. Registro de aprobación de §4.2
 
 El propietario aprobó el 15 de noviembre de 2026 el texto propuesto para B1-A-06 §4.2, incorporando las precisiones sobre la relación entre `Memory.owner_id` y `PrivateMemoryConsumerAuthorization.owner_identity_id`, la semántica de `issuer_id` y la condición verificable de conservar un método de acceso o recuperación utilizable.
 
@@ -134,37 +133,60 @@ No se cambia la estructura actual de OperationContext ni se redefine su campo us
 
 ## 6. Compatibilidad y límites
 
-- Se conservan AuthenticatedUserSubject, IdentitySubjectBindingPort y AtlasIdentityBindingAdapter como contratos legacy hasta una migración aprobada.
-- subject_user_id no se reinterpretará como subject externo de un issuer.
-- La implementación legacy no podrá emitir VerifiedIdentityContext nuevo por inferencia.
-- No se introduce tabla, columna, índice ni migración SQLite en esta enmienda.
-- No se modifica Memory.owner_id ni se añade owner_issuer_id.
-- No se equiparan consumer_id, UserId e identity_id.
-- PRIVATE_MEMORY_AUTHORIZATION sigue siendo una autoridad CAM independiente.
-- La aprobación de esta enmienda no habilita autenticación externa, linking operativo, migraciones ni runtime protegido.
+- Se conservan `AuthenticatedUserSubject`, `IdentitySubjectBindingPort` y `AtlasIdentityBindingAdapter` como contratos legacy hasta que exista una migración explícita, aprobada y verificable.
+- `subject_user_id` no se reinterpretará como subject externo de un issuer ni se asumirá que equivale automáticamente al UserId canónico. Cualquier relación entre el dato legacy y el modelo canónico requiere una migración y verificación explícitas.
+- `AtlasIdentityBindingAdapter` solo adapta el contrato legacy al contrato neutral del Memory Engine. No constituye Identity Authority, no administra bindings externos y no emite VerifiedIdentityContext.
+- La implementación legacy no podrá emitir VerifiedIdentityContext nuevo por inferencia ni reutilizar evidencia incompleta como si fuera evidencia del modelo nuevo.
+- No se introduce tabla, columna, índice ni migración SQLite en esta enmienda. No se alteran migraciones históricas ni se reconstruye la base de datos.
+- No se modifica `Memory.owner_id`, no se añade `owner_issuer_id` y no se altera la propiedad de memorias.
+- No se equiparan `consumer_id`, UserId e `identity_id`; son identificadores distintos con autoridades y semánticas propias.
+- `PRIVATE_MEMORY_AUTHORIZATION` sigue siendo una autoridad CAM independiente de Grants PROJECT. Consistency puede reconocer su revisión y coordinar invalidación, fencing y recuperación, pero no se convierte en autoridad canónica de esa autorización ni en un Grant.
+- La aprobación de esta sección no habilita autenticación externa, linking operativo, emisión de VerifiedIdentityContext, migraciones, persistencia nueva ni runtime protegido.
+- No se permite fallback silencioso del modelo nuevo al legacy cuando falle la autoridad o la evidencia requerida. Cualquier transición de compatibilidad debe ser explícita, autorizada y verificable.
+
+### 6.1. Registro de aprobación de §6
+
+El propietario aprobó el 15 de noviembre de 2026 esta versión de §6. La aprobación fija los límites de compatibilidad y evita reinterpretaciones automáticas de los contratos legacy, cambios de esquema o propiedad, emisión inferida de evidencia nueva y fallback silencioso.
+
+La aprobación se limita a esta sección y no autoriza implementación, migración, cambios de SQLite ni activación de flujos protegidos. Las propuestas de §§4–5 de este borrador siguen pendientes de aprobación.
 
 ## 7. Cuestiones deliberadamente no resueltas
 
-Deben especificarse antes de implementar flujos de cuenta:
+Las siguientes cuestiones requieren contratos o especificaciones adicionales antes de habilitar los flujos correspondientes. Su carácter pendiente no revoca ni debilita las invariantes lógicas aprobadas en B1-B-03A-02 y §§2–3 de este borrador.
 
-1. Procedimiento de recuperación, factores admitidos, revisión, notificaciones y protección contra account takeover.
-2. Política operativa exacta para impedir que unlink elimine el último método de acceso utilizable, incluidos fallos simultáneos del proveedor.
-3. Autoridad y procedimiento para revisar una eventual fusión de identidades; la fusión permanece deshabilitada por defecto.
-4. Validación criptográfica y parámetros concretos por issuer/proveedor.
-5. Persistencia, generación física, unicidad y retención de UserId, identity_id y binding_id.
-6. Matriz de revisiones, invalidación, fencing, CAS, idempotencia y recuperación ante cambios de Identity o binding.
-7. Migración del binding legacy y prueba de no regresión; sin fallback silencioso cuando la nueva autoridad falle.
+1. **Recuperación de cuenta y protección contra account takeover.** Deben definirse la autoridad responsable, factores admitidos, nivel de prueba, revisión, notificaciones, demoras o periodos de seguridad y tratamiento de señales de compromiso. La recuperación no puede basarse únicamente en email, nombre, teléfono, UserId o una sesión antigua.
 
-Estas cuestiones no reabren las decisiones A–G ya aprobadas; limitan el alcance de implementación hasta que se definan.
+2. **Política operativa de linking y unlink.** Deben especificarse la reautenticación reciente, la prueba de control de la cuenta nueva, la confirmación explícita, las notificaciones, la concurrencia de operaciones y el tratamiento de fallos parciales o indisponibilidad de proveedores. Un unlink no puede dejar al usuario sin un método de acceso o recuperación utilizable; deben definirse las comprobaciones y garantías operativas para sostener esa condición.
 
-## 8. Aprobación solicitada
+3. **Ciclo de vida y confianza de issuers.** Deben definirse la autoridad y el procedimiento para incorporar, actualizar, suspender y retirar issuers del registro confiable de Atlas; gestionar rotación o compromiso de claves, cambios de configuración y pérdida de confianza; y determinar cómo esos eventos afectan bindings, contextos verificados, sesiones y admisiones dependientes.
 
-Solicito aprobación del propietario del texto propuesto en §§2–6 como enmienda normativa coordinada a B1-A-06, identity.md y operation-context.md.
+4. **Fusión de identidades.** Deben definirse la autoridad, el procedimiento, las pruebas de control de ambas identidades, la revisión de propiedad, Grants y recursos, y la evidencia auditable para una eventual fusión. La fusión permanece deshabilitada por defecto y nunca puede producirse automáticamente por coincidencia de atributos.
 
-Hasta esa aprobación final:
+5. **Validación criptográfica por issuer.** Deben especificarse los algoritmos y parámetros admitidos y las comprobaciones aplicables a cada issuer, incluyendo firma, audiencia, expiración, nonce, subject y demás validaciones propias del protocolo. La selección de proveedores y mecanismos concretos permanece pendiente.
+
+6. **Garantías físicas y persistencia de identificadores.** Deben definirse el diseño físico, generación, almacenamiento, unicidad, restricciones, retención y tombstones de UserId, identity_id y binding_id. Estas decisiones de implementación deben preservar las propiedades lógicas ya aprobadas: opacidad, estabilidad, unicidad, no reutilización y relación 1:1 entre UserId e Identity(USER), así como la unicidad y no reasignación de cada pareja (issuer_id, subject). No se reabre la semántica lógica aprobada.
+
+7. **Revisiones, invalidación y consistencia.** Deben definirse la matriz de revisiones de Identity, binding e issuer; los conjuntos de autoridades serializadas por operación; invalidación y fencing de contextos y admisiones dependientes; CAS o mecanismo equivalente; idempotencia; orden de coordinación; y recuperación ante cambios parciales, timeouts o resultados inciertos. Debe mantenerse la separación de autoridades y aplicarse el marco de Consistency y D4O-F/G/H, sin convertir Consistency en autoridad canónica de Identity o CAM.
+
+8. **Migración de contratos y datos legacy.** Deben inventariarse consumidores y datos afectados, definirse la correspondencia verificable de `subject_user_id` con UserId canónico, la secuencia de transición, cualquier dual-read temporal si se justifica, precedencia, reconciliación, rollback seguro y pruebas de no regresión. No se reinterpretarán datos por inferencia ni se permitirá fallback silencioso. La migración requiere aprobación explícita y no forma parte de esta enmienda.
+
+9. **Evidencia y auditoría.** Deben definirse formato, procedencia, integridad, protección, retención y verificación de evidencias de autenticación, linking, unlink, recuperación, revocación y cambios en el registro de issuers. La auditoría debe conservar separación respecto de Identity Authority y CAM: registrar evidencia no convierte al registro de auditoría en autoridad de identidad o autorización.
+
+### 7.1. Registro de aprobación de §7
+
+El propietario aprobó el 15 de noviembre de 2026 la versión ampliada de §7. La aprobación incorpora explícitamente la separación entre invariantes lógicas aprobadas y garantías físicas pendientes, el ciclo de vida y la confianza del registro de issuers, y los requisitos operativos de linking/unlink, además de las cuestiones de recuperación, fusión, validación criptográfica, persistencia, consistencia, migración legacy y auditoría.
+
+Estas cuestiones permanecen deliberadamente abiertas y deben especificarse antes de habilitar los flujos correspondientes. La aprobación de §7 no autoriza implementar soluciones implícitas, conceder permisos, alterar propiedad, modificar SQLite o habilitar operaciones protegidas. No reabre las decisiones A–G ya aprobadas.
+
+## 8. Aprobación solicitada y estado del paquete
+
+El propietario ha aprobado las propuestas para B1-A-06 §§4.2 y 5, así como las secciones 6 y 7 de este borrador. Las propuestas de §§4–5 de este documento —adiciones a `identity.md` y `operation-context.md`— siguen pendientes de revisión y aprobación.
+
+Hasta la aprobación final del paquete coordinado:
 - los documentos normativos vigentes permanecen sin cambios;
-- este archivo es solo un borrador;
+- este archivo continúa siendo un borrador;
 - B1-B-03A no se considera cerrado;
-- B1-B-03B (diseño físico SQLite) no debe comenzar.
+- B1-B-03B (diseño físico SQLite) no debe comenzar;
+- no se autoriza implementación, migración ni activación de runtime protegido.
 
-**Estado final:** decisiones A–G aprobadas; texto normativo propuesto pendiente de aprobación; ninguna implementación autorizada.
+**Estado final:** decisiones A–G aprobadas; propuestas de B1-A-06 §§4.2 y 5 aprobadas; §§6–7 de este borrador aprobadas; propuestas para identity.md y operation-context.md pendientes; ninguna implementación autorizada.
