@@ -108,7 +108,7 @@ Memory
 Invariantes:
 
 1. `memory_id` identifica una memoria lógica y no se reutiliza.
-2. `owner_id` es la única representación canónica del propietario.
+2. `owner_id` es la única representación canónica del propietario y conserva el tipo `UserId` global y canónico de Atlas. No representa un subject externo, un `identity_id` ni un identificador elegido o declarado por el caller.
 3. `scope` es obligatorio.
 4. `current_approved_version_id` puede ser nulo mientras la memoria no tenga una versión aprobada.
 5. Si no es nulo, debe apuntar a una versión perteneciente a esa misma memoria y cuyo estado sea `approved`.
@@ -117,6 +117,8 @@ Invariantes:
 8. Los timestamps son instantes UTC con zona horaria explícita.
 
 La consistencia entre la memoria y las versiones relacionadas requiere validación de dominio/servicio; no puede garantizarse únicamente con la validación aislada de una dataclass.
+
+La autoridad confiable de Atlas emite y administra el `UserId`. Para una operación autenticada externamente, la frontera confiable resuelve la cuenta exacta `(issuer_id, subject)` mediante Identity Authority y obtiene el `UserId` canónico asociado a la Identity(USER) verificada. La correspondencia entre `UserId` e `identity_id` es 1:1 y autoritativa, pero no exige igualdad textual entre ambos identificadores. Cuando la operación protegida requiera comprobar propiedad, CAM compara exactamente el `UserId` canónico resuelto con `Memory.owner_id`; si interviene `PrivateMemoryConsumerAuthorization`, verifica además que `owner_identity_id` corresponda al `identity_id` de esa misma Identity(USER). Un subject externo, `identity_id`, `OperationContext.user_id` aislado o identificador declarado por el caller no sustituye esta resolución. Ausencia, ambigüedad, discrepancia, revocación, expiración o evidencia no verificable producen `DENY`.
 
 ### 4.3 MemoryVersion
 
@@ -349,7 +351,11 @@ La regla de propietario privado se evalúa como una ruta explícita y limitada, 
 
 - actor de tipo `USER`;
 - identidad activa;
-- el sujeto autenticado por la frontera de identidad coincide con `Memory.owner_id`, y la identidad `USER` del actor está vinculada a ese sujeto por evidencia confiable; `context.user_id` por sí solo no demuestra autenticación ni propiedad;
+- la frontera confiable resuelve el binding externo exacto `(issuer_id, subject)` mediante Identity Authority y obtiene la Identity(USER) verificada y su `UserId` global y canónico de Atlas;
+- el `UserId` canónico resuelto coincide exactamente con `Memory.owner_id`; el subject externo no se compara directamente con `Memory.owner_id`;
+- la relación 1:1 entre ese `UserId` e `identity_id` está verificada mediante evidencia interna autoritativa y vigente, sin exigir igualdad textual entre identificadores;
+- la identidad `USER` del actor corresponde exactamente al `identity_id` de la Identity(USER) autenticada; si interviene `PrivateMemoryConsumerAuthorization`, `owner_identity_id` coincide exactamente con ese mismo `identity_id`;
+- `OperationContext.user_id` aislado, un subject externo, un `identity_id` o un identificador declarado por el caller no demuestran autenticación ni propiedad;
 - scope de la memoria explícitamente `PRIVATE`;
 - acción dentro del conjunto permitido para la operación;
 - recurso exacto y metadatos confiables.
