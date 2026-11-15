@@ -167,7 +167,7 @@ Se añadieron en la rama los siguientes contratos neutrales:
 
 **Límite deliberado:** estos cambios no implementan un registro real de rutas ni un adaptador de revisiones. La inspección actual no demuestra que los repositorios canónicos de Memory, Identity, Project, Environment y Grant compartan una transacción ni que todos sus caminos de mutación emitan primero invalidación durable. Una lectura puntual de revisiones, un lock de proceso o notificaciones eventuales no cierran esa carrera. Los dos nuevos puertos reciben la posición verificada esperada; el resultado debe referirse a esa misma posición y el coordinador volverá a comparar el head dentro de la UoW. Toda mutación de revisiones o rutas debe publicar primero su invalidación durable en la misma autoridad; si una fuente no puede demostrar ese orden, responderá `UNAVAILABLE`.
 
-No se ha implementado `admit_read`, no se ha abierto el Recovery Gate y no se ha habilitado runtime protegido. Las 11 pruebas contractuales están añadidas, pero no se ejecutaron: el repositorio no está montado en este entorno de ejecución. La autorización del usuario para probar queda vigente; se ejecutarán desde el checkout de esta rama antes de avanzar a adaptadores.
+No se ha implementado `admit_read`, no se ha abierto el Recovery Gate y no se ha habilitado runtime protegido. Las 12 pruebas contractuales están añadidas, pero no se ejecutaron: el repositorio no está montado en este entorno de ejecución. La autorización del usuario para probar queda vigente; se ejecutarán desde el checkout de esta rama antes de avanzar a adaptadores.
 
 ## 11. Criterio de salida
 
