@@ -42,21 +42,27 @@ class GrantManagementService:
         self,
         repository: GrantRepository,
         *,
-        consumer_id: str,
-        revocation_authorizer: GrantRevocationAuthorizationPort,
-        proof_authorization: GrantRevocationProofAuthorizationService,
-        change_coordinator: AuthorityChangeCoordinatorPort,
-        clock: Clock,
+        consumer_id: str | None = None,
+        revocation_authorizer: GrantRevocationAuthorizationPort | None = None,
+        proof_authorization: GrantRevocationProofAuthorizationService | None = None,
+        change_coordinator: AuthorityChangeCoordinatorPort | None = None,
+        clock: Clock | None = None,
     ) -> None:
-        if not isinstance(consumer_id, str) or not consumer_id.strip():
-            raise ContractError("consumer_id debe ser una cadena no vacía")
-        if (
-            revocation_authorizer is None
-            or proof_authorization is None
-            or change_coordinator is None
-            or clock is None
+        configured = (
+            consumer_id is not None,
+            revocation_authorizer is not None,
+            proof_authorization is not None,
+            change_coordinator is not None,
+            clock is not None,
+        )
+        if any(configured) and not all(configured):
+            raise ContractError(
+                "la configuración de revocación debe proporcionar todos sus puertos"
+            )
+        if consumer_id is not None and (
+            not isinstance(consumer_id, str) or not consumer_id.strip()
         ):
-            raise ContractError("los puertos de revocación son obligatorios")
+            raise ContractError("consumer_id debe ser una cadena no vacía")
         self._repository = repository
         self._consumer_id = consumer_id
         self._revocation_authorizer = revocation_authorizer
@@ -107,6 +113,19 @@ class GrantManagementService:
     ) -> GrantRevocationResult:
         """Solicita autorización CAM y delega el cambio al coordinador durable."""
         self._validate_owner_context(context)
+        if any(
+            dependency is None
+            for dependency in (
+                self._consumer_id,
+                self._revocation_authorizer,
+                self._proof_authorization,
+                self._change_coordinator,
+                self._clock,
+            )
+        ):
+            raise ContractError(
+                "revocación deshabilitada: faltan los puertos de coordinación y CAM"
+            )
         self._validate_utc(now)
         for field, value in (
             ("grant_id", grant_id),
