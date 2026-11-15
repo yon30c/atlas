@@ -164,9 +164,9 @@ La ampliación exige:
 - invalidation mapping, source CAS, idempotencia y recovery evidence;
 - pruebas negativas de separación PRIVATE/PROJECT.
 
-**Evolución de v4:** las tablas `authority_change_operations` y `authority_change_invalidations` contienen CHECK constraints que enumeran AuthorityKind y hoy excluyen PRIVATE_MEMORY_AUTHORIZATION. La solución propuesta es una migración v5 aditiva que reconstruya transaccionalmente las tablas afectadas y sus dependencias FK, copie y verifique cada fila existente, amplíe los CHECK y recree índices. No se modifica el SQL ni los checksums de v1–v4. No se reconstruye la base completa. La migración solo se aprobará tras pruebas de preservación de todas las filas, claves, índices y FKs, `PRAGMA foreign_key_check` e integridad.
+**Evolución de v4 y separación de fases:** las tablas `authority_change_operations` y `authority_change_invalidations` contienen CHECK constraints que enumeran AuthorityKind y hoy excluyen PRIVATE_MEMORY_AUTHORIZATION. Esta fase no amplía esos CHECK ni reconstruye las tablas de coordinación. La migración v5 de este incremento se reserva para las tablas canónicas `identity_records` y `atlas_users`, sus restricciones e invariantes. PRIVATE_MEMORY_AUTHORIZATION queda fuera; su incorporación requerirá un diseño y una migración posterior independiente (v6 o posterior), incluyendo la reconstrucción transaccional de las tablas afectadas y sus dependencias FK si continúa siendo necesaria. No se modifica el SQL ni los checksums de v1–v4. No se reconstruye la base completa.
 
-La implementación debe decidir si la reconstrucción integral del conjunto de siete tablas de authority-change es necesaria para preservar correctamente las referencias; no se permite una modificación parcial que deje FKs apuntando a tablas antiguas.
+Cuando se diseñe la migración futura de PRIVATE_MEMORY_AUTHORIZATION, deberá probar preservación de todas las filas, claves, índices y FKs, `PRAGMA foreign_key_check` e integridad. No se permite una modificación parcial que deje FKs apuntando a tablas antiguas.
 
 ## 6. Fronteras UoW y concurrencia
 
@@ -183,7 +183,7 @@ No se comparan revisiones de autoridades diferentes. Cada CAS compara autoridad,
 ## 7. Migraciones y compatibilidad
 
 1. Preservar migrations v1–v4 exactamente, incluyendo nombre y checksum.
-2. Añadir una migración v5 nueva; no editar migraciones históricas.
+2. Añadir una migración v5 nueva y aditiva para `identity_records` y `atlas_users`; no editar migraciones históricas.
 3. Aplicar primero sobre DB temporal generada desde v1, v2, v3 y v4, y sobre copias de fixtures representativas.
 4. Validar conteos, IDs, revisiones, tombstones, FKs, índices, constraints y checksums antes/después.
 5. No migrar automáticamente `AuthenticatedUserSubject.subject_user_id` a UserId canónico ni a subject de proveedor.
