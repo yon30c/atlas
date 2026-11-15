@@ -427,7 +427,10 @@ class GrantManagementService:
         revoked_grant = None
         status = result.status
         if status is AuthorityChangeStatus.COMPLETED:
-            current = self._repository.get(original_grant.grant_id)
+            try:
+                current = self._repository.get(original_grant.grant_id)
+            except Exception:
+                current = None
             if (
                 not isinstance(current, Grant)
                 or current.owner_user_id != original_grant.owner_user_id
