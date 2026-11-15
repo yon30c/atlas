@@ -212,6 +212,18 @@ class GrantManagementService:
 
         if reservation is None:
             return self._blocked_for_grant(grant)
+        if (
+            reservation.intent.consumer_id != self._consumer_id
+            or reservation.intent.idempotency_key != idempotency_key
+            or reservation.intent.authority_kind is not AuthorityKind.GRANT
+            or reservation.intent.authority_id != grant_id
+        ):
+            return self._blocked_for_grant(
+                grant,
+                operation_id=reservation.operation_id,
+                previous_revision=reservation.intent.expected_revision,
+                proposed_revision=reservation.intent.proposed_revision,
+            )
         if reservation.status is not AuthorityChangeStatus.REQUESTED:
             existing_result = self._change_coordinator.get_result(
                 reservation.operation_id
@@ -226,7 +238,7 @@ class GrantManagementService:
             owner_user_id=grant.owner_user_id,
             grant_id=grant.grant_id,
             expected_revision=grant.revision,
-            requested_at=now,
+            requested_at=reservation.intent.requested_at,
         )
         try:
             evidence = self._revocation_authorizer.authorize_revocation(
@@ -280,7 +292,7 @@ class GrantManagementService:
             evidence=evidence,
             authorization_result=proof_result,
             proposed_revision=grant.revision + 1,
-            consumed_at=now,
+            consumed_at=verification_now,
         )
         try:
             change_result = self._change_coordinator.apply_change(
