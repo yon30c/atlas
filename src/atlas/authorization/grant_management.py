@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 
 from atlas.authorization.grant_revocation import (
     GrantRevocationAuthorityChangeAuthorization,
+    GrantRevocationAuthorizationResult,
     GrantRevocationAuthorizationStatus,
     GrantRevocationProofAuthorizationService,
     GrantRevocationResult,
