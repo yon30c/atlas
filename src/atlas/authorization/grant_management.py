@@ -31,6 +31,7 @@ from atlas.ports.authority_change_coordinator import AuthorityChangeCoordinatorP
 from atlas.ports.grant_revocation_authorization import (
     GrantRevocationAuthorizationPort,
 )
+from atlas.ports.clock import Clock
 from atlas.ports.grants import GrantRepository
 
 
@@ -45,6 +46,7 @@ class GrantManagementService:
         revocation_authorizer: GrantRevocationAuthorizationPort,
         proof_authorization: GrantRevocationProofAuthorizationService,
         change_coordinator: AuthorityChangeCoordinatorPort,
+        clock: Clock,
     ) -> None:
         if not isinstance(consumer_id, str) or not consumer_id.strip():
             raise ContractError("consumer_id debe ser una cadena no vacía")
@@ -52,6 +54,7 @@ class GrantManagementService:
             revocation_authorizer is None
             or proof_authorization is None
             or change_coordinator is None
+            or clock is None
         ):
             raise ContractError("los puertos de revocación son obligatorios")
         self._repository = repository
@@ -59,6 +62,7 @@ class GrantManagementService:
         self._revocation_authorizer = revocation_authorizer
         self._proof_authorization = proof_authorization
         self._change_coordinator = change_coordinator
+        self._clock = clock
 
     def issue(
         self,
@@ -234,7 +238,18 @@ class GrantManagementService:
             return self._blocked_result(reservation)
 
         if evidence is None:
-            return self._abort_unstarted(reservation, now, grant)
+            try:
+                abort_at = self._clock.now()
+                self._validate_utc(abort_at)
+            except Exception:
+                return self._blocked_result(reservation)
+            return self._abort_unstarted(reservation, abort_at, grant)
+
+        try:
+            verification_now = self._clock.now()
+            self._validate_utc(verification_now)
+        except Exception:
+            return self._blocked_result(reservation)
 
         try:
             proof_result = self._proof_authorization.verify_and_consume(
@@ -242,7 +257,7 @@ class GrantManagementService:
                 evidence=evidence,
                 operation_id=reservation.operation_id,
                 idempotency_key=idempotency_key,
-                now=now,
+                now=verification_now,
             )
         except Exception:
             # No abortar: el consumo pudo confirmarse y perderse su respuesta.
@@ -254,7 +269,7 @@ class GrantManagementService:
                 GrantRevocationAuthorizationStatus.DENIED,
                 GrantRevocationAuthorizationStatus.PROOF_REPLAY_CONFLICT,
             ):
-                return self._abort_unstarted(reservation, now, grant)
+                return self._abort_unstarted(reservation, verification_now, grant)
             # Verificador no disponible o consumo incierto: conservar la misma
             # operación para recuperación con la misma clave, nunca abortarla.
             return self._blocked_result(reservation)
@@ -271,7 +286,7 @@ class GrantManagementService:
             change_result = self._change_coordinator.apply_change(
                 reservation,
                 authorization,
-                now,
+                verification_now,
             )
         except Exception:
             # Resolver el resultado durable; nunca inferir rollback por timeout.
