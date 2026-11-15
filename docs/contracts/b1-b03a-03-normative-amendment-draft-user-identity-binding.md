@@ -88,13 +88,27 @@ CAM debe comprobar separadamente la identidad del actor efectivo y, cuando corre
 
 La presencia de VerifiedIdentityContext o de `user_id` no concede autoridad de ejecución ni demuestra por sí sola una delegación válida. Una discrepancia de identidad, ausencia de delegación exigible o evidencia incompleta produce denegación.
 
+
+**Alcance de VerifiedIdentityContext**
+
+`VerifiedIdentityContext` se emite exclusivamente para una Identity(USER) cuya autenticación externa haya sido verificada y resuelta por Identity Authority hacia su UserId canónico. En consecuencia, `identity_type` debe identificar `USER`.
+
+Este contexto no autentica ni acredita por sí mismo la identidad del actor ejecutor cuando este sea de tipo `AGENT`, `SERVICE`, `WATCHER` o `SYSTEM`. Tampoco sustituye la evidencia que corresponda para verificar esos actores.
+
+Cuando el actor ejecutor sea una Identity(USER), CAM debe comprobar que su `identity_id` corresponde exactamente al `identity_id` autenticado del contexto y que el UserId contextual corresponde al mismo usuario canónico.
+
+Cuando el actor ejecutor sea distinto del usuario autenticado, CAM debe verificar separadamente la identidad del actor mediante una fuente confiable y comprobar la delegación explícita aplicable. La mera presencia de `VerifiedIdentityContext`, `user_id` o `actor.identity_id` no demuestra esa delegación.
+
+Esta disposición no define ni habilita un mecanismo de autenticación para AGENT, SERVICE, WATCHER o SYSTEM, ni les concede capacidades nuevas. Esos mecanismos requieren especificación independiente y deben respetar sus respectivos contratos y estados.
+
+
 El resto de §5 —separación de Identity y CAM, ausencia de permisos implícitos y coordinación con Consistency— permanece vigente sin cambios.
 
 ### 3.1. Registro de aprobación de §5
 
-El propietario aprobó el 15 de noviembre de 2026 la propuesta para B1-A-06 §5, incorporando la distinción entre identidad autenticada, UserId contextual y actor ejecutor, así como la verificación independiente de la identidad del actor y de la delegación cuando corresponda.
+El propietario aprobó el 15 de noviembre de 2026 la propuesta para B1-A-06 §5, incorporando la distinción entre identidad autenticada, UserId contextual y actor ejecutor, así como la verificación independiente de la identidad del actor y de la delegación cuando corresponda. El propietario aprobó además la precisión «Alcance de VerifiedIdentityContext» incluida en esta sección: el contexto se emite exclusivamente para Identity(USER), no autentica actores AGENT, SERVICE, WATCHER o SYSTEM, y exige verificar por separado la identidad del actor y la delegación aplicable.
 
-Esta aprobación se limita a B1-A-06 §5. No constituye por sí sola aprobación de las propuestas para identity.md y operation-context.md incluidas en las secciones 4 y 5 de este borrador, ni autoriza modificar los contratos normativos vigentes.
+Esta aprobación se limita a B1-A-06 §5. No constituye por sí sola aprobación de las propuestas para identity.md y operation-context.md incluidas en las secciones 4 y 5 de este borrador, ni autoriza modificar los contratos normativos vigentes, implementar autenticación de actores no USER ni concederles capacidades nuevas.
 
 ## 4. Propuesta para identity.md
 
