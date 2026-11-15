@@ -1,150 +1,163 @@
 # Atlas
 
-Atlas es un entorno personal de asistencia, coordinación y automatización de proyectos. Su propósito es permitir que el propietario consulte y gestione sus proyectos y delegue trabajo a agentes y herramientas bajo límites explícitos, verificables y revocables.
+Atlas es un entorno personal de asistencia, coordinación y automatización de proyectos. Permite al propietario consultar sus proyectos y delegar trabajo a agentes y herramientas bajo límites explícitos, verificables y revocables.
 
-La arquitectura se guía por seguridad por defecto, mínimo privilegio, aislamiento, mediación, trazabilidad, recuperación segura y portabilidad. La autonomía nunca equivale a autoridad ilimitada.
+La arquitectura se rige por **seguridad por defecto, mínimo privilegio, aislamiento, mediación, trazabilidad, recuperación segura y portabilidad**. La autonomía nunca equivale a autoridad ilimitada.
 
-## Estado del repositorio
+> **Estado importante:** el repositorio contiene una primera experiencia conversacional local y una implementación progresiva de dominios, autorización y Memory Engine. No todos los componentes están integrados en un único flujo operativo. La existencia de un módulo, contrato, migración o prueba no demuestra por sí sola que una capacidad esté habilitada en runtime.
 
-El repositorio contiene una primera experiencia conversacional local funcional y una implementación progresiva de contratos de dominio, autorización y Memory Engine. No todos esos módulos están integrados en un único flujo operativo.
+## Componentes
 
-**Importante:** la presencia de un módulo, contrato, migración o prueba no demuestra por sí sola que una capacidad esté completa o habilitada en runtime.
+### Atlas Assistant y AtlasCore
 
-### Capacidades implementadas en la línea de trabajo
+La experiencia actual se ejecuta desde la consola local:
 
-- **Atlas Assistant / AtlasCore:** experiencia conversacional de consola, modelos neutrales de solicitud/respuesta, contexto de sesión y streaming.
-- **Proveedor LLM local:** adaptador Ollama sobre `/api/chat`, restringido a endpoints loopback (`localhost`, `127.0.0.1`, `::1`). No se admiten proveedores remotos ni proxies del entorno en esta composición.
-- **Historial conversacional:** `InMemoryConversationHistory`, separado por `conversation_id`, con límite de hasta 8 turnos y 2000 caracteres por mensaje histórico. Es temporal y desaparece al terminar el proceso.
-- **SQLite / consistencia local:** infraestructura de base SQLite, UoW, journal, migraciones y mecanismos parciales de recuperación.
-- **D4O-I C.4.1:** `SQLiteAuthorityChangeStore` con reserva durable e idempotencia semántica de operaciones. Su alcance es almacenamiento de operaciones; no es un coordinador completo de revocación ni de cambios de autoridad.
+- Modelos inmutables \`AssistantRequest\` y \`AssistantResponse\`.
+- Contexto de operación y correlación por solicitud.
+- \`AtlasCore\` como fachada de orquestación de aplicación.
+- \`ConversationContextProcessor\` para enriquecer solicitudes con el historial de la conversación.
+- Adaptador LLM local \`OllamaProvider\` sobre \`/api/chat\`, con respuestas completas y streaming NDJSON.
+- El endpoint Ollama se limita a loopback: \`localhost\`, \`127.0.0.1\` o \`::1\`.
 
-La ejecución local del propietario reportó 787 pruebas de la suite completa finalizadas con `OK` para el estado C.4.1 y sus correcciones de tests. Esta evidencia corresponde a esa ejecución local; no implica que GitHub Actions/CI haya pasado ni que las capacidades pendientes estén verificadas.
+El historial conversacional activo usa \`InMemoryConversationHistory\`:
 
-### Capacidades en diseño o implementación parcial
+- Separado por \`conversation_id\`.
+- Hasta 8 turnos anteriores.
+- Hasta 2.000 caracteres por mensaje histórico.
+- Se descartan turnos cuya respuesta sea de tipo \`ERROR\`.
+- Desaparece al terminar el proceso; no es memoria persistente.
 
-- Memory Engine y Memory Gateway: contratos de dominio, scopes PRIVATE/PROJECT, versiones, procedencia, autorización y consistencia.
-- Identity, bindings y contexto de identidad verificada.
-- CAM, Grants y coordinación de cambios de autoridad.
-- Admisión durable de lecturas y recuperación protegida.
-- Persistencia canónica compartida de Memory, Identity, Project, Environment y CAM.
+La consola recoge y presenta texto. El modelo no obtiene acceso directo a archivos, SQL, shell, Docker ni herramientas privilegiadas. Interpretar una solicitud o generar un plan no constituye autorización ni ejecución.
 
-Aún no debe afirmarse que existe una persistencia completa de contenido Memory, un coordinador SQLite completo de revocación, una implementación de `admit_read`, egress protegido completo o runtime protegido habilitado.
+### Memory Engine y Memory Gateway
 
-### Visión de arquitectura
+El repositorio contiene componentes de dominio y de infraestructura para:
 
-La descomposición objetivo es:
+- Memory, MemoryVersion, scopes PRIVATE/PROJECT, procedencia y validación.
+- \`MemoryGateway\` como frontera de acceso a memoria.
+- Journal de consistencia, checkpoints, reducers y recuperación.
+- \`SQLiteDatabase\` y \`SQLiteUnitOfWork\`.
+- \`LocalSQLiteRecoveryGateAdapter\`, limitado al ciclo del Recovery Gate.
+- \`SQLiteAuthorityChangeStore\` para reservas e idempotencia de cambios de autoridad.
+- Coordinación de revocación de Grants y sus contratos de autorización/prueba.
+- Verificación local de recibos, políticas de confianza y firma del journal.
 
-1. **Atlas Assistant / AtlasCore:** interfaz y coordinación de solicitudes.
-2. **Memory Engine / Memory Gateway:** memoria persistente gobernada por scope, procedencia, versiones y autorización.
-3. **Identity Authority:** identidad canónica y bindings autenticados.
-4. **CAM:** autorización central por operación y recurso exactos.
-5. **Consistency:** invalidación, fencing, admisiones, journal y recuperación.
-6. **Project / Environment:** identidad, configuración, estado deseado y estado observado de proyectos y entornos.
-7. **Broker:** frontera pequeña y explícita para operaciones de runtime Docker Rootless.
-8. **Skills y agentes:** capacidades extensibles sujetas a procedencia, revisión de código/dependencias, declaración y aprobación de permisos, instalación controlada, aislamiento, auditoría y desactivación.
-9. **Backup / Manifest / Restore / Verification:** reconstrucción portable y verificación antes de reactivar cargas de trabajo.
+**La memoria conversacional del Assistant sigue siendo temporal y no está conectada a una persistencia conversacional durable.** La infraestructura SQLite existente es principalmente de consistencia y control; no representa todavía almacenamiento durable completo del contenido de las memorias.
 
-Esta arquitectura es una visión por etapas. La existencia de contratos no implica que todos los componentes estén implementados o integrados. Atlas Broker se mantiene como componente/proyecto separado y no se debe asumir una integración operativa con AtlasCore.
+#### Esquema SQLite
+
+La línea de integración incluye migraciones consecutivas **v1–v6**:
+
+- **v1–v3:** dominio local, journal, checkpoints e identidad única de append.
+- **v4:** ledger durable de cambios de autoridad, invalidaciones y evidencia de recuperación.
+- **v5:** relación canónica entre \`UserId\` interno e \`Identity(USER)\`.
+- **v6:** integridad bidireccional entre identidad USER y registro canónico de usuario mediante claves foráneas diferidas.
+
+Las migraciones v5–v6 incorporan persistencia local de identidad canónica. No implementan proveedores externos, bindings de identidad externos ni autenticación externa completa.
+
+El esquema no incluye tablas de contenido de memorias, embeddings ni snippets. No debe confundirse la persistencia del journal/control con la persistencia del contenido Memory.
+
+#### Límites que siguen vigentes
+
+Todavía no se debe afirmar que existe:
+
+- Una autoridad protegida completa que coordine admisión de lecturas, Recovery Gate y egress bajo una misma unidad de trabajo.
+- Una implementación operativa completa de \`admit_read\`.
+- Egress protegido completo con fencing e idempotencia verificable en el receptor.
+- Integración atómica completa de Forget/invalidation con admisiones y egress.
+- Persistencia canónica completa para todos los dominios Memory, Identity, Project, Environment y CAM.
+- Integración de MemoryGateway con el flujo conversacional de AtlasCore.
+
+El Recovery Gate debe permanecer cerrado hasta completar bootstrap, autoridad compuesta, recuperación y validación. No se debe abrir ni modificar manualmente mediante SQL.
+
+### Identity y autorización
+
+Se están construyendo la identidad canónica, los bindings, CAM, Grants y la coordinación de cambios de autoridad.
+
+La persistencia SQLite actual cubre el par interno \`UserId\`–\`Identity(USER)\`; no equivale a un sistema completo de autenticación, vinculación con proveedores externos o identidad verificada.
+
+Los accesos protegidos deben pasar por CAM y MemoryGateway. Los scopes PRIVATE no heredan permisos de proyectos, agentes ni otras memorias. La aprobación, el rechazo y el olvido de memorias son decisiones directas y no delegables del propietario.
+
+### Atlas Broker
+
+[Atlas Broker](https://github.com/yon30c/atlas-broker) es un repositorio y componente separado. Su responsabilidad es mediar operaciones del runtime Docker Rootless mediante una interfaz controlada, con autenticación local, autorización y auditoría.
+
+**No existe todavía una integración operativa entre AtlasCore/Assistant y Atlas Broker en este repositorio.** Assistant no debe conectarse directamente a Docker ni saltarse CAM, Scheduler, aprobaciones o la interfaz autorizada del Broker.
 
 ## Principios de seguridad
 
 - Denegar por defecto y fallar cerrado ante identidad, contexto, autorización o evidencia incompletos.
 - Separar autenticación, identidad y autorización.
-- Verificar permisos en cada operación protegida.
-- Limitar Grants a consumidor/proyecto, entorno, recurso, operación, límites y vigencia explícitos.
-- No conceder permisos por conocer IDs.
-- Aislar consumidores y proyectos; no hay acceso ni búsqueda cross-consumer/project por defecto.
-- Mantener aprobación, rechazo y Forget de memoria como acciones directas y no delegables del propietario.
-- Coordinar cambios de autoridad con invalidación y fencing previos.
-- No restaurar proyectos o Skills automáticamente después de migración/recuperación.
-- No almacenar secretos en documentación ni respaldos sin cifrado y custodia apropiada.
-
-## Contratos y documentación normativa
-
-El documento normativo principal es:
-
-- [Contrato de diseño Atlas v1 — revisión 4](Contrato-de-diseno-Atlas-v1.md)
-
-Enmiendas y contratos relacionados:
-
-- [B1-A-06 — identidad, Project/Environment y persistencia compartida](docs/contracts/b1-a06-identity-project-environment-and-persistence.md)
-- [B1-B-02 — modelo lógico integrado y matriz de consistencia contractual](docs/design/b1-b02-logical-model-and-contract-consistency.md)
-- [B1-B-03A-01 — propuesta de aclaración owner_id / Identity Binding](docs/contracts/b1-b03a-01-owner-identity-binding-clarification.md)
-- [Contrato técnico de Memory Engine](docs/design/memory-engine-technical-contract.md)
-- [Independencia de Memory Engine respecto a consumidores](docs/design/memory-engine-project-independence-implementation.md)
-- [DM-01 — especificación del modelo de dominio](docs/design/domain-model-specification-dm-01.md)
-- [ME-D4O-B — admisión durable de lectura](docs/design/ME-D4O-B-durable-read-admission.md)
-- [ME-D4O-I C.2 — verificación y consumo de pruebas de revocación](docs/design/me-d4o-i-c2-proof-verification-and-one-shot-consumption.md)
-- [ME-D4O-I C.3 — coordinación de revocación de Grants](docs/design/me-d4o-i-c3-grant-revocation-coordination.md)
-- [ME-D4O-I C.4.1 — almacenamiento durable SQLite de cambios de autoridad](docs/design/me-d4o-i-c4-sqlite-durable-authority-store.md)
-- [README de Memory Engine](docs/memory-engine/README.md)
-
-La enmienda B1-A-06 adopta B1-A-01 a B1-A-05 como decisiones posteriores al baseline anterior. B1-B-02 consolida el modelo lógico y registra las discrepancias que deben resolverse antes del diseño físico. No constituye autorización de implementación.
+- Verificar permisos en cada operación protegida y sobre el recurso concreto.
+- No conceder permisos por conocer identificadores.
+- Aislar consumidores y proyectos; no permitir acceso cross-consumer/project por defecto.
+- No permitir que un modelo, prompt, Skill o herramienta amplíe sus propios permisos.
+- Distinguir hechos, inferencias, propuestas y resultados.
+- No presentar una propuesta como tarea admitida, autorización concedida u operación ejecutada.
+- No restaurar proyectos o Skills automáticamente después de migración o recuperación.
 
 ## Ejecución local
 
 Desde la raíz del repositorio:
 
-```bash
+\`\`\`bash
 PYTHONPATH=src python -m atlas
-```
+\`\`\`
 
 Para instalar el comando en el entorno activo:
 
-```bash
+\`\`\`bash
 python -m pip install -e .
 atlas
-```
+\`\`\`
 
 Modo informativo sin proveedor LLM:
 
-```bash
+\`\`\`bash
 ATLAS_MODE=offline PYTHONPATH=src python -m atlas
-```
+\`\`\`
 
-Configuración de consola:
+Configuración:
 
-- `ATLAS_MODEL`: tag del modelo local (predeterminado: `gemma4:e2b`).
-- `ATLAS_OLLAMA_URL`: endpoint Ollama; debe ser loopback.
-- `ATLAS_MODE=offline`: modo informativo sin LLM.
+- \`ATLAS_MODEL\`: tag del modelo local; predeterminado \`gemma4:e2b\`.
+- \`ATLAS_OLLAMA_URL\`: endpoint Ollama, limitado a loopback.
+- \`ATLAS_MODE=offline\`: modo informativo sin LLM.
 
 Atlas no instala, descarga ni inicia Ollama automáticamente.
 
-## Pruebas
+## Pruebas y estado de validación
 
-La suite se ejecuta desde el entorno del proyecto:
+Ejecutar la suite completa desde el entorno del proyecto:
 
-```bash
+\`\`\`bash
 PYTHONPATH=src python -m unittest discover -s tests -v
-```
+\`\`\`
 
-La lista y el resultado de las pruebas deben corresponder al checkout concreto y quedar registrados con su commit. No se debe inferir un resultado CI a partir de una ejecución local.
+La línea C.4.1 anterior registró 787 pruebas locales reportadas como correctas. Esa evidencia es anterior a la incorporación de las migraciones de identidad v5–v6 y **no valida por sí sola la línea de integración actual**. Las pruebas específicas de identidad y migración v5–v6 están añadidas; se requiere ejecutar la suite completa sobre el commit de integración antes de promoverlo a \`main\`.
 
-## Hoja de ruta inmediata
+No se debe inferir un resultado CI a partir de una ejecución local.
 
-**B1-B-03A está CERRADO NORMATIVAMENTE** (15-11-2026). Sus enmiendas se incorporaron y verificaron en DM-01, B1-A-06, identity.md y operation-context.md. No implica implementación.
+## Documentación normativa y técnica
 
-Diseños técnicos elaborados en la rama `docs/b1-b03-identity-authority-roadmap`:
+- [Contrato de diseño Atlas v1](Contrato-de-diseno-Atlas-v1.md)
+- [Contrato de Atlas Assistant](docs/contracts/assistant.md)
+- [Contrato de memoria](docs/contracts/memory.md)
+- [B1-A-06 — identidad, Project/Environment y persistencia compartida](docs/contracts/b1-a06-identity-project-environment-and-persistence.md)
+- [B1-B-02 — modelo lógico integrado y consistencia contractual](docs/design/b1-b02-logical-model-and-contract-consistency.md)
+- [B1-B-03B — diseño físico de Identity Authority](docs/design/b1-b03b-identity-authority-physical-design.md)
+- [B1-B-03C — ciclo de vida y seguridad de cuentas](docs/design/b1-b03c-identity-lifecycle-and-account-security.md)
+- [B1-B-03D — VerifiedIdentityContext y evidencia](docs/design/b1-b03d-verified-identity-and-evidence.md)
+- [B1-B-03E — migración legacy y rollout](docs/design/b1-b03e-legacy-migration-and-rollout.md)
+- [ME-D4J — unidad de trabajo SQLite](docs/design/ME-D4J-sqlite-unit-of-work.md)
+- [ME-D4N — adaptador SQLite del Recovery Gate](docs/design/ME-D4N-sqlite-recovery-gate.md)
+- [ME-D4O — bootstrap e integración de autoridad SQLite](docs/design/ME-D4O-sqlite-authority-bootstrap-and-integration.md)
+- [ME-D4O-A — bootstrap autenticado por perfil](docs/design/ME-D4O-A-authenticated-domain-bootstrap.md)
+- [ME-D4O-B — admisión durable de lectura](docs/design/ME-D4O-B-durable-read-admission.md)
+- [ME-D4O-I C.2 — verificación y consumo de pruebas de revocación](docs/design/me-d4o-i-c2-proof-verification-and-one-shot-consumption.md)
+- [ME-D4O-I C.3 — coordinación de revocación de Grants](docs/design/me-d4o-i-c3-grant-revocation-coordination.md)
+- [ME-D4O-I C.4 — almacenamiento durable SQLite de cambios de autoridad](docs/design/me-d4o-i-c4-sqlite-durable-authority-store.md)
+- [README de Memory Engine](docs/memory-engine/README.md)
 
-1. **B1-B-03B — Diseño físico de Identity Authority / SQLite:** [documento](docs/design/b1-b03b-identity-authority-physical-design.md). Modelo relacional candidato, constraints, ownership, UoW, CAS, evolución v4→v5 y compatibilidad.
-2. **B1-B-03C — Ciclo de vida y seguridad de cuentas:** [documento](docs/design/b1-b03c-identity-lifecycle-and-account-security.md). Linking, unlink, cambio de proveedor, issuers, recovery y merge.
-3. **B1-B-03D — VerifiedIdentityContext y evidencia:** [documento](docs/design/b1-b03d-verified-identity-and-evidence.md). Validación criptográfica, nonce/replay, actor/delegación, auditoría y expiración.
-4. **B1-B-03E — Migración legacy y rollout:** [documento](docs/design/b1-b03e-legacy-migration-and-rollout.md). Inventario, mapping manifest, dry-run, backup/restore, cutover y reconciliación.
+## Alcance y cambios controlados
 
-### Estado real y bloqueos
-
-- El inventario confirmó SQLite schema v4, migraciones con checksums inmutables, Identity sin persistencia canónica completa y ausencia de PRIVATE_MEMORY_AUTHORIZATION en AuthorityKind/schema v4.
-- El diseño propone una migración v5 aditiva; no se modificaron migraciones ni bases de datos.
-- No se implementaron repositorios Identity/CAM, issuer adapters ni autenticación externa.
-- No se habilitaron linking, unlink, recovery, merge, VerifiedIdentityContext, Memory Gateway protegido ni Recovery Gate.
-- Permanecen pendientes decisiones de proveedor de secretos, representación protegida del subject, protocolo/issuer, fuente canónica de consumer_id, política de recuperación y mapping legacy.
-- La migración real requiere pruebas v1→v5 y v4→v5, preservación de filas/FKs/checksums, backup restaurable y autorización específica de ejecución.
-
-**Siguiente trabajo técnico:** cerrar los bloqueos de implementación y preparar la migración v5 en una rama de código aislada; ejecutar la suite completa y pruebas de upgrade/downgrade/recovery en DB temporal. No aplicar cambios a datos reales ni a componentes protegidos sin autorización de ejecución correspondiente.
-
-## Límites de seguridad y alcance
-
-- No modificar Atlas Broker, Registry, servicios protegidos ni producción como parte del trabajo de Memory Engine.
-- No abrir el Recovery Gate ni habilitar lecturas/egress protegidos antes del bootstrap, recuperación y validaciones exigidas.
-- No realizar merge, PR, deploy ni cambios de políticas sin autorización explícita.
-- Antes de migraciones o cambios de estado: respaldo verificado, integridad y permisos comprobados.
+Este repositorio contiene código y documentación de Atlas. No autoriza cambios en Atlas Broker, servicios protegidos, bases de datos reales ni producción. Las migraciones deben validarse primero en bases temporales y con pruebas de upgrade, integridad y recuperación.
