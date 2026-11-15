@@ -319,3 +319,133 @@ class GrantRevocationAuthorityChangeAuthorization:
     def issued_at(self) -> datetime:
         return self.evidence.issued_at
 
+
+
+from atlas.authorization.models import Grant
+from atlas.memory.authority_changes import AuthorityChangeStatus
+from atlas.memory.consistency import AuthorityKind
+
+
+@dataclass(frozen=True, slots=True)
+class GrantRevocationResult:
+    """Resultado público de la revocación coordinada de un Grant."""
+
+    operation_id: str
+    grant_id: str
+    status: AuthorityChangeStatus
+    previous_revision: int
+    proposed_revision: int
+    revoked_grant: Grant | None = None
+
+    def __post_init__(self) -> None:
+        for field in ("operation_id", "grant_id"):
+            value = getattr(self, field)
+            if not isinstance(value, str) or not value.strip():
+                raise ContractError(f"{field} debe ser una cadena no vacía")
+        if not isinstance(self.status, AuthorityChangeStatus):
+            raise ContractError("status debe ser AuthorityChangeStatus")
+        for field in ("previous_revision", "proposed_revision"):
+            value = getattr(self, field)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ContractError(f"{field} debe ser un entero positivo")
+        if self.proposed_revision <= self.previous_revision:
+            raise ContractError("proposed_revision debe superar previous_revision")
+        if self.status is AuthorityChangeStatus.COMPLETED:
+            if (
+                not isinstance(self.revoked_grant, Grant)
+                or self.revoked_grant.grant_id != self.grant_id
+                or self.revoked_grant.revision != self.proposed_revision
+                or self.revoked_grant.revoked_at is None
+            ):
+                raise ContractError(
+                    "COMPLETED requiere el Grant exacto revocado en proposed_revision"
+                )
+        elif self.revoked_grant is not None:
+            raise ContractError("solo COMPLETED puede incluir revoked_grant")
+
+
+@dataclass(frozen=True, slots=True)
+class GrantRevocationAuthorityChangeAuthorization:
+    """Adapta evidencia CAM consumida al contrato neutral del coordinador."""
+
+    operation_id: str
+    request: GrantRevocationAuthorizationRequest
+    evidence: VerifiedGrantRevocationAuthorization
+    authorization_result: GrantRevocationAuthorizationResult
+    proposed_revision: int
+    consumed_at: datetime
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.operation_id, str) or not self.operation_id.strip():
+            raise ContractError("operation_id debe ser una cadena no vacía")
+        if not isinstance(self.request, GrantRevocationAuthorizationRequest):
+            raise ContractError("request debe ser GrantRevocationAuthorizationRequest")
+        if not isinstance(self.evidence, VerifiedGrantRevocationAuthorization):
+            raise ContractError("evidence debe ser VerifiedGrantRevocationAuthorization")
+        if (
+            not isinstance(self.authorization_result, GrantRevocationAuthorizationResult)
+            or not self.authorization_result.authorized
+        ):
+            raise ContractError("se requiere autorización CAM verificada y consumida")
+        if (
+            self.authorization_result.operation_id != self.operation_id
+            or self.authorization_result.grant_id != self.evidence.grant_id
+            or self.authorization_result.proof_id != self.evidence.proof_id
+            or self.request.request_id != self.evidence.request_id
+            or self.request.actor_identity_id != self.evidence.actor_identity_id
+            or self.request.owner_user_id != self.evidence.owner_user_id
+            or self.request.grant_id != self.evidence.grant_id
+            or self.request.expected_revision != self.evidence.expected_revision
+        ):
+            raise ContractError("evidencia CAM no corresponde a la operación exacta")
+        if (
+            isinstance(self.proposed_revision, bool)
+            or not isinstance(self.proposed_revision, int)
+            or self.proposed_revision != self.request.expected_revision + 1
+        ):
+            raise ContractError("proposed_revision debe ser expected_revision + 1")
+        _validate_utc(self.consumed_at, "consumed_at")
+        if not (
+            self.evidence.issued_at <= self.consumed_at < self.evidence.expires_at
+        ):
+            raise ContractError("la evidencia no estaba vigente al consumirse")
+
+    @property
+    def proof_id(self) -> str:
+        return self.evidence.proof_id
+
+    @property
+    def decision_id(self) -> str:
+        return self.evidence.decision_id
+
+    @property
+    def request_id(self) -> str:
+        return self.evidence.request_id
+
+    @property
+    def actor_identity_id(self) -> str:
+        return self.evidence.actor_identity_id
+
+    @property
+    def owner_id(self) -> str:
+        return self.evidence.owner_user_id
+
+    @property
+    def authority_kind(self) -> AuthorityKind:
+        return AuthorityKind.GRANT
+
+    @property
+    def authority_id(self) -> str:
+        return self.evidence.grant_id
+
+    @property
+    def expected_revision(self) -> int:
+        return self.evidence.expected_revision
+
+    @property
+    def issuer_id(self) -> str:
+        return self.evidence.issuer_id
+
+    @property
+    def issued_at(self) -> datetime:
+        return self.evidence.issued_at
