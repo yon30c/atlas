@@ -52,11 +52,17 @@ La presencia de un `user_id` no demuestra que ese usuario haya autenticado la so
 
 La relación entre el actor, el usuario contextual y la identidad autenticada debe verificarse mediante los mecanismos de autenticación y autorización correspondientes.
 
+Para operaciones autenticadas de un usuario Atlas, `user_id` contextual debe proceder de un `VerifiedIdentityContext` vigente emitido por Identity Authority, o de otro mecanismo de autoridad expresamente definido para el tipo de operación. La frontera confiable de Atlas construye `OperationContext` y establece el `UserId` canónico; no acepta un `user_id` enviado por el caller como prueba de identidad, propiedad o autenticación.
+
+El `UserId` canónico no es equivalente a `actor.identity_id`. Para un actor USER, la correspondencia entre ambos se resuelve mediante Identity Authority y la relación 1:1 vigente. En operaciones delegadas, `user_id` identifica al usuario contextual y `actor.identity_id` identifica al actor efectivo; la delegación requiere verificación independiente y evaluación de CAM.
+
 ### 3.3. Separación de responsabilidades
 
 El contexto no sustituye la identidad autenticada ni la evidencia de autenticación.
 
 La identidad autenticada, el actor efectivo, el origen y la delegación son conceptos distintos. Cuando una operación requiera comprobar su correspondencia, esa comprobación debe realizarse en la frontera de seguridad correspondiente.
+
+La presencia de `user_id` en `OperationContext` sigue siendo dato contextual y no concede autorización. Su procedencia confiable permite identificar al usuario contextual, pero CAM debe evaluar por separado acción, recurso, scope, permisos, revisiones y vigencia. Un caller no puede elegir un UserId arbitrario para obtener acceso a memorias u otros recursos.
 
 ## 4. Delegación
 
