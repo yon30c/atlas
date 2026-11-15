@@ -217,6 +217,8 @@ class GrantManagementService:
             or reservation.intent.idempotency_key != idempotency_key
             or reservation.intent.authority_kind is not AuthorityKind.GRANT
             or reservation.intent.authority_id != grant_id
+            or reservation.intent.expected_revision != grant.revision
+            or reservation.intent.proposed_revision != grant.revision + 1
         ):
             return self._blocked_for_grant(
                 grant,
@@ -300,9 +302,12 @@ class GrantManagementService:
             # Resolver el resultado durable; nunca inferir rollback por timeout.
             change_result = None
         if change_result is None:
-            change_result = self._change_coordinator.get_result(
-                reservation.operation_id
-            )
+            try:
+                change_result = self._change_coordinator.get_result(
+                    reservation.operation_id
+                )
+            except Exception:
+                change_result = None
         if change_result is None:
             return self._blocked_result(reservation)
         return self._to_grant_result(change_result, grant)
@@ -313,8 +318,24 @@ class GrantManagementService:
         now: datetime,
         original_grant: Grant,
     ) -> GrantRevocationResult:
-        result = self._change_coordinator.abort_unstarted(reservation, now)
+        try:
+            result = self._change_coordinator.abort_unstarted(reservation, now)
+        except Exception:
+            result = None
         if result is None:
+            try:
+                result = self._change_coordinator.get_result(
+                    reservation.operation_id
+                )
+            except Exception:
+                result = None
+        if (
+            not isinstance(result, AuthorityChangeResult)
+            or result.status not in (
+                AuthorityChangeStatus.ABORTED,
+                AuthorityChangeStatus.BLOCKED,
+            )
+        ):
             return self._blocked_result(reservation)
         return self._to_grant_result(result, original_grant)
 
