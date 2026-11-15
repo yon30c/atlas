@@ -37,6 +37,12 @@ class AuthorityChangeCoordinatorPort(Protocol):
     def get_result(self, operation_id: str) -> AuthorityChangeResult | None:
         """Recupera el estado durable actual de una operación."""
 
+    def get_reservation(
+        self,
+        operation_id: str,
+    ) -> AuthorityChangeReservation | None:
+        """Recupera la intención original y el estado de reserva."""
+
     def reserve_change(
         self,
         intent: AuthorityChangeIntent,
