@@ -1,10 +1,10 @@
 # B1-B-03A-03 — Borrador de enmienda normativa: UserId e Identity Binding
 
-**Estado:** BORRADOR NORMATIVO — decisiones A–G aprobadas; propuestas para B1-A-06 §§2.1, 4.2 y 5 aprobadas; §§4–7 de este borrador aprobadas por el propietario el 15 de noviembre de 2026. Los contratos normativos vigentes aún no han sido modificados y la implementación no está autorizada.  
+**Estado:** CONSOLIDACIÓN NORMATIVA DOCUMENTAL EJECUTADA — decisiones A–G y propuestas coordinadas aprobadas por el propietario; cuatro contratos normativos actualizados en esta rama; verificación cruzada final pendiente antes del cierre de B1-B-03A. La implementación, migración y activación de runtime protegido no están autorizadas.  
 **Fecha:** 15 de noviembre de 2026.  
 **Documento de decisión:** [B1-B-03A-02 — Modelo lógico de UserId canónico y bindings externos](b1-b03a-02-canonical-user-and-external-identity-binding.md).  
-**Alcance:** proponer texto coordinado para B1-A-06, identity.md y operation-context.md.  
-**No autorizado por este documento:** editar los contratos normativos vigentes, cambiar código, esquema SQLite, datos, migraciones o runtime.
+**Alcance:** registrar las propuestas aprobadas y su consolidación coordinada en DM-01, B1-A-06, identity.md y operation-context.md.  
+**Fuera de alcance y no autorizado:** cambiar código, esquema SQLite, datos, migraciones, autenticación operativa, linking/unlink operativo, ni runtime protegido.
 
 ---
 
@@ -135,7 +135,7 @@ No agregar UserId como campo a la entidad Identity en esta enmienda.
 
 El propietario aprobó el 15 de noviembre de 2026 la propuesta de esta sección, con la siguiente corrección normativa: la relación entre UserId e Identity(USER) es 1:1 y autoritativa; Identity Authority mantiene y resuelve esta correspondencia mediante evidencia interna verificable y vigente. La resolución debe confirmar que ambos identificadores pertenecen a la misma identidad canónica y que sus revisiones y estados son válidos.
 
-Esta aprobación no define el mecanismo físico de persistencia o verificación, no agrega UserId como campo a Identity y no autoriza modificar todavía el contrato vigente identity.md.
+Esta aprobación no define el mecanismo físico de persistencia o verificación ni agrega UserId como campo a Identity. La consolidación documental aprobada se registra en §8; no autoriza implementación.
 
 ## 5. Propuesta para operation-context.md
 
@@ -206,13 +206,18 @@ Estas cuestiones permanecen deliberadamente abiertas y deben especificarse antes
 
 ## 8. Aprobación solicitada y estado del paquete
 
-El propietario ha aprobado las propuestas para B1-A-06 §§2.1, 4.2 y 5, así como las secciones 4–7 de este borrador. La aprobación de B1-A-06 §§2.1 y 4.2 confirma que `Memory.owner_id` conserva el `UserId` global y canónico, que `owner_identity_id` identifica la Identity(USER) correspondiente y que Identity Authority debe verificar la relación 1:1 vigente entre ambos mediante evidencia interna autoritativa. La cuenta externa se resuelve separadamente mediante el binding exacto `(issuer_id, subject)`; no se comparan identificadores de espacios distintos por igualdad textual. El mecanismo físico permanece pendiente.
+El propietario aprobó las decisiones A–G de B1-B-03A-02, las propuestas para B1-A-06 §§2.1, 4.2 y 5, y las propuestas para `identity.md` y `operation-context.md`, incluidas las precisiones sobre el alcance exclusivo de VerifiedIdentityContext para Identity(USER) y la verificación independiente de actores AGENT, SERVICE, WATCHER y SYSTEM.
 
-Hasta la aprobación final del paquete coordinado:
-- los documentos normativos vigentes permanecen sin cambios;
-- este archivo continúa siendo un borrador;
-- B1-B-03A no se considera cerrado;
-- B1-B-03B (diseño físico SQLite) no debe comenzar;
-- no se autoriza implementación, migración ni activación de runtime protegido.
+La consolidación documental autorizada se ejecutó en esta rama y actualizó los cuatro contratos normativos:
+- `docs/design/domain-model-specification-dm-01.md` — §§4.2 y 6.4.
+- `docs/contracts/b1-a06-identity-project-environment-and-persistence.md` — §§2.1, 4.2 y 5.
+- `docs/contracts/identity.md` — §5.1 y decisiones técnicas abiertas de §7.
+- `docs/contracts/operation-context.md` — §§3.2 y 3.3.
 
-**Estado final:** decisiones A–G aprobadas; propuestas de B1-A-06 §§2.1, 4.2 y 5 aprobadas; §§4–7 de este borrador aprobadas; contratos normativos vigentes sin cambios; ninguna implementación, migración ni activación de runtime protegido autorizada.
+La consolidación conserva `Memory.owner_id` como UserId global y canónico; `owner_identity_id` como identity_id de la Identity(USER) correspondiente; la relación 1:1 autoritativa entre ambos; y la resolución externa separada mediante `(issuer_id, subject)`. No se exige igualdad textual entre identificadores de espacios distintos. La evidencia interna y vigente de Identity Authority es necesaria; CAM conserva la decisión de autorización. El mecanismo físico permanece pendiente.
+
+**Criterios de cierre aprobados:** (1) decisiones aprobadas y trazables; (2) enmiendas incorporadas en los contratos; (3) coherencia entre contratos; (4) separación de autoridades; (5) compatibilidad legacy; (6) cuestiones pendientes delimitadas y flujos dependientes deshabilitados; (7) verificación documental final de contenido, referencias, diff, rama y SHA.
+
+**Cuestiones posteriores abiertas:** recuperación de cuenta; linking/unlink operativo; ciclo de vida y confianza de issuers; fusión de identidades; validación criptográfica por issuer; garantías físicas y persistencia de identificadores; revisiones, invalidación y consistencia; migración legacy; evidencia y auditoría. Permanecen abiertas conforme a §7 y no bloquean por sí mismas el cierre normativo mientras no se habiliten los flujos dependientes.
+
+**Estado actual:** consolidación normativa documental ejecutada; verificación cruzada final pendiente. B1-B-03A todavía no se declara cerrado. B1-B-03B no debe comenzar hasta el cierre formal de esta fase y autorización explícita. No se autoriza implementación, migración, cambios de SQLite, autenticación operativa, linking/unlink operativo ni activación de runtime protegido.
