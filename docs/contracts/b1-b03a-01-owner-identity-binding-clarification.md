@@ -79,11 +79,21 @@ Para una autorización PRIVATE delegada:
 5. Evaluar autorización, expiración, revocación, snapshot y fencing por CAM/Consistency.
 6. Denegar si la relación owner/identity no es única o verificable.
 
-## 6. Punto que sigue requiriendo precisión antes del diseño físico
+## 6. Hallazgo documental y punto que sigue requiriendo precisión
 
-DM-01 tipa `owner_id` como `UserId`, mientras que Identity Binding se identifica por el par `(issuer, subject)`. Antes de diseñar claves/índices, debe verificarse si el `UserId` existente identifica globalmente un subject o si su unicidad depende del issuer.
+La revisión de las fuentes adicionales confirma que esta cuestión no está definida todavía:
 
-No se debe añadir un campo a Memory, cambiar el tipo, crear una tabla de bindings paralela ni elegir un issuer por inferencia. Si el valor `owner_id` por sí solo no permite resolver de forma inequívoca la autoridad/binding del propietario, esa ambigüedad debe resolverse mediante una decisión contractual sobre el namespace canónico de UserId o un mecanismo confiable de resolución. Hasta entonces, cualquier caso ambiguo deniega.
+- `docs/contracts/identity.md` §5 deja fuera de alcance el mecanismo para vincular `identity_id` con una cuenta externa; §7 mantiene pendientes autenticación, espacio de nombres, unicidad y normalización de identificadores.
+- `docs/contracts/operation-context.md` §§3.2–3.3 establecen que `user_id` es distinto de `actor.identity_id`, puede representar al usuario en cuyo contexto opera un agente y no demuestra autenticación, autorización ni delegación.
+- DM-01 §4.2 define `Memory.owner_id: UserId`, y §6.4 exige coincidencia con el subject autenticado, pero no define el namespace/issuer que hace único ese UserId.
+- B1-A-06 §4.2 define `(issuer, subject) -> identity_id`, pero no resuelve cómo se asocia el `UserId` persistido en Memory con el issuer correspondiente.
+
+Por tanto, la decisión conceptual aprobada es clara, pero no basta para seleccionar una clave física ni para resolver una autorización delegada en todos los casos. Antes de diseño físico debe aprobarse una de estas semánticas sin alterar el identificador existente por inferencia:
+
+1. **UserId es global y canónico:** una autoridad confiable garantiza que el valor almacenado en `Memory.owner_id` identifica de forma única al subject en un namespace global, y expone su relación con el binding/issuer activo.
+2. **UserId es issuer-scoped:** el valor solo es único junto con un issuer; una fuente confiable externa al caller debe resolver el issuer canónico asociado a cada Memory.owner_id. No se puede elegir el issuer usando solo el contexto de un actor delegado.
+
+No se recomienda agregar silenciosamente `owner_issuer_id` a Memory ni reinterpretar `OperationContext.user_id` como prueba. Si la fuente confiable no puede resolver de forma única el propietario, la operación falla cerrada. Esta decisión de namespace es un bloqueo contractual explícito, no una autorización para crear una tabla o migración.
 
 ## 7. Compatibilidad y no-regresión
 
@@ -110,6 +120,6 @@ No se debe añadir un campo a Memory, cambiar el tipo, crear una tabla de bindin
 
 La decisión conceptual está aprobada. Esta propuesta concreta el texto y expone el único punto de precisión pendiente: namespace/unicidad de `UserId` respecto de issuer/subject.
 
-Siguiente paso: revisar esa precisión contra los contratos Identity y OperationContext vigentes; después, preparar una enmienda normativa final que actualice DM-01 y B1-A-06 de forma consistente y solicite aprobación explícita del texto antes de sustituir los documentos aprobados.
+Siguiente paso: el propietario debe elegir/confirmar la semántica canónica de UserId (global o issuer-scoped) y la autoridad confiable que puede resolverla. Después se redactará la enmienda normativa final que actualice DM-01 y B1-A-06 de forma consistente y se solicitará aprobación explícita del texto antes de sustituir los documentos aprobados.
 
 No iniciar B1-B-03B ni modificar SQLite hasta cerrar este punto y los restantes bloqueos de B1-B-03A.
