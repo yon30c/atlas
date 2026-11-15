@@ -338,6 +338,7 @@ class MemoryGatewayAuthorizationIntegrationTests(unittest.TestCase):
     def test_gateway_uses_one_consistency_boundary_for_admission_egress_and_reconcile(self):
         read = self.gateway.get_version(make_context(), MEMORY_ID, VERSION_ID)
         self.assertIsNotNone(read)
+        self.assertEqual(self.identity_port.calls, ["identity-1"])
 
         receipt = self.gateway.emit_version(
             read, "assistant-response", "integration-emission-1", 1
@@ -366,6 +367,7 @@ class MemoryGatewayAuthorizationIntegrationTests(unittest.TestCase):
     def test_gateway_rejects_unregistered_delivery_route_before_egress(self):
         read = self.gateway.get_version(make_context(), MEMORY_ID, VERSION_ID)
         self.assertIsNotNone(read)
+        self.assertEqual(self.identity_port.calls, ["identity-1"])
         self.assertIsNone(
             self.gateway.emit_version(
                 read, "unregistered-endpoint", "invalid-route-emission", 1
@@ -377,6 +379,7 @@ class MemoryGatewayAuthorizationIntegrationTests(unittest.TestCase):
     def test_gateway_session_and_forget_share_the_same_atomic_boundary(self):
         read = self.gateway.get_version(make_context(), MEMORY_ID, VERSION_ID)
         self.assertIsNotNone(read)
+        self.assertEqual(self.identity_port.calls, ["identity-1"])
         barrier = threading.Barrier(3)
         emissions = []
         closures = []
@@ -433,6 +436,7 @@ class MemoryGatewayAuthorizationIntegrationTests(unittest.TestCase):
 
         self.assertIsNone(result)
         self.assertEqual(self.content.calls, [])
+        self.assertEqual(self.identity_port.calls, ["identity-1"])
 
     def test_project_memory_with_exact_grant_opens_protected_handle(self):
         self.memory_port.memory = make_memory(MemoryScopeKind.PROJECT, PROJECT_ID)
