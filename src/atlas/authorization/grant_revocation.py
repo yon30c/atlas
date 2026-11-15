@@ -1,8 +1,17 @@
 """Contrato de verificación y consumo de evidencia de revocación CAM."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from atlas.ports.grant_revocation_proof import (
+        GrantRevocationProofConsumptionPort,
+        GrantRevocationProofVerifierPort,
+    )
 
 from atlas.authorization.models import (
     GrantRevocationAuthorizationRequest,
@@ -91,7 +100,11 @@ class GrantRevocationProofAuthorizationService:
     El consumidor debe proporcionar consumo atómico, durable y recuperable.
     """
 
-    def __init__(self, verifier, consumer) -> None:
+    def __init__(
+        self,
+        verifier: GrantRevocationProofVerifierPort,
+        consumer: GrantRevocationProofConsumptionPort,
+    ) -> None:
         if verifier is None or consumer is None:
             raise ContractError("verifier y consumer son obligatorios")
         self._verifier = verifier
@@ -107,9 +120,13 @@ class GrantRevocationProofAuthorizationService:
     ) -> GrantRevocationAuthorizationResult:
         """Autoriza solo después de verificar y consumir la prueba one-shot."""
         if not isinstance(request, GrantRevocationAuthorizationRequest):
-            raise ContractError("request debe ser GrantRevocationAuthorizationRequest")
+            raise ContractError(
+                "request debe ser GrantRevocationAuthorizationRequest"
+            )
         if not isinstance(evidence, VerifiedGrantRevocationAuthorization):
-            raise ContractError("evidence debe ser VerifiedGrantRevocationAuthorization")
+            raise ContractError(
+                "evidence debe ser VerifiedGrantRevocationAuthorization"
+            )
         for field, value in (
             ("operation_id", operation_id),
             ("idempotency_key", idempotency_key),
@@ -202,7 +219,12 @@ class GrantRevocationProofAuthorizationService:
         )
 
     @staticmethod
-    def _result(operation_id, grant_id, proof_id, status):
+    def _result(
+        operation_id: str,
+        grant_id: str,
+        proof_id: str | None,
+        status: GrantRevocationAuthorizationStatus,
+    ) -> GrantRevocationAuthorizationResult:
         return GrantRevocationAuthorizationResult(
             operation_id=operation_id,
             grant_id=grant_id,
