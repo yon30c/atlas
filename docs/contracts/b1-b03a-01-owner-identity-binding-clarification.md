@@ -79,21 +79,33 @@ Para una autorización PRIVATE delegada:
 5. Evaluar autorización, expiración, revocación, snapshot y fencing por CAM/Consistency.
 6. Denegar si la relación owner/identity no es única o verificable.
 
-## 6. Hallazgo documental y punto que sigue requiriendo precisión
+## 6. Semántica de UserId aprobada y consecuencias
 
-La revisión de las fuentes adicionales confirma que esta cuestión no está definida todavía:
+El propietario aprobó expresamente la primera alternativa el 15 de noviembre de 2026:
 
-- `docs/contracts/identity.md` §5 deja fuera de alcance el mecanismo para vincular `identity_id` con una cuenta externa; §7 mantiene pendientes autenticación, espacio de nombres, unicidad y normalización de identificadores.
-- `docs/contracts/operation-context.md` §§3.2–3.3 establecen que `user_id` es distinto de `actor.identity_id`, puede representar al usuario en cuyo contexto opera un agente y no demuestra autenticación, autorización ni delegación.
-- DM-01 §4.2 define `Memory.owner_id: UserId`, y §6.4 exige coincidencia con el subject autenticado, pero no define el namespace/issuer que hace único ese UserId.
-- B1-A-06 §4.2 define `(issuer, subject) -> identity_id`, pero no resuelve cómo se asocia el `UserId` persistido en Memory con el issuer correspondiente.
+**`UserId` es global y canónico.** El valor almacenado en `Memory.owner_id` identifica de forma única al usuario dentro del namespace canónico de Atlas, independientemente del issuer/proveedor externo utilizado para autenticarse.
 
-Por tanto, la decisión conceptual aprobada es clara, pero no basta para seleccionar una clave física ni para resolver una autorización delegada en todos los casos. Antes de diseño físico debe aprobarse una de estas semánticas sin alterar el identificador existente por inferencia:
+La relación queda definida conceptualmente así:
 
-1. **UserId es global y canónico:** una autoridad confiable garantiza que el valor almacenado en `Memory.owner_id` identifica de forma única al subject en un namespace global, y expone su relación con el binding/issuer activo.
-2. **UserId es issuer-scoped:** el valor solo es único junto con un issuer; una fuente confiable externa al caller debe resolver el issuer canónico asociado a cada Memory.owner_id. No se puede elegir el issuer usando solo el contexto de un actor delegado.
+- `UserId`: identificador canónico y estable del usuario en Atlas; es el valor que conserva `Memory.owner_id` y el `user_id` contextual cuando corresponda.
+- `(issuer, subject)`: identificador externo de una cuenta/principal autenticado en un proveedor concreto.
+- `identity_id`: identidad canónica interna del actor en Identity Authority.
+- Identity Authority mantiene/verifica bindings confiables que permiten resolver la cuenta externa `(issuer, subject)` hacia la identidad interna correspondiente y relacionar la identidad USER con el `UserId` canónico.
+- La autoridad que emite y administra el `UserId` debe ser interna/confiable de Atlas; el caller no puede elegirlo ni declararlo como prueba. La autoridad exacta, el modelo de persistencia y el ciclo de vida de estos bindings aún deben especificarse.
 
-No se recomienda agregar silenciosamente `owner_issuer_id` a Memory ni reinterpretar `OperationContext.user_id` como prueba. Si la fuente confiable no puede resolver de forma única el propietario, la operación falla cerrada. Esta decisión de namespace es un bloqueo contractual explícito, no una autorización para crear una tabla o migración.
+La resolución de un propietario de Memory debe ser inequívoca: el subject autenticado se valida exactamente contra el binding confiable del issuer; ese binding conduce a la identidad USER y al `UserId` canónico; el `UserId` resuelto debe coincidir exactamente con `Memory.owner_id`; y el `identity_id` correspondiente debe coincidir con `owner_identity_id` cuando se evalúe una autorización PRIVATE. Una coincidencia textual entre IDs no sustituye ninguna de estas comprobaciones.
+
+La decisión no convierte `UserId` en `identity_id`, no exige que ambos strings sean iguales y no cambia el tipo ni el contenido de registros existentes.
+
+### 6.1. Consecuencias aún por especificar
+
+- Qué autoridad interna de Atlas emite el `UserId` canónico y cómo se autentica su emisión.
+- Cómo Identity Authority relaciona de forma verificable `identity_id` USER con `UserId`.
+- Cómo se asocian, agregan, cambian o revocan múltiples bindings externos `(issuer, subject)` a una misma identidad/usuario sin transferir propiedad accidentalmente.
+- Cómo se tratan unlink, cambio de proveedor, colisión, recuperación de cuenta, merge/split de identidades y cuentas comprometidas.
+- Qué evidencia y revisiones se incluyen en `VerifiedIdentityContext` y en snapshots CAM para impedir TOCTOU.
+
+Hasta que estos puntos estén especificados, cualquier relación ambigua o no verificable falla cerrada. No se agrega `owner_issuer_id` a Memory ni se reinterpreta `OperationContext.user_id` como prueba.
 
 ## 7. Compatibilidad y no-regresión
 
@@ -120,6 +132,6 @@ No se recomienda agregar silenciosamente `owner_issuer_id` a Memory ni reinterpr
 
 La decisión conceptual está aprobada. Esta propuesta concreta el texto y expone el único punto de precisión pendiente: namespace/unicidad de `UserId` respecto de issuer/subject.
 
-Siguiente paso: el propietario debe elegir/confirmar la semántica canónica de UserId (global o issuer-scoped) y la autoridad confiable que puede resolverla. Después se redactará la enmienda normativa final que actualice DM-01 y B1-A-06 de forma consistente y se solicitará aprobación explícita del texto antes de sustituir los documentos aprobados.
+Siguiente paso: especificar la autoridad interna que emite `UserId` y el binding verificable entre `UserId`, `identity_id` y cuentas externas. Después, redactar la enmienda normativa final para DM-01 y B1-A-06 y solicitar aprobación explícita antes de sustituir los contratos aprobados.
 
 No iniciar B1-B-03B ni modificar SQLite hasta cerrar este punto y los restantes bloqueos de B1-B-03A.
