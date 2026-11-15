@@ -14,9 +14,9 @@ from atlas.memory.checkpoint_projection_codec import (
 )
 from atlas.memory.journal import ConsistencyCheckpoint, ConsistencyPosition
 from atlas.memory.journal_reducer import ConsistencyProjection
-from atlas.ports.local_consistency_recovery import (
-    LocalCheckpointProjectionRequest,
-    LocalVerificationStatus,
+from atlas.memory.ports.recovery import (
+    CheckpointProjectionRequest,
+    RecoveryVerificationStatus,
 )
 
 

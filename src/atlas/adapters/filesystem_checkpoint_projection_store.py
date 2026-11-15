@@ -18,10 +18,10 @@ from atlas.memory.checkpoint_projection_codec import (
     CheckpointProjectionArtifacts,
     decode_checkpoint_projection_artifacts,
 )
-from atlas.ports.local_consistency_recovery import (
-    CheckpointProjectionResolution,
-    LocalCheckpointProjectionRequest,
-    LocalVerificationStatus,
+from atlas.memory.ports.recovery import (
+    CheckpointProjectionResult,
+    CheckpointProjectionRequest,
+    RecoveryVerificationStatus,
     VerifiedCheckpointProjection,
 )
 from atlas.ports.checkpoint_projection_store import (
@@ -161,11 +161,11 @@ class FilesystemCheckpointProjectionStore(
         )
 
     def resolve_checkpoint_projection(
-        self, request: LocalCheckpointProjectionRequest
-    ) -> CheckpointProjectionResolution:
+        self, request: CheckpointProjectionRequest
+    ) -> CheckpointProjectionResult:
         """Resolve exact checkpoint references; fail closed on missing/corrupt data."""
-        if not isinstance(request, LocalCheckpointProjectionRequest):
-            return CheckpointProjectionResolution(LocalVerificationStatus.REJECTED)
+        if not isinstance(request, CheckpointProjectionRequest):
+            return CheckpointProjectionResult(RecoveryVerificationStatus.REJECTED)
         try:
             state_path = self._path_for(
                 self._state_dir, request.checkpoint.state_reference
@@ -176,13 +176,13 @@ class FilesystemCheckpointProjectionStore(
             state_bytes = self._read_file(state_path)
             manifest_bytes = self._read_file(manifest_path)
         except FileNotFoundError:
-            return CheckpointProjectionResolution(LocalVerificationStatus.UNAVAILABLE)
+            return CheckpointProjectionResult(RecoveryVerificationStatus.UNAVAILABLE)
         except PermissionError:
-            return CheckpointProjectionResolution(LocalVerificationStatus.UNAVAILABLE)
+            return CheckpointProjectionResult(RecoveryVerificationStatus.UNAVAILABLE)
         except OSError:
-            return CheckpointProjectionResolution(LocalVerificationStatus.UNAVAILABLE)
+            return CheckpointProjectionResult(RecoveryVerificationStatus.UNAVAILABLE)
         except ContractError:
-            return CheckpointProjectionResolution(LocalVerificationStatus.REJECTED)
+            return CheckpointProjectionResult(RecoveryVerificationStatus.REJECTED)
 
         try:
             projection, manifest, integrity_commitment = (
@@ -202,7 +202,7 @@ class FilesystemCheckpointProjectionStore(
                 or manifest.schema_version not in request.allowed_schema_versions
                 or manifest.reducer_version not in request.allowed_reducer_versions
             ):
-                return CheckpointProjectionResolution(LocalVerificationStatus.REJECTED)
+                return CheckpointProjectionResult(RecoveryVerificationStatus.REJECTED)
 
             evidence = VerifiedCheckpointProjection(
                 checkpoint_id=manifest.checkpoint_id,
@@ -222,10 +222,10 @@ class FilesystemCheckpointProjectionStore(
                     f"{integrity_commitment}"
                 ),
             )
-            return CheckpointProjectionResolution(
-                LocalVerificationStatus.VERIFIED, evidence
+            return CheckpointProjectionResult(
+                RecoveryVerificationStatus.VERIFIED, evidence
             )
         except ContractError:
-            return CheckpointProjectionResolution(LocalVerificationStatus.REJECTED)
+            return CheckpointProjectionResult(RecoveryVerificationStatus.REJECTED)
         except Exception:
-            return CheckpointProjectionResolution(LocalVerificationStatus.REJECTED)
+            return CheckpointProjectionResult(RecoveryVerificationStatus.REJECTED)
