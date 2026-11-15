@@ -39,6 +39,7 @@ El esquema almacena metadatos de control, journal, checkpoints y relaciones de i
 Requisitos:
 
 - Python y dependencias del proyecto instaladas.
+- SQLite 3.26.0 o superior en la biblioteca enlazada al módulo `sqlite3` de Python.
 - Directorio persistente y ruta absoluta.
 - Directorio propiedad de la cuenta que ejecuta Atlas.
 - Firmante local aprobado que implemente \`LocalConsistencySignerPort.sign_envelope()\`.
