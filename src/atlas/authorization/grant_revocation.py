@@ -319,10 +319,3 @@ class GrantRevocationAuthorityChangeAuthorization:
     def issued_at(self) -> datetime:
         return self.evidence.issued_at
 
-    @property
-    def consumed_at(self) -> datetime:
-        return object.__getattribute__(self, "consumed_at")
-
-    @property
-    def proposed_revision_value(self) -> int:
-        return self.proposed_revision
