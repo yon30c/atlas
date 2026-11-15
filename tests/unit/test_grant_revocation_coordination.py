@@ -17,6 +17,7 @@ from atlas.authorization.models import (
 )
 from atlas.core.context import OperationContext
 from atlas.core.errors import AuthorizationError
+from atlas.core.enums import DelegationMode
 from atlas.core.identity import Identity, IdentityKind, IdentityStatus
 from atlas.memory.authority_changes import (
     AuthorityChangeIntent,
@@ -273,8 +274,8 @@ class GrantRevocationCoordinationTests(unittest.TestCase):
         self.assertEqual(self.coordinator.reserve_calls, 0)
 
     def test_revoke_requires_direct_non_delegated_owner_action(self):
-        delegated = replace(self.context, delegation=object())
-        with self.assertRaises(Exception):
+        delegated = replace(self.context, delegation=DelegationMode.DELEGATED)
+        with self.assertRaises(AuthorizationError):
             self.service.revoke(
                 delegated, self.grant.grant_id, "idem-003", NOW
             )
