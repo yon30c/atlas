@@ -65,17 +65,17 @@ class GrantManagementService:
         ):
             raise ContractError("consumer_id debe ser una cadena no vacía")
         self._repository = repository
-        self._consumer_id = cast(str | None, consumer_id)
+        self._consumer_id = cast(str, consumer_id)
         self._revocation_authorizer = cast(
-            GrantRevocationAuthorizationPort | None, revocation_authorizer
+            GrantRevocationAuthorizationPort, revocation_authorizer
         )
         self._proof_authorization = cast(
-            GrantRevocationProofAuthorizationService | None, proof_authorization
+            GrantRevocationProofAuthorizationService, proof_authorization
         )
         self._change_coordinator = cast(
-            AuthorityChangeCoordinatorPort | None, change_coordinator
+            AuthorityChangeCoordinatorPort, change_coordinator
         )
-        self._clock = cast(Clock | None, clock)
+        self._clock = cast(Clock, clock)
 
     def issue(
         self,
