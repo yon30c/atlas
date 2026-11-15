@@ -100,6 +100,16 @@ Cada operación utiliza un `OperationContext` explícito e inmutable. Su campo `
 
 Identidad, autenticación y autorización son conceptos separados. La forma de autenticar o probar una identidad, vincular `identity_id` con una cuenta externa, y administrar el ciclo de vida del registro queda fuera de lo especificado aquí y requiere decisiones técnicas explícitas.
 
+## 5.1. Relación con el usuario canónico Atlas
+
+Una Identity de tipo USER representa el actor interno de un usuario Atlas, pero `identity_id` no es el `UserId` del usuario. Atlas mantiene un `UserId` global y canónico separado, emitido y administrado por Identity Authority.
+
+La relación entre `UserId` e Identity(USER) es 1:1 y autoritativa. Identity Authority mantiene y resuelve esta correspondencia mediante evidencia interna verificable y vigente. La relación no se establece ni se demuestra mediante igualdad textual entre identificadores. La resolución debe confirmar que ambos identificadores pertenecen a la misma identidad canónica y que sus revisiones y estados son válidos.
+
+Una Identity(USER) puede tener varios bindings externos verificados, cada uno identificado por `(issuer_id, subject)` y `binding_id`. Estos bindings permiten autenticar cuentas externas distintas para la misma identidad interna. La autenticación externa, el binding y la autorización son responsabilidades separadas.
+
+El modelo Identity no incorpora credenciales externas ni secretos. Un binding no concede permisos. La autorización de cada operación corresponde a CAM.
+
 ## 6. Errores de validación
 
 Una identidad inválida, un tipo que no sea `IdentityKind`, o un estado que no sea `IdentityStatus` produce `ContractError` al construir `Identity`. No se describe una conversión automática ni recuperación implícita.
@@ -117,6 +127,8 @@ Quedan pendientes de definición:
 - **Administración:** procedimientos, actores autorizados y controles necesarios para gestionar el ciclo de vida de las identidades.
 - **Persistencia e historial:** representación del estado, conservación del historial de cambios y trazabilidad de las operaciones administrativas.
 - **Autenticación:** mecanismo para comprobar la identidad de un actor y vincular un `identity_id` con una credencial o cuenta externa.
+- **UserId canónico:** su significado global, la relación 1:1 con Identity(USER) y la autoridad emisora se rigen por B1-A-06 §4.2. Formato físico, generación concreta, persistencia y migración siguen pendientes.
+- **Bindings externos:** el ciclo de vida lógico y las invariantes de issuer/subject se rigen por B1-A-06 §4.2. Los protocolos concretos de autenticación, registro de issuers y verificación criptográfica requieren especificación técnica por proveedor.
 - **Identificadores revocados:** política de conservación y prevención de reutilización de identificadores para proteger la atribución histórica.
 
 ### 7.1. Límites de estas decisiones pendientes
