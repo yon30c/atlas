@@ -37,5 +37,18 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e .
 
+      - name: Verify SQLite runtime compatibility
+        run: |
+          python - <<'PY'
+          import sqlite3
+          minimum = (3, 26, 0)
+          current = sqlite3.sqlite_version_info
+          print(f"SQLite runtime: {sqlite3.sqlite_version}")
+          if current < minimum:
+              raise SystemExit(
+                  f"SQLite >= {'.'.join(map(str, minimum))} is required; found {sqlite3.sqlite_version}"
+              )
+          PY
+
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
