@@ -92,20 +92,18 @@ class SwitchableProjectionStore:
         return self.delegate.resolve_checkpoint_projection(request)
 
 
-class CommitThenLoseResponseDatabase:
-    """Delegate a real commit, then simulate losing its successful response."""
+class CommitThenLoseResponseDatabase(SQLiteDatabase):
+    """Commit through the real UoW, then simulate losing its successful response."""
 
     def __init__(self, database):
         self.database = database
         self.lose_next_response = True
-
-    def connection(self):
-        return self.database.connection()
+        super().__init__(database.path, busy_timeout_ms=database.busy_timeout_ms)
 
     @contextmanager
-    def write_transaction(self):
-        with self.database.write_transaction() as connection:
-            yield connection
+    def unit_of_work(self):
+        with super().unit_of_work() as unit_of_work:
+            yield unit_of_work
         if self.lose_next_response:
             self.lose_next_response = False
             raise OSError("simulated response loss after durable commit")
