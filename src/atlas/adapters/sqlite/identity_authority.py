@@ -71,10 +71,10 @@ class SQLiteIdentityAuthority(IdentityAuthorityPort):
                     """
                     INSERT INTO identity_records (
                         identity_id, identity_kind, identity_status,
-                        revision, created_at, updated_at
-                    ) VALUES (?, 'user', 'active', 1, ?, ?)
+                        revision, created_at, updated_at, user_id
+                    ) VALUES (?, 'user', 'active', 1, ?, ?, ?)
                     """,
-                    (identity_id, now, now),
+                    (identity_id, now, now, user_id),
                 )
                 connection.execute(
                     """

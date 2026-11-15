@@ -159,8 +159,9 @@ class SQLiteIdentityAuthorityTests(unittest.TestCase):
                 )
 
     def test_schema_enforces_user_kind_and_one_to_one_identity_relation(self):
-        identity_id = "22222222-2222-4222-8222-222222222222"
+        agent_identity = "22222222-2222-4222-8222-222222222222"
         user_id = "33333333-3333-4333-8333-333333333333"
+        canonical_identity = "44444444-4444-4444-8444-444444444444"
         with self.database.connection() as connection:
             connection.execute(
                 """
@@ -169,28 +170,30 @@ class SQLiteIdentityAuthorityTests(unittest.TestCase):
                     created_at, updated_at
                 ) VALUES (?, 'agent', 'active', 1, 'now', 'now')
                 """,
-                (identity_id,),
+                (agent_identity,),
             )
             with self.assertRaises(sqlite3.IntegrityError):
                 connection.execute(
                     "INSERT INTO atlas_users (user_id, identity_id, created_at) VALUES (?, ?, 'now')",
-                    (user_id, identity_id),
+                    (user_id, agent_identity),
                 )
 
+            connection.execute("BEGIN")
             connection.execute(
                 """
                 INSERT INTO identity_records (
                     identity_id, identity_kind, identity_status, revision,
-                    created_at, updated_at
-                ) VALUES ('44444444-4444-4444-8444-444444444444',
-                          'user', 'active', 1, 'now', 'now')
-                """
+                    created_at, updated_at, user_id
+                ) VALUES (?, 'user', 'active', 1, 'now', 'now', ?)
+                """,
+                (canonical_identity, user_id),
             )
-            canonical_identity = "44444444-4444-4444-8444-444444444444"
             connection.execute(
                 "INSERT INTO atlas_users (user_id, identity_id, created_at) VALUES (?, ?, 'now')",
                 (user_id, canonical_identity),
             )
+            connection.commit()
+
             with self.assertRaises(sqlite3.IntegrityError):
                 connection.execute(
                     """
@@ -199,6 +202,174 @@ class SQLiteIdentityAuthorityTests(unittest.TestCase):
                     """,
                     (canonical_identity,),
                 )
+
+
+    def test_direct_sql_cannot_commit_an_orphan_user_identity(self):
+        with self.database.connection() as connection:
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    """
+                    INSERT INTO identity_records (
+                        identity_id, identity_kind, identity_status, revision,
+                        created_at, updated_at, user_id
+                    ) VALUES (
+                        '66666666-6666-4666-8666-666666666666',
+                        'user', 'active', 1, 'now', 'now',
+                        '77777777-7777-4777-8777-777777777777'
+                    )
+                    """
+                )
+
+    def test_direct_sql_cannot_commit_a_mismatched_user_identity_pair(self):
+        with self.database.connection() as connection:
+            connection.execute("BEGIN")
+            connection.execute(
+                """
+                INSERT INTO identity_records (
+                    identity_id, identity_kind, identity_status, revision,
+                    created_at, updated_at, user_id
+                ) VALUES (
+                    '66666666-6666-4666-8666-666666666666',
+                    'user', 'active', 1, 'now', 'now',
+                    '77777777-7777-4777-8777-777777777777'
+                )
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO atlas_users (user_id, identity_id, created_at)
+                VALUES (
+                    '88888888-8888-4888-8888-888888888888',
+                    '66666666-6666-4666-8666-666666666666',
+                    'now'
+                )
+                """
+            )
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.commit()
+            connection.rollback()
+
+    def test_non_user_identity_cannot_carry_user_id(self):
+        with self.database.connection() as connection:
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    """
+                    INSERT INTO identity_records (
+                        identity_id, identity_kind, identity_status, revision,
+                        created_at, updated_at, user_id
+                    ) VALUES (
+                        '99999999-9999-4999-8999-999999999999',
+                        'agent', 'active', 1, 'now', 'now',
+                        '77777777-7777-4777-8777-777777777777'
+                    )
+                    """
+                )
+
+    def test_sql_triggers_preserve_identity_immutability_revocation_and_tombstones(self):
+        user = self.authority.create_user()
+        with self.database.connection() as connection:
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    "UPDATE identity_records SET user_id = ? WHERE identity_id = ?",
+                    ("88888888-8888-4888-8888-888888888888", user.identity.identity_id),
+                )
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    "UPDATE atlas_users SET user_id = ? WHERE user_id = ?",
+                    ("88888888-8888-4888-8888-888888888888", user.user_id),
+                )
+            connection.execute(
+                """
+                UPDATE identity_records
+                SET identity_status = 'revoked', revision = revision + 1
+                WHERE identity_id = ?
+                """,
+                (user.identity.identity_id,),
+            )
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    """
+                    UPDATE identity_records
+                    SET identity_status = 'active', revision = revision + 1
+                    WHERE identity_id = ?
+                    """,
+                    (user.identity.identity_id,),
+                )
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute("DELETE FROM atlas_users WHERE user_id = ?", (user.user_id,))
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    "DELETE FROM identity_records WHERE identity_id = ?",
+                    (user.identity.identity_id,),
+                )
+
+    def test_v6_migration_preserves_existing_user_pairs(self):
+        legacy = SQLiteDatabase(Path(self.temp_dir.name) / "legacy-valid.sqlite")
+        legacy.apply_migrations(SQLITE_MIGRATIONS[:-1])
+        user_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        identity_id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        with legacy.connection() as connection:
+            connection.execute("BEGIN")
+            connection.execute(
+                """
+                INSERT INTO identity_records (
+                    identity_id, identity_kind, identity_status, revision,
+                    created_at, updated_at
+                ) VALUES (?, 'user', 'active', 1, 'legacy', 'legacy')
+                """,
+                (identity_id,),
+            )
+            connection.execute(
+                "INSERT INTO atlas_users (user_id, identity_id, created_at) VALUES (?, ?, 'legacy')",
+                (user_id, identity_id),
+            )
+            connection.commit()
+
+        legacy.apply_migrations(SQLITE_MIGRATIONS)
+        with legacy.connection() as connection:
+            row = connection.execute(
+                "SELECT user_id FROM identity_records WHERE identity_id = ?",
+                (identity_id,),
+            ).fetchone()
+            versions = connection.execute(
+                "SELECT version FROM schema_migrations ORDER BY version"
+            ).fetchall()
+            violations = connection.execute("PRAGMA foreign_key_check").fetchall()
+        self.assertEqual(row["user_id"], user_id)
+        self.assertEqual([item[0] for item in versions], [1, 2, 3, 4, 5, 6])
+        self.assertEqual(violations, [])
+
+    def test_v6_migration_rejects_legacy_orphan_user_identity_atomically(self):
+        legacy = SQLiteDatabase(Path(self.temp_dir.name) / "legacy-orphan.sqlite")
+        legacy.apply_migrations(SQLITE_MIGRATIONS[:-1])
+        identity_id = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+        with legacy.connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO identity_records (
+                    identity_id, identity_kind, identity_status, revision,
+                    created_at, updated_at
+                ) VALUES (?, 'user', 'active', 1, 'legacy', 'legacy')
+                """,
+                (identity_id,),
+            )
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            legacy.apply_migrations(SQLITE_MIGRATIONS)
+        with legacy.connection() as connection:
+            versions = connection.execute(
+                "SELECT version FROM schema_migrations ORDER BY version"
+            ).fetchall()
+            row = connection.execute(
+                "SELECT identity_id FROM identity_records WHERE identity_id = ?",
+                (identity_id,),
+            ).fetchone()
+            columns = {
+                item["name"] for item in connection.execute("PRAGMA table_info(identity_records)")
+            }
+        self.assertEqual([item[0] for item in versions], [1, 2, 3, 4, 5])
+        self.assertEqual(row["identity_id"], identity_id)
+        self.assertNotIn("user_id", columns)
 
     def test_identity_revision_must_advance_exactly_one(self):
         user = self.authority.create_user()
