@@ -270,6 +270,52 @@ No se afirma que todos estos coordinadores o repositorios existan hoy. La tabla 
 
 **Estado:** requiere enmienda/compatibilidad D4O-F y validación de D4O-G/H; no implementar por alias de GRANT.
 
+### 7.1 Contraste adicional con ME-03F, ME-03H y ME-03K
+
+La inspección de los contratos y modelos disponibles precisa las discrepancias anteriores:
+
+**Admisión y recuperación exacta**
+- ME-03F define `READ_ADMITTED` schema_version 2 con `scope_kind` y `scope_project_id`, exige `owner_id`, actor, request, IDs exactos, revisiones, generación y rutas; la proyección conserva `admitted_at`, clasificación de recuperabilidad y recibo terminal.
+- ME-03F conserva v1 para replay histórico, pero una admisión v1 no es recuperable como objetivo vivo porque no conserva scope exacto. No se infiere PRIVATE/PROJECT.
+- ME-03H exige recuperar todas las admisiones no terminales, tanto v1 como v2, como trabajo unresolved/fenced; todas las rutas persistidas se vuelven a cercar con una generación superior. Recibos históricos no omiten el nuevo fencing.
+- ME-03H es un contrato de orquestación pura/fakes. No acredita autoridad durable que cierre el gate, contacte endpoints, persista todos los recibos y reconcilie atómicamente.
+
+**No duplicar schema**
+- ME-03K define `journal_entries`, `journal_operations`, `checkpoints`, `checkpoint_projections` e inventarios operativos como base del perfil local.
+- Las admisiones se representan en transiciones/proyecciones de journal y sus inventarios; no se debe crear una segunda tabla canónica de admissions sin demostrar una necesidad no cubierta por esas estructuras.
+- Las rutas deben seguir derivándose de un registro confiable y conservarse exactamente en la transición/proyección; la lista del caller no puede ampliar el inventario.
+- ME-03K SQLite migration v2 refuerza la FK compuesta de `journal_operations` a `journal_entries`. Es distinta de `READ_ADMITTED` schema_version 2 de ME-03F. No comparten contador ni semántica de versión.
+
+**Brecha PRIVATE en AuthorityRevisionSet**
+- El código inspeccionado declara AuthorityKind MEMORY, MEMORY_VERSION, IDENTITY, PROJECT, ENVIRONMENT, GRANT y CONSISTENCY.
+- `AuthorizationRevisionSet` solo tiene slots de revisión para Memory, Version, Identity y, opcionalmente, Project, Environment y Grant.
+- El modelo de transición `INVALIDATION_CLOSED` depende de AuthorityKind. Por tanto, PRIVATE_MEMORY_AUTHORIZATION no puede expresarse actualmente como autoridad de revisión/invalidation independiente sin ampliar el contrato y sus validadores/reducer.
+- La ampliación debe ser aditiva y explícita: nuevo AuthorityKind, revisión exacta de autorización PRIVATE donde aplique, validación de scope PRIVATE/PROJECT, invalidation mapping, source CAS y recuperación. No se debe mapear a GRANT ni hacer que PRIVATE dependa de Grant.
+
+**Alcance real de D4O-B**
+- ME-D4O-B define secuencia de admisión durable dentro de una UoW, revalidación de revisiones, idempotencia exacta y uso de READ_ADMITTED v2.
+- El mismo documento declara que el coordinador/adaptadores de admisión siguen pendientes, que el bootstrap LOCAL es prerrequisito para operación y que D4O-B no habilita lecturas operativas.
+- Por ello, contratos neutrales, schema de transición v2 y reducer no deben presentarse como `admit_read` durable completo.
+
+**Perfil de recuperación**
+- El baseline SQLite aprobado es LOCAL, un único servidor Debian, sin Trust Anchor externo ni garantía anti-rollback externa.
+- El perfil ANCHORED se posterga a la etapa final; si se selecciona, no puede degradar automáticamente a LOCAL.
+- Esta limitación no elimina la obligación de autenticidad local, fencing, idempotencia, atomicidad y recuperación fail-closed.
+
+### 7.2 Bloqueos concretos para B1-B-03A
+
+Antes del diseño físico se deben cerrar, con evidencia y contratos:
+
+1. **Owner:** alinear `Memory.owner_id: UserId`, `AuthorizationSnapshot.owner_id`, el sujeto PRIVATE y `PrivateMemoryConsumerAuthorization.owner_identity_id`. Definir el binding canónico sin reinterpretar IDs existentes.
+2. **Consumer:** identificar la autoridad que emite/verifica `consumer_id` y cómo se vincula con actor/identidad sin hacerlos equivalentes.
+3. **PRIVATE revision:** definir revisión, snapshot, idempotencia e invalidación de `PRIVATE_MEMORY_AUTHORIZATION` a través de CAM, Consistency y recuperación.
+4. **Read admission:** comprobar que el inventario ME-03K y las proyecciones ME-03F/H cubren admisión, rutas, recibos y recuperación; documentar únicamente las tablas auxiliares estrictamente necesarias.
+5. **Consistency domains:** fijar el conjunto mínimo de autoridades que comparte orden serializable para cada operación, evitando tanto época global innecesaria como dominios aislados con carreras.
+6. **Content Store:** aprobar el contrato de staging, referencia opaca, lectura condicional, cuarentena, inventario de huérfanos, backup/restore y retención antes de seleccionar proveedor.
+7. **Invalidation on approval:** definir qué admisiones/versiones se cercan al mover el puntero vigente y qué evidencia permite completar o cancelar una entrega anterior.
+
+Estos puntos son bloqueos de diseño físico, no una solicitud de modificar la DB actual.
+
 ## 8. Estado de implementación y límites conocidos
 
 Evidencia de código/documentación inspeccionada en la rama documental base:
