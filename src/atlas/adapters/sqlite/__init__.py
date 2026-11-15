@@ -1,18 +1,22 @@
 """SQLite infrastructure for the single-server local profile."""
 
 from atlas.adapters.sqlite.database import SQLiteDatabase, SQLiteMigration, SQLiteUnitOfWork
+from atlas.adapters.sqlite.authority_changes import SQLiteAuthorityChangeStore
 from atlas.adapters.sqlite.recovery_gate import LocalSQLiteRecoveryGateAdapter
 from atlas.adapters.sqlite.migrations import (
     SQLITE_MIGRATIONS, CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3,
+    CORE_SCHEMA_V4,
 )
 
 __all__ = [
     "SQLiteDatabase",
     "SQLiteMigration",
     "SQLiteUnitOfWork",
+    "SQLiteAuthorityChangeStore",
     "LocalSQLiteRecoveryGateAdapter",
     "SQLITE_MIGRATIONS",
     "CORE_SCHEMA_V1",
     "CORE_SCHEMA_V2",
     "CORE_SCHEMA_V3",
+    "CORE_SCHEMA_V4",
 ]
