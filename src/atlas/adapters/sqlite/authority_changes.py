@@ -5,7 +5,7 @@ affected admissions, fence delivery routes, mutate authority sources, or claim
 reconciliation. Those operations must be composed by the single consistency
 authority inside the same SQLiteUnitOfWork.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import sqlite3
@@ -145,7 +145,7 @@ class SQLiteAuthorityChangeStore:
         canonical = _canonical_intent(intent)
         digest = hashlib.sha256(canonical).hexdigest()
         requested_at = _utc_text(intent.requested_at)
-        now = _utc_text(datetime.now(tz=intent.requested_at.tzinfo))
+        now = _utc_text(datetime.now(timezone.utc))
 
         with self._database.unit_of_work() as unit:
             connection = unit._connection_for(self._database)
