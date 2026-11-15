@@ -1,6 +1,6 @@
 # B1-B-03A-01 — Aclaración propuesta de owner_id e Identity Binding
 
-**Estado:** propuesta documental en consolidación. El propietario aprobó expresamente el texto propuesto para DM-01 §§4.2 y 6.4 el 15 de noviembre de 2026. La propuesta coordinada para B1-A-06 §2.1 y §4.2 permanece pendiente de revisión y aprobación. Los contratos normativos vigentes no han sido modificados.  
+**Estado:** propuesta documental en consolidación. El propietario aprobó el texto propuesto para DM-01 §§4.2 y 6.4 y para B1-A-06 §§2.1 y 4.2 el 15 de noviembre de 2026. Los contratos normativos vigentes no han sido modificados; la aprobación es documental y no autoriza implementación.  
 **Fecha:** 15 de noviembre de 2026.  
 **Decisión de diseño de origen:** aprobada por el propietario el 15 de noviembre de 2026.  
 **Ámbito:** DM-01 §4.2 y §6.4; B1-A-06 §§2.1, 4.2 y 5; autorización PRIVATE y su comprobación por CAM.  
@@ -60,18 +60,54 @@ Mantener el resto de las restricciones de §6.4: scope PRIVATE explícito, recur
 
 ## 4. Texto contractual propuesto para B1-A-06
 
-### Aclaración a §2.1 — Modelo y alcance
+### Sustitución de la última oración de §2.1 — Modelo y alcance
 
-Añadir después de la regla que exige propietario canónico coincidente con `owner_identity_id`:
+**Texto aprobado por el propietario el 15 de noviembre de 2026.** Sustituir únicamente la última oración de §2.1 por:
 
-> Para esta comparación, el propietario de Memory y el propietario de la autorización se expresan en espacios de identidad distintos. `Memory.owner_id` conserva el `UserId` global y canónico de Atlas; `owner_identity_id` es el `identity_id` canónico de Identity(USER). Identity Authority debe resolver y verificar la relación 1:1 vigente entre ambos identificadores mediante evidencia interna autoritativa. La cuenta externa del propietario se valida separadamente mediante el binding exacto `(issuer_id, subject)` hacia esa Identity(USER); el subject externo no se compara directamente con `Memory.owner_id` ni con `owner_identity_id`. CAM debe comprobar que el `UserId` resuelto coincide exactamente con `Memory.owner_id` y que el `identity_id` resuelto coincide exactamente con `owner_identity_id`. No se comparan ambos campos entre sí como strings ni se convierte uno en el otro. Si Identity Authority no puede resolver ambas relaciones de manera única y vigente, CAM deniega.
+> La autorización vincula exactamente un propietario, consumidor y memoria. La memoria debe tener scope `PRIVATE` y `project_id = NULL`.
+>
+> `Memory.owner_id` conserva el `UserId` global y canónico de Atlas. `PrivateMemoryConsumerAuthorization.owner_identity_id` identifica el `identity_id` de la Identity(USER) correspondiente al propietario.
+>
+> Identity Authority debe resolver y verificar la relación 1:1 vigente entre el `UserId` y el `identity_id` de esa misma Identity(USER), mediante evidencia interna autoritativa. CAM debe comprobar que el `UserId` resuelto coincide exactamente con `Memory.owner_id` y que el `identity_id` resuelto coincide exactamente con `owner_identity_id`.
+>
+> Cuando la operación se base en autenticación externa, la cuenta `(issuer_id, subject)` debe resolverse separadamente mediante su binding externo verificado hacia esa Identity(USER). El subject externo no se compara directamente con `Memory.owner_id` ni con `owner_identity_id`.
+>
+> La imposibilidad de resolver cualquiera de estas relaciones de forma única, vigente y verificable produce `DENY`.
 
-### Aclaración a §4.2 — Identidad y binding
+### Adición a §4.2 — Identidad y binding
 
-Añadir:
+**Texto aprobado por el propietario el 15 de noviembre de 2026.** Añadir después de las reglas actuales de binding:
 
-> Para vincular el propietario de una Memory con `owner_identity_id`, CAM consume evidencia de Identity Authority que permite verificar conjuntamente el `UserId` canónico, el `identity_id` de Identity(USER) y, cuando la autenticación sea externa, el binding exacto `(issuer_id, subject)`, incluidos estado y revisiones vigentes. Identity Authority debe confirmar la relación 1:1 entre UserId e Identity(USER), así como la relación del binding externo con esa identidad. El binding debe estar activo, verificado y vigente en el momento de la autorización. La evidencia no puede ser sustituida por datos enviados por el consumidor ni por coincidencia de atributos personales.
+> **Relación entre UserId e Identity(USER)**
+>
+> Atlas mantiene un `UserId` global y canónico, independiente de cualquier proveedor externo. Identity Authority es responsable de emitirlo, mantenerlo y resolver su correspondencia con la identidad interna.
+>
+> La relación entre `UserId` e Identity(USER) es 1:1 y autoritativa: cada `UserId` corresponde a exactamente una Identity(USER), y cada Identity(USER) corresponde a exactamente un `UserId`. Ambos identificadores son distintos y no se establece ni demuestra su correspondencia mediante igualdad textual.
+>
+> El binding externo `(issuer_id, subject)` identifica una cuenta autenticada dentro de un issuer confiable y se vincula a como máximo una Identity(USER). Una Identity(USER) puede tener varios bindings externos verificados mediante un procedimiento explícito.
+>
+> Identity Authority debe poder verificar conjuntamente:
+>
+> - el `UserId` canónico;
+> - el `identity_id` de Identity(USER);
+> - la relación 1:1 vigente entre ambos;
+> - el binding externo exacto `(issuer_id, subject)`, cuando la operación dependa de autenticación externa;
+> - el estado y las revisiones vigentes de la identidad y del binding.
+>
+> La evidencia debe permitir que CAM compruebe esas relaciones sin depender de identificadores declarados por el consumidor, coincidencias de atributos personales ni igualdad textual entre identificadores de espacios distintos.
+>
+> La relación UserId–Identity(USER) no constituye una autorización. Los bindings externos tampoco conceden permisos. CAM conserva la responsabilidad exclusiva de decidir la autorización de cada operación.
+>
+> El mecanismo físico de emisión, almacenamiento y verificación de UserId y de su relación con `identity_id` queda sujeto a una especificación posterior. Esta disposición no agrega campos a `Identity`, no modifica `Memory.owner_id` y no autoriza cambios de persistencia.
 
+### 4.1. Registro de aprobación
+
+El propietario aprobó el 15 de noviembre de 2026 las propuestas de B1-A-06 §§2.1 y 4.2 en los términos anteriores. La aprobación confirma que la comparación de propiedad se realiza entre el `UserId` canónico de Memory y el `identity_id` de la autorización mediante una relación 1:1 verificada por Identity Authority; no se comparan los identificadores entre sí ni se usa el subject externo como sustituto. También confirma que la relación UserId–Identity(USER) no concede autorización y que su mecanismo físico permanece pendiente.
+
+Esta aprobación no modifica por sí misma B1-A-06 vigente ni autoriza implementación, cambios de persistencia, migraciones o activación de flujos protegidos.
+
+---
+ 
 ## 5. Reglas de validación derivadas
 
 Para una lectura PRIVATE del propietario:
@@ -146,8 +182,10 @@ Hasta que estos puntos estén especificados, cualquier relación ambigua o no ve
 
 ## 9. Estado y siguiente paso
 
-La decisión conceptual y el texto propuesto para DM-01 §§4.2 y 6.4 están aprobados. La propuesta de B1-A-06 §2.1 debe ahora alinearse con la semántica canónica de UserId y owner_identity_id; su aprobación permanece pendiente. La propuesta de §4.2 de B1-A-06 también requiere comprobar que la evidencia identifica conjuntamente UserId, identity_id y el binding externo exacto.
+La decisión conceptual y el texto propuesto para DM-01 §§4.2 y 6.4 están aprobados. También están aprobadas las propuestas coordinadas para B1-A-06 §§2.1 y 4.2, según el texto registrado en la sección 4.
 
-Siguiente paso: revisar y aprobar por separado el texto coordinado de B1-A-06 §2.1 y §4.2. Los contratos vigentes no se sustituyen hasta la aprobación formal del paquete completo.
+Los contratos normativos vigentes no se sustituyen hasta la aprobación formal del paquete completo. La aprobación de estas propuestas no autoriza implementación, migraciones, cambios de SQLite ni activación de runtime protegido.
 
-No iniciar B1-B-03B ni modificar SQLite hasta cerrar este punto y los restantes bloqueos de B1-B-03A.
+Siguiente paso: continuar la revisión global de B1-B-03A, especialmente la separación entre VerifiedIdentityContext y la identidad del actor AGENT/SERVICE, y definir criterios explícitos de cierre del paquete.
+
+No iniciar B1-B-03B ni modificar SQLite hasta cerrar los restantes bloqueos de B1-B-03A y recibir autorización explícita.
