@@ -1,6 +1,6 @@
 # B1-B-03A-03 — Borrador de enmienda normativa: UserId e Identity Binding
 
-**Estado:** BORRADOR NORMATIVO — decisiones A–G aprobadas; propuestas para B1-A-06 §§4.2 y 5 aprobadas con precisiones; §6 y §7 aprobadas por el propietario el 15 de noviembre de 2026; propuestas para identity.md y operation-context.md (§§4–5 de este borrador) pendientes de revisión y aprobación.  
+**Estado:** BORRADOR NORMATIVO — decisiones A–G aprobadas; propuestas para B1-A-06 §§4.2 y 5 aprobadas con precisiones; §§4–7 de este borrador aprobadas por el propietario el 15 de noviembre de 2026. Los contratos normativos vigentes aún no han sido modificados y la implementación no está autorizada.  
 **Fecha:** 15 de noviembre de 2026.  
 **Documento de decisión:** [B1-B-03A-02 — Modelo lógico de UserId canónico y bindings externos](b1-b03a-02-canonical-user-and-external-identity-binding.md).  
 **Alcance:** proponer texto coordinado para B1-A-06, identity.md y operation-context.md.  
@@ -37,7 +37,7 @@ Atlas distingue tres conceptos:
 
 La relación entre UserId e Identity(USER) es exactamente 1:1: cada UserId corresponde a una única Identity(USER), y cada Identity(USER) corresponde a un único UserId. UserId e identity_id son identificadores distintos y no se exige igualdad textual entre ellos.
 
-La propiedad de una memoria y la identidad interna de su propietario se representan mediante identificadores distintos. `Memory.owner_id` conserva el `UserId` canónico de Atlas. Cuando una autorización u operación requiera identificar la Identity(USER) correspondiente al propietario, Identity Authority debe resolver y verificar la relación vigente entre ambos identificadores. En el caso de `PrivateMemoryConsumerAuthorization`, `owner_identity_id` debe corresponder exactamente a la Identity(USER) asociada al UserId propietario de la memoria. No se permite inferir esta correspondencia mediante igualdad textual entre `UserId` e `identity_id`. La ausencia, ambigüedad, inconsistencia o invalidez del binding interno produce denegación.
+La propiedad de una memoria y la identidad interna de su propietario se representan mediante identificadores distintos. `Memory.owner_id` conserva el `UserId` canónico de Atlas. Cuando una autorización u operación requiera identificar la Identity(USER) correspondiente al propietario, Identity Authority debe resolver y verificar la relación vigente entre ambos identificadores. En el caso de `PrivateMemoryConsumerAuthorization`, `owner_identity_id` debe corresponder exactamente a la Identity(USER) asociada al UserId propietario de la memoria. No se permite inferir esta correspondencia mediante igualdad textual entre `UserId` e `identity_id`. La ausencia, ambigüedad, inconsistencia o invalidez de la relación verificada produce denegación.
 
 Una Identity(USER) puede tener cero o varios bindings externos. Cada binding pertenece a una única Identity(USER). Una pareja exacta (issuer_id, subject) no puede vincularse a más de una identidad. La pareja permanece reservada después de la revocación de su binding y no puede reasignarse silenciosamente.
 
@@ -57,7 +57,7 @@ Un binding no concede autorización, Grants, permisos PRIVATE, delegación ni pr
 
 El propietario aprobó el 15 de noviembre de 2026 el texto propuesto para B1-A-06 §4.2, incorporando las precisiones sobre la relación entre `Memory.owner_id` y `PrivateMemoryConsumerAuthorization.owner_identity_id`, la semántica de `issuer_id` y la condición verificable de conservar un método de acceso o recuperación utilizable.
 
-Esta aprobación se limita a §4.2. No constituye aprobación de las propuestas de §§4–6 ni autoriza modificar los contratos normativos vigentes. La formalización normativa coordinada permanece pendiente hasta completar la revisión y aprobación del resto del paquete.
+Esta aprobación se limita a B1-A-06 §4.2. No constituye por sí sola aprobación de las propuestas para identity.md y operation-context.md incluidas en las secciones 4 y 5 de este borrador, ni autoriza modificar los contratos normativos vigentes.
 
 ## 3. Propuesta para B1-A-06 §5 — VerifiedIdentityContext
 
@@ -94,7 +94,7 @@ El resto de §5 —separación de Identity y CAM, ausencia de permisos implícit
 
 El propietario aprobó el 15 de noviembre de 2026 la propuesta para B1-A-06 §5, incorporando la distinción entre identidad autenticada, UserId contextual y actor ejecutor, así como la verificación independiente de la identidad del actor y de la delegación cuando corresponda.
 
-Esta aprobación se limita a §5. No constituye aprobación de las propuestas de §§4–6 ni autoriza modificar todavía los contratos normativos vigentes.
+Esta aprobación se limita a B1-A-06 §5. No constituye por sí sola aprobación de las propuestas para identity.md y operation-context.md incluidas en las secciones 4 y 5 de este borrador, ni autoriza modificar los contratos normativos vigentes.
 
 ## 4. Propuesta para identity.md
 
@@ -104,7 +104,7 @@ Añadir después de la sección 5, como nueva sección 5.1:
 
 Una Identity de tipo USER representa el actor interno de un usuario Atlas, pero identity_id no es el UserId del usuario. Atlas mantiene un UserId global y canónico separado, emitido por Identity Authority.
 
-La relación entre UserId e Identity(USER) es 1:1 y autoritativa. No se almacena ni se infiere mediante igualdad textual entre identificadores. La resolución se obtiene de Identity Authority y debe estar respaldada por un binding interno vigente.
+La relación entre UserId e Identity(USER) es 1:1 y autoritativa. Identity Authority mantiene y resuelve esta correspondencia mediante evidencia interna verificable y vigente. La relación no se establece ni se demuestra mediante igualdad textual entre identificadores. La resolución debe confirmar que ambos identificadores pertenecen a la misma identidad canónica y que sus revisiones y estados son válidos.
 
 Una Identity(USER) puede tener varios bindings externos verificados, cada uno identificado por (issuer_id, subject) y binding_id. Estos bindings permiten autenticar cuentas externas distintas para la misma identidad interna. La autenticación externa, el binding y la autorización son responsabilidades separadas.
 
@@ -116,6 +116,12 @@ Añadir a la sección 7, decisiones técnicas abiertas:
 - **Bindings externos:** el ciclo de vida lógico y las invariantes de issuer/subject se rigen por B1-A-06 §4.2. Los protocolos concretos de autenticación, registro de issuers y verificación criptográfica requieren especificación técnica por proveedor.
 
 No agregar UserId como campo a la entidad Identity en esta enmienda.
+
+### 4.1. Registro de aprobación de la propuesta para identity.md
+
+El propietario aprobó el 15 de noviembre de 2026 la propuesta de esta sección, con la siguiente corrección normativa: la relación entre UserId e Identity(USER) es 1:1 y autoritativa; Identity Authority mantiene y resuelve esta correspondencia mediante evidencia interna verificable y vigente. La resolución debe confirmar que ambos identificadores pertenecen a la misma identidad canónica y que sus revisiones y estados son válidos.
+
+Esta aprobación no define el mecanismo físico de persistencia o verificación, no agrega UserId como campo a Identity y no autoriza modificar todavía el contrato vigente identity.md.
 
 ## 5. Propuesta para operation-context.md
 
@@ -130,6 +136,12 @@ El UserId canónico no es equivalente a actor.identity_id. Para un actor USER, l
 La presencia de user_id en OperationContext sigue siendo dato contextual y no concede autorización. Su procedencia confiable permite identificar el usuario contextual, pero CAM debe evaluar por separado acción, recurso, scope, permisos, revisiones y vigencia. Un caller no puede elegir un UserId arbitrario para obtener acceso a memorias u otros recursos.
 
 No se cambia la estructura actual de OperationContext ni se redefine su campo user_id en esta enmienda.
+
+### 5.1. Registro de aprobación de la propuesta para operation-context.md
+
+El propietario aprobó el 15 de noviembre de 2026 la propuesta de esta sección. Se confirma que la frontera confiable construye OperationContext y establece el UserId canónico desde VerifiedIdentityContext vigente u otro mecanismo de autoridad expresamente definido; el caller no puede aportar user_id como prueba. Se conserva la distinción entre UserId y actor.identity_id, así como la verificación independiente de la delegación.
+
+Esta aprobación no cambia la estructura de OperationContext ni autoriza modificar todavía el contrato vigente operation-context.md.
 
 ## 6. Compatibilidad y límites
 
@@ -148,7 +160,7 @@ No se cambia la estructura actual de OperationContext ni se redefine su campo us
 
 El propietario aprobó el 15 de noviembre de 2026 esta versión de §6. La aprobación fija los límites de compatibilidad y evita reinterpretaciones automáticas de los contratos legacy, cambios de esquema o propiedad, emisión inferida de evidencia nueva y fallback silencioso.
 
-La aprobación se limita a esta sección y no autoriza implementación, migración, cambios de SQLite ni activación de flujos protegidos. Las propuestas de §§4–5 de este borrador siguen pendientes de aprobación.
+La aprobación se limita a esta sección y no autoriza implementación, migración, cambios de SQLite ni activación de flujos protegidos.
 
 ## 7. Cuestiones deliberadamente no resueltas
 
@@ -180,7 +192,7 @@ Estas cuestiones permanecen deliberadamente abiertas y deben especificarse antes
 
 ## 8. Aprobación solicitada y estado del paquete
 
-El propietario ha aprobado las propuestas para B1-A-06 §§4.2 y 5, así como las secciones 6 y 7 de este borrador. Las propuestas de §§4–5 de este documento —adiciones a `identity.md` y `operation-context.md`— siguen pendientes de revisión y aprobación.
+El propietario ha aprobado las propuestas para B1-A-06 §§4.2 y 5, así como las secciones 4–7 de este borrador. La aprobación de las secciones 4 y 5 incluye la corrección de la relación UserId–Identity(USER): Identity Authority mantiene y resuelve la correspondencia mediante evidencia interna verificable y vigente, sin introducir un mecanismo físico no especificado.
 
 Hasta la aprobación final del paquete coordinado:
 - los documentos normativos vigentes permanecen sin cambios;
@@ -189,4 +201,4 @@ Hasta la aprobación final del paquete coordinado:
 - B1-B-03B (diseño físico SQLite) no debe comenzar;
 - no se autoriza implementación, migración ni activación de runtime protegido.
 
-**Estado final:** decisiones A–G aprobadas; propuestas de B1-A-06 §§4.2 y 5 aprobadas; §§6–7 de este borrador aprobadas; propuestas para identity.md y operation-context.md pendientes; ninguna implementación autorizada.
+**Estado final:** decisiones A–G aprobadas; propuestas de B1-A-06 §§4.2 y 5 aprobadas; §§4–7 de este borrador aprobadas; contratos normativos vigentes sin cambios; ninguna implementación, migración ni activación de runtime protegido autorizada.
