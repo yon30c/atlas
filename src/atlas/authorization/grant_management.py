@@ -133,44 +133,81 @@ class GrantManagementService:
                 raise AuthorizationError(
                     "La clave de idempotencia ya pertenece a otro recurso"
                 )
-            return self._to_grant_result(existing, grant)
-
-        if grant.revoked_at is not None:
-            raise ContractError(
-                "El Grant ya está revocado y no tiene una operación coincidente"
+            if existing.status is not AuthorityChangeStatus.REQUESTED:
+                return self._to_grant_result(existing, grant)
+            reservation = self._change_coordinator.get_reservation(
+                existing.operation_id
             )
+            if reservation is None:
+                return self._blocked_for_grant(
+                    grant,
+                    operation_id=existing.operation_id,
+                    previous_revision=existing.previous_revision,
+                    proposed_revision=existing.proposed_revision,
+                )
+            if (
+                reservation.intent.consumer_id != self._consumer_id
+                or reservation.intent.idempotency_key != idempotency_key
+                or reservation.intent.authority_kind is not AuthorityKind.GRANT
+                or reservation.intent.authority_id != grant_id
+                or reservation.intent.expected_revision != grant.revision
+                or reservation.intent.proposed_revision != grant.revision + 1
+            ):
+                return self._blocked_for_grant(
+                    grant,
+                    operation_id=reservation.operation_id,
+                    previous_revision=reservation.intent.expected_revision,
+                    proposed_revision=reservation.intent.proposed_revision,
+                )
+        else:
+            if grant.revoked_at is not None:
+                raise ContractError(
+                    "El Grant ya está revocado y no tiene una operación coincidente"
+                )
 
-        intent = AuthorityChangeIntent(
-            idempotency_key=idempotency_key,
-            consumer_id=self._consumer_id,
-            authority_kind=AuthorityKind.GRANT,
-            authority_id=grant.grant_id,
-            expected_revision=grant.revision,
-            proposed_revision=grant.revision + 1,
-            change_kind="revoke",
-            request_context_ref=context.request_id,
-            requested_at=now,
-        )
-        try:
-            reservation = self._change_coordinator.reserve_change(intent)
-        except Exception as exc:
-            # El commit de la reserva puede haberse confirmado aunque se haya
-            # perdido la respuesta. Recuperar siempre por la misma clave.
-            recovered = self._change_coordinator.get_by_idempotency_key(
-                self._consumer_id,
-                idempotency_key,
+            intent = AuthorityChangeIntent(
+                idempotency_key=idempotency_key,
+                consumer_id=self._consumer_id,
+                authority_kind=AuthorityKind.GRANT,
+                authority_id=grant.grant_id,
+                expected_revision=grant.revision,
+                proposed_revision=grant.revision + 1,
+                change_kind="revoke",
+                request_context_ref=context.request_id,
+                requested_at=now,
             )
-            if recovered is not None:
-                return self._to_grant_result(recovered, grant)
-            raise ContractError(
-                "Reserva indeterminada; reintentar con la misma idempotency_key"
-            ) from exc
+            try:
+                reservation = self._change_coordinator.reserve_change(intent)
+            except Exception as exc:
+                # El commit de la reserva puede haberse confirmado aunque se haya
+                # perdido la respuesta. Recuperar siempre por la misma clave.
+                recovered = self._change_coordinator.get_by_idempotency_key(
+                    self._consumer_id,
+                    idempotency_key,
+                )
+                if recovered is not None:
+                    if (
+                        recovered.authority_kind is AuthorityKind.GRANT
+                        and recovered.authority_id == grant_id
+                        and recovered.status is AuthorityChangeStatus.REQUESTED
+                    ):
+                        reservation = self._change_coordinator.get_reservation(
+                            recovered.operation_id
+                        )
+                    else:
+                        return self._to_grant_result(recovered, grant)
+                else:
+                    raise ContractError(
+                        "Reserva indeterminada; reintentar con la misma idempotency_key"
+                    ) from exc
+            if reservation is None:
+                raise ContractError(
+                    "No se pudo reservar la operación; reintentar con la misma idempotency_key"
+                )
+            self._validate_reservation(reservation, intent)
+
         if reservation is None:
-            raise ContractError(
-                "No se pudo reservar la operación; reintentar con la misma idempotency_key"
-            )
-        self._validate_reservation(reservation, intent)
-
+            return self._blocked_for_grant(grant)
         if reservation.status is not AuthorityChangeStatus.REQUESTED:
             existing_result = self._change_coordinator.get_result(
                 reservation.operation_id
@@ -180,7 +217,7 @@ class GrantManagementService:
             return self._to_grant_result(existing_result, grant)
 
         authorization_request = GrantRevocationAuthorizationRequest(
-            request_id=context.request_id,
+            request_id=reservation.intent.request_context_ref,
             actor_identity_id=context.actor.identity_id,
             owner_user_id=grant.owner_user_id,
             grant_id=grant.grant_id,
