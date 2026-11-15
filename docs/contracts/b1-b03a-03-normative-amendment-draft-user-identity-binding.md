@@ -1,6 +1,6 @@
 # B1-B-03A-03 — Borrador de enmienda normativa: UserId e Identity Binding
 
-**Estado:** BORRADOR NORMATIVO — decisiones A–G aprobadas; §4.2 aprobada por el propietario el 15 de noviembre de 2026 con precisiones; §§3–6 pendientes de revisión y aprobación.  
+**Estado:** BORRADOR NORMATIVO — decisiones A–G aprobadas; §4.2 aprobada por el propietario el 15 de noviembre de 2026 con precisiones; §3 aprobada por el propietario el 15 de noviembre de 2026 con precisión sobre actor y delegación; §§4–6 pendientes de revisión y aprobación.  
 **Fecha:** 15 de noviembre de 2026.  
 **Documento de decisión:** [B1-B-03A-02 — Modelo lógico de UserId canónico y bindings externos](b1-b03a-02-canonical-user-and-external-identity-binding.md).  
 **Alcance:** proponer texto coordinado para B1-A-06, identity.md y operation-context.md.  
@@ -58,7 +58,7 @@ Un binding no concede autorización, Grants, permisos PRIVATE, delegación ni pr
 
 El propietario aprobó el 15 de noviembre de 2026 el texto propuesto para B1-A-06 §4.2, incorporando las precisiones sobre la relación entre `Memory.owner_id` y `PrivateMemoryConsumerAuthorization.owner_identity_id`, la semántica de `issuer_id` y la condición verificable de conservar un método de acceso o recuperación utilizable.
 
-Esta aprobación se limita a §4.2. No constituye aprobación de las propuestas de §§3–6 ni autoriza modificar los contratos normativos vigentes. La formalización normativa coordinada permanece pendiente hasta completar la revisión y aprobación del resto del paquete.
+Esta aprobación se limita a §4.2. No constituye aprobación de las propuestas de §§4–6 ni autoriza modificar los contratos normativos vigentes. La formalización normativa coordinada permanece pendiente hasta completar la revisión y aprobación del resto del paquete.
 
 ## 3. Propuesta para B1-A-06 §5 — VerifiedIdentityContext
 
@@ -81,9 +81,21 @@ Identity emite un contexto inmutable conceptual VerifiedIdentityContext con:
 
 El contexto acredita que la autenticación externa fue validada y resuelta por Identity Authority hacia la Identity(USER) y UserId indicados, dentro de su vigencia y revisiones. No es un Grant, no constituye autorización permanente y no transporta credenciales ni secretos.
 
-El contexto queda ligado a la revisión de Identity y del binding. CAM debe comprobar vigencia, estado, revisiones actuales y correspondencia exacta del actor y usuario contextual antes de admitir la operación. Una revisión obsoleta, binding revocado, issuer no confiable, expiración o evidencia incompleta producen denegación.
+El contexto queda ligado a la revisión de Identity y del binding. CAM debe comprobar vigencia, estado, revisiones actuales y correspondencia del usuario contextual antes de admitir la operación. Una revisión obsoleta, binding revocado, issuer no confiable, expiración o evidencia incompleta producen denegación.
+
+`VerifiedIdentityContext.identity_id` identifica exclusivamente la Identity(USER) cuya autenticación externa ha sido verificada. `VerifiedIdentityContext.user_id` identifica el UserId canónico asociado a esa identidad. Estos campos no identifican necesariamente al actor ejecutor de todas las operaciones realizadas dentro del contexto.
+
+CAM debe comprobar separadamente la identidad del actor efectivo y, cuando corresponda, la delegación explícita que relaciona al actor con el usuario contextual. Si el actor es el propio usuario, debe verificarse la correspondencia entre el actor y la identidad autenticada. Si el actor es un agente o servicio, debe verificarse su propia identidad y la delegación aplicable. La delegación no puede deducirse de la mera presencia de `user_id` ni de VerifiedIdentityContext.
+
+La presencia de VerifiedIdentityContext o de `user_id` no concede autoridad de ejecución ni demuestra por sí sola una delegación válida. Una discrepancia de identidad, ausencia de delegación exigible o evidencia incompleta produce denegación.
 
 El resto de §5 —separación de Identity y CAM, ausencia de permisos implícitos y coordinación con Consistency— permanece vigente sin cambios.
+
+### 3.1. Registro de aprobación de §5
+
+El propietario aprobó el 15 de noviembre de 2026 la propuesta para B1-A-06 §5, incorporando la distinción entre identidad autenticada, UserId contextual y actor ejecutor, así como la verificación independiente de la identidad del actor y de la delegación cuando corresponda.
+
+Esta aprobación se limita a §5. No constituye aprobación de las propuestas de §§4–6 ni autoriza modificar todavía los contratos normativos vigentes.
 
 ## 4. Propuesta para identity.md
 
