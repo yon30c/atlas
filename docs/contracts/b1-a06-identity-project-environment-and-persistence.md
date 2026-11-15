@@ -36,7 +36,7 @@ Modelo conceptual `PrivateMemoryConsumerAuthorization`:
 - `expires_at`
 - `revoked_at`
 
-La autorización vincula exactamente un propietario, consumidor y memoria. La memoria debe tener scope `PRIVATE`, `project_id = NULL` y propietario canónico coincidente con `owner_identity_id`.
+La autorización vincula exactamente un propietario, consumidor y memoria. La memoria debe tener scope `PRIVATE` y `project_id = NULL`. `Memory.owner_id` conserva el `UserId` global y canónico de Atlas; `owner_identity_id` identifica el `identity_id` canónico de la Identity(USER) asociada a ese mismo usuario. Identity Authority debe resolver y verificar la relación 1:1 vigente mediante evidencia interna autoritativa. CAM comprueba cada identificador en su propio espacio: no exige ni infiere igualdad textual entre `UserId` e `identity_id`. La correspondencia debe verificarse antes de admitir la autorización PRIVATE.
 
 ### 2.2 Permisos
 
@@ -105,20 +105,23 @@ Ninguna de estas responsabilidades se sustituye por otra.
 
 ### 4.2 Identidad y binding
 
-`identity_id` es interno, canónico, inmutable, independiente de correo/nombre/proveedor y no reutilizable.
+`identity_id` es interno, canónico, inmutable, independiente de correo/nombre/proveedor y no reutilizable. `UserId` es un identificador global y canónico de Atlas, distinto de `identity_id`, emitido y administrado por Identity Authority. Existe una relación 1:1 autoritativa entre un `UserId` y exactamente una Identity(USER), y cada Identity(USER) corresponde a exactamente un `UserId`. Identity Authority mantiene y resuelve esta relación mediante evidencia interna verificable y vigente; no se exige igualdad textual entre ambos identificadores.
 
-Binding conceptual: `(issuer, subject) -> identity_id`.
+Binding externo conceptual: `(issuer_id, subject) -> identity_id`.
 
-- Una pareja issuer+subject activa solo puede apuntar a una identidad.
-- Una identidad puede tener varios bindings verificados mediante un proceso explícito.
-- Un binding no concede autorización.
+- `issuer_id` identifica una entrada del registro de issuers confiable de Atlas; no es una cadena arbitraria elegida por el caller.
+- `subject` es opaco y se interpreta únicamente dentro del issuer correspondiente.
+- Una pareja exacta `(issuer_id, subject)` puede vincularse a como máximo una Identity(USER). La pareja permanece reservada y no reasignable incluso después de revocar el binding.
+- Una Identity(USER) puede tener varios bindings externos verificados mediante un proceso explícito.
+- Un binding no concede autorización, Grants, permisos PRIVATE, delegación ni propiedad.
 - No se crea ni modifica un binding a partir de identificadores enviados por un consumidor.
-- Un binding revocado es irreversible.
+- Un binding revocado es irreversible y permanece como tombstone no reasignable.
 - Un binding nuevo no hereda Grants ni autorizaciones.
 - No se fusionan identidades por coincidencia de atributos.
-- Cambiar de proveedor requiere un binding nuevo y un procedimiento explícito.
+- Cambiar de proveedor requiere añadir un binding nuevo a la misma Identity(USER), con un procedimiento explícito; la revocación del anterior debe preservar un método de acceso o recuperación utilizable.
+- La revocación/unlink no puede completarse si no queda al menos un método de acceso o recuperación utilizable conforme a una política aprobada.
 
-La autenticación verifica issuer, subject estable, firma/evidencia, audiencia, vigencia y estado. Correo o ID aislado no es prueba suficiente. Fallos o indisponibilidad producen denegación.
+La autenticación externa y la resolución del binding son distintas de la autorización. La frontera confiable valida el issuer configurado y el subject exacto y Identity Authority resuelve la Identity(USER) y el `UserId` canónico asociados. Email, nombre, teléfono o ID aislado no son prueba suficiente. Fallos, ambigüedad, expiración, revocación, pérdida de confianza o indisponibilidad producen denegación. CAM conserva la autoridad exclusiva para evaluar cada operación protegida.
 
 ### 4.3 Tipos y compatibilidad histórica
 
@@ -138,6 +141,7 @@ Identity emite un contexto inmutable conceptual `VerifiedIdentityContext`:
 - `identity_id`
 - `identity_type`
 - `identity_revision`
+- `user_id` (UserId canónico Atlas)
 - `binding_id`
 - `binding_revision`
 - `issuer_id`
@@ -147,6 +151,10 @@ Identity emite un contexto inmutable conceptual `VerifiedIdentityContext`:
 - `verification_ref`
 
 El contexto acredita identidad verificada dentro de su vigencia; no es un Grant ni una autorización permanente. No transporta credenciales ni sustituye la validación CAM.
+
+`VerifiedIdentityContext` se emite exclusivamente para una Identity(USER); `identity_type` debe identificar `USER`. `identity_id` identifica la Identity(USER) autenticada y `user_id` identifica el UserId canónico asociado. Estos campos no identifican necesariamente al actor ejecutor de todas las operaciones realizadas dentro del contexto.
+
+Cuando el actor ejecutor sea una Identity(USER), CAM debe comprobar que su `identity_id` coincide exactamente con el `identity_id` autenticado en el contexto y que el UserId contextual corresponde al mismo usuario canónico. Cuando el actor sea AGENT, SERVICE, WATCHER o SYSTEM, CAM debe verificar separadamente su identidad mediante una fuente confiable y comprobar la delegación explícita aplicable. `VerifiedIdentityContext` no autentica ni acredita por sí mismo esos actores. Esta disposición no define ni habilita mecanismos de autenticación para actores no USER ni les concede capacidades nuevas; requieren especificación independiente.
 
 CAM recibe una solicitud que identifica actor y revisiones, binding y revisión, acción exacta, tipo/ID/revisión esperada del recurso, consumidor cuando aplique y fecha de solicitud. Un `identity_id` aislado no es suficiente.
 
