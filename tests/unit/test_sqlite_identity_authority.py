@@ -407,22 +407,59 @@ class SQLiteIdentityAuthorityTests(unittest.TestCase):
                 "SELECT version FROM schema_migrations ORDER BY version"
             ).fetchall()
             violations = connection.execute("PRAGMA foreign_key_check").fetchall()
+            integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
 
         expected_by_kind = {
             kind: (identity_id, kind, status, revision, created_at, updated_at,
                    user_id if kind == "user" else None)
             for identity_id, kind, status, revision, created_at, updated_at in records
         }
+        expected_identity_rows = {
+            kind: values for kind, values in expected_by_kind.items()
+        }
+        expected_user_row = (user_id, records[0][0], user_created_at)
         self.assertEqual(
             {row["identity_kind"]: tuple(row) for row in migrated},
-            expected_by_kind,
+            expected_identity_rows,
         )
-        self.assertEqual(
-            tuple(user_row),
-            (user_id, records[0][0], user_created_at),
-        )
+        self.assertEqual(tuple(user_row), expected_user_row)
         self.assertEqual([item[0] for item in versions], [1, 2, 3, 4, 5, 6])
         self.assertEqual(violations, [])
+        self.assertEqual(integrity, "ok")
+
+        # Reapplying the complete migration history must not mutate v6 data.
+        legacy.apply_migrations(SQLITE_MIGRATIONS)
+        with legacy.connection() as connection:
+            rerun_identity_rows = {
+                row["identity_kind"]: tuple(row)
+                for row in connection.execute(
+                    """
+                    SELECT identity_id, identity_kind, identity_status, revision,
+                           created_at, updated_at, user_id
+                    FROM identity_records ORDER BY identity_kind
+                    """
+                )
+            }
+            rerun_user_row = tuple(connection.execute(
+                "SELECT user_id, identity_id, created_at FROM atlas_users"
+            ).fetchone())
+            rerun_versions = [
+                row[0] for row in connection.execute(
+                    "SELECT version FROM schema_migrations ORDER BY version"
+                )
+            ]
+            rerun_violations = connection.execute(
+                "PRAGMA foreign_key_check"
+            ).fetchall()
+            rerun_integrity = connection.execute(
+                "PRAGMA integrity_check"
+            ).fetchone()[0]
+
+        self.assertEqual(rerun_identity_rows, expected_identity_rows)
+        self.assertEqual(rerun_user_row, expected_user_row)
+        self.assertEqual(rerun_versions, [1, 2, 3, 4, 5, 6])
+        self.assertEqual(rerun_violations, [])
+        self.assertEqual(rerun_integrity, "ok")
 
     def test_v6_migration_rejects_legacy_orphan_atlas_user_atomically(self):
         database_path = Path(self.temp_dir.name) / "legacy-orphan-user.sqlite"
