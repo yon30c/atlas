@@ -74,6 +74,16 @@ class FakeCAM:
         )
 
 
+class DenyingCAM:
+    def authorize_revocation(self, request):
+        return None
+
+
+class UncertainProofAuthorization:
+    def verify_and_consume_for_change(self, **kwargs):
+        raise RuntimeError("consumption result unavailable")
+
+
 class FakeProofAuthorization:
     def verify_and_consume_for_change(
         self,
@@ -272,6 +282,24 @@ class GrantRevocationCoordinationTests(unittest.TestCase):
                 other_context, self.grant.grant_id, "idem-002", NOW
             )
         self.assertEqual(self.coordinator.reserve_calls, 0)
+
+    def test_cam_denial_aborts_only_when_coordinator_confirms_source_unchanged(self):
+        self.service._revocation_authorizer = DenyingCAM()
+        result = self.service.revoke(
+            self.context, self.grant.grant_id, "idem-denied", NOW
+        )
+        self.assertEqual(result.status, AuthorityChangeStatus.ABORTED)
+        self.assertEqual(self.coordinator.abort_calls, 1)
+        self.assertEqual(self.coordinator.apply_calls, 0)
+
+    def test_uncertain_proof_consumption_never_starts_or_aborts_change(self):
+        self.service._proof_authorization = UncertainProofAuthorization()
+        result = self.service.revoke(
+            self.context, self.grant.grant_id, "idem-uncertain", NOW
+        )
+        self.assertEqual(result.status, AuthorityChangeStatus.BLOCKED)
+        self.assertEqual(self.coordinator.abort_calls, 0)
+        self.assertEqual(self.coordinator.apply_calls, 0)
 
     def test_revoke_requires_direct_non_delegated_owner_action(self):
         delegated = replace(self.context, delegation=DelegationMode.DELEGATED)
