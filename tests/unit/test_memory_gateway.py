@@ -3,9 +3,11 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 from atlas.core.errors import ContractError
-from atlas.authorization.models import AuthorizationDecision, AuthorizationResult
-from atlas.core.context import OperationContext
-from atlas.core.identity import Identity, IdentityKind, IdentityStatus
+from atlas.memory.authorization import (
+    MemoryAuthorizationDecision,
+    MemoryAuthorizationResult,
+)
+from atlas.memory.context import MemoryRequestContext
 from atlas.memory.consistency import (
     AuthorityKind,
     AuthorityRevision,
@@ -35,17 +37,16 @@ MEMORY_ID = "018bcfe5-7b3a-7cc2-98c4-dc0c0c073a11"
 VERSION_ID = "018bcfe5-7b3a-7cc2-98c4-dc0c0c073a12"
 ROUTES = frozenset({"assistant-response", "api-response"})
 
-
 def make_context():
-    return OperationContext(
+    return MemoryRequestContext(
         request_id="request-1",
         correlation_id="correlation-1",
-        actor=Identity("identity-1", IdentityKind.USER, IdentityStatus.ACTIVE),
+        actor_id="identity-1",
+        actor_kind="user",
+        actor_status="active",
+        actor_revision=1,
         user_id="owner-1",
         origin="unit-test",
-        delegation=None,
-        project_id=None,
-        environment=None,
         purpose="test memory gateway",
         classification="internal",
         created_at=NOW,
@@ -229,8 +230,9 @@ class MemoryGatewayServiceTests(unittest.TestCase):
             identity_revision=AuthorityRevision(AuthorityKind.IDENTITY, "identity-1", 2),
         )
         stale_snapshot = replace(self.snapshot, revisions=revisions)
-        self.authorization.result = AuthorizationResult(
-            AuthorizationDecision.ALLOW, stale_snapshot
+        self.authorization.result = MemoryAuthorizationResult(
+            MemoryAuthorizationDecision.ALLOW,
+            stale_snapshot,
         )
         self.assertIsNone(
             self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
@@ -271,8 +273,9 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         other_actor_snapshot = replace(
             self.snapshot, actor_identity_id="other-identity", revisions=revisions
         )
-        self.authorization.result = AuthorizationResult(
-            AuthorizationDecision.ALLOW, other_actor_snapshot
+        self.authorization.result = MemoryAuthorizationResult(
+            MemoryAuthorizationDecision.ALLOW,
+            other_actor_snapshot,
         )
         self.assertIsNone(
             self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
@@ -282,8 +285,8 @@ class MemoryGatewayServiceTests(unittest.TestCase):
 
     def test_snapshot_for_another_request_is_rejected_before_admission(self):
         other_request_snapshot = replace(self.snapshot, request_id="other-request")
-        self.authorization.result = AuthorizationResult(
-            AuthorizationDecision.ALLOW, other_request_snapshot
+        self.authorization.result = MemoryAuthorizationResult(
+            MemoryAuthorizationDecision.ALLOW, other_request_snapshot
         )
         self.assertIsNone(
             self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
@@ -295,7 +298,7 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         self.snapshot = make_snapshot()
         self.admission = make_admission(self.snapshot)
         self.authorization = StubAuthorization(
-            AuthorizationResult(AuthorizationDecision.ALLOW, self.snapshot)
+            MemoryAuthorizationResult(MemoryAuthorizationDecision.ALLOW, self.snapshot)
         )
         self.authority = StubAuthority(self.admission)
         self.handle = FakeHandle(self.admission)
@@ -311,7 +314,7 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         self.context = make_context()
 
     def test_denial_never_admits_or_reads_content(self):
-        self.authorization.result = AuthorizationResult(AuthorizationDecision.DENY)
+        self.authorization.result = MemoryAuthorizationResult(MemoryAuthorizationDecision.DENY)
 
         result = self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
 
@@ -379,8 +382,8 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         other = make_snapshot(
             memory_id="018bcfe5-7b3a-7cc2-98c4-dc0c0c073a13"
         )
-        self.authorization.result = AuthorizationResult(
-            AuthorizationDecision.ALLOW, other
+        self.authorization.result = MemoryAuthorizationResult(
+            MemoryAuthorizationDecision.ALLOW, other
         )
 
         result = self.gateway.get_version(self.context, MEMORY_ID, VERSION_ID)
@@ -438,8 +441,8 @@ class MemoryGatewayServiceTests(unittest.TestCase):
     def test_grant_expiry_between_cam_and_admission_rejects_read(self):
         expires = NOW + timedelta(seconds=5)
         snapshot = make_snapshot(grant_expires_at=expires)
-        self.authorization.result = AuthorizationResult(
-            AuthorizationDecision.ALLOW, snapshot
+        self.authorization.result = MemoryAuthorizationResult(
+            MemoryAuthorizationDecision.ALLOW, snapshot
         )
         self.gateway = MemoryGatewayService(
             self.authorization,
@@ -460,8 +463,8 @@ class MemoryGatewayServiceTests(unittest.TestCase):
         snapshot = make_snapshot(grant_expires_at=expires)
         admission = make_admission(snapshot)
         handle = FakeHandle(admission)
-        self.authorization.result = AuthorizationResult(
-            AuthorizationDecision.ALLOW, snapshot
+        self.authorization.result = MemoryAuthorizationResult(
+            MemoryAuthorizationDecision.ALLOW, snapshot
         )
         self.authority.admission = admission
         self.content.handle = handle

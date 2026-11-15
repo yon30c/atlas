@@ -200,6 +200,7 @@ def execute_recovery_fencing(plan, fencer, verifier):
 class RecoveryJournalCoordinator(_RecoveryJournalCoordinator):
     def __init__(self, *args, **kwargs):
         kwargs.setdefault("trust_context_factory", FakeReceiptTrustContextFactory())
+        kwargs.setdefault("verified_recovery", args[0])
         super().__init__(*args, **kwargs)
 
 

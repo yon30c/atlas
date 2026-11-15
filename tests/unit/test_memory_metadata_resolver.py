@@ -1,8 +1,9 @@
-import unittest
 
-from atlas.core.errors import ContractError
+import unittest
 from datetime import datetime, timezone
 
+from atlas.core.errors import ContractError
+from atlas.memory.errors import MemoryContractError
 from atlas.authorization.memory_metadata_resolver import MemoryMetadataResolver
 from atlas.memory.metadata import (
     EnvironmentMetadata,
@@ -194,7 +195,7 @@ class MemoryMetadataResolverTests(unittest.TestCase):
             )
 
     def test_metadata_requires_positive_canonical_revisions(self):
-        with self.assertRaises(ContractError):
+        with self.assertRaises(MemoryContractError):
             MemoryVersionMetadata(
                 version_id=VERSION_ID,
                 memory_id=MEMORY_ID,
@@ -203,9 +204,9 @@ class MemoryMetadataResolverTests(unittest.TestCase):
                 parent_version_id=None,
                 revision=0,
             )
-        with self.assertRaises(ContractError):
+        with self.assertRaises(MemoryContractError):
             ProjectMetadata("project-1", "active", 0)
-        with self.assertRaises(ContractError):
+        with self.assertRaises(MemoryContractError):
             EnvironmentMetadata("environment-1", "active", 0)
 
     def test_invalid_ids_fail_closed_without_port_calls(self):

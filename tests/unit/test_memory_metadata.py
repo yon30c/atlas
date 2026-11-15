@@ -1,6 +1,6 @@
 import unittest
 
-from atlas.core.errors import ContractError
+from atlas.memory.errors import MemoryContractError
 from atlas.memory.metadata import (
     EnvironmentMetadata,
     MemoryVersionMetadata,
@@ -29,7 +29,7 @@ class MemoryMetadataTests(unittest.TestCase):
         self.assertEqual(metadata.classification, MemoryClassification.CONFIDENTIAL)
 
     def test_version_metadata_rejects_invalid_identifiers(self):
-        with self.assertRaises(ContractError):
+        with self.assertRaises(MemoryContractError):
             MemoryVersionMetadata(
                 version_id="not-a-uuid",
                 memory_id=MEMORY_ID,
@@ -40,7 +40,7 @@ class MemoryMetadataTests(unittest.TestCase):
             )
 
     def test_version_metadata_rejects_unknown_status_type(self):
-        with self.assertRaises(ContractError):
+        with self.assertRaises(MemoryContractError):
             MemoryVersionMetadata(
                 version_id=VERSION_ID,
                 memory_id=MEMORY_ID,
@@ -51,7 +51,7 @@ class MemoryMetadataTests(unittest.TestCase):
             )
 
     def test_version_metadata_rejects_unknown_classification_type(self):
-        with self.assertRaises(ContractError):
+        with self.assertRaises(MemoryContractError):
             MemoryVersionMetadata(
                 version_id=VERSION_ID,
                 memory_id=MEMORY_ID,
@@ -63,16 +63,16 @@ class MemoryMetadataTests(unittest.TestCase):
 
     def test_project_metadata_preserves_canonical_status(self):
         self.assertEqual(ProjectMetadata("project-001", "active", 1).status, "active")
-        with self.assertRaises(ContractError):
+        with self.assertRaises(MemoryContractError):
             ProjectMetadata("", "active", 1)
-        with self.assertRaises(ContractError):
+        with self.assertRaises(MemoryContractError):
             ProjectMetadata("project-001", " ", 1)
 
     def test_environment_metadata_preserves_canonical_status(self):
         self.assertEqual(EnvironmentMetadata("development", "active", 1).status, "active")
-        with self.assertRaises(ContractError):
+        with self.assertRaises(MemoryContractError):
             EnvironmentMetadata(" ", "active", 1)
-        with self.assertRaises(ContractError):
+        with self.assertRaises(MemoryContractError):
             EnvironmentMetadata("development", " ", 1)
 
 
