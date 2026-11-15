@@ -8,10 +8,13 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from atlas.authorization.models import (
+    Grant,
     GrantRevocationAuthorizationRequest,
     VerifiedGrantRevocationAuthorization,
 )
 from atlas.core.errors import ContractError
+from atlas.memory.authority_changes import AuthorityChangeStatus
+from atlas.memory.consistency import AuthorityKind
 
 if TYPE_CHECKING:
     from atlas.ports.grant_revocation_proof import (
@@ -233,97 +236,6 @@ class GrantRevocationProofAuthorizationService:
         )
 
 
-@dataclass(frozen=True, slots=True)
-class GrantRevocationAuthorityChangeAuthorization:
-    """Adapta evidencia CAM consumida al contrato neutral del coordinador."""
-
-    operation_id: str
-    request: GrantRevocationAuthorizationRequest
-    evidence: VerifiedGrantRevocationAuthorization
-    authorization_result: GrantRevocationAuthorizationResult
-    proposed_revision: int
-    consumed_at: datetime
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.operation_id, str) or not self.operation_id.strip():
-            raise ContractError("operation_id debe ser una cadena no vacía")
-        if not isinstance(self.request, GrantRevocationAuthorizationRequest):
-            raise ContractError("request debe ser GrantRevocationAuthorizationRequest")
-        if not isinstance(self.evidence, VerifiedGrantRevocationAuthorization):
-            raise ContractError("evidence debe ser VerifiedGrantRevocationAuthorization")
-        if not isinstance(
-            self.authorization_result, GrantRevocationAuthorizationResult
-        ) or not self.authorization_result.authorized:
-            raise ContractError("se requiere autorización CAM verificada y consumida")
-        if (
-            self.authorization_result.operation_id != self.operation_id
-            or self.authorization_result.grant_id != self.evidence.grant_id
-            or self.authorization_result.proof_id != self.evidence.proof_id
-            or self.request.request_id != self.evidence.request_id
-            or self.request.actor_identity_id != self.evidence.actor_identity_id
-            or self.request.owner_user_id != self.evidence.owner_user_id
-            or self.request.grant_id != self.evidence.grant_id
-            or self.request.expected_revision != self.evidence.expected_revision
-        ):
-            raise ContractError("evidencia CAM no corresponde a la operación exacta")
-        if (
-            isinstance(self.proposed_revision, bool)
-            or not isinstance(self.proposed_revision, int)
-            or self.proposed_revision != self.request.expected_revision + 1
-        ):
-            raise ContractError("proposed_revision debe ser expected_revision + 1")
-        _validate_utc(self.consumed_at, "consumed_at")
-        if not (
-            self.evidence.issued_at <= self.consumed_at < self.evidence.expires_at
-        ):
-            raise ContractError("la evidencia no estaba vigente al consumirse")
-
-    @property
-    def proof_id(self) -> str:
-        return self.evidence.proof_id
-
-    @property
-    def decision_id(self) -> str:
-        return self.evidence.decision_id
-
-    @property
-    def request_id(self) -> str:
-        return self.evidence.request_id
-
-    @property
-    def actor_identity_id(self) -> str:
-        return self.evidence.actor_identity_id
-
-    @property
-    def owner_id(self) -> str:
-        return self.evidence.owner_user_id
-
-    @property
-    def authority_kind(self):
-        from atlas.memory.consistency import AuthorityKind
-        return AuthorityKind.GRANT
-
-    @property
-    def authority_id(self) -> str:
-        return self.evidence.grant_id
-
-    @property
-    def expected_revision(self) -> int:
-        return self.evidence.expected_revision
-
-    @property
-    def issuer_id(self) -> str:
-        return self.evidence.issuer_id
-
-    @property
-    def issued_at(self) -> datetime:
-        return self.evidence.issued_at
-
-
-
-from atlas.authorization.models import Grant
-from atlas.memory.authority_changes import AuthorityChangeStatus
-from atlas.memory.consistency import AuthorityKind
 
 
 @dataclass(frozen=True, slots=True)
