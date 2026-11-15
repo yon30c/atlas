@@ -1,6 +1,6 @@
-# B1-B-03A-03 — Borrador de enmienda normativa: UserId e Identity Binding
+# B1-B-03A-03 — Enmienda normativa consolidada: UserId e Identity Binding
 
-**Estado:** CONSOLIDACIÓN NORMATIVA DOCUMENTAL EJECUTADA — decisiones A–G y propuestas coordinadas aprobadas por el propietario; cuatro contratos normativos actualizados en esta rama; verificación cruzada final pendiente antes del cierre de B1-B-03A. La implementación, migración y activación de runtime protegido no están autorizadas.  
+**Estado:** CERRADO NORMATIVAMENTE el 15 de noviembre de 2026 — decisiones A–G y propuestas coordinadas aprobadas; cuatro contratos normativos consolidados; verificación documental final completada. La implementación, migración y activación de runtime protegido no están autorizadas.  
 **Fecha:** 15 de noviembre de 2026.  
 **Documento de decisión:** [B1-B-03A-02 — Modelo lógico de UserId canónico y bindings externos](b1-b03a-02-canonical-user-and-external-identity-binding.md).  
 **Alcance:** registrar las propuestas aprobadas y su consolidación coordinada en DM-01, B1-A-06, identity.md y operation-context.md.  
@@ -220,4 +220,4 @@ La consolidación conserva `Memory.owner_id` como UserId global y canónico; `ow
 
 **Cuestiones posteriores abiertas:** recuperación de cuenta; linking/unlink operativo; ciclo de vida y confianza de issuers; fusión de identidades; validación criptográfica por issuer; garantías físicas y persistencia de identificadores; revisiones, invalidación y consistencia; migración legacy; evidencia y auditoría. Permanecen abiertas conforme a §7 y no bloquean por sí mismas el cierre normativo mientras no se habiliten los flujos dependientes.
 
-**Estado actual:** consolidación normativa documental ejecutada; verificación cruzada final pendiente. B1-B-03A todavía no se declara cerrado. B1-B-03B no debe comenzar hasta el cierre formal de esta fase y autorización explícita. No se autoriza implementación, migración, cambios de SQLite, autenticación operativa, linking/unlink operativo ni activación de runtime protegido.
+**Estado final:** B1-B-03A queda cerrado en su alcance normativo y documental conforme a los siete criterios aprobados. Las nueve cuestiones de §7 permanecen abiertas para especificaciones posteriores y bloquean los flujos que dependan de ellas. B1-B-03B no comienza por efecto de este cierre; requiere autorización explícita. No se autoriza implementación, migración, cambios de SQLite, autenticación operativa, linking/unlink operativo ni activación de runtime protegido.
