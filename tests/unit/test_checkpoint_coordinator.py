@@ -25,11 +25,11 @@ from atlas.memory.local_trust_policy import (
     LocalIssuerAuthorization,
 )
 from atlas.memory.trust import ConsistencyRecoveryVerificationStatus
-from atlas.ports.local_consistency_recovery import (
-    CheckpointProjectionResolution,
-    LocalConsistencyInventoryVerificationResult,
-    LocalVerificationStatus,
-    VerifiedLocalConsistencyInventories,
+from atlas.memory.ports.recovery import (
+    CheckpointProjectionResult,
+    RecoveryInventoryResult,
+    RecoveryVerificationStatus,
+    VerifiedRecoveryInventories,
 )
 from unit.test_memory_journal import CHECKPOINT_ID, NOW, RECORD_1, RECORD_2, read_admitted
 
@@ -57,7 +57,7 @@ class HistoricalKeys:
 
 class VerifiedInventory:
     def verify_recovery_inventories(self, request):
-        evidence = VerifiedLocalConsistencyInventories(
+        evidence = VerifiedRecoveryInventories(
             consistency_domain_id=request.state.domain_id,
             authority_epoch=request.state.authority_epoch,
             head_sequence=request.state.head_sequence,
@@ -69,8 +69,8 @@ class VerifiedInventory:
             verified_reference_ids=frozenset(request.projection.emission_ids),
             verification_id="checkpoint-coordinator-inventory-verification",
         )
-        return LocalConsistencyInventoryVerificationResult(
-            LocalVerificationStatus.VERIFIED, evidence
+        return RecoveryInventoryResult(
+            RecoveryVerificationStatus.VERIFIED, evidence
         )
 
 
@@ -86,8 +86,8 @@ class SwitchableProjectionStore:
 
     def resolve_checkpoint_projection(self, request):
         if self.unavailable:
-            return CheckpointProjectionResolution(
-                LocalVerificationStatus.UNAVAILABLE
+            return CheckpointProjectionResult(
+                RecoveryVerificationStatus.UNAVAILABLE
             )
         return self.delegate.resolve_checkpoint_projection(request)
 
