@@ -208,6 +208,34 @@ class GrantRevocationProofAuthorizationService:
             status = GrantRevocationAuthorizationStatus.CONSUMPTION_UNCERTAIN
         return self._result(operation_id, request.grant_id, evidence.proof_id, status)
 
+    def verify_and_consume_for_change(
+        self,
+        request: GrantRevocationAuthorizationRequest,
+        evidence: VerifiedGrantRevocationAuthorization,
+        operation_id: str,
+        idempotency_key: str,
+        proposed_revision: int,
+        now: datetime,
+    ) -> GrantRevocationAuthorityChangeAuthorization | GrantRevocationAuthorizationResult:
+        """Produce el sobre neutral solo tras verificación y consumo exitosos."""
+        result = self.verify_and_consume(
+            request=request,
+            evidence=evidence,
+            operation_id=operation_id,
+            idempotency_key=idempotency_key,
+            now=now,
+        )
+        if not result.authorized:
+            return result
+        return GrantRevocationAuthorityChangeAuthorization(
+            operation_id=operation_id,
+            request=request,
+            evidence=evidence,
+            authorization_result=result,
+            proposed_revision=proposed_revision,
+            consumed_at=now,
+        )
+
     @staticmethod
     def _matches_request(
         request: GrantRevocationAuthorizationRequest,
