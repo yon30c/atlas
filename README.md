@@ -69,6 +69,7 @@ Enmiendas y contratos relacionados:
 
 - [B1-A-06 — identidad, Project/Environment y persistencia compartida](docs/contracts/b1-a06-identity-project-environment-and-persistence.md)
 - [B1-B-02 — modelo lógico integrado y matriz de consistencia contractual](docs/design/b1-b02-logical-model-and-contract-consistency.md)
+- [B1-B-03A-01 — propuesta de aclaración owner_id / Identity Binding](docs/contracts/b1-b03a-01-owner-identity-binding-clarification.md)
 - [Contrato técnico de Memory Engine](docs/design/memory-engine-technical-contract.md)
 - [Independencia de Memory Engine respecto a consumidores](docs/design/memory-engine-project-independence-implementation.md)
 - [DM-01 — especificación del modelo de dominio](docs/design/domain-model-specification-dm-01.md)
