@@ -212,9 +212,17 @@ No se afirma que todos estos coordinadores o repositorios existan hoy. La tabla 
 
 **Riesgo:** dos identificadores distintos podrían representar al propietario y divergir; no se puede asumir que user_id sea identity_id.
 
-**Propuesta técnica:** hacer que el propietario de Memory se refiera semánticamente al `identity_id` canónico. Mantener el nombre de campo `owner_id` solo si el contrato documenta explícitamente que su valor es identity_id, o migrar a `owner_identity_id` mediante enmienda y migración compatible. No almacenar el subject externo como owner.
+**Propuesta técnica refinada tras revisar DM-01 §6.4 y B1-A-06 §§2.1, 4.2 y 5:**
 
-**Estado:** propuesta pendiente de aprobación contractual; no cambiar DM-01 por inferencia.
+- Conservar `Memory.owner_id: UserId` como el subject/user ID canónico al que está ligada la memoria, sin reinterpretarlo como `identity_id`.
+- `owner_identity_id` en PRIVATE authorization representa la identidad interna canónica del propietario.
+- La relación entre ambos valores se demuestra mediante un binding verificado de Identity Authority: el binding del propietario resuelve el subject exacto almacenado en `Memory.owner_id` hacia el `identity_id` exacto usado por CAM.
+- No se exige igualdad textual entre `owner_id` y `owner_identity_id`; se exige una relación autenticada y vigente. Correo, nombre, ID declarado por el caller o igualdad casual de strings no sirven como prueba.
+- Para una lectura PRIVATE del propietario, el sujeto autenticado debe coincidir con `Memory.owner_id`, y la identidad USER del actor debe estar vinculada a ese sujeto. Para autorización PRIVATE delegada, CAM debe comprobar que `owner_identity_id` corresponde al propietario de la memoria mediante esa misma fuente de identidad confiable.
+
+Esta interpretación preserva los tipos y semántica explícitos de DM-01, y da significado verificable al `owner_identity_id` de B1-A-06 sin duplicar ni confundir identidades. Debe registrarse como aclaración contractual conjunta antes del esquema físico.
+
+**Estado:** recomendación técnica, pendiente de aceptación/registro contractual; no cambiar el tipo del campo ni realizar migraciones por inferencia.
 
 ### D-02 — Payload externo y atomicidad
 
