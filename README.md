@@ -123,6 +123,7 @@ La lista y el resultado de las pruebas deben corresponder al checkout concreto y
 ## Hoja de ruta inmediata
 
 1. **B1-B-03A — en curso:** D-01 tiene dos decisiones aprobadas (2026-11-15): `Memory.owner_id` permanece como `UserId/subject` y se relaciona con `owner_identity_id` mediante Identity Binding verificado; `UserId` es global y canónico en Atlas, independiente del issuer externo. Falta especificar la autoridad de emisión y el binding verificable entre `(issuer, subject)`, `identity_id` USER y `UserId`; la formalización normativa sigue pendiente.
+2. **Propuesta pendiente de aprobación:** [B1-B-03A-02 — modelo lógico de UserId y bindings externos](docs/contracts/b1-b03a-02-canonical-user-and-external-identity-binding.md). Incluye autoridad emisora recomendada, linking/unlinking, recuperación, colisiones y compatibilidad con el binding legado.
 2. Cerrar D-02 a D-07: autoridad de `consumer_id`, invalidación por aprobación de versión, compatibilidad PRIVATE con D4O-F/G/H, inventario admissions/routes ME-03K, consistency domains/epochs y contrato lógico del Content Store.
 3. Registrar decisiones y próximos pasos en [B1-B-02](docs/design/b1-b02-logical-model-and-contract-consistency.md#11-registro-de-decisiones-y-continuidad-de-trabajo).
 4. Completar B1-B-03B: diseño físico SQLite y plan incremental de migraciones, preservando schema v4.
