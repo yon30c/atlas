@@ -11,8 +11,8 @@ from atlas.authorization.identity_binding import AuthenticatedUserSubject
 from atlas.authorization.memory_metadata_resolver import MemoryMetadataResolver
 from atlas.authorization.memory_service import MemoryAuthorizationService
 from atlas.authorization.models import Grant, GrantResourceScope, AuthorizationDecision
-from atlas.core.context import OperationContext
-from atlas.core.identity import Identity, IdentityKind, IdentityStatus
+from atlas.adapters.atlas_memory_authorization import AtlasMemoryAuthorizationAdapter
+from atlas.memory.context import MemoryRequestContext
 from atlas.memory.consistency import (
     DeliveryRouteSet,
     EgressReceipt,
@@ -242,11 +242,20 @@ class FixedClock:
 
 
 def make_context(project_id=None, environment=None):
-    return OperationContext(
+    """Contexto emitido por la frontera confiable simulada de esta prueba.
+
+    Esto prueba la composición CAM/Gateway después de autenticar al actor;
+    no pretende probar la autenticación ni crear un mapper para contextos
+    arbitrarios de AtlasCore.
+    """
+    return MemoryRequestContext(
         request_id="request-1",
         correlation_id="correlation-1",
-        actor=Identity("identity-1", IdentityKind.USER, IdentityStatus.ACTIVE),
-        user_id="untrusted-context-user",
+        actor_id="identity-1",
+        actor_kind="user",
+        actor_status="active",
+        actor_revision=1,
+        user_id="owner-1",
         origin="integration-test",
         delegation=None,
         project_id=project_id,
@@ -316,8 +325,9 @@ class MemoryGatewayAuthorizationIntegrationTests(unittest.TestCase):
         self.content = SpyContentPort()
         self.authority = FakeReadAuthority()
         self.routes = DeliveryRouteSet(frozenset({"assistant-response"}))
+        authorization_port = AtlasMemoryAuthorizationAdapter(authorization)
         self.gateway = MemoryGatewayService(
-            authorization,
+            authorization_port,
             self.content,
             self.authority,
             self.routes,
@@ -454,6 +464,7 @@ class MemoryGatewayAuthorizationIntegrationTests(unittest.TestCase):
 
         self.assertIsNone(result)
         self.assertEqual(self.content.calls, [])
+        self.assertEqual(self.grant_repository.owner_requests, ["owner-1"])
 
     def test_project_memory_with_grant_for_another_project_is_denied(self):
         self.memory_port.memory = make_memory(MemoryScopeKind.PROJECT, PROJECT_ID)
@@ -467,6 +478,7 @@ class MemoryGatewayAuthorizationIntegrationTests(unittest.TestCase):
 
         self.assertIsNone(result)
         self.assertEqual(self.content.calls, [])
+        self.assertEqual(self.grant_repository.owner_requests, ["owner-1"])
 
     def test_project_memory_with_grant_for_another_memory_id_is_denied(self):
         self.memory_port.memory = make_memory(MemoryScopeKind.PROJECT, PROJECT_ID)
@@ -482,6 +494,7 @@ class MemoryGatewayAuthorizationIntegrationTests(unittest.TestCase):
 
         self.assertIsNone(result)
         self.assertEqual(self.content.calls, [])
+        self.assertEqual(self.grant_repository.owner_requests, ["owner-1"])
 
     def test_invalid_identity_binding_fails_closed_before_content_read(self):
         self.identity_port.actor_identity_id = "different-actor"
@@ -490,6 +503,7 @@ class MemoryGatewayAuthorizationIntegrationTests(unittest.TestCase):
 
         self.assertIsNone(result)
         self.assertEqual(self.content.calls, [])
+        self.assertEqual(self.identity_port.calls, ["identity-1"])
 
 
     def test_mismatched_canonical_memory_metadata_fails_closed(self):
