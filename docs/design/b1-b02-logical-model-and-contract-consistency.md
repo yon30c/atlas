@@ -400,10 +400,11 @@ Este registro es la bitácora mínima para retomar el proyecto sin depender del 
 | Fecha | ID | Decisión | Estado |
 |---|---|---|---|
 | 2026-11-15 | B1-B-03A / D-01 | `Memory.owner_id` permanece como `UserId/subject`; `owner_identity_id` representa `identity_id` canónico; el vínculo se acredita con Identity Binding verificado y vigente. | Aprobada por el propietario; formalización normativa pendiente |
+| 2026-11-15 | B1-B-03A / D-01b | `UserId` es global y canónico en Atlas, independiente del issuer externo. Identity Authority debe relacionar los bindings externos con la identidad USER y el UserId canónico mediante evidencia verificable. | Aprobada por el propietario; autoridad de emisión y modelo de binding pendientes |
 
 ### Próximos pasos obligatorios
 
-1. **Propuesta redactada:** [B1-B-03A-01 — Aclaración propuesta de owner_id e Identity Binding](../contracts/b1-b03a-01-owner-identity-binding-clarification.md). Revisar el namespace/unicidad de UserId respecto de issuer/subject; después cerrar el texto y solicitar aprobación explícita antes de modificar DM-01 y B1-A-06.
+1. **Decisión aprobada y registrada:** `UserId` es global y canónico en Atlas. [B1-B-03A-01 — Aclaración de owner_id e Identity Binding](../contracts/b1-b03a-01-owner-identity-binding-clarification.md) documenta la semántica. Próximo trabajo: definir la autoridad de emisión y el binding verificable `issuer/subject -> identity_id USER -> UserId`; después cerrar y someter a aprobación la enmienda normativa DM-01/B1-A-06.
 2. Identificar y comparar las fuentes/contratos disponibles para determinar quién emite y verifica `consumer_id`; no crear una tabla `consumers` ni derivarlo de `identity_id` sin decisión aprobada.
 3. Completar la matriz de compatibilidad de `PRIVATE_MEMORY_AUTHORIZATION` con D4O-F/G/H: AuthorityKind, revision set, snapshot, invalidation, source CAS, idempotencia y recovery evidence.
 4. Contrastar admissions, routes e inventarios ME-03K con ME-03F/H y documentar si falta alguna estructura, evitando duplicar las proyecciones existentes.
@@ -417,4 +418,4 @@ Este registro es la bitácora mínima para retomar el proyecto sin depender del 
 
 Al terminar cada sesión/fase, actualizar este documento y el roadmap del README con: commit base, cambios realizados, decisiones aprobadas, decisiones pendientes, verificaciones ejecutadas y resultado, riesgos/bloqueos y el siguiente paso exacto. No marcar como completado algo que solo esté propuesto o documentado parcialmente.
 
-**Estado actual:** B1-B-03A en curso. D-01 tiene decisión de diseño aprobada y una propuesta de aclaración redactada en B1-B-03A-01; queda pendiente verificar la unicidad/namespace de UserId frente a issuer/subject y aprobar el texto normativo final. D-02 a D-07 siguen pendientes. No se ha autorizado diseño físico, migración ni implementación.
+**Estado actual (2026-11-15):** B1-B-03A en curso. D-01 tiene aprobadas ambas decisiones conceptuales: (a) `Memory.owner_id: UserId/subject` se relaciona con `owner_identity_id` mediante Identity Binding verificado y vigente; (b) `UserId` es global y canónico en Atlas, independiente del issuer externo. La propuesta B1-B-03A-01 registra la semántica y sus consecuencias. Pendiente especificar la autoridad interna que emite `UserId`, el binding verificable entre `UserId`, `identity_id` y `(issuer, subject)`, y aprobar el texto normativo final. D-02 a D-07 siguen pendientes. No se ha autorizado diseño físico, migración ni implementación.
