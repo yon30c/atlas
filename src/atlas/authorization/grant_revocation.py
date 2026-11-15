@@ -7,17 +7,17 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from atlas.ports.grant_revocation_proof import (
-        GrantRevocationProofConsumptionPort,
-        GrantRevocationProofVerifierPort,
-    )
-
 from atlas.authorization.models import (
     GrantRevocationAuthorizationRequest,
     VerifiedGrantRevocationAuthorization,
 )
 from atlas.core.errors import ContractError
+
+if TYPE_CHECKING:
+    from atlas.ports.grant_revocation_proof import (
+        GrantRevocationProofConsumptionPort,
+        GrantRevocationProofVerifierPort,
+    )
 
 
 class ProofConsumptionStatus(str, Enum):
