@@ -403,7 +403,7 @@ Este registro es la bitácora mínima para retomar el proyecto sin depender del 
 
 ### Próximos pasos obligatorios
 
-1. Redactar una aclaración contractual conjunta para DM-01 y B1-A-06 que preserve los tipos existentes y defina exactamente cómo se valida el binding owner/subject/identity.
+1. **Propuesta redactada:** [B1-B-03A-01 — Aclaración propuesta de owner_id e Identity Binding](../contracts/b1-b03a-01-owner-identity-binding-clarification.md). Revisar el namespace/unicidad de UserId respecto de issuer/subject; después cerrar el texto y solicitar aprobación explícita antes de modificar DM-01 y B1-A-06.
 2. Identificar y comparar las fuentes/contratos disponibles para determinar quién emite y verifica `consumer_id`; no crear una tabla `consumers` ni derivarlo de `identity_id` sin decisión aprobada.
 3. Completar la matriz de compatibilidad de `PRIVATE_MEMORY_AUTHORIZATION` con D4O-F/G/H: AuthorityKind, revision set, snapshot, invalidation, source CAS, idempotencia y recovery evidence.
 4. Contrastar admissions, routes e inventarios ME-03K con ME-03F/H y documentar si falta alguna estructura, evitando duplicar las proyecciones existentes.
@@ -417,4 +417,4 @@ Este registro es la bitácora mínima para retomar el proyecto sin depender del 
 
 Al terminar cada sesión/fase, actualizar este documento y el roadmap del README con: commit base, cambios realizados, decisiones aprobadas, decisiones pendientes, verificaciones ejecutadas y resultado, riesgos/bloqueos y el siguiente paso exacto. No marcar como completado algo que solo esté propuesto o documentado parcialmente.
 
-**Estado actual:** B1-B-03A en curso. D-01 tiene decisión de diseño aprobada; su formalización normativa y D-02 a D-07 siguen pendientes. No se ha autorizado diseño físico, migración ni implementación.
+**Estado actual:** B1-B-03A en curso. D-01 tiene decisión de diseño aprobada y una propuesta de aclaración redactada en B1-B-03A-01; queda pendiente verificar la unicidad/namespace de UserId frente a issuer/subject y aprobar el texto normativo final. D-02 a D-07 siguen pendientes. No se ha autorizado diseño físico, migración ni implementación.
