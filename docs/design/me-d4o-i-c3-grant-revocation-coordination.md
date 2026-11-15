@@ -23,9 +23,9 @@ Eliminar la escritura directa de revocaciones desde `GrantManagementService`. La
 
 `AuthorityChangeIntent` no contiene `operation_id`: ese identificador es asignado y persistido por el coordinador. La intención incluye consumer_id explícito, clave idempotente, autoridad/recurso exacto, revisión esperada/propuesta, tipo de cambio, referencia del contexto y timestamp.
 
-El `consumer_id` es configuración explícita de la composición confiable. No se deriva del nombre del proyecto, del contexto del usuario ni de un identificador suministrado libremente en cada llamada.
+El `consumer_id` es configuración explícita de la composición confiable. No se deriva del nombre del proyecto, del contexto del usuario ni de un identificador suministrado libremente en cada llamada. El puerto `Clock` existente se usa después de la respuesta CAM para validar la vigencia real de emisión y fijar el instante de consumo.
 
-Los reintentos recuperan la intención original y conservan su `request_context_ref` y `requested_at`; no sustituyen el contexto CAM original por uno nuevo. Una clave reutilizada para otro recurso no puede obtener ni ejecutar la operación previa.
+Los reintentos recuperan la intención original y conservan su `request_context_ref` y `requested_at`; no sustituyen el contexto CAM original por uno nuevo. La comparación de idempotencia conserva todos los campos semánticos de la intención; el timestamp de una repetición no reemplaza el timestamp original persistido. Una clave reutilizada para otro recurso no puede obtener ni ejecutar la operación previa.
 
 ## Incertidumbre y fail-closed
 
@@ -42,6 +42,7 @@ Los reintentos recuperan la intención original y conservan su `request_context_
 ### GrantManagementService
 
 - Mantiene validaciones de propietario como defensa adicional.
+- La composición puede mantener disponible la emisión de Grants sin configurar revocación; en ese caso, `revoke` falla cerrado. Para habilitar revocación deben inyectarse conjuntamente CAM, verificación/consumo, Clock y coordinador.
 - No llama `GrantRepository.update` para revocar.
 - No genera operation_id ni invalidation_id.
 - No decide permisos CAM ni realiza invalidación.
