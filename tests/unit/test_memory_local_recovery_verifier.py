@@ -29,10 +29,12 @@ from atlas.memory.trust import (
     ConsistencyRecoveryTrustContext,
     ConsistencyRecoveryVerificationStatus,
 )
-from atlas.ports.local_consistency_recovery import (
-    LocalConsistencyInventoryVerificationResult,
-    LocalVerificationStatus,
-    VerifiedLocalConsistencyInventories,
+from atlas.memory.ports.recovery import (
+    CheckpointProjectionResult,
+    RecoveryInventoryResult,
+    RecoveryVerificationStatus,
+    VerifiedCheckpointProjection,
+    VerifiedRecoveryInventories,
 )
 
 NOW = datetime(2026, 11, 14, 12, 0, tzinfo=timezone.utc)
@@ -151,16 +153,16 @@ class LocalConsistencyRecoveryVerifierTests(unittest.TestCase):
                 return KEY if key_reference == "local-key-1" else None
 
         self.keys = Keys()
-        self.inventory_status = LocalVerificationStatus.VERIFIED
+        self.inventory_status = RecoveryVerificationStatus.VERIFIED
         self.inventory_receipts = frozenset()
 
         class Inventory:
             def verify_recovery_inventories(inner_self, request):
-                if self.inventory_status is not LocalVerificationStatus.VERIFIED:
-                    return LocalConsistencyInventoryVerificationResult(
+                if self.inventory_status is not RecoveryVerificationStatus.VERIFIED:
+                    return RecoveryInventoryResult(
                         self.inventory_status
                     )
-                evidence = VerifiedLocalConsistencyInventories(
+                evidence = VerifiedRecoveryInventories(
                     consistency_domain_id=request.state.domain_id,
                     authority_epoch=request.state.authority_epoch,
                     head_sequence=request.state.head_sequence,
@@ -172,8 +174,8 @@ class LocalConsistencyRecoveryVerifierTests(unittest.TestCase):
                     verified_reference_ids=frozenset({"snapshot-local"}),
                     verification_id="inventory-check-1",
                 )
-                return LocalConsistencyInventoryVerificationResult(
-                    LocalVerificationStatus.VERIFIED, evidence
+                return RecoveryInventoryResult(
+                    RecoveryVerificationStatus.VERIFIED, evidence
                 )
 
         self.inventory = Inventory()
@@ -207,7 +209,7 @@ class LocalConsistencyRecoveryVerifierTests(unittest.TestCase):
 
     def test_reports_inventory_unavailable_without_opening_verification(self):
         state = build_recovery_state()
-        self.inventory_status = LocalVerificationStatus.UNAVAILABLE
+        self.inventory_status = RecoveryVerificationStatus.UNAVAILABLE
         result = self.verifier.verify_recovery_state(state, self.context)
         self.assertIs(result.status, ConsistencyRecoveryVerificationStatus.UNAVAILABLE)
 
@@ -285,9 +287,8 @@ class LocalConsistencyRecoveryVerifierTests(unittest.TestCase):
 
     def test_verifies_checkpoint_projection_before_replaying_tail(self):
         from atlas.memory.journal_reducer import ConsistencyJournalReducer
-        from atlas.ports.local_consistency_recovery import (
-            CheckpointProjectionResolution,
-            LocalVerificationStatus,
+        from atlas.memory.ports.recovery import (
+            CheckpointProjectionResult,
             VerifiedCheckpointProjection,
         )
 
@@ -346,8 +347,8 @@ class LocalConsistencyRecoveryVerifierTests(unittest.TestCase):
                     projection=base_projection,
                     verification_id="checkpoint-verification",
                 )
-                return CheckpointProjectionResolution(
-                    LocalVerificationStatus.VERIFIED, evidence
+                return CheckpointProjectionResult(
+                    RecoveryVerificationStatus.VERIFIED, evidence
                 )
 
         verifier = LocalConsistencyRecoveryVerifier(
