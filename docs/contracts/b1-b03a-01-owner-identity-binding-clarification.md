@@ -1,6 +1,6 @@
 # B1-B-03A-01 — Aclaración propuesta de owner_id e Identity Binding
 
-**Estado:** propuesta documental para revisión; no es todavía una enmienda normativa aprobada.  
+**Estado:** propuesta documental en consolidación. El propietario aprobó expresamente el texto propuesto para DM-01 §§4.2 y 6.4 el 15 de noviembre de 2026. La propuesta coordinada para B1-A-06 §2.1 y §4.2 permanece pendiente de revisión y aprobación. Los contratos normativos vigentes no han sido modificados.  
 **Fecha:** 15 de noviembre de 2026.  
 **Decisión de diseño de origen:** aprobada por el propietario el 15 de noviembre de 2026.  
 **Ámbito:** DM-01 §4.2 y §6.4; B1-A-06 §§2.1, 4.2 y 5; autorización PRIVATE y su comprobación por CAM.  
@@ -20,26 +20,41 @@ La decisión aprobada conserva ambos identificadores con semánticas distintas. 
 
 ## 2. Decisión de diseño aprobada
 
-1. `Memory.owner_id` permanece como `UserId`, con semántica de subject/user ID autenticado definida por DM-01. No se cambia su tipo.
+1. `Memory.owner_id` permanece como `UserId` global y canónico de Atlas. No representa un subject externo ni se cambia su tipo.
 2. `owner_identity_id` representa el `identity_id` canónico e interno de Identity Authority.
-3. La relación entre ambos se demuestra mediante un Identity Binding verificado, vigente y perteneciente a la autoridad de identidad.
-4. No se exige igualdad textual entre `owner_id` y `owner_identity_id`.
-5. Un email, nombre, identificador declarado por el caller, coincidencia accidental de strings o `context.user_id` aislado no constituyen prueba.
-6. Si la relación no puede resolverse de forma única y autoritativa, la operación falla cerrada.
+3. La relación entre `UserId` e Identity(USER) es 1:1 y autoritativa; Identity Authority debe mantenerla y resolverla mediante evidencia interna verificable y vigente. El mecanismo físico de persistencia/verificación no queda definido aquí.
+4. La cuenta externa se identifica mediante la pareja exacta `(issuer_id, subject)`, que se resuelve mediante un binding externo verificado hacia Identity(USER). El subject no se compara directamente con `Memory.owner_id`.
+5. `Memory.owner_id` debe coincidir exactamente con el `UserId` canónico resuelto. Cuando corresponda, `owner_identity_id` debe coincidir exactamente con el `identity_id` de esa misma Identity(USER). No se exige igualdad textual entre UserId e identity_id.
+6. Un email, nombre, identificador declarado por el caller, coincidencia accidental de strings o `context.user_id` aislado no constituyen prueba.
+7. Si cualquier relación no puede resolverse de forma única, vigente y autoritativa, la operación falla cerrada.
 
 ## 3. Texto contractual propuesto para DM-01
 
 ### Adición a §4.2 — Memory
 
-Añadir después de los invariantes existentes:
+**Texto aprobado por el propietario el 15 de noviembre de 2026.** Añadir después de los invariantes existentes:
 
-> `Memory.owner_id` conserva el tipo `UserId` y representa el identificador de usuario/subject autenticado al que pertenece la memoria. No representa ni se convierte en `identity_id`. Cuando una operación protegida necesite relacionar el propietario con una identidad canónica, Identity Authority deberá demostrar esa relación mediante un binding verificado y vigente. La comparación del subject con `owner_id` debe ser exacta y no normalizada. La identidad canónica obtenida del binding se conserva como `identity_id` separado. Si el binding está ausente, revocado, vencido, ambiguo o no puede verificarse, CAM deniega.
+> `Memory.owner_id` conserva el tipo `UserId` y representa exclusivamente el identificador global y canónico del propietario dentro de Atlas. No representa un subject externo, un `identity_id` ni un identificador elegido o declarado por el caller.
+>
+> El valor de `owner_id` debe proceder de la autoridad confiable de Atlas. Para una operación autenticada externamente, la frontera confiable debe resolver la cuenta `(issuer_id, subject)` mediante Identity Authority y obtener el `UserId` canónico asociado a la Identity(USER) verificada.
+>
+> La correspondencia entre `UserId` e `identity_id` es 1:1 y autoritativa. Identity Authority debe poder verificar que ambos identificadores corresponden a la misma Identity(USER), sin exigir ni inferir igualdad textual entre ellos.
+>
+> Cuando una operación protegida requiera comprobar la propiedad, CAM debe comparar exactamente el `UserId` canónico resuelto con `Memory.owner_id`. Cuando también intervenga `PrivateMemoryConsumerAuthorization`, debe comprobar que `owner_identity_id` corresponde al `identity_id` de la misma Identity(USER).
+>
+> Un subject externo, `identity_id`, `OperationContext.user_id` aislado o identificador declarado por el caller no sustituye esta resolución. La ausencia, ambigüedad, discrepancia, revocación, expiración o imposibilidad de verificar la relación produce `DENY`.
 
 ### Aclaración a §6.4 — Memoria PRIVATE del propietario
 
-Sustituir la frase que relaciona al sujeto autenticado con la identidad USER por:
+**Texto aprobado por el propietario el 15 de noviembre de 2026.** Sustituir el punto que relaciona directamente el subject autenticado con `Memory.owner_id` por:
 
-> El sujeto autenticado en el contexto verificado debe coincidir exactamente con `Memory.owner_id`. Identity Authority debe validar que el par issuer/subject autenticado está asociado, mediante un binding activo y verificado, al `identity_id` USER del actor. La igualdad de `owner_id` y `identity_id` no se exige ni se infiere. CAM solo puede aplicar la ruta PRIVATE del propietario después de validar el binding y las revisiones vigentes de identidad y binding.
+> - actor de tipo `USER`;
+> - identidad USER activa y verificada mediante evidencia vigente de Identity Authority;
+> - `VerifiedIdentityContext.user_id` debe coincidir exactamente con `Memory.owner_id`;
+> - `VerifiedIdentityContext.identity_id` debe identificar la Identity(USER) asociada al `UserId` resuelto;
+> - si interviene `PrivateMemoryConsumerAuthorization`, su `owner_identity_id` debe coincidir exactamente con ese `identity_id`;
+> - la cuenta externa autenticada debe haber sido validada mediante el binding exacto `(issuer_id, subject)` registrado y verificado por Identity Authority. El subject externo no se compara directamente con `Memory.owner_id`;
+> - `context.user_id` por sí solo no demuestra autenticación, propiedad ni autoridad.
 
 Mantener el resto de las restricciones de §6.4: scope PRIVATE explícito, recurso y metadatos confiables, Gateway y CAM obligatorios, acciones limitadas y prueba directa no delegable para approve/reject/forget.
 
@@ -61,14 +76,15 @@ Añadir:
 
 Para una lectura PRIVATE del propietario:
 
-1. Obtener `VerifiedIdentityContext` desde la frontera de autenticación confiable.
-2. Verificar vigencia del contexto y estado USER.
-3. Comprobar igualdad exacta entre el subject autenticado y `Memory.owner_id`.
-4. Verificar en Identity Authority el binding exacto (issuer, subject) hacia el `identity_id` del actor.
-5. Comprobar estado y revisión actuales de Identity y Binding.
-6. Comprobar scope PRIVATE y metadatos canónicos de Memory.
-7. Evaluar la acción exacta mediante CAM.
-8. Ante ausencia, ambigüedad, discrepancia, revocación, expiración o error, denegar.
+1. Obtener `VerifiedIdentityContext` vigente desde la frontera confiable.
+2. Verificar que el contexto identifica una Identity(USER) activa y que la autenticación externa fue validada para el issuer confiable.
+3. Resolver y verificar el binding exacto `(issuer_id, subject)` hacia la Identity(USER), incluyendo estado y revisión actuales.
+4. Resolver mediante Identity Authority el `UserId` canónico asociado a esa Identity(USER).
+5. Comprobar igualdad exacta entre el `UserId` resuelto y `Memory.owner_id`.
+6. Cuando intervenga `PrivateMemoryConsumerAuthorization`, comprobar que `owner_identity_id` coincide exactamente con el `identity_id` de esa misma Identity(USER).
+7. Comprobar scope PRIVATE, recurso y metadatos canónicos de Memory.
+8. Evaluar la acción exacta mediante CAM.
+9. Ante ausencia, ambigüedad, discrepancia, revocación, expiración, revisión obsoleta o error, denegar.
 
 Para una autorización PRIVATE delegada:
 
@@ -121,8 +137,8 @@ Hasta que estos puntos estén especificados, cualquier relación ambigua o no ve
 
 ## 8. Trazabilidad de fuentes
 
-- DM-01 §4.2: `Memory.owner_id: UserId`, propietario canónico único e inmutabilidad.
-- DM-01 §6.4: el sujeto autenticado debe coincidir con `Memory.owner_id`; el actor USER debe estar vinculado a ese sujeto mediante evidencia confiable.
+- DM-01 §4.2: `Memory.owner_id: UserId`, propietario canónico único e inmutabilidad; la adición aprobada aclara que UserId no es subject externo.
+- DM-01 §6.4: la ruta PRIVATE compara el UserId canónico resuelto con `Memory.owner_id` y verifica separadamente el `identity_id` correspondiente; el subject externo se valida mediante binding y no se compara con owner_id.
 - DM-01 §6.5 y §6.6: owner/scope provienen de metadatos confiables; resolver ausente o inconsistente produce DENY.
 - B1-A-06 §2.1: `owner_identity_id` y coincidencia con el propietario canónico de Memory.
 - B1-A-06 §4.2: binding `(issuer, subject) -> identity_id`, binding no concede autorización.
@@ -130,8 +146,8 @@ Hasta que estos puntos estén especificados, cualquier relación ambigua o no ve
 
 ## 9. Estado y siguiente paso
 
-La decisión conceptual está aprobada. Esta propuesta concreta el texto y expone el único punto de precisión pendiente: namespace/unicidad de `UserId` respecto de issuer/subject.
+La decisión conceptual y el texto propuesto para DM-01 §§4.2 y 6.4 están aprobados. La propuesta de B1-A-06 §2.1 debe ahora alinearse con la semántica canónica de UserId y owner_identity_id; su aprobación permanece pendiente. La propuesta de §4.2 de B1-A-06 también requiere comprobar que la evidencia identifica conjuntamente UserId, identity_id y el binding externo exacto.
 
-Siguiente paso: especificar la autoridad interna que emite `UserId` y el binding verificable entre `UserId`, `identity_id` y cuentas externas. Después, redactar la enmienda normativa final para DM-01 y B1-A-06 y solicitar aprobación explícita antes de sustituir los contratos aprobados.
+Siguiente paso: revisar y aprobar por separado el texto coordinado de B1-A-06 §2.1 y §4.2. Los contratos vigentes no se sustituyen hasta la aprobación formal del paquete completo.
 
 No iniciar B1-B-03B ni modificar SQLite hasta cerrar este punto y los restantes bloqueos de B1-B-03A.
