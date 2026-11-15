@@ -64,13 +64,13 @@ Mantener el resto de las restricciones de §6.4: scope PRIVATE explícito, recur
 
 Añadir después de la regla que exige propietario canónico coincidente con `owner_identity_id`:
 
-> Para esta comparación, el propietario de Memory y el propietario de la autorización se expresan en espacios de identidad distintos. `Memory.owner_id` conserva el `UserId`/subject definido por DM-01; `owner_identity_id` es el `identity_id` canónico. La coincidencia se acredita mediante Identity Authority: el binding verificado y vigente debe demostrar que el subject del propietario de la memoria corresponde exactamente al `identity_id` indicado por la autorización. No se comparan ambos campos como strings ni se convierte uno en el otro. Si Identity Authority no puede resolver la correspondencia de manera única, CAM deniega.
+> Para esta comparación, el propietario de Memory y el propietario de la autorización se expresan en espacios de identidad distintos. `Memory.owner_id` conserva el `UserId` global y canónico de Atlas; `owner_identity_id` es el `identity_id` canónico de Identity(USER). Identity Authority debe resolver y verificar la relación 1:1 vigente entre ambos identificadores mediante evidencia interna autoritativa. La cuenta externa del propietario se valida separadamente mediante el binding exacto `(issuer_id, subject)` hacia esa Identity(USER); el subject externo no se compara directamente con `Memory.owner_id` ni con `owner_identity_id`. CAM debe comprobar que el `UserId` resuelto coincide exactamente con `Memory.owner_id` y que el `identity_id` resuelto coincide exactamente con `owner_identity_id`. No se comparan ambos campos entre sí como strings ni se convierte uno en el otro. Si Identity Authority no puede resolver ambas relaciones de manera única y vigente, CAM deniega.
 
 ### Aclaración a §4.2 — Identidad y binding
 
 Añadir:
 
-> Para vincular el propietario de una Memory con `owner_identity_id`, CAM consume evidencia de Identity Authority que identifica el binding exacto, su issuer, subject, `identity_id`, estado y revisión. El binding debe estar activo, verificado y vigente en el momento de la autorización. La prueba no puede ser sustituida por datos enviados por el consumidor ni por coincidencia de atributos personales.
+> Para vincular el propietario de una Memory con `owner_identity_id`, CAM consume evidencia de Identity Authority que permite verificar conjuntamente el `UserId` canónico, el `identity_id` de Identity(USER) y, cuando la autenticación sea externa, el binding exacto `(issuer_id, subject)`, incluidos estado y revisiones vigentes. Identity Authority debe confirmar la relación 1:1 entre UserId e Identity(USER), así como la relación del binding externo con esa identidad. El binding debe estar activo, verificado y vigente en el momento de la autorización. La evidencia no puede ser sustituida por datos enviados por el consumidor ni por coincidencia de atributos personales.
 
 ## 5. Reglas de validación derivadas
 
