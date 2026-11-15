@@ -68,6 +68,7 @@ El documento normativo principal es:
 Enmiendas y contratos relacionados:
 
 - [B1-A-06 — identidad, Project/Environment y persistencia compartida](docs/contracts/b1-a06-identity-project-environment-and-persistence.md)
+- [B1-B-02 — modelo lógico integrado y matriz de consistencia contractual](docs/design/b1-b02-logical-model-and-contract-consistency.md)
 - [Contrato técnico de Memory Engine](docs/design/memory-engine-technical-contract.md)
 - [Independencia de Memory Engine respecto a consumidores](docs/design/memory-engine-project-independence-implementation.md)
 - [DM-01 — especificación del modelo de dominio](docs/design/domain-model-specification-dm-01.md)
@@ -77,7 +78,7 @@ Enmiendas y contratos relacionados:
 - [ME-D4O-I C.4.1 — almacenamiento durable SQLite de cambios de autoridad](docs/design/me-d4o-i-c4-sqlite-durable-authority-store.md)
 - [README de Memory Engine](docs/memory-engine/README.md)
 
-La enmienda B1-A-06 adopta B1-A-01 a B1-A-05 como decisiones posteriores al baseline anterior. El diseño físico de persistencia (B1-B-02) sigue pendiente.
+La enmienda B1-A-06 adopta B1-A-01 a B1-A-05 como decisiones posteriores al baseline anterior. B1-B-02 consolida el modelo lógico y registra las discrepancias que deben resolverse antes del diseño físico. No constituye autorización de implementación.
 
 ## Ejecución local
 
@@ -120,11 +121,11 @@ La lista y el resultado de las pruebas deben corresponder al checkout concreto y
 
 ## Hoja de ruta inmediata
 
-1. Cerrar la consolidación normativa B1-A-06.
-2. Ejecutar las validaciones documentales y resolver referencias inconsistentes.
-3. Completar B1-B-02: diseño físico de persistencia sobre la base SQLite compartida, sin implementar todavía.
-4. Definir transacciones, CAS, idempotencia, invalidación y recuperación por dominio.
-5. Implementar de forma incremental solo después de aprobar cada contrato técnico y su alcance.
+1. Cerrar B1-B-02 resolviendo o aislando formalmente sus discrepancias contractuales D-01 a D-07.
+2. Completar B1-B-03A: contratos de owner, consumer_id, invalidación, consistency domains, inventario admissions/routes y Content Store.
+3. Completar B1-B-03B: diseño físico SQLite y plan incremental de migraciones, preservando schema v4.
+4. Validar el diseño físico contra contratos y escenarios de fallo/recuperación.
+5. Solicitar aprobación explícita antes de implementar migraciones, repositorios o cambios de runtime.
 
 ## Límites de seguridad y alcance
 
