@@ -348,78 +348,76 @@ No acreditado como completo:
 
 El inventario es una fotografía de fuentes inspeccionadas; antes de implementar debe repetirse sobre el commit exacto de trabajo.
 
-## 9. Próxima fase recomendada: B1-B-03 — Diseño físico y plan de migraciones
+## 9. Continuidad: B1-B-03A cerrado y roadmap B1-B-03
 
-B1-B-02 debe cerrarse primero con resolución/aceptación de D-01 a D-07. Después:
+B1-B-03A quedó **CERRADO NORMATIVAMENTE** el 15 de noviembre de 2026. Las enmiendas fueron incorporadas y verificadas en DM-01, B1-A-06, `identity.md` y `operation-context.md`. Los documentos B1-B-03A-01/02/03 conservan la trazabilidad. No se reabre el cierre ni se infiere implementación.
 
-### B1-B-03A — Cierre de contratos y dependencias
-1. **Owner — decisión aprobada:** conservar `Memory.owner_id: UserId/subject` y resolver su relación con `owner_identity_id` mediante Identity Binding verificado. Próxima acción: redactar y revisar la aclaración contractual conjunta; no cambiar tipos ni datos existentes.
-2. Definir la autoridad de consumer_id.
-3. Precisar la política de invalidación de admisiones por aprobación de versión.
-4. Completar compatibilidad PRIVATE_MEMORY_AUTHORIZATION con D4O-F/G/H.
-5. Verificar el inventario real de admissions/routes/projections de ME-03K.
-6. Definir conjuntos de consistency domains/epochs.
-7. Aprobar el contrato lógico del Content Store sin seleccionar aún proveedor si no hace falta.
+### 9.1 Estado del baseline lógico
 
-### B1-B-03B — Diseño físico SQLite
-1. Inventariar el esquema/migraciones existentes y sus checksums; preservar v4.
-2. Mapear cada agregado a tablas de propiedad de dominio, claves, FKs, índices, unique constraints y checks.
-3. Definir CAS, revisiones, idempotency keys y relaciones de operation_id.
-4. Diseñar UoW por caso de uso y documentar dónde la atomicidad no es posible.
-5. Definir estrategia de migración incremental y rollback seguro sin reescribir migraciones históricas.
-6. Preparar matriz de compatibilidad y escenarios de fallo/recuperación.
+- Los siete dominios, sus autoridades y límites siguen siendo el modelo lógico aprobado.
+- `Memory.owner_id` conserva `UserId` global y canónico; `owner_identity_id` representa `identity_id`; la relación se verifica por Identity Authority, sin igualdad textual.
+- Identity Authority emite UserId y mantiene la relación 1:1 con Identity(USER).
+- Una Identity(USER) puede tener múltiples bindings externos; la pareja exacta issuer/subject no se reasigna tras revocación.
+- VerifiedIdentityContext se emite solo para Identity(USER); actor y usuario contextual se verifican por separado.
+- Los contratos legacy se preservan hasta una migración explícita y verificable.
+- PRIVATE_MEMORY_AUTHORIZATION sigue siendo autoridad CAM propia, separada de Grant PROJECT.
+- Schema v4 y las migraciones históricas permanecen intactos.
 
-### B1-B-03C — Validación antes de implementación
-1. Revisar el diseño contra contratos raíz, B1-A-06, DM-01, ME-03F/K y D4O-F/G/H.
-2. Crear pruebas de conformidad de esquema y migración en DB temporal, sin tocar datos reales.
-3. Revisar aislamiento por consumer/project y ausencia de cross-write.
-4. Revisar Forget, fencing y recovery para impedir reaperturas inseguras.
-5. Presentar el esquema físico y el plan de migración para aprobación explícita antes de escribir migraciones.
+### 9.2 Roadmap técnico aprobado para estudio
 
-**Fuera de alcance de B1-B-03:** implementar repositorios, migrar datos reales, cambiar runtime, habilitar Memory Gateway protegido, abrir Recovery Gate, modificar Broker o desplegar.
+#### B1-B-03B — Diseño físico Identity Authority / SQLite
+1. Inventariar código, esquema v4, constraints, índices, FKs y checksums.
+2. Especificar persistencia de Identity, UserId, issuer y bindings externos.
+3. Diseñar unicidad permanente de issuer/subject, tombstones y revisiones.
+4. Incorporar PRIVATE_MEMORY_AUTHORIZATION al modelo de revisiones/invalidation sin alias de GRANT.
+5. Definir UoW, CAS, idempotencia, v5 aditiva y pruebas de preservación.
+6. Mantener fuera de SQLite los secretos y payloads.
+
+#### B1-B-03C — Ciclo de vida y seguridad de cuentas
+1. Linking con sesión verificada, reautenticación, prueba de cuenta nueva y confirmación.
+2. Unlink irreversible, sin liberar issuer/subject y sin eliminar el último método utilizable.
+3. Cambio de proveedor añadiendo primero la cuenta nueva.
+4. Ciclo de vida de issuers y respuesta ante suspensión, revocación y compromiso de claves.
+5. Mantener recuperación y merge deshabilitados hasta disponer de políticas verificables.
+
+#### B1-B-03D — VerifiedIdentityContext y evidencia
+1. Verificación por issuer de firma, audience, expiry, nonce y subject exactos.
+2. Contexto efímero con Identity(USER), UserId, binding y revisiones vigentes.
+3. Separación actor/usuario/delegación en CAM.
+4. Replay protection, minimización de evidencia y auditoría.
+5. Fallo cerrado ante reloj, issuer, clave o autoridad no verificables.
+
+#### B1-B-03E — Migración legacy y rollout
+1. Inventario read-only y mapping manifest verificable.
+2. No inferir UserId ni subject externo desde `subject_user_id`.
+3. Preservar tipos/estados legacy; conflictos quedan bloqueados.
+4. Dry-run sobre DB temporal y prueba de backup/restore.
+5. Cutover controlado con gate cerrado, validación y reconciliación.
+
+### 9.3 Límites de implementación
+
+Los documentos B1-B-03B/03C/03D/03E son diseños técnicos propuestos, no autorizaciones para ejecutar migraciones, enlazar proveedores, emitir contextos, migrar registros reales, abrir Recovery Gate o habilitar Memory Gateway protegido. La migración v5 debe ser aprobada y probada antes de aplicarse a cualquier DB real.
+
+Las nueve cuestiones técnicas abiertas en B1-B-03A-03 §7 continúan abiertas hasta que cada una tenga una resolución técnica verificable. En particular, proveedor de secretos, protocolo/issuer, fuente canónica de consumer_id, recuperación de cuenta y mapeo legacy no se resuelven por inferencia.
 
 ## 10. Criterios de salida de B1-B-02
 
-B1-B-02 se considerará documentalmente listo para diseño físico cuando:
-- los siete dominios tengan ownership y autoridad inequívocos;
-- las relaciones y cardinalidades estén documentadas;
-- cada cambio protegido tenga revisión, idempotencia e invalidación definidos;
-- las fronteras UoW y los límites externos estén explícitos;
-- D-01 a D-07 estén resueltos o aislados como bloqueos explícitos aprobados;
-- las proyecciones existentes de admissions/routes hayan sido contrastadas;
-- no se duplique el schema v4 ni se cree una autoridad paralela.
-
-La aprobación de este documento no implica implementación. Toda migración y código requiere fase y alcance aprobados por separado.
+B1-B-02 queda como baseline lógico consolidado. Sus decisiones de arquitectura no sustituyen los diseños físicos y operativos posteriores. La salida de B1-B-02 no certifica repositorios SQLite, coordinadores completos, Content Store, admit_read operativo, egress protegido ni runtime habilitado.
 
 ## 11. Registro de decisiones y continuidad de trabajo
 
-Este registro es la bitácora mínima para retomar el proyecto sin depender del historial conversacional. Debe actualizarse al cerrar cada paso relevante.
-
-### Decisiones registradas
-
-| Fecha | ID | Decisión | Estado |
+| Fecha | ID | Decisión / resultado | Estado |
 |---|---|---|---|
-| 2026-11-15 | B1-B-03A / D-01 | `Memory.owner_id` permanece como `UserId/subject`; `owner_identity_id` representa `identity_id` canónico; el vínculo se acredita con Identity Binding verificado y vigente. | Aprobada por el propietario; formalización normativa pendiente |
-| 2026-11-15 | B1-B-03A / D-01b | `UserId` es global y canónico en Atlas, independiente del issuer externo. Identity Authority emite UserId y mantiene la relación 1:1 con Identity(USER); una identidad puede tener múltiples bindings externos verificados. | Aprobada por el propietario |
-| 2026-11-15 | B1-B-03A / A–G | Autoridad emisora, cardinalidad, unicidad/no reasignación de bindings, linking/unlinking, VerifiedIdentityContext y compatibilidad legacy conforme a B1-B-03A-02. | Aprobadas por el propietario; enmienda normativa final pendiente |
-
-### Próximos pasos obligatorios
-
-1. **Decisión aprobada y registrada:** `UserId` es global y canónico en Atlas. [B1-B-03A-01 — Aclaración de owner_id e Identity Binding](../contracts/b1-b03a-01-owner-identity-binding-clarification.md) documenta la semántica.
-2. **Decisiones A–G aprobadas (2026-11-15):** [B1-B-03A-02 — Modelo lógico de UserId canónico y bindings externos](../contracts/b1-b03a-02-canonical-user-and-external-identity-binding.md). Identity Authority emite UserId; relación 1:1 UserId↔Identity(USER); múltiples bindings externos; linking/unlinking controlados; binding revocado no reasignable; VerifiedIdentityContext ligado a UserId y binding; compatibilidad legacy.
-3. **Texto normativo en revisión:** [B1-B-03A-03 — Borrador de enmienda normativa](../contracts/b1-b03a-03-normative-amendment-draft-user-identity-binding.md), con propuestas coordinadas para B1-A-06, identity.md y operation-context.md. Requiere aprobación final del texto antes de modificar esos contratos.
-2. **Aprobación normativa pendiente:** revisar y aprobar el texto de B1-B-03A-03 antes de modificar B1-A-06, identity.md y operation-context.md.
-3. Identificar y comparar las fuentes/contratos disponibles para determinar quién emite y verifica `consumer_id`; no crear una tabla `consumers` ni derivarlo de `identity_id` sin decisión aprobada.
-4. Completar la matriz de compatibilidad de `PRIVATE_MEMORY_AUTHORIZATION` con D4O-F/G/H: AuthorityKind, revision set, snapshot, invalidation, source CAS, idempotencia y recovery evidence.
-5. Contrastar admissions, routes e inventarios ME-03K con ME-03F/H y documentar si falta alguna estructura, evitando duplicar las proyecciones existentes.
-6. Definir consistency domains/epochs por operación y su orden de adquisición/reconciliación.
-7. Especificar el contrato lógico del Content Store: staging inmutable, referencias opacas, lectura, integridad, cuarentena, huérfanos, backup/restore, retención y fallos.
-8. Definir invalidación/fencing al aprobar una nueva versión y la evidencia necesaria para completar o cancelar entregas anteriores.
-9. Publicar una matriz de cierre D-01 a D-07, señalando para cada punto: decisión, fuente normativa, cambio documental requerido, pruebas de conformidad y bloqueo restante.
-10. Solo después de cerrar B1-B-03A, comenzar B1-B-03B (diseño físico SQLite). B1-B-03C validará el diseño antes de solicitar aprobación explícita para implementación.
+| 2026-11-15 | B1-B-03A / D-01 | UserId canónico distinto de identity_id; owner_id y owner_identity_id se relacionan mediante Identity Authority. | Normativamente cerrado |
+| 2026-11-15 | B1-B-03A / A–G | Emisión UserId, cardinalidad, bindings, linking/unlinking, VerifiedIdentityContext y compatibilidad legacy. | Normativamente cerrado |
+| 2026-11-15 | B1-B-03A / 03 | Enmiendas incorporadas a DM-01, B1-A-06, identity.md y operation-context.md. | Normativamente cerrado |
+| 2026-11-15 | B1-B-03B | Inventario del código y diseño físico candidato. | Diseño documentado; implementación pendiente |
+| 2026-11-15 | B1-B-03C | Política de lifecycle, linking/unlinking, issuer, recovery y merge. | Diseño documentado; flujos deshabilitados |
+| 2026-11-15 | B1-B-03D | Contexto verificado, evidencia, replay y actor/delegación. | Diseño documentado; autenticación externa deshabilitada |
+| 2026-11-15 | B1-B-03E | Migración legacy, cutover, backup/restore y rollback. | Diseño documentado; migración real pendiente |
 
 ### Regla de continuidad
 
-Al terminar cada sesión/fase, actualizar este documento y el roadmap del README con: commit base, cambios realizados, decisiones aprobadas, decisiones pendientes, verificaciones ejecutadas y resultado, riesgos/bloqueos y el siguiente paso exacto. No marcar como completado algo que solo esté propuesto o documentado parcialmente.
+Al terminar cada fase se actualizará esta bitácora con commit base, archivos, SHA, decisiones, pendientes, verificaciones y bloqueos. No se afirmará que una capacidad está implementada solo porque exista un contrato, esquema o prueba aislada.
 
-**Estado actual (2026-11-15):** B1-B-03A en curso. D-01 y las decisiones A–G de B1-B-03A-02 están aprobadas por el propietario. B1-B-03A-03 contiene el texto normativo propuesto para B1-A-06, identity.md y operation-context.md; falta aprobación final de ese texto. Los procedimientos de recuperación, protección del último método de acceso, detalles criptográficos por issuer y proceso de merge permanecen pendientes. D-02 a D-07 siguen pendientes. No se ha autorizado diseño físico, migración ni implementación.
+**Estado actualizado:** B1-B-03A cerrado normativamente. B1-B-03B a B1-B-03E documentados como diseños técnicos propuestos. No se han creado migraciones, repositorios ni cambios de runtime; no se han migrado datos reales ni activado proveedores externos.
