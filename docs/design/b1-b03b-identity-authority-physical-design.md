@@ -56,7 +56,7 @@ Una fila por Identity interna.
 
 Campos propuestos:
 
-- `identity_id` — PK, identificador opaco, inmutable y no reutilizable.
+- `identity_id` — PK, UUIDv4 aleatorio en representación canónica lowercase con guiones; opaco, inmutable y no reutilizable. Lo genera exclusivamente Identity Authority. No se normaliza ni se regenera silenciosamente ante una colisión.
 - `identity_kind` — USER, AGENT, SERVICE, WATCHER o SYSTEM.
 - `identity_status` — ACTIVE, SUSPENDED o REVOKED, preservando el vocabulario legacy.
 - `revision` — entero positivo, monotónico por identidad.
@@ -75,7 +75,7 @@ Tabla de la autoridad emisora de UserId.
 
 Campos propuestos:
 
-- `user_id` — PK global y canónico Atlas, opaco, estable, inmutable y no derivado de atributos.
+- `user_id` — PK global y canónico Atlas (`UserId`), UUIDv4 aleatorio en representación canónica lowercase con guiones; opaco, estable, inmutable y no derivado de atributos. Lo genera exclusivamente Identity Authority. No se normaliza ni se regenera silenciosamente ante una colisión.
 - `identity_id` — FK a `identity_records`, UNIQUE y NOT NULL.
 - `created_at`.
 
@@ -84,7 +84,7 @@ Restricciones:
 - UNIQUE(identity_id) y PK(user_id) materializan la relación 1:1.
 - Para una nueva identidad canónica, alta de `identity_records` y `atlas_users` es una sola UoW.
 - No se deriva UserId de email, nombre, teléfono, issuer, subject ni identity_id.
-- El formato físico/generación del UserId e identity_id sigue pendiente de decisión técnica explícita; no asumir UUIDv7 por DM-01, cuyo alcance de IDs no incluye automáticamente estos tipos.
+- UserId e identity_id usan UUIDv4 aleatorio y canónico. No se aplica la política UUIDv7 de `src/atlas/memory/identifiers.py`: su alcance corresponde a identificadores de Memory y no se generaliza a Identity Authority.
 
 Los USER legacy sin correspondencia canónica demostrable no se insertan aquí ni se convierten por inferencia.
 
@@ -116,7 +116,7 @@ Un binding externo exacto hacia una Identity(USER).
 
 Campos propuestos:
 
-- `binding_id` — PK, opaco, inmutable.
+- `binding_id` — PK, UUIDv4 aleatorio en representación canónica lowercase con guiones; opaco e inmutable. Lo genera exclusivamente Identity Authority. Esta decisión fija el formato futuro, pero no autoriza implementar bindings externos en esta fase.
 - `identity_id` — FK a Identity(USER).
 - `issuer_id` — FK a `identity_issuers`.
 - `binding_state` — ACTIVE o REVOKED.
@@ -202,6 +202,10 @@ Rollback: antes del commit de una migración transaccional fallida, SQLite revie
 | Memory metadata | Memory | Identity no modifica owner/scope |
 | runtime state | Broker/adaptador correspondiente | Identity no ejecuta Docker |
 
+## 9.1 Alcance del primer incremento de implementación
+
+El primer incremento autorizado se limita a la persistencia interna de `UserId` y `Identity(USER)`, su relación 1:1, restricciones SQLite, operaciones transaccionales y control de revisión/CAS, con pruebas de unicidad, concurrencia, conflicto CAS y rollback. Aunque el formato UUIDv4 de `binding_id` queda decidido para mantener coherencia del modelo futuro, los issuers, bindings externos, evidencia, replay y autenticación externa permanecen fuera de este incremento. Tampoco se implementa `PRIVATE_MEMORY_AUTHORIZATION` ni se amplía el alcance de la migración v5 de coordinación en este trabajo.
+
 ## 9. Criterios de conformidad B1-B-03B
 
 - Cardinalidad UserId↔Identity(USER) 1:1 demostrada por constraints y pruebas.
@@ -214,10 +218,24 @@ Rollback: antes del commit de una migración transaccional fallida, SQLite revie
 - Toda ambigüedad, excepción, revisión obsoleta o autoridad no disponible produce DENY/BLOCKED.
 - No se habilitan flujos externos hasta cerrar B1-B-03C y B1-B-03D.
 
-## 10. Decisiones bloqueantes restantes
+## 10. Decisiones adoptadas y decisiones bloqueantes restantes
 
-1. Formato/generación y protección de UserId, identity_id y binding_id.
-2. Proveedor de secretos y representación segura/lookup del subject externo.
+### 10.1 Decisiones adoptadas (15-11-2026)
+
+- `UserId`, `identity_id` y `binding_id` serán UUIDv4 aleatorios, en representación canónica lowercase con guiones.
+- Identity Authority será el único componente autorizado para generar estos identificadores.
+- Los identificadores son opacos, estables e inmutables; no se derivan de email, teléfono, nombre, issuer, subject, cuenta externa ni de otro identificador.
+- No se normalizan entradas no canónicas. Una colisión o conflicto de unicidad rechaza la operación; no se reintenta con otro ID de forma silenciosa ni se sobrescribe un registro.
+- Los identificadores no son credenciales, tokens de sesión ni prueba de autenticación o autorización.
+- La relación `UserId` ↔ `Identity(USER)` es 1:1, reforzada por PK/UNIQUE/FK y validación de tipo USER. Su alta ocurre en una única UoW atómica.
+- Las actualizaciones usan revisión monotónica y CAS sobre la revisión esperada; una revisión obsoleta produce conflicto sin sobrescribir el estado vigente.
+- Las operaciones de escritura SQLite utilizan la infraestructura transaccional existente (`BEGIN IMMEDIATE`); cualquier fallo revierte la operación completa.
+- Las migraciones históricas v1–v4 son inmutables. La persistencia canónica requerirá una nueva migración aditiva, diseñada y probada antes de aplicarse a cualquier base real.
+- Los contratos legacy y los componentes de Memory se conservan; la política UUIDv7 de Memory no se extiende a Identity Authority.
+
+### 10.2 Decisiones bloqueantes restantes
+
+1. Proveedor de secretos y representación segura/lookup del subject externo.
 3. Protocolo(s) de issuer y política de claves/rotación.
 4. Fuente canónica verificable de consumer_id.
 5. Política de recuperación de cuenta y protección del último método de acceso.
