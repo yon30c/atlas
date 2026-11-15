@@ -54,6 +54,7 @@ La línea de integración incluye migraciones consecutivas **v1–v6**:
 - **v6:** integridad bidireccional entre identidad USER y registro canónico de usuario mediante claves foráneas diferidas.
 
 Las migraciones v5–v6 incorporan persistencia local de identidad canónica. No implementan proveedores externos, bindings de identidad externos ni autenticación externa completa.
+El adaptador requiere SQLite 3.26.0 o superior; el workflow de pruebas conserva el filtro de ramas existente y añade una comprobación de compatibilidad antes de ejecutar la suite.
 
 El esquema no incluye tablas de contenido de memorias, embeddings ni snippets. No debe confundirse la persistencia del journal/control con la persistencia del contenido Memory.
 
