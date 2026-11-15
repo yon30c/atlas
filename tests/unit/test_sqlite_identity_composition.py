@@ -3,6 +3,7 @@
 from pathlib import Path
 import multiprocessing
 import tempfile
+import traceback
 import unittest
 from unittest.mock import patch
 
@@ -33,7 +34,7 @@ def _compose_identity_in_process(database_path, barrier, results):
             ).fetchall()
         results.put(("ok", versions, integrity, len(foreign_key_violations)))
     except BaseException as exc:
-        results.put(("error", repr(exc)))
+        results.put(("error", traceback.format_exc()))
 
 
 class SQLiteIdentityCompositionTests(unittest.TestCase):
