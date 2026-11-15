@@ -1,6 +1,7 @@
 """Contract tests for the explicit SQLite identity composition root."""
 
 from pathlib import Path
+import multiprocessing
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -12,6 +13,27 @@ from atlas.adapters.sqlite.identity_composition import (
     compose_sqlite_identity,
 )
 from atlas.core.errors import ContractError
+
+
+def _compose_identity_in_process(database_path, barrier, results):
+    """Run composition in an independent process and report database health."""
+    try:
+        barrier.wait(timeout=20)
+        composition = compose_sqlite_identity(database_path)
+        with composition.database.connection() as connection:
+            versions = [
+                row["version"]
+                for row in connection.execute(
+                    "SELECT version FROM schema_migrations ORDER BY version"
+                )
+            ]
+            integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
+            foreign_key_violations = connection.execute(
+                "PRAGMA foreign_key_check"
+            ).fetchall()
+        results.put(("ok", versions, integrity, len(foreign_key_violations)))
+    except BaseException as exc:
+        results.put(("error", repr(exc)))
 
 
 class SQLiteIdentityCompositionTests(unittest.TestCase):
@@ -80,6 +102,49 @@ class SQLiteIdentityCompositionTests(unittest.TestCase):
 
         apply_migrations.assert_called_once()
         authority_factory.assert_not_called()
+
+    def test_two_processes_can_compose_the_same_database_concurrently(self):
+        context = multiprocessing.get_context("spawn")
+        barrier = context.Barrier(2)
+        results = context.Queue()
+        processes = [
+            context.Process(
+                target=_compose_identity_in_process,
+                args=(str(self.database_path), barrier, results),
+            )
+            for _ in range(2)
+        ]
+
+        try:
+            for process in processes:
+                process.start()
+            for process in processes:
+                process.join(timeout=30)
+                if process.is_alive():
+                    process.terminate()
+                    process.join(timeout=5)
+
+            self.assertEqual(
+                [process.exitcode for process in processes],
+                [0, 0],
+                "un proceso de composición terminó incorrectamente",
+            )
+            outcomes = [results.get(timeout=5) for _ in processes]
+        finally:
+            for process in processes:
+                if process.is_alive():
+                    process.terminate()
+                    process.join(timeout=5)
+            results.close()
+            results.join_thread()
+
+        errors = [outcome for outcome in outcomes if outcome[0] != "ok"]
+        self.assertEqual(errors, [])
+        self.assertEqual(len(outcomes), 2)
+        for outcome in outcomes:
+            self.assertEqual(outcome[1], [1, 2, 3, 4, 5, 6])
+            self.assertEqual(outcome[2], "ok")
+            self.assertEqual(outcome[3], 0)
 
     def test_composition_rejects_authority_bound_to_another_database(self):
         first_database = SQLiteDatabase(self.database_path)
