@@ -5,11 +5,7 @@ from datetime import datetime, timedelta, timezone
 from atlas.authorization.grant_management import GrantManagementService
 from atlas.authorization.models import Grant, GrantResourceScope
 from atlas.core.context import OperationContext
-from atlas.core.errors import (
-    AuthorizationError,
-    ContractError,
-    NotFoundError,
-)
+from atlas.core.errors import AuthorizationError, ContractError
 from atlas.core.identity import Identity, IdentityKind, IdentityStatus
 
 
@@ -17,11 +13,8 @@ NOW = datetime(2026, 11, 12, 15, 0, tzinfo=timezone.utc)
 
 
 class InMemoryGrantRepository:
-    """Repositorio temporal utilizado exclusivamente en pruebas."""
-
     def __init__(self):
         self.grants = {}
-        self.update_calls = 0
 
     def create(self, grant):
         self.grants[grant.grant_id] = grant
@@ -30,13 +23,11 @@ class InMemoryGrantRepository:
         return self.grants.get(grant_id)
 
     def update(self, grant):
-        self.update_calls += 1
         self.grants[grant.grant_id] = grant
 
     def list_by_owner(self, owner_user_id):
         return tuple(
-            grant
-            for grant in self.grants.values()
+            grant for grant in self.grants.values()
             if grant.owner_user_id == owner_user_id
         )
 
@@ -145,66 +136,14 @@ class GrantManagementTests(unittest.TestCase):
                 NOW + timedelta(seconds=1),
             )
 
-    def test_revoke_sets_timestamp_without_deleting_grant(self):
+    def test_revoke_fails_closed_without_coordinator_and_cam_ports(self):
         self.service.issue(self.context, self.grant, NOW)
-        revoked_at = NOW + timedelta(hours=1)
-        revoked_grant = self.service.revoke(
-            self.context,
-            self.grant.grant_id,
-            revoked_at,
-        )
-        self.assertEqual(revoked_grant.revoked_at, revoked_at)
-        self.assertEqual(revoked_grant.revision, self.grant.revision + 1)
-        self.assertEqual(
-            self.repository.get(self.grant.grant_id),
-            revoked_grant,
-        )
-        self.assertEqual(
-            self.repository.list_by_owner("user-001"),
-            (revoked_grant,),
-        )
-
-    def test_revoke_rejects_another_owner(self):
-        self.service.issue(self.context, self.grant, NOW)
-        another_owner = Identity(
-            identity_id="user-002",
-            kind=IdentityKind.USER,
-            status=IdentityStatus.ACTIVE,
-        )
-        other_context = replace(
-            self.context,
-            actor=another_owner,
-            user_id="user-002",
-        )
-        with self.assertRaises(AuthorizationError):
-            self.service.revoke(
-                other_context,
-                self.grant.grant_id,
-                NOW + timedelta(hours=1),
-            )
-
-    def test_revoke_is_idempotent_and_missing_grant_is_not_found(self):
-        self.service.issue(self.context, self.grant, NOW)
-        first_revocation = NOW + timedelta(hours=1)
-        first_result = self.service.revoke(
-            self.context,
-            self.grant.grant_id,
-            first_revocation,
-        )
-        second_result = self.service.revoke(
-            self.context,
-            self.grant.grant_id,
-            NOW + timedelta(hours=2),
-        )
-        self.assertEqual(second_result.revoked_at, first_revocation)
-        self.assertEqual(second_result, first_result)
-        self.assertEqual(self.repository.update_calls, 1)
-
-        with self.assertRaises(NotFoundError):
+        with self.assertRaises(ContractError):
             self.service.revoke(
                 self.context,
-                "missing-grant",
-                NOW + timedelta(hours=2),
+                self.grant.grant_id,
+                "idem-001",
+                NOW + timedelta(seconds=1),
             )
 
 
