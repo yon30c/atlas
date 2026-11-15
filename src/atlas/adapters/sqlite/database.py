@@ -9,6 +9,7 @@ import hashlib
 from pathlib import Path
 import sqlite3
 from threading import local
+from time import monotonic, sleep
 from typing import Iterator, Sequence
 
 from atlas.core.errors import ContractError
@@ -124,12 +125,39 @@ class SQLiteDatabase:
         finally:
             connection.close()
 
+    def _enable_wal(self, connection: sqlite3.Connection) -> None:
+        """Enable WAL, retrying only SQLITE_BUSY within the configured timeout."""
+        connection.execute("PRAGMA busy_timeout = 0")
+        deadline = monotonic() + self._busy_timeout_ms / 1000
+        delay = 0.005
+
+        while True:
+            try:
+                mode = connection.execute("PRAGMA journal_mode = WAL").fetchone()[0]
+                if not isinstance(mode, str) or mode.lower() != "wal":
+                    raise sqlite3.DatabaseError("SQLite no confirmó journal_mode=WAL")
+                connection.execute(f"PRAGMA busy_timeout = {self._busy_timeout_ms}")
+                return
+            except sqlite3.OperationalError as exc:
+                error_code = getattr(exc, "sqlite_errorcode", None)
+                is_busy = (
+                    error_code is not None
+                    and error_code & 0xFF == sqlite3.SQLITE_BUSY
+                )
+                if error_code is None:
+                    # Python runtimes without sqlite_errorcode still expose the
+                    # canonical SQLITE_BUSY message for this operation.
+                    is_busy = str(exc).lower() == "database is locked"
+                remaining = deadline - monotonic()
+                if not is_busy or remaining <= 0:
+                    raise
+                sleep(min(delay, remaining))
+                delay = min(delay * 2, 0.05)
+
     def initialize(self) -> None:
         """Enable WAL and create the migration ledger without applying schema changes."""
         with self.connection() as connection:
-            mode = connection.execute("PRAGMA journal_mode = WAL").fetchone()[0]
-            if not isinstance(mode, str) or mode.lower() != "wal":
-                raise sqlite3.DatabaseError("SQLite no confirmó journal_mode=WAL")
+            self._enable_wal(connection)
             connection.execute("BEGIN IMMEDIATE")
             try:
                 connection.execute(
