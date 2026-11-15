@@ -1,6 +1,6 @@
 # B1-B-03A-03 — Borrador de enmienda normativa: UserId e Identity Binding
 
-**Estado:** BORRADOR NORMATIVO — decisiones A–G aprobadas; propuestas para B1-A-06 §§4.2 y 5 aprobadas con precisiones; §§4–7 de este borrador aprobadas por el propietario el 15 de noviembre de 2026. Los contratos normativos vigentes aún no han sido modificados y la implementación no está autorizada.  
+**Estado:** BORRADOR NORMATIVO — decisiones A–G aprobadas; propuestas para B1-A-06 §§2.1, 4.2 y 5 aprobadas; §§4–7 de este borrador aprobadas por el propietario el 15 de noviembre de 2026. Los contratos normativos vigentes aún no han sido modificados y la implementación no está autorizada.  
 **Fecha:** 15 de noviembre de 2026.  
 **Documento de decisión:** [B1-B-03A-02 — Modelo lógico de UserId canónico y bindings externos](b1-b03a-02-canonical-user-and-external-identity-binding.md).  
 **Alcance:** proponer texto coordinado para B1-A-06, identity.md y operation-context.md.  
@@ -192,7 +192,7 @@ Estas cuestiones permanecen deliberadamente abiertas y deben especificarse antes
 
 ## 8. Aprobación solicitada y estado del paquete
 
-El propietario ha aprobado las propuestas para B1-A-06 §§4.2 y 5, así como las secciones 4–7 de este borrador. La aprobación de las secciones 4 y 5 incluye la corrección de la relación UserId–Identity(USER): Identity Authority mantiene y resuelve la correspondencia mediante evidencia interna verificable y vigente, sin introducir un mecanismo físico no especificado.
+El propietario ha aprobado las propuestas para B1-A-06 §§2.1, 4.2 y 5, así como las secciones 4–7 de este borrador. La aprobación de B1-A-06 §§2.1 y 4.2 confirma que `Memory.owner_id` conserva el `UserId` global y canónico, que `owner_identity_id` identifica la Identity(USER) correspondiente y que Identity Authority debe verificar la relación 1:1 vigente entre ambos mediante evidencia interna autoritativa. La cuenta externa se resuelve separadamente mediante el binding exacto `(issuer_id, subject)`; no se comparan identificadores de espacios distintos por igualdad textual. El mecanismo físico permanece pendiente.
 
 Hasta la aprobación final del paquete coordinado:
 - los documentos normativos vigentes permanecen sin cambios;
@@ -201,4 +201,4 @@ Hasta la aprobación final del paquete coordinado:
 - B1-B-03B (diseño físico SQLite) no debe comenzar;
 - no se autoriza implementación, migración ni activación de runtime protegido.
 
-**Estado final:** decisiones A–G aprobadas; propuestas de B1-A-06 §§4.2 y 5 aprobadas; §§4–7 de este borrador aprobadas; contratos normativos vigentes sin cambios; ninguna implementación, migración ni activación de runtime protegido autorizada.
+**Estado final:** decisiones A–G aprobadas; propuestas de B1-A-06 §§2.1, 4.2 y 5 aprobadas; §§4–7 de este borrador aprobadas; contratos normativos vigentes sin cambios; ninguna implementación, migración ni activación de runtime protegido autorizada.
