@@ -285,5 +285,127 @@ CORE_SCHEMA_V3 = SQLiteMigration(
 )
 
 
-SQLITE_MIGRATIONS = (CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3)
+# v4 adds a generic durable authority-change ledger. It stores control-plane
+# metadata only; authority-specific source records remain behind adapters.
+CORE_SCHEMA_V4 = SQLiteMigration(
+    version=4,
+    name="durable_authority_change_coordination",
+    sql="""
+    CREATE TABLE authority_change_operations (
+        operation_id TEXT PRIMARY KEY CHECK (length(trim(operation_id)) > 0),
+        consumer_id TEXT NOT NULL CHECK (length(trim(consumer_id)) > 0),
+        authority_kind TEXT NOT NULL CHECK (
+            authority_kind IN (
+                'memory', 'memory_version', 'identity', 'project',
+                'environment', 'grant', 'consistency'
+            )
+        ),
+        authority_id TEXT NOT NULL CHECK (length(trim(authority_id)) > 0),
+        expected_revision INTEGER NOT NULL CHECK (expected_revision > 0),
+        proposed_revision INTEGER NOT NULL CHECK (proposed_revision > expected_revision),
+        change_kind TEXT NOT NULL CHECK (length(trim(change_kind)) > 0),
+        request_context_ref TEXT NOT NULL CHECK (length(trim(request_context_ref)) > 0),
+        requested_at TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (
+            status IN (
+                'REQUESTED', 'INVALIDATION_PENDING', 'SOURCE_PENDING',
+                'SOURCE_CONFIRMED', 'RECONCILING', 'COMPLETED',
+                'ABORTED', 'BLOCKED'
+            )
+        ),
+        source_revision INTEGER CHECK (source_revision IS NULL OR source_revision > 0),
+        invalidation_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE authority_change_idempotency (
+        consumer_id TEXT NOT NULL CHECK (length(trim(consumer_id)) > 0),
+        idempotency_key TEXT NOT NULL CHECK (length(trim(idempotency_key)) > 0),
+        operation_id TEXT NOT NULL UNIQUE,
+        intent_digest TEXT NOT NULL CHECK (length(intent_digest) = 64),
+        intent_canonical BLOB NOT NULL CHECK (length(intent_canonical) > 0),
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (consumer_id, idempotency_key),
+        FOREIGN KEY (operation_id) REFERENCES authority_change_operations(operation_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE INDEX authority_change_operations_resource
+        ON authority_change_operations(consumer_id, authority_kind, authority_id, status);
+
+    CREATE TABLE authority_change_invalidations (
+        invalidation_id TEXT PRIMARY KEY CHECK (length(trim(invalidation_id)) > 0),
+        operation_id TEXT NOT NULL UNIQUE,
+        authority_kind TEXT NOT NULL CHECK (
+            authority_kind IN (
+                'memory', 'memory_version', 'identity', 'project',
+                'environment', 'grant', 'consistency'
+            )
+        ),
+        authority_id TEXT NOT NULL CHECK (length(trim(authority_id)) > 0),
+        previous_revision INTEGER NOT NULL CHECK (previous_revision > 0),
+        new_revision INTEGER NOT NULL CHECK (new_revision > previous_revision),
+        fencing_generation INTEGER NOT NULL CHECK (fencing_generation > 0),
+        status TEXT NOT NULL CHECK (status IN ('CLOSED', 'RECONCILED', 'BLOCKED')),
+        created_at TEXT NOT NULL,
+        reconciled_at TEXT,
+        FOREIGN KEY (operation_id) REFERENCES authority_change_operations(operation_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE TABLE authority_change_affected_admissions (
+        operation_id TEXT NOT NULL,
+        admission_id TEXT NOT NULL CHECK (length(trim(admission_id)) > 0),
+        previous_status TEXT NOT NULL CHECK (length(trim(previous_status)) > 0),
+        previous_generation INTEGER NOT NULL CHECK (previous_generation > 0),
+        PRIMARY KEY (operation_id, admission_id),
+        FOREIGN KEY (operation_id) REFERENCES authority_change_operations(operation_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE TABLE authority_change_affected_routes (
+        operation_id TEXT NOT NULL,
+        admission_id TEXT NOT NULL CHECK (length(trim(admission_id)) > 0),
+        route_id TEXT NOT NULL CHECK (length(trim(route_id)) > 0),
+        fencing_generation INTEGER NOT NULL CHECK (fencing_generation > 0),
+        status TEXT NOT NULL CHECK (status IN ('PENDING', 'FENCED', 'COMPLETED', 'BLOCKED')),
+        PRIMARY KEY (operation_id, admission_id, route_id),
+        FOREIGN KEY (operation_id, admission_id)
+            REFERENCES authority_change_affected_admissions(operation_id, admission_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE TABLE authority_change_source_results (
+        operation_id TEXT PRIMARY KEY,
+        source_revision INTEGER NOT NULL CHECK (source_revision > 0),
+        result_digest TEXT NOT NULL CHECK (length(result_digest) = 64),
+        result_canonical BLOB NOT NULL CHECK (length(result_canonical) > 0),
+        confirmed_at TEXT NOT NULL,
+        FOREIGN KEY (operation_id) REFERENCES authority_change_operations(operation_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE TABLE authority_change_recovery_evidence (
+        evidence_id TEXT PRIMARY KEY CHECK (length(trim(evidence_id)) > 0),
+        operation_id TEXT NOT NULL,
+        phase TEXT NOT NULL CHECK (
+            phase IN ('INVALIDATION', 'SOURCE', 'RECONCILIATION', 'ABORT')
+        ),
+        evidence_digest TEXT NOT NULL CHECK (length(evidence_digest) = 64),
+        evidence_canonical BLOB NOT NULL CHECK (length(evidence_canonical) > 0),
+        verified_at TEXT NOT NULL,
+        FOREIGN KEY (operation_id) REFERENCES authority_change_operations(operation_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE INDEX authority_change_recovery_by_operation
+        ON authority_change_recovery_evidence(operation_id, phase);
+    """,
+)
+
+
+SQLITE_MIGRATIONS = (
+    CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4
+)
 
