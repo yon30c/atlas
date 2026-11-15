@@ -512,50 +512,59 @@ CORE_SCHEMA_V5 = SQLiteMigration(
 
 
 
-# v6 closes the identity relation in both directions at transaction commit.
-# Existing USER rows are backfilled; orphaned legacy identities abort the migration.
+# v6 rebuilds the two identity tables with reciprocal deferred foreign keys.
+# A USER identity and its atlas_users row must both exist at transaction commit.
+# Legacy orphan USER identities fail the copy and leave the v5 schema untouched.
 CORE_SCHEMA_V6 = SQLiteMigration(
     version=6,
     name="bidirectional_user_identity_integrity",
     sql="""
-    PRAGMA defer_foreign_keys = ON;
-
-    ALTER TABLE identity_records ADD COLUMN user_id TEXT
-        REFERENCES atlas_users(user_id)
-        ON UPDATE NO ACTION ON DELETE NO ACTION
-        DEFERRABLE INITIALLY DEFERRED;
-
-    DROP TRIGGER identity_records_revision_step;
-
-    CREATE TRIGGER identity_records_user_link_kind_insert
-    BEFORE INSERT ON identity_records
-    WHEN (NEW.identity_kind = 'user' AND NEW.user_id IS NULL)
-      OR (NEW.identity_kind != 'user' AND NEW.user_id IS NOT NULL)
-    BEGIN
-        SELECT RAISE(ABORT, 'only USER identities may reference atlas_users');
-    END;
-
-    CREATE TRIGGER identity_records_user_link_kind_update
-    BEFORE UPDATE OF identity_kind, user_id ON identity_records
-    WHEN (NEW.identity_kind = 'user' AND NEW.user_id IS NULL)
-      OR (NEW.identity_kind != 'user' AND NEW.user_id IS NOT NULL)
-    BEGIN
-        SELECT RAISE(ABORT, 'identity kind and user link are inconsistent');
-    END;
-
-    UPDATE identity_records
-    SET user_id = (
-        SELECT atlas_users.user_id
-        FROM atlas_users
-        WHERE atlas_users.identity_id = identity_records.identity_id
-    )
-    WHERE identity_kind = 'user';
-
-    CREATE UNIQUE INDEX identity_records_user_id_unique
-        ON identity_records(user_id);
-
-    CREATE UNIQUE INDEX identity_records_identity_user_unique
-        ON identity_records(identity_id, user_id);
+    CREATE TABLE identity_records_v6 (
+        identity_id TEXT PRIMARY KEY CHECK (
+            length(identity_id) = 36
+            AND identity_id = lower(identity_id)
+            AND length(replace(identity_id, '-', '')) = 32
+            AND substr(identity_id, 9, 1) = '-'
+            AND substr(identity_id, 14, 1) = '-'
+            AND substr(identity_id, 19, 1) = '-'
+            AND substr(identity_id, 24, 1) = '-'
+            AND substr(identity_id, 15, 1) = '4'
+            AND substr(identity_id, 20, 1) IN ('8', '9', 'a', 'b')
+            AND identity_id NOT GLOB '*[^0-9a-f-]*'
+        ),
+        identity_kind TEXT NOT NULL CHECK (
+            identity_kind IN ('user', 'agent', 'service', 'watcher', 'system')
+        ),
+        identity_status TEXT NOT NULL CHECK (
+            identity_status IN ('active', 'suspended', 'revoked')
+        ),
+        revision INTEGER NOT NULL CHECK (revision > 0),
+        created_at TEXT NOT NULL CHECK (length(trim(created_at)) > 0),
+        updated_at TEXT NOT NULL CHECK (length(trim(updated_at)) > 0),
+        user_id TEXT UNIQUE CHECK (
+            user_id IS NULL OR (
+                length(user_id) = 36
+                AND user_id = lower(user_id)
+                AND length(replace(user_id, '-', '')) = 32
+                AND substr(user_id, 9, 1) = '-'
+                AND substr(user_id, 14, 1) = '-'
+                AND substr(user_id, 19, 1) = '-'
+                AND substr(user_id, 24, 1) = '-'
+                AND substr(user_id, 15, 1) = '4'
+                AND substr(user_id, 20, 1) IN ('8', '9', 'a', 'b')
+                AND user_id NOT GLOB '*[^0-9a-f-]*'
+            )
+        ),
+        UNIQUE (identity_id, user_id),
+        CHECK (
+            (identity_kind = 'user' AND user_id IS NOT NULL)
+            OR
+            (identity_kind != 'user' AND user_id IS NULL)
+        ),
+        FOREIGN KEY (user_id) REFERENCES atlas_users_v6(user_id)
+            ON UPDATE NO ACTION ON DELETE NO ACTION
+            DEFERRABLE INITIALLY DEFERRED
+    );
 
     CREATE TABLE atlas_users_v6 (
         user_id TEXT PRIMARY KEY CHECK (
@@ -573,17 +582,38 @@ CORE_SCHEMA_V6 = SQLiteMigration(
         identity_id TEXT NOT NULL UNIQUE,
         created_at TEXT NOT NULL CHECK (length(trim(created_at)) > 0),
         FOREIGN KEY (identity_id, user_id)
-            REFERENCES identity_records(identity_id, user_id)
+            REFERENCES identity_records_v6(identity_id, user_id)
             ON UPDATE NO ACTION ON DELETE NO ACTION
             DEFERRABLE INITIALLY DEFERRED
     );
+
+    INSERT INTO identity_records_v6 (
+        identity_id, identity_kind, identity_status, revision,
+        created_at, updated_at, user_id
+    )
+    SELECT
+        i.identity_id, i.identity_kind, i.identity_status, i.revision,
+        i.created_at, i.updated_at, u.user_id
+    FROM identity_records AS i
+    LEFT JOIN atlas_users AS u ON u.identity_id = i.identity_id;
 
     INSERT INTO atlas_users_v6 (user_id, identity_id, created_at)
     SELECT user_id, identity_id, created_at
     FROM atlas_users;
 
     DROP TABLE atlas_users;
+    DROP TABLE identity_records;
+
+    ALTER TABLE identity_records_v6 RENAME TO identity_records;
     ALTER TABLE atlas_users_v6 RENAME TO atlas_users;
+
+    CREATE TRIGGER identity_records_id_and_kind_immutable
+    BEFORE UPDATE OF identity_id, identity_kind ON identity_records
+    WHEN NEW.identity_id != OLD.identity_id
+      OR NEW.identity_kind != OLD.identity_kind
+    BEGIN
+        SELECT RAISE(ABORT, 'identity_id and identity_kind are immutable');
+    END;
 
     CREATE TRIGGER identity_records_revision_step
     BEFORE UPDATE ON identity_records
@@ -592,11 +622,38 @@ CORE_SCHEMA_V6 = SQLiteMigration(
         SELECT RAISE(ABORT, 'identity revision must increase by exactly one');
     END;
 
+    CREATE TRIGGER identity_records_revoked_terminal
+    BEFORE UPDATE OF identity_status ON identity_records
+    WHEN OLD.identity_status = 'revoked'
+      AND NEW.identity_status != 'revoked'
+    BEGIN
+        SELECT RAISE(ABORT, 'revoked identity is terminal');
+    END;
+
+    CREATE TRIGGER identity_records_no_delete
+    BEFORE DELETE ON identity_records
+    BEGIN
+        SELECT RAISE(ABORT, 'identity records are retained as tombstones');
+    END;
+
     CREATE TRIGGER identity_records_user_id_immutable
     BEFORE UPDATE OF user_id ON identity_records
     WHEN NEW.user_id != OLD.user_id
     BEGIN
         SELECT RAISE(ABORT, 'identity user_id is immutable');
+    END;
+
+    CREATE TRIGGER identity_records_no_replace
+    BEFORE INSERT ON identity_records
+    WHEN EXISTS (
+        SELECT 1 FROM identity_records WHERE identity_id = NEW.identity_id
+    ) OR (
+        NEW.user_id IS NOT NULL AND EXISTS (
+            SELECT 1 FROM identity_records WHERE user_id = NEW.user_id
+        )
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'identity records cannot be replaced');
     END;
 
     CREATE TRIGGER atlas_users_require_user_identity
@@ -620,6 +677,19 @@ CORE_SCHEMA_V6 = SQLiteMigration(
     BEGIN
         SELECT RAISE(ABORT, 'canonical user records cannot be deleted');
     END;
+
+    CREATE TRIGGER atlas_users_no_replace
+    BEFORE INSERT ON atlas_users
+    WHEN EXISTS (
+        SELECT 1 FROM atlas_users
+        WHERE user_id = NEW.user_id OR identity_id = NEW.identity_id
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'canonical user records cannot be replaced');
+    END;
+
+    CREATE INDEX identity_records_kind_status
+        ON identity_records(identity_kind, identity_status);
     """,
 )
 
@@ -628,4 +698,3 @@ SQLITE_MIGRATIONS = (
     CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
     CORE_SCHEMA_V5, CORE_SCHEMA_V6,
 )
-
