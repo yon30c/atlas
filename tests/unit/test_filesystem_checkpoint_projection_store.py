@@ -60,7 +60,7 @@ class FilesystemCheckpointProjectionStoreTests(unittest.TestCase):
             integrity_reference=self.artifacts.integrity_reference,
             created_at=datetime(2026, 11, 14, tzinfo=timezone.utc),
         )
-        self.request = LocalCheckpointProjectionRequest(
+        self.request = CheckpointProjectionRequest(
             checkpoint=self.checkpoint,
             consistency_domain_id="atlas-main",
             authority_epoch=2,
@@ -75,7 +75,7 @@ class FilesystemCheckpointProjectionStoreTests(unittest.TestCase):
     def test_publish_and_resolve_returns_exact_verified_projection(self):
         self.store.publish_checkpoint_projection(self.artifacts)
         result = self.store.resolve_checkpoint_projection(self.request)
-        self.assertIs(result.status, LocalVerificationStatus.VERIFIED)
+        self.assertIs(result.status, RecoveryVerificationStatus.VERIFIED)
         evidence = result.verified_projection
         self.assertEqual(evidence.checkpoint_id, CHECKPOINT_ID)
         self.assertEqual(evidence.projection, projection())
@@ -89,19 +89,19 @@ class FilesystemCheckpointProjectionStoreTests(unittest.TestCase):
         self.store.publish_checkpoint_projection(self.artifacts)
         self.assertIs(
             self.store.resolve_checkpoint_projection(self.request).status,
-            LocalVerificationStatus.VERIFIED,
+            RecoveryVerificationStatus.VERIFIED,
         )
 
     def test_missing_object_is_unavailable(self):
         result = self.store.resolve_checkpoint_projection(self.request)
-        self.assertIs(result.status, LocalVerificationStatus.UNAVAILABLE)
+        self.assertIs(result.status, RecoveryVerificationStatus.UNAVAILABLE)
 
     def test_corrupt_state_object_is_rejected(self):
         self.store.publish_checkpoint_projection(self.artifacts)
         digest = self.artifacts.state_reference.removeprefix("sha256:")
         (self.root / "state" / digest).write_bytes(b"tampered")
         result = self.store.resolve_checkpoint_projection(self.request)
-        self.assertIs(result.status, LocalVerificationStatus.REJECTED)
+        self.assertIs(result.status, RecoveryVerificationStatus.REJECTED)
 
     def test_existing_content_address_collision_is_not_overwritten(self):
         self.store.publish_checkpoint_projection(self.artifacts)
@@ -112,7 +112,7 @@ class FilesystemCheckpointProjectionStoreTests(unittest.TestCase):
         self.assertEqual((self.root / "state" / digest).read_bytes(), b"tampered")
 
     def test_manifest_bound_to_another_policy_is_rejected(self):
-        wrong_request = LocalCheckpointProjectionRequest(
+        wrong_request = CheckpointProjectionRequest(
             checkpoint=self.checkpoint,
             consistency_domain_id="atlas-main",
             authority_epoch=2,
@@ -122,10 +122,10 @@ class FilesystemCheckpointProjectionStoreTests(unittest.TestCase):
         )
         self.store.publish_checkpoint_projection(self.artifacts)
         result = self.store.resolve_checkpoint_projection(wrong_request)
-        self.assertIs(result.status, LocalVerificationStatus.REJECTED)
+        self.assertIs(result.status, RecoveryVerificationStatus.REJECTED)
 
     def test_unsupported_schema_or_reducer_is_rejected(self):
-        wrong_request = LocalCheckpointProjectionRequest(
+        wrong_request = CheckpointProjectionRequest(
             checkpoint=self.checkpoint,
             consistency_domain_id="atlas-main",
             authority_epoch=2,
@@ -135,7 +135,7 @@ class FilesystemCheckpointProjectionStoreTests(unittest.TestCase):
         )
         self.store.publish_checkpoint_projection(self.artifacts)
         result = self.store.resolve_checkpoint_projection(wrong_request)
-        self.assertIs(result.status, LocalVerificationStatus.REJECTED)
+        self.assertIs(result.status, RecoveryVerificationStatus.REJECTED)
 
     def test_preexisting_storage_directory_with_permissive_mode_is_rejected(self):
         insecure_root = Path(self.temporary.name) / "insecure-checkpoint-store"
