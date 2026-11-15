@@ -1,62 +1,83 @@
 # Atlas
 
-Atlas es un entorno personal de automatización y gestión de proyectos diseñado alrededor de seguridad por defecto, aislamiento, mínimo privilegio, trazabilidad y recuperabilidad.
+Atlas es un entorno personal de asistencia, coordinación y automatización de proyectos. Su propósito es permitir que el propietario consulte y gestione sus proyectos y delegue trabajo a agentes y herramientas bajo límites explícitos, verificables y revocables.
 
-## Estado actual: F1 funcional
+La arquitectura se guía por seguridad por defecto, mínimo privilegio, aislamiento, mediación, trazabilidad, recuperación segura y portabilidad. La autonomía nunca equivale a autoridad ilimitada.
 
-La rama `feature/atlas-functional-f1` incorpora una primera experiencia conversacional local:
+## Estado del repositorio
 
-- Modelos inmutables `AssistantRequest` y `AssistantResponse`.
-- Mensajes históricos neutrales al proveedor mediante `ConversationMessage`.
-- Servicio de aplicación que correlaciona solicitudes y respuestas.
-- Adaptador de consola desacoplado de la lógica de aplicación.
-- Identidad inicial derivada de la cuenta local del sistema.
-- Contexto explícito por solicitud y marcas de tiempo UTC.
-- Orquestador `AtlasCore` en `atlas.application`, que coordina la creación de solicitudes, el contexto conversacional, el servicio y el streaming.
-- Inicio mediante `python -m atlas` o el comando `atlas` tras instalar el paquete.
+El repositorio contiene una primera experiencia conversacional local funcional y una implementación progresiva de contratos de dominio, autorización y Memory Engine. No todos esos módulos están integrados en un único flujo operativo.
 
-`src/atlas/core` conserva los contratos fundamentales del dominio (identidad, contexto, errores y enums). No debe confundirse con `AtlasCore`, que es la fachada de orquestación de aplicación en `src/atlas/application/atlas_core.py`.
+**Importante:** la presencia de un módulo, contrato, migración o prueba no demuestra por sí sola que una capacidad esté completa o habilitada en runtime.
 
-La consola solo recoge y presenta texto. AtlasCore recibe ese texto, solicita a la fábrica el contexto local, delega en el procesador de contexto conversacional y valida que la respuesta corresponda a la solicitud original. Esta capa no concede permisos, no ejecuta herramientas ni permite que el modelo acceda directamente a archivos o sistemas.
+### Capacidades implementadas en la línea de trabajo
 
-### Contexto conversacional de sesión
+- **Atlas Assistant / AtlasCore:** experiencia conversacional de consola, modelos neutrales de solicitud/respuesta, contexto de sesión y streaming.
+- **Proveedor LLM local:** adaptador Ollama sobre `/api/chat`, restringido a endpoints loopback (`localhost`, `127.0.0.1`, `::1`). No se admiten proveedores remotos ni proxies del entorno en esta composición.
+- **Historial conversacional:** `InMemoryConversationHistory`, separado por `conversation_id`, con límite de hasta 8 turnos y 2000 caracteres por mensaje histórico. Es temporal y desaparece al terminar el proceso.
+- **SQLite / consistencia local:** infraestructura de base SQLite, UoW, journal, migraciones y mecanismos parciales de recuperación.
+- **D4O-I C.4.1:** `SQLiteAuthorityChangeStore` con reserva durable e idempotencia semántica de operaciones. Su alcance es almacenamiento de operaciones; no es un coordinador completo de revocación ni de cambios de autoridad.
 
-`ConversationContextProcessor` enriquece cada solicitud con los turnos anteriores de la misma conversación. El historial se mantiene en `InMemoryConversationHistory`, separado por `conversation_id`, protegido para accesos concurrentes y limitado por cantidad y tamaño:
+La ejecución local del propietario reportó 787 pruebas de la suite completa finalizadas con `OK` para el estado C.4.1 y sus correcciones de tests. Esta evidencia corresponde a esa ejecución local; no implica que GitHub Actions/CI haya pasado ni que las capacidades pendientes estén verificadas.
 
-- Hasta 8 turnos anteriores (16 mensajes: usuario y asistente).
-- Hasta 2000 caracteres por mensaje histórico; el contenido más allá del límite se trunca con una marca explícita.
-- Solo se guardan turnos cuya respuesta no sea de tipo `ERROR`.
-- Las respuestas y solicitudes conservan sus identificadores y contexto originales.
-- El historial desaparece al terminar el proceso. No se escribe en disco ni se comparte entre sesiones.
+### Capacidades en diseño o implementación parcial
 
-El mensaje de sistema se mantiene al principio del prompt; después se envían los mensajes históricos en orden y, al final, el mensaje actual del usuario. La gestión del historial pertenece a la capa de aplicación, no a Ollama.
+- Memory Engine y Memory Gateway: contratos de dominio, scopes PRIVATE/PROJECT, versiones, procedencia, autorización y consistencia.
+- Identity, bindings y contexto de identidad verificada.
+- CAM, Grants y coordinación de cambios de autoridad.
+- Admisión durable de lecturas y recuperación protegida.
+- Persistencia canónica compartida de Memory, Identity, Project, Environment y CAM.
 
-Los contratos neutrales para proveedores de modelos (`LLMProvider`, `LLMRequest`, `LLMResponse` y `LLMMessage`) están definidos en `atlas.ports.llm`. No dependen de un SDK ni de un proveedor concreto y no conceden capacidad para ejecutar herramientas.
+Aún no debe afirmarse que existe una persistencia completa de contenido Memory, un coordinador SQLite completo de revocación, una implementación de `admit_read`, egress protegido completo o runtime protegido habilitado.
 
-El adaptador `OllamaProvider` implementa la API local `/api/chat` mediante la biblioteca estándar. Solo acepta endpoints HTTP loopback (`localhost`, `127.0.0.1` o `::1`); no admite proveedores remotos ni proxies del entorno. Soporta tanto respuestas completas como streaming NDJSON.
+### Visión de arquitectura
 
-El puente `OllamaResponseGenerator` conecta el puerto LLM con `AssistantService`. Convierte cada solicitud en mensajes de sistema, historial y mensaje actual, y traduce fallos conocidos de Ollama en respuestas de tipo `ERROR`, sin propagar detalles internos al usuario. El streaming atraviesa proveedor, generador, servicio, contexto conversacional, AtlasCore y consola: los fragmentos se muestran conforme llegan, sin esperar a que termine la generación. Se rechazan flujos que no entreguen el evento final de Ollama.
+La descomposición objetivo es:
 
-### Configuración local de la consola
+1. **Atlas Assistant / AtlasCore:** interfaz y coordinación de solicitudes.
+2. **Memory Engine / Memory Gateway:** memoria persistente gobernada por scope, procedencia, versiones y autorización.
+3. **Identity Authority:** identidad canónica y bindings autenticados.
+4. **CAM:** autorización central por operación y recurso exactos.
+5. **Consistency:** invalidación, fencing, admisiones, journal y recuperación.
+6. **Project / Environment:** identidad, configuración, estado deseado y estado observado de proyectos y entornos.
+7. **Broker:** frontera pequeña y explícita para operaciones de runtime Docker Rootless.
+8. **Skills y agentes:** capacidades extensibles sujetas a procedencia, revisión de código/dependencias, declaración y aprobación de permisos, instalación controlada, aislamiento, auditoría y desactivación.
+9. **Backup / Manifest / Restore / Verification:** reconstrucción portable y verificación antes de reactivar cargas de trabajo.
 
-La consola utiliza por defecto:
+Esta arquitectura es una visión por etapas. La existencia de contratos no implica que todos los componentes estén implementados o integrados. Atlas Broker se mantiene como componente/proyecto separado y no se debe asumir una integración operativa con AtlasCore.
 
-- Modelo: `gemma4:e2b`.
-- Endpoint: `http://127.0.0.1:11434`.
-- Streaming: activado.
-- Historial de sesión: hasta 8 turnos, 2000 caracteres por mensaje histórico.
+## Principios de seguridad
 
-Variables opcionales:
+- Denegar por defecto y fallar cerrado ante identidad, contexto, autorización o evidencia incompletos.
+- Separar autenticación, identidad y autorización.
+- Verificar permisos en cada operación protegida.
+- Limitar Grants a consumidor/proyecto, entorno, recurso, operación, límites y vigencia explícitos.
+- No conceder permisos por conocer IDs.
+- Aislar consumidores y proyectos; no hay acceso ni búsqueda cross-consumer/project por defecto.
+- Mantener aprobación, rechazo y Forget de memoria como acciones directas y no delegables del propietario.
+- Coordinar cambios de autoridad con invalidación y fencing previos.
+- No restaurar proyectos o Skills automáticamente después de migración/recuperación.
+- No almacenar secretos en documentación ni respaldos sin cifrado y custodia apropiada.
 
-- `ATLAS_MODEL`: cambia el tag del modelo local.
-- `ATLAS_OLLAMA_URL`: cambia el endpoint; debe seguir siendo loopback.
-- `ATLAS_MODE=offline`: inicia el modo informativo sin proveedor LLM.
+## Contratos y documentación normativa
 
-No se instala, descarga ni inicia Ollama automáticamente. El modelo debe estar instalado en la instancia local de Ollama. No hay memoria conversacional persistente, herramientas, agentes ni conexión con Atlas Broker en esta fase.
+El documento normativo principal es:
 
-El repositorio también contiene módulos de memoria, autorización y proactividad con contratos y pruebas propios. Su presencia no significa que estén integrados en el flujo conversacional de AtlasCore. Esa integración se abordará en etapas posteriores y con límites de seguridad explícitos.
+- [Contrato de diseño Atlas v1 — revisión 4](Contrato-de-diseno-Atlas-v1.md)
 
-La integración LLM está cubierta por pruebas unitarias con transportes y proveedores simulados; no requiere un servidor Ollama activo.
+Enmiendas y contratos relacionados:
+
+- [B1-A-06 — identidad, Project/Environment y persistencia compartida](docs/contracts/b1-a06-identity-project-environment-and-persistence.md)
+- [Contrato técnico de Memory Engine](docs/design/memory-engine-technical-contract.md)
+- [Independencia de Memory Engine respecto a consumidores](docs/design/memory-engine-project-independence-implementation.md)
+- [DM-01 — especificación del modelo de dominio](docs/design/domain-model-specification-dm-01.md)
+- [ME-D4O-B — admisión durable de lectura](docs/design/ME-D4O-B-durable-read-admission.md)
+- [ME-D4O-I C.2 — verificación y consumo de pruebas de revocación](docs/design/me-d4o-i-c2-proof-verification-and-one-shot-consumption.md)
+- [ME-D4O-I C.3 — coordinación de revocación de Grants](docs/design/me-d4o-i-c3-grant-revocation-coordination.md)
+- [ME-D4O-I C.4.1 — almacenamiento durable SQLite de cambios de autoridad](docs/design/me-d4o-i-c4-sqlite-durable-authority-store.md)
+- [README de Memory Engine](docs/memory-engine/README.md)
+
+La enmienda B1-A-06 adopta B1-A-01 a B1-A-05 como decisiones posteriores al baseline anterior. El diseño físico de persistencia (B1-B-02) sigue pendiente.
 
 ## Ejecución local
 
@@ -66,49 +87,48 @@ Desde la raíz del repositorio:
 PYTHONPATH=src python -m atlas
 ```
 
-Para instalar el comando de consola en el entorno activo:
+Para instalar el comando en el entorno activo:
 
 ```bash
 python -m pip install -e .
 atlas
 ```
 
-Para ejecutar deliberadamente el modo informativo sin modelo:
+Modo informativo sin proveedor LLM:
 
 ```bash
 ATLAS_MODE=offline PYTHONPATH=src python -m atlas
 ```
 
+Configuración de consola:
+
+- `ATLAS_MODEL`: tag del modelo local (predeterminado: `gemma4:e2b`).
+- `ATLAS_OLLAMA_URL`: endpoint Ollama; debe ser loopback.
+- `ATLAS_MODE=offline`: modo informativo sin LLM.
+
+Atlas no instala, descarga ni inicia Ollama automáticamente.
+
 ## Pruebas
 
+La suite se ejecuta desde el entorno del proyecto:
+
 ```bash
-PYTHONPATH=src python -m unittest \
-  tests.unit.test_assistant_conversation_models \
-  tests.unit.test_assistant_service \
-  tests.unit.test_assistant_console \
-  tests.unit.test_local_console_composition \
-  tests.unit.test_llm_contracts \
-  tests.unit.test_ollama_adapter \
-  tests.unit.test_ollama_assistant \
-  tests.unit.test_ollama_streaming \
-  tests.unit.test_atlas_core \
-  tests.unit.test_conversation_context -v
+PYTHONPATH=src python -m unittest discover -s tests -v
 ```
 
-## Próximas etapas
+La lista y el resultado de las pruebas deben corresponder al checkout concreto y quedar registrados con su commit. No se debe inferir un resultado CI a partir de una ejecución local.
 
-Validar el contexto de sesión con la suite completa y una conversación local real. Después, diseñar la integración controlada de memoria persistente y las políticas de autorización antes de exponer herramientas. Ninguna capacidad futura debe considerarse implementada hasta contar con código y pruebas verificadas.
+## Hoja de ruta inmediata
 
+1. Cerrar la consolidación normativa B1-A-06.
+2. Ejecutar las validaciones documentales y resolver referencias inconsistentes.
+3. Completar B1-B-02: diseño físico de persistencia sobre la base SQLite compartida, sin implementar todavía.
+4. Definir transacciones, CAS, idempotencia, invalidación y recuperación por dominio.
+5. Implementar de forma incremental solo después de aprobar cada contrato técnico y su alcance.
 
-## Memory Engine — persistencia local (en desarrollo)
+## Límites de seguridad y alcance
 
-El perfil SQLite del Memory Engine tiene migraciones, journal local y un adaptador gate-only que hace atómicos RECOVERY_CLOSED/RECOVERY_RECONCILED con la proyección del Recovery Gate. Todavía no existe una autoridad común que incluya admisión y egress protegido. ME-D4O identificó que el dominio nuevo nace con gate cerrado y carece de bootstrap autenticado. El contrato se corrigió para el baseline LOCAL sin Trust Anchor externo; esto permite continuar el desarrollo por etapas, pero no activa memoria persistente, lecturas protegidas ni egress.
-
-- [README de Memory Engine: configuración SQLite, journal y límites](docs/memory-engine/README.md)
-- [ME-D4J: diseño de unidad de trabajo SQLite compartida](docs/design/ME-D4J-sqlite-unit-of-work.md)
-- [ME-D4N: adaptador SQLite del Recovery Gate y límites](docs/design/ME-D4N-sqlite-recovery-gate.md)
-- [ME-D4O: bootstrap seguro e integración de autoridad SQLite](docs/design/ME-D4O-sqlite-authority-bootstrap-and-integration.md)
-- [ME-D4O-A: contrato de bootstrap autenticado](docs/design/ME-D4O-A-authenticated-domain-bootstrap.md)
-- [Registro de implementación e independencia](docs/design/memory-engine-project-independence-implementation.md)
-
-La guía explica cómo preparar el archivo SQLite, aplicar migraciones y configurar las dependencias explícitas del journal. La autoridad transaccional, la implementación completa de Forget/egress y sus pruebas de concurrencia siguen pendientes.
+- No modificar Atlas Broker, Registry, servicios protegidos ni producción como parte del trabajo de Memory Engine.
+- No abrir el Recovery Gate ni habilitar lecturas/egress protegidos antes del bootstrap, recuperación y validaciones exigidas.
+- No realizar merge, PR, deploy ni cambios de políticas sin autorización explícita.
+- Antes de migraciones o cambios de estado: respaldo verificado, integridad y permisos comprobados.
