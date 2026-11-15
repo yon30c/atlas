@@ -208,6 +208,35 @@ class SQLiteIdentityAuthorityTests(unittest.TestCase):
                 )
 
 
+    def test_direct_sql_cannot_insert_user_without_identity(self):
+        with self.database.connection() as connection:
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    """
+                    INSERT INTO atlas_users (user_id, identity_id, created_at)
+                    VALUES (
+                        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                        'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                        'now'
+                    )
+                    """
+                )
+
+    def test_direct_sql_cannot_insert_user_identity_without_user_id(self):
+        with self.database.connection() as connection:
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    """
+                    INSERT INTO identity_records (
+                        identity_id, identity_kind, identity_status, revision,
+                        created_at, updated_at
+                    ) VALUES (
+                        'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+                        'user', 'active', 1, 'now', 'now'
+                    )
+                    """
+                )
+
     def test_direct_sql_cannot_commit_an_orphan_user_identity(self):
         with self.database.connection() as connection:
             with self.assertRaises(sqlite3.IntegrityError):
