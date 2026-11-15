@@ -141,8 +141,11 @@ class SQLiteIdentityAuthorityTests(unittest.TestCase):
                     """
                     INSERT INTO identity_records (
                         identity_id, identity_kind, identity_status, revision,
-                        created_at, updated_at
-                    ) VALUES ('NOT-A-UUID', 'user', 'active', 1, 'now', 'now')
+                        created_at, updated_at, user_id
+                    ) VALUES (
+                        'NOT-A-UUID', 'user', 'active', 1, 'now', 'now',
+                        '77777777-7777-4777-8777-777777777777'
+                    )
                     """
                 )
             with self.assertRaises(sqlite3.IntegrityError):
@@ -150,10 +153,11 @@ class SQLiteIdentityAuthorityTests(unittest.TestCase):
                     """
                     INSERT INTO identity_records (
                         identity_id, identity_kind, identity_status, revision,
-                        created_at, updated_at
+                        created_at, updated_at, user_id
                     ) VALUES (
                         '11111111-1111-1111-8111-111111111111',
-                        'user', 'active', 1, 'now', 'now'
+                        'user', 'active', 1, 'now', 'now',
+                        '77777777-7777-4777-8777-777777777777'
                     )
                     """
                 )
