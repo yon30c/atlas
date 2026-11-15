@@ -354,41 +354,137 @@ class SQLiteIdentityAuthorityTests(unittest.TestCase):
                     (user.identity.identity_id,),
                 )
 
-    def test_v6_migration_preserves_existing_user_pairs(self):
+    def test_v6_migration_preserves_user_pair_and_all_non_user_identity_fields(self):
         legacy = SQLiteDatabase(Path(self.temp_dir.name) / "legacy-valid.sqlite")
         legacy.apply_migrations(SQLITE_MIGRATIONS[:-1])
-        user_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-        identity_id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        records = (
+            ("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "user", "suspended", 3,
+             "user-created", "user-updated"),
+            ("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "agent", "active", 7,
+             "agent-created", "agent-updated"),
+            ("cccccccc-cccc-4ccc-8ccc-cccccccccccc", "service", "revoked", 9,
+             "service-created", "service-updated"),
+            ("dddddddd-dddd-4ddd-8ddd-dddddddddddd", "watcher", "suspended", 4,
+             "watcher-created", "watcher-updated"),
+            ("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", "system", "active", 2,
+             "system-created", "system-updated"),
+        )
+        user_id = "11111111-1111-4111-8111-111111111111"
+        user_created_at = "user-row-created"
         with legacy.connection() as connection:
             connection.execute("BEGIN")
-            connection.execute(
+            connection.executemany(
                 """
                 INSERT INTO identity_records (
                     identity_id, identity_kind, identity_status, revision,
                     created_at, updated_at
-                ) VALUES (?, 'user', 'active', 1, 'legacy', 'legacy')
+                ) VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (identity_id,),
+                records,
             )
             connection.execute(
-                "INSERT INTO atlas_users (user_id, identity_id, created_at) VALUES (?, ?, 'legacy')",
-                (user_id, identity_id),
+                """
+                INSERT INTO atlas_users (user_id, identity_id, created_at)
+                VALUES (?, ?, ?)
+                """,
+                (user_id, records[0][0], user_created_at),
             )
             connection.commit()
 
         legacy.apply_migrations(SQLITE_MIGRATIONS)
         with legacy.connection() as connection:
-            row = connection.execute(
-                "SELECT user_id FROM identity_records WHERE identity_id = ?",
-                (identity_id,),
+            migrated = connection.execute(
+                """
+                SELECT identity_id, identity_kind, identity_status, revision,
+                       created_at, updated_at, user_id
+                FROM identity_records ORDER BY identity_kind
+                """
+            ).fetchall()
+            user_row = connection.execute(
+                "SELECT user_id, identity_id, created_at FROM atlas_users"
             ).fetchone()
             versions = connection.execute(
                 "SELECT version FROM schema_migrations ORDER BY version"
             ).fetchall()
             violations = connection.execute("PRAGMA foreign_key_check").fetchall()
-        self.assertEqual(row["user_id"], user_id)
+
+        expected_by_kind = {
+            kind: (identity_id, kind, status, revision, created_at, updated_at,
+                   user_id if kind == "user" else None)
+            for identity_id, kind, status, revision, created_at, updated_at in records
+        }
+        self.assertEqual(
+            {row["identity_kind"]: tuple(row) for row in migrated},
+            expected_by_kind,
+        )
+        self.assertEqual(
+            tuple(user_row),
+            (user_id, records[0][0], user_created_at),
+        )
         self.assertEqual([item[0] for item in versions], [1, 2, 3, 4, 5, 6])
         self.assertEqual(violations, [])
+
+    def test_v6_migration_rejects_legacy_orphan_atlas_user_atomically(self):
+        database_path = Path(self.temp_dir.name) / "legacy-orphan-user.sqlite"
+        legacy = SQLiteDatabase(database_path)
+        legacy.apply_migrations(SQLITE_MIGRATIONS[:-1])
+
+        user_id = "22222222-2222-4222-8222-222222222222"
+        missing_identity_id = "33333333-3333-4333-8333-333333333333"
+
+        # Simulate legacy corruption that normal v5 FK enforcement prevents.
+        # Disable FK checks before the transaction and remove the v5 kind guard
+        # so the intentionally dangling atlas_users row can be represented.
+        raw = sqlite3.connect(database_path)
+        try:
+            raw.execute("PRAGMA foreign_keys = OFF")
+            raw.execute("DROP TRIGGER atlas_users_require_user_identity")
+            raw.execute(
+                """
+                INSERT INTO atlas_users (user_id, identity_id, created_at)
+                VALUES (?, ?, 'orphan-user-created')
+                """,
+                (user_id, missing_identity_id),
+            )
+            raw.commit()
+        finally:
+            raw.close()
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            legacy.apply_migrations(SQLITE_MIGRATIONS)
+
+        with legacy.connection() as connection:
+            versions = connection.execute(
+                "SELECT version FROM schema_migrations ORDER BY version"
+            ).fetchall()
+            orphan = connection.execute(
+                "SELECT user_id, identity_id, created_at FROM atlas_users"
+            ).fetchone()
+            columns = {
+                item["name"]
+                for item in connection.execute("PRAGMA table_info(identity_records)")
+            }
+            temporary_tables = {
+                row["name"]
+                for row in connection.execute(
+                    """
+                    SELECT name FROM sqlite_master
+                    WHERE type = 'table'
+                      AND name IN ('identity_records_v6', 'atlas_users_v6')
+                    """
+                )
+            }
+            violations = connection.execute("PRAGMA foreign_key_check").fetchall()
+
+        self.assertEqual([item[0] for item in versions], [1, 2, 3, 4, 5])
+        self.assertEqual(
+            tuple(orphan),
+            (user_id, missing_identity_id, "orphan-user-created"),
+        )
+        self.assertNotIn("user_id", columns)
+        self.assertEqual(temporary_tables, set())
+        self.assertTrue(violations)
+        self.assertEqual(violations[0][0], "atlas_users")
 
     def test_v6_migration_rejects_legacy_orphan_user_identity_atomically(self):
         legacy = SQLiteDatabase(Path(self.temp_dir.name) / "legacy-orphan.sqlite")
