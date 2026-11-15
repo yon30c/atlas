@@ -2,8 +2,8 @@
 
 **Estado:** baseline arquitectónico aprobado por el propietario.
 **Implementación:** autorizada únicamente para la Fase 1, conforme al alcance registrado en §20.5.
-**Versión:** revisión 3.
-**Fecha:** 13 de noviembre de 2026.
+**Versión:** revisión 4.
+**Fecha:** 15 de noviembre de 2026.
 **Alcance:** especificación documental y contractual.
 **Implementación:** este documento no autoriza ni declara implementados los componentes descritos.
 
@@ -104,29 +104,17 @@ No deben conservarse clasificaciones pendientes que contradigan decisiones aprob
 
 Tampoco deben elevarse propuestas técnicas o requisitos documentados a la categoría de aprobados sin aceptación expresa.
 
-### 1.2.6 Estado global del documento
+### 1.2.6 Estado global y revisión vigente
 
-La revisión 2 es el documento base vigente para esta revisión arquitectónica.
+La revisión 3 constituyó el baseline arquitectónico aprobado el 13 de noviembre de 2026.
 
-Su utilización como documento base no significa que el contrato completo haya recibido aprobación definitiva.
+La revisión 4 incorpora la enmienda normativa B1-A-06, aprobada por el propietario el 15 de noviembre de 2026. La enmienda adopta las decisiones B1-A-01 a B1-A-05 como ampliaciones posteriores relativas a autorización PRIVATE, relación Project–Environment, Identity/bindings, integración Identity–CAM y persistencia SQLite local compartida.
 
-El cierre de esta revisión arquitectónica requerirá:
+La enmienda se conserva como documento separado en `docs/contracts/b1-a06-identity-project-environment-and-persistence.md` para mantener trazabilidad, historial y detalle. Forma parte del baseline normativo vigente y prevalece sobre disposiciones anteriores incompatibles dentro de su alcance. El contrato raíz continúa siendo el documento normativo principal.
 
-1. Conciliar las decisiones aprobadas.
-2. Resolver las contradicciones internas.
-3. Identificar explícitamente las decisiones del propietario pendientes.
-4. Identificar los parámetros técnicos pendientes y su clasificación.
-5. Someter el documento consolidado a aprobación explícita del propietario.
+La aprobación de la revisión 4 y de B1-A-06 es arquitectónica y documental. No declara que las capacidades estén implementadas, integradas, verificadas o desplegadas, ni amplía por sí misma la autorización de implementación registrada en §20.5.
 
-La aprobación del baseline arquitectónico podrá realizarse con decisiones del propietario y parámetros técnicos pendientes expresamente identificados, siempre que estos no representen contradicciones sin resolver ni dejen indeterminadas las garantías arquitectónicas y de seguridad aprobadas.
-
-Las especificaciones técnicas expresamente diferidas podrán completarse durante las fases correspondientes de diseño e implementación, siempre que respeten las decisiones, invariantes y garantías aprobadas.
-
-La aprobación del baseline no implica que todos los componentes estén especificados, implementados, integrados o verificados.
-
-Tampoco constituye autorización de implementación, despliegue ni modificación de infraestructura protegida.
-
-Toda modificación posterior que altere, debilite o posponga una garantía arquitectónica o de seguridad aprobada deberá documentarse y someterse nuevamente a revisión y aprobación explícita del propietario antes de adoptarse.
+Los parámetros técnicos pendientes pueden desarrollarse en fases posteriores siempre que respeten las decisiones, invariantes y garantías aprobadas. Toda modificación que debilite o posponga una garantía aprobada requiere nueva revisión y aprobación expresa del propietario.
 
 ## 2. Propósito y principios de Atlas
 
@@ -2751,3 +2739,16 @@ El propietario decide que el Trust Anchor externo será una capacidad **opcional
 Revisión 3: incorpora la decisión aprobada sobre Trust Anchor opcional, aplaza su implementación real a la etapa final y documenta las limitaciones de anti-rollback y restauración en el perfil local. También actualiza la regla de no reintroducción de memorias olvidadas para evitar afirmar una garantía que no pueda demostrarse sin una fuente independiente de supresión/continuidad.
 
 **Fin del documento.**
+
+
+## 21. Enmienda normativa B1-A-06 — 15 de noviembre de 2026
+
+**Estado: APROBADA POR EL PROPIETARIO.**
+
+La enmienda `docs/contracts/b1-a06-identity-project-environment-and-persistence.md` adopta y consolida las decisiones B1-A-01 a B1-A-05 como ampliaciones normativas posteriores de este contrato.
+
+Su alcance comprende: autorización individual de consumidores sobre memorias PRIVATE; relación Project–Environment 1:N; identidad canónica y bindings; separación Authentication Authority / Identity Authority / CAM / Consistency; contexto de identidad verificada; y persistencia local compartida mediante una única base SQLite con autoridades de dominio separadas y UoW común donde exista atomicidad real.
+
+Las reglas de compatibilidad histórica, ausencia de alias implícitos de permisos, conservación de migraciones, aislamiento, invalidación, fencing y recuperación se detallan en la enmienda. En particular, no se migran automáticamente estados históricos de Identity y no se declara completa la persistencia de dominios ni el coordinador de cambios de autoridad.
+
+La aprobación es de diseño y no certifica implementación, pruebas ni despliegue. B1-B-02 (diseño físico de persistencia) permanece como siguiente fase documental.
