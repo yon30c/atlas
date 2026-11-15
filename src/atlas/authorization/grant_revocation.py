@@ -1,0 +1,211 @@
+"""Contrato de verificación y consumo de evidencia de revocación CAM."""
+
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from enum import Enum
+
+from atlas.authorization.models import (
+    GrantRevocationAuthorizationRequest,
+    VerifiedGrantRevocationAuthorization,
+)
+from atlas.core.errors import ContractError
+
+
+class ProofConsumptionStatus(str, Enum):
+    CONSUMED = "consumed"
+    REPLAY_SAME_OPERATION = "replay_same_operation"
+    REPLAY_CONFLICT = "replay_conflict"
+    INDETERMINATE = "indeterminate"
+
+
+class GrantRevocationAuthorizationStatus(str, Enum):
+    AUTHORIZED = "authorized"
+    DENIED = "denied"
+    VERIFIER_UNAVAILABLE = "verifier_unavailable"
+    PROOF_REPLAY_CONFLICT = "proof_replay_conflict"
+    CONSUMPTION_UNCERTAIN = "consumption_uncertain"
+
+
+@dataclass(frozen=True, slots=True)
+class ProofConsumptionResult:
+    """Resultado durable esperado del consumo de una prueba one-shot."""
+
+    proof_id: str
+    operation_id: str
+    idempotency_key: str
+    status: ProofConsumptionStatus
+
+    def __post_init__(self) -> None:
+        for field in ("proof_id", "operation_id", "idempotency_key"):
+            value = getattr(self, field)
+            if not isinstance(value, str) or not value.strip():
+                raise ContractError(f"{field} debe ser una cadena no vacía")
+        if not isinstance(self.status, ProofConsumptionStatus):
+            raise ContractError("status debe ser ProofConsumptionStatus")
+
+
+@dataclass(frozen=True, slots=True)
+class GrantRevocationAuthorizationResult:
+    """Resultado de verificar y consumir evidencia para una operación."""
+
+    operation_id: str
+    grant_id: str
+    proof_id: str | None
+    status: GrantRevocationAuthorizationStatus
+
+    def __post_init__(self) -> None:
+        for field in ("operation_id", "grant_id"):
+            value = getattr(self, field)
+            if not isinstance(value, str) or not value.strip():
+                raise ContractError(f"{field} debe ser una cadena no vacía")
+        if self.proof_id is not None and (
+            not isinstance(self.proof_id, str) or not self.proof_id.strip()
+        ):
+            raise ContractError("proof_id debe ser None o una cadena no vacía")
+        if not isinstance(self.status, GrantRevocationAuthorizationStatus):
+            raise ContractError(
+                "status debe ser GrantRevocationAuthorizationStatus"
+            )
+
+    @property
+    def authorized(self) -> bool:
+        return self.status is GrantRevocationAuthorizationStatus.AUTHORIZED
+
+
+def _validate_utc(value: datetime, field: str) -> None:
+    if (
+        not isinstance(value, datetime)
+        or value.tzinfo is None
+        or value.utcoffset() is None
+    ):
+        raise ContractError(f"{field} debe ser un datetime con zona horaria")
+    if value.utcoffset() != timedelta(0):
+        raise ContractError(f"{field} debe estar en UTC")
+
+
+class GrantRevocationProofAuthorizationService:
+    """Verifica claims y consume evidencia CAM mediante puertos confiables.
+
+    No autentica firmas por sí mismo ni implementa almacenamiento de consumo.
+    El verificador debe validar la autoridad emisora y la evidencia original.
+    El consumidor debe proporcionar consumo atómico, durable y recuperable.
+    """
+
+    def __init__(self, verifier, consumer) -> None:
+        if verifier is None or consumer is None:
+            raise ContractError("verifier y consumer son obligatorios")
+        self._verifier = verifier
+        self._consumer = consumer
+
+    def verify_and_consume(
+        self,
+        request: GrantRevocationAuthorizationRequest,
+        evidence: VerifiedGrantRevocationAuthorization,
+        operation_id: str,
+        idempotency_key: str,
+        now: datetime,
+    ) -> GrantRevocationAuthorizationResult:
+        """Autoriza solo después de verificar y consumir la prueba one-shot."""
+        if not isinstance(request, GrantRevocationAuthorizationRequest):
+            raise ContractError("request debe ser GrantRevocationAuthorizationRequest")
+        if not isinstance(evidence, VerifiedGrantRevocationAuthorization):
+            raise ContractError("evidence debe ser VerifiedGrantRevocationAuthorization")
+        for field, value in (
+            ("operation_id", operation_id),
+            ("idempotency_key", idempotency_key),
+        ):
+            if not isinstance(value, str) or not value.strip():
+                raise ContractError(f"{field} debe ser una cadena no vacía")
+        _validate_utc(now, "now")
+
+        if not self._matches_request(request, evidence):
+            return self._result(
+                operation_id, request.grant_id, evidence.proof_id,
+                GrantRevocationAuthorizationStatus.DENIED,
+            )
+        if evidence.issued_at < request.requested_at or not (
+            evidence.issued_at <= now < evidence.expires_at
+        ):
+            return self._result(
+                operation_id, request.grant_id, evidence.proof_id,
+                GrantRevocationAuthorizationStatus.DENIED,
+            )
+
+        try:
+            verified = self._verifier.verify(request, evidence, now)
+        except Exception:
+            return self._result(
+                operation_id, request.grant_id, evidence.proof_id,
+                GrantRevocationAuthorizationStatus.VERIFIER_UNAVAILABLE,
+            )
+        if verified is not True:
+            return self._result(
+                operation_id, request.grant_id, evidence.proof_id,
+                GrantRevocationAuthorizationStatus.DENIED,
+            )
+
+        try:
+            consumed = self._consumer.consume(
+                proof_id=evidence.proof_id,
+                operation_id=operation_id,
+                idempotency_key=idempotency_key,
+                consumed_at=now,
+            )
+        except Exception:
+            # No se puede inferir que la prueba siga libre: el resultado puede
+            # haberse confirmado antes de perderse la respuesta.
+            return self._result(
+                operation_id, request.grant_id, evidence.proof_id,
+                GrantRevocationAuthorizationStatus.CONSUMPTION_UNCERTAIN,
+            )
+
+        if not isinstance(consumed, ProofConsumptionResult):
+            return self._result(
+                operation_id, request.grant_id, evidence.proof_id,
+                GrantRevocationAuthorizationStatus.CONSUMPTION_UNCERTAIN,
+            )
+        if (
+            consumed.proof_id != evidence.proof_id
+            or consumed.operation_id != operation_id
+            or consumed.idempotency_key != idempotency_key
+        ):
+            return self._result(
+                operation_id, request.grant_id, evidence.proof_id,
+                GrantRevocationAuthorizationStatus.PROOF_REPLAY_CONFLICT,
+            )
+
+        if consumed.status in (
+            ProofConsumptionStatus.CONSUMED,
+            ProofConsumptionStatus.REPLAY_SAME_OPERATION,
+        ):
+            return self._result(
+                operation_id, request.grant_id, evidence.proof_id,
+                GrantRevocationAuthorizationStatus.AUTHORIZED,
+            )
+        if consumed.status is ProofConsumptionStatus.REPLAY_CONFLICT:
+            status = GrantRevocationAuthorizationStatus.PROOF_REPLAY_CONFLICT
+        else:
+            status = GrantRevocationAuthorizationStatus.CONSUMPTION_UNCERTAIN
+        return self._result(operation_id, request.grant_id, evidence.proof_id, status)
+
+    @staticmethod
+    def _matches_request(
+        request: GrantRevocationAuthorizationRequest,
+        evidence: VerifiedGrantRevocationAuthorization,
+    ) -> bool:
+        return (
+            evidence.request_id == request.request_id
+            and evidence.actor_identity_id == request.actor_identity_id
+            and evidence.owner_user_id == request.owner_user_id
+            and evidence.grant_id == request.grant_id
+            and evidence.expected_revision == request.expected_revision
+        )
+
+    @staticmethod
+    def _result(operation_id, grant_id, proof_id, status):
+        return GrantRevocationAuthorizationResult(
+            operation_id=operation_id,
+            grant_id=grant_id,
+            proof_id=proof_id,
+            status=status,
+        )
