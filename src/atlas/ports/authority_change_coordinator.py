@@ -27,6 +27,16 @@ class AuthorityChangeCoordinatorPort(Protocol):
     La incertidumbre conserva BLOCKED/fencing; timeout no significa ABORTED.
     """
 
+    def get_by_idempotency_key(
+        self,
+        consumer_id: str,
+        idempotency_key: str,
+    ) -> AuthorityChangeResult | None:
+        """Recupera el resultado existente de la misma clave/consumidor."""
+
+    def get_result(self, operation_id: str) -> AuthorityChangeResult | None:
+        """Recupera el estado durable actual de una operación."""
+
     def reserve_change(
         self,
         intent: AuthorityChangeIntent,
