@@ -1,6 +1,6 @@
 # B1-B-03A-03 — Borrador de enmienda normativa: UserId e Identity Binding
 
-**Estado:** BORRADOR NORMATIVO — decisiones A–G aprobadas; texto de enmienda pendiente de aprobación final.  
+**Estado:** BORRADOR NORMATIVO — decisiones A–G aprobadas; §4.2 aprobada por el propietario el 15 de noviembre de 2026 con precisiones; §§3–6 pendientes de revisión y aprobación.  
 **Fecha:** 15 de noviembre de 2026.  
 **Documento de decisión:** [B1-B-03A-02 — Modelo lógico de UserId canónico y bindings externos](b1-b03a-02-canonical-user-and-external-identity-binding.md).  
 **Alcance:** proponer texto coordinado para B1-A-06, identity.md y operation-context.md.  
@@ -37,19 +37,28 @@ Atlas distingue tres conceptos:
 
 La relación entre UserId e Identity(USER) es exactamente 1:1: cada UserId corresponde a una única Identity(USER), y cada Identity(USER) corresponde a un único UserId. UserId e identity_id son identificadores distintos y no se exige igualdad textual entre ellos.
 
+La propiedad de una memoria y la identidad interna de su propietario se representan mediante identificadores distintos. `Memory.owner_id` conserva el `UserId` canónico de Atlas. Cuando una autorización u operación requiera identificar la Identity(USER) correspondiente al propietario, Identity Authority debe resolver y verificar la relación vigente entre ambos identificadores. En el caso de `PrivateMemoryConsumerAuthorization`, `owner_identity_id` debe corresponder exactamente a la Identity(USER) asociada al UserId propietario de la memoria. No se permite inferir esta correspondencia mediante igualdad textual entre `UserId` e `identity_id`. La ausencia, ambigüedad, inconsistencia o invalidez del binding interno produce denegación.
+
 Una Identity(USER) puede tener cero o varios bindings externos. Cada binding pertenece a una única Identity(USER). Una pareja exacta (issuer_id, subject) no puede vincularse a más de una identidad. La pareja permanece reservada después de la revocación de su binding y no puede reasignarse silenciosamente.
 
 Identity Authority es la autoridad canónica responsable de emitir UserId, mantener la relación UserId↔identity_id y administrar el ciclo de vida de los bindings. Los issuers externos autentican cuentas conforme a la configuración de confianza de Atlas; no emiten ni eligen UserId o identity_id.
 
-El issuer debe resolverse contra un registro/configuración confiable de Atlas. El subject se trata como identificador opaco dentro del espacio de nombres del issuer. Email, nombre, teléfono y otros atributos de perfil no son claves de binding ni prueba suficiente de control o identidad.
+`issuer_id` identifica una entrada del registro confiable de issuers de Atlas; no es una cadena arbitraria suministrada por el proveedor o por el caller. El issuer debe resolverse contra ese registro/configuración confiable. El subject se trata como identificador opaco dentro del espacio de nombres del issuer. Email, nombre, teléfono y otros atributos de perfil no son claves de binding ni prueba suficiente de control o identidad.
 
 Una pareja issuer/subject solo puede vincularse después de verificar la evidencia de autenticación del issuer y la unicidad de la pareja. La vinculación de una cuenta adicional exige una sesión existente verificada de la identidad propietaria, prueba reciente de control de la cuenta nueva y confirmación explícita del propietario. No se permite linking automático por coincidencia de atributos.
 
-La revocación de un binding es irreversible. Un binding revocado se conserva como registro no reutilizable. Desvincular una cuenta no cambia UserId, identity_id, propietario de memorias, Grants ni recursos. El procedimiento debe preservar al menos un método de acceso o recuperación utilizable. El detalle del proceso de recuperación se definirá en un contrato separado.
+La revocación de un binding es irreversible. Un binding revocado se conserva como registro no reutilizable. Desvincular una cuenta no cambia UserId, identity_id, propietario de memorias, Grants ni recursos. La operación de revocación no puede completarse si no se ha verificado que permanece disponible al menos un método de acceso o recuperación utilizable conforme a una política de recuperación aprobada. El procedimiento que demuestra esa condición y el detalle del proceso de recuperación se definirán en un contrato separado.
 
 No se fusionan identidades por coincidencia de atributos. Una fusión, si alguna vez se autoriza, requiere procedimiento separado, prueba de control de ambas identidades, revisión de propiedad, Grants y recursos, y un plan explícito de migración. No se reasignan memorias ni UserId por efecto de vincular o desvincular una cuenta.
 
 Un binding no concede autorización, Grants, permisos PRIVATE, delegación ni propiedad. Toda operación protegida continúa sujeta a CAM y Consistency. Los cambios de binding, revocación o estado invalidan los contextos y admisiones dependientes mediante las revisiones, invalidación y fencing aplicables.
+
+
+## 2.1. Registro de aprobación de §4.2
+
+El propietario aprobó el 15 de noviembre de 2026 el texto propuesto para B1-A-06 §4.2, incorporando las precisiones sobre la relación entre `Memory.owner_id` y `PrivateMemoryConsumerAuthorization.owner_identity_id`, la semántica de `issuer_id` y la condición verificable de conservar un método de acceso o recuperación utilizable.
+
+Esta aprobación se limita a §4.2. No constituye aprobación de las propuestas de §§3–6 ni autoriza modificar los contratos normativos vigentes. La formalización normativa coordinada permanece pendiente hasta completar la revisión y aprobación del resto del paquete.
 
 ## 3. Propuesta para B1-A-06 §5 — VerifiedIdentityContext
 
