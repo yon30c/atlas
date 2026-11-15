@@ -1,6 +1,6 @@
 # B1-B-03A-02 — Modelo lógico de UserId canónico y bindings externos
 
-**Estado:** propuesta de diseño lógico; pendiente de aprobación del propietario.  
+**Estado:** decisiones A–G APROBADAS por el propietario el 15 de noviembre de 2026; formalización normativa pendiente.  
 **Fecha:** 15 de noviembre de 2026.  
 **Decisiones de origen aprobadas:** UserId global/canónico en Atlas; Memory.owner_id: UserId separado de identity_id.  
 **Fuentes revisadas:** Identity, OperationContext, B1-A-06 §§4.2–5, DM-01, identity_binding.py, memory/identity.py y memory_service.py.  
@@ -60,7 +60,7 @@ Se propone que Identity Authority sea la autoridad canónica responsable de emit
 - Un binding pertenece a una sola identidad USER.
 - Una cuenta externa no es un UserId ni un identity_id.
 
-La relación 1:1 User–Identity es una recomendación para evitar identidades USER paralelas con propiedad divergente. Requiere aprobación antes de formalizarse.
+**Decisión aprobada:** la relación es 1:1 entre UserId e Identity(USER), para evitar identidades USER paralelas con propiedad divergente.
 
 ### 3.3 Emisión de UserId
 
@@ -179,9 +179,9 @@ Incluir user_id en VerifiedIdentityContext es una propuesta de ampliación de B1
 11. Los contextos verificados son temporales, ligados a revisiones y sujetos a invalidación/fencing.
 12. CAM conserva autoridad exclusiva sobre autorización; Identity Authority solo resuelve identidad.
 
-## 8. Decisiones que requieren aprobación
+## 8. Decisiones A–G aprobadas
 
-Se recomienda aprobar el modelo lógico de §§3–7 con estas decisiones explícitas:
+El propietario aprobó explícitamente el modelo lógico de §§3–7 y las siguientes decisiones:
 
 - **A. Autoridad emisora:** Identity Authority es la autoridad canónica que emite UserId y administra su relación con una identidad USER.
 - **B. Cardinalidad:** un UserId ↔ una Identity(USER); una identidad puede tener múltiples bindings externos.
@@ -191,15 +191,14 @@ Se recomienda aprobar el modelo lógico de §§3–7 con estas decisiones explí
 - **F. VerifiedIdentityContext:** incluir el UserId canónico y el binding_id/revisión exactos.
 - **G. Legacy:** preservar los puertos y modelos históricos hasta migración explícita; nunca tratarlos como evidencia externa completa.
 
-La recomendación es aprobar A–G como decisiones de diseño lógico. Recuperación de cuenta, autoridad de revisión de merges, detalles criptográficos por issuer y política exacta para evitar el último método de acceso deben cerrarse en contratos específicos antes de implementar.
+**Aprobación registrada:** A–G quedan aprobadas como decisiones de diseño lógico. La aprobación no define todavía el procedimiento de recuperación de cuenta, la autoridad de revisión de merges, los detalles criptográficos por issuer ni la política exacta para evitar la pérdida del último método de acceso; esos asuntos requieren contratos específicos antes de implementar.
 
 ## 9. Próximos pasos obligatorios
 
-1. Obtener aprobación/revisión del propietario para A–G.
-2. Si se aprueban, actualizar B1-A-06 §4.2 y §5, Identity y OperationContext mediante enmienda normativa consistente; no sustituir contratos aprobados sin aprobación explícita del texto final.
-3. Especificar recuperación de cuenta y tratamiento de la última credencial/binding.
-4. Cerrar la matriz de revocación/invalidation/fencing de bindings y contextos con D4O-F/G/H.
-5. Contrastar consumer_id y PRIVATE authorization para asegurar que no se confundan con UserId/Identity.
-6. Solo al cerrar B1-B-03A, iniciar B1-B-03B (diseño físico SQLite).
+1. Redactar y revisar la enmienda normativa B1-B-03A-03 con texto preciso para B1-A-06, identity.md y operation-context.md; mantener los contratos vigentes sin modificación hasta aprobar el texto final.
+2. Especificar recuperación de cuenta y tratamiento de la última credencial/binding.
+3. Cerrar la matriz de revocación/invalidation/fencing de bindings y contextos con D4O-F/G/H.
+4. Contrastar consumer_id y PRIVATE authorization para asegurar que no se confundan con UserId/Identity.
+5. Solo al cerrar B1-B-03A, iniciar B1-B-03B (diseño físico SQLite).
 
 **Estado:** propuesta documental. No implementada. No hay migraciones ni cambios de runtime autorizados.
