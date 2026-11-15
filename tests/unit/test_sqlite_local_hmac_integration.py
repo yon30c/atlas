@@ -25,12 +25,12 @@ from atlas.memory.local_trust_policy import (
     LocalIssuerAuthorization,
 )
 from atlas.memory.trust import ConsistencyRecoveryVerificationStatus
-from atlas.ports.local_consistency_recovery import (
-    CheckpointProjectionResolution,
-    LocalConsistencyInventoryVerificationResult,
-    LocalVerificationStatus,
+from atlas.memory.ports.recovery import (
+    CheckpointProjectionResult,
+    RecoveryInventoryResult,
+    RecoveryVerificationStatus,
     VerifiedCheckpointProjection,
-    VerifiedLocalConsistencyInventories,
+    VerifiedRecoveryInventories,
 )
 from unit.test_memory_journal import CHECKPOINT_ID, NOW, RECORD_1, read_admitted
 
@@ -196,7 +196,7 @@ class SQLiteLocalHmacIntegrationTests(unittest.TestCase):
 
         class Inventory:
             def verify_recovery_inventories(inner_self, request):
-                evidence = VerifiedLocalConsistencyInventories(
+                evidence = VerifiedRecoveryInventories(
                     consistency_domain_id=request.state.domain_id,
                     authority_epoch=request.state.authority_epoch,
                     head_sequence=request.state.head_sequence,
@@ -208,8 +208,8 @@ class SQLiteLocalHmacIntegrationTests(unittest.TestCase):
                     verified_reference_ids=frozenset({"snapshot-1"}),
                     verification_id="sqlite-inventory-verification",
                 )
-                return LocalConsistencyInventoryVerificationResult(
-                    LocalVerificationStatus.VERIFIED, evidence
+                return RecoveryInventoryResult(
+                    RecoveryVerificationStatus.VERIFIED, evidence
                 )
 
         verifier = LocalConsistencyRecoveryVerifier(
@@ -282,7 +282,7 @@ class SQLiteLocalHmacIntegrationTests(unittest.TestCase):
 
         class Inventory:
             def verify_recovery_inventories(inner_self, request):
-                evidence = VerifiedLocalConsistencyInventories(
+                evidence = VerifiedRecoveryInventories(
                     consistency_domain_id=request.state.domain_id,
                     authority_epoch=request.state.authority_epoch,
                     head_sequence=request.state.head_sequence,
@@ -294,8 +294,8 @@ class SQLiteLocalHmacIntegrationTests(unittest.TestCase):
                     verified_reference_ids=frozenset({"snapshot-1"}),
                     verification_id="sqlite-inventory-verification",
                 )
-                return LocalConsistencyInventoryVerificationResult(
-                    LocalVerificationStatus.VERIFIED, evidence
+                return RecoveryInventoryResult(
+                    RecoveryVerificationStatus.VERIFIED, evidence
                 )
 
         reducer_calls = []
@@ -373,7 +373,7 @@ class SQLiteLocalHmacIntegrationTests(unittest.TestCase):
 
         class Inventory:
             def verify_recovery_inventories(inner_self, request):
-                evidence = VerifiedLocalConsistencyInventories(
+                evidence = VerifiedRecoveryInventories(
                     consistency_domain_id=request.state.domain_id,
                     authority_epoch=request.state.authority_epoch,
                     head_sequence=request.state.head_sequence,
@@ -385,8 +385,8 @@ class SQLiteLocalHmacIntegrationTests(unittest.TestCase):
                     verified_reference_ids=frozenset({"snapshot-1"}),
                     verification_id="checkpoint-inventory-verification",
                 )
-                return LocalConsistencyInventoryVerificationResult(
-                    LocalVerificationStatus.VERIFIED, evidence
+                return RecoveryInventoryResult(
+                    RecoveryVerificationStatus.VERIFIED, evidence
                 )
 
         class CheckpointProjection:
@@ -411,8 +411,8 @@ class SQLiteLocalHmacIntegrationTests(unittest.TestCase):
                     projection=inner_self.projection,
                     verification_id="checkpoint-projection-verification",
                 )
-                return CheckpointProjectionResolution(
-                    LocalVerificationStatus.VERIFIED, evidence
+                return CheckpointProjectionResult(
+                    RecoveryVerificationStatus.VERIFIED, evidence
                 )
 
         projection_port = CheckpointProjection()
