@@ -1,10 +1,9 @@
-"""Puerto de verificación confiable de evidencia CAM."""
+"""Puertos de verificación confiable y consumo de evidencia CAM."""
 
+from datetime import datetime
 from typing import Protocol
 
-from atlas.authorization.grant_revocation import (
-    ProofConsumptionResult,
-)
+from atlas.authorization.grant_revocation import ProofConsumptionResult
 from atlas.authorization.models import (
     GrantRevocationAuthorizationRequest,
     VerifiedGrantRevocationAuthorization,
@@ -15,16 +14,21 @@ class GrantRevocationProofVerifierPort(Protocol):
     """Verifica autenticidad y emisor contra una fuente CAM confiable.
 
     La implementación debe comprobar que proof_id identifica una decisión
-    CAM auténtica y vigente, que el emisor está permitido y que todos los
-    claims coinciden con la evidencia recibida. La forma del dataclass no
-    constituye prueba criptográfica ni autoridad por sí sola.
+    CAM auténtica, emitida por un emisor permitido, para una acción directa
+    grant.revoke de un usuario activo que corresponde al propietario canónico.
+    Debe verificar todos los claims y la vigencia. No debe considerar el mero
+    dataclass como prueba criptográfica ni autoridad por sí sola.
+
+    La verificación de autenticidad no consume la prueba ni debe rechazarla
+    únicamente porque ya fue consumida: los reintentos exactos se resuelven
+    exclusivamente mediante el puerto de consumo idempotente.
     """
 
     def verify(
         self,
         request: GrantRevocationAuthorizationRequest,
         evidence: VerifiedGrantRevocationAuthorization,
-        now,
+        now: datetime,
     ) -> bool:
         """True solo ante verificación completa; False ante evidencia inválida."""
 
@@ -44,6 +48,6 @@ class GrantRevocationProofConsumptionPort(Protocol):
         proof_id: str,
         operation_id: str,
         idempotency_key: str,
-        consumed_at,
+        consumed_at: datetime,
     ) -> ProofConsumptionResult:
         """Registra el consumo o devuelve el resultado idempotente existente."""
