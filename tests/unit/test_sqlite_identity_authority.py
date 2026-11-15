@@ -311,6 +311,24 @@ class SQLiteIdentityAuthorityTests(unittest.TestCase):
                     "UPDATE atlas_users SET user_id = ? WHERE user_id = ?",
                     ("88888888-8888-4888-8888-888888888888", user.user_id),
                 )
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    """
+                    INSERT OR REPLACE INTO identity_records (
+                        identity_id, identity_kind, identity_status, revision,
+                        created_at, updated_at, user_id
+                    ) VALUES (?, 'user', 'active', 1, 'now', 'now', ?)
+                    """,
+                    (user.identity.identity_id, user.user_id),
+                )
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    """
+                    INSERT OR REPLACE INTO atlas_users (user_id, identity_id, created_at)
+                    VALUES (?, ?, 'now')
+                    """,
+                    (user.user_id, user.identity.identity_id),
+                )
             connection.execute(
                 """
                 UPDATE identity_records
