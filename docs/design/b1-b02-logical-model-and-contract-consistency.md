@@ -222,7 +222,7 @@ No se afirma que todos estos coordinadores o repositorios existan hoy. La tabla 
 
 Esta interpretación preserva los tipos y semántica explícitos de DM-01, y da significado verificable al `owner_identity_id` de B1-A-06 sin duplicar ni confundir identidades. Debe registrarse como aclaración contractual conjunta antes del esquema físico.
 
-**Estado:** recomendación técnica, pendiente de aceptación/registro contractual; no cambiar el tipo del campo ni realizar migraciones por inferencia.
+**Estado:** la recomendación fue aprobada expresamente por el propietario el 15 de noviembre de 2026. La decisión de diseño queda resuelta: conservar `Memory.owner_id: UserId/subject` y relacionarlo con `owner_identity_id` mediante un Identity Binding verificado y vigente. Sigue pendiente registrar la aclaración en los contratos normativos correspondientes antes del diseño físico; no cambiar el tipo del campo ni realizar migraciones por inferencia.
 
 ### D-02 — Payload externo y atomicidad
 
@@ -314,7 +314,7 @@ La inspección de los contratos y modelos disponibles precisa las discrepancias 
 
 Antes del diseño físico se deben cerrar, con evidencia y contratos:
 
-1. **Owner:** alinear `Memory.owner_id: UserId`, `AuthorizationSnapshot.owner_id`, el sujeto PRIVATE y `PrivateMemoryConsumerAuthorization.owner_identity_id`. Definir el binding canónico sin reinterpretar IDs existentes.
+1. **Owner — RESUELTO COMO DECISIÓN DE DISEÑO (2026-11-15):** conservar `Memory.owner_id: UserId/subject`; `owner_identity_id` es el `identity_id` canónico. La relación se demuestra mediante Identity Binding verificado y vigente. Pendiente formalizar la aclaración en los contratos normativos aplicables antes del diseño físico.
 2. **Consumer:** identificar la autoridad que emite/verifica `consumer_id` y cómo se vincula con actor/identidad sin hacerlos equivalentes.
 3. **PRIVATE revision:** definir revisión, snapshot, idempotencia e invalidación de `PRIVATE_MEMORY_AUTHORIZATION` a través de CAM, Consistency y recuperación.
 4. **Read admission:** comprobar que el inventario ME-03K y las proyecciones ME-03F/H cubren admisión, rutas, recibos y recuperación; documentar únicamente las tablas auxiliares estrictamente necesarias.
@@ -353,7 +353,7 @@ El inventario es una fotografía de fuentes inspeccionadas; antes de implementar
 B1-B-02 debe cerrarse primero con resolución/aceptación de D-01 a D-07. Después:
 
 ### B1-B-03A — Cierre de contratos y dependencias
-1. Resolver semántica canónica de owner_id / owner_identity_id.
+1. **Owner — decisión aprobada:** conservar `Memory.owner_id: UserId/subject` y resolver su relación con `owner_identity_id` mediante Identity Binding verificado. Próxima acción: redactar y revisar la aclaración contractual conjunta; no cambiar tipos ni datos existentes.
 2. Definir la autoridad de consumer_id.
 3. Precisar la política de invalidación de admisiones por aprobación de versión.
 4. Completar compatibilidad PRIVATE_MEMORY_AUTHORIZATION con D4O-F/G/H.
@@ -390,3 +390,31 @@ B1-B-02 se considerará documentalmente listo para diseño físico cuando:
 - no se duplique el schema v4 ni se cree una autoridad paralela.
 
 La aprobación de este documento no implica implementación. Toda migración y código requiere fase y alcance aprobados por separado.
+
+## 11. Registro de decisiones y continuidad de trabajo
+
+Este registro es la bitácora mínima para retomar el proyecto sin depender del historial conversacional. Debe actualizarse al cerrar cada paso relevante.
+
+### Decisiones registradas
+
+| Fecha | ID | Decisión | Estado |
+|---|---|---|---|
+| 2026-11-15 | B1-B-03A / D-01 | `Memory.owner_id` permanece como `UserId/subject`; `owner_identity_id` representa `identity_id` canónico; el vínculo se acredita con Identity Binding verificado y vigente. | Aprobada por el propietario; formalización normativa pendiente |
+
+### Próximos pasos obligatorios
+
+1. Redactar una aclaración contractual conjunta para DM-01 y B1-A-06 que preserve los tipos existentes y defina exactamente cómo se valida el binding owner/subject/identity.
+2. Identificar y comparar las fuentes/contratos disponibles para determinar quién emite y verifica `consumer_id`; no crear una tabla `consumers` ni derivarlo de `identity_id` sin decisión aprobada.
+3. Completar la matriz de compatibilidad de `PRIVATE_MEMORY_AUTHORIZATION` con D4O-F/G/H: AuthorityKind, revision set, snapshot, invalidation, source CAS, idempotencia y recovery evidence.
+4. Contrastar admissions, routes e inventarios ME-03K con ME-03F/H y documentar si falta alguna estructura, evitando duplicar las proyecciones existentes.
+5. Definir consistency domains/epochs por operación y su orden de adquisición/reconciliación.
+6. Especificar el contrato lógico del Content Store: staging inmutable, referencias opacas, lectura, integridad, cuarentena, huérfanos, backup/restore, retención y fallos.
+7. Definir invalidación/fencing al aprobar una nueva versión y la evidencia necesaria para completar o cancelar entregas anteriores.
+8. Publicar una matriz de cierre D-01 a D-07, señalando para cada punto: decisión, fuente normativa, cambio documental requerido, pruebas de conformidad y bloqueo restante.
+9. Solo después de cerrar B1-B-03A, comenzar B1-B-03B (diseño físico SQLite). B1-B-03C validará el diseño antes de solicitar aprobación explícita para implementación.
+
+### Regla de continuidad
+
+Al terminar cada sesión/fase, actualizar este documento y el roadmap del README con: commit base, cambios realizados, decisiones aprobadas, decisiones pendientes, verificaciones ejecutadas y resultado, riesgos/bloqueos y el siguiente paso exacto. No marcar como completado algo que solo esté propuesto o documentado parcialmente.
+
+**Estado actual:** B1-B-03A en curso. D-01 tiene decisión de diseño aprobada; su formalización normativa y D-02 a D-07 siguen pendientes. No se ha autorizado diseño físico, migración ni implementación.
