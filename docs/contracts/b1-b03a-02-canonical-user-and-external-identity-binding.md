@@ -1,6 +1,6 @@
 # B1-B-03A-02 — Modelo lógico de UserId canónico y bindings externos
 
-**Estado:** decisiones A–G APROBADAS por el propietario el 15 de noviembre de 2026; formalización normativa pendiente.  
+**Estado:** decisiones A–G APROBADAS; propuestas normativas coordinadas aprobadas; consolidación documental ejecutada; verificación cruzada final pendiente antes del cierre de B1-B-03A.  
 **Fecha:** 15 de noviembre de 2026.  
 **Decisiones de origen aprobadas:** UserId global/canónico en Atlas; Memory.owner_id: UserId separado de identity_id.  
 **Fuentes revisadas:** Identity, OperationContext, B1-A-06 §§4.2–5, DM-01, identity_binding.py, memory/identity.py y memory_service.py.  
@@ -193,12 +193,12 @@ El propietario aprobó explícitamente el modelo lógico de §§3–7 y las sigu
 
 **Aprobación registrada:** A–G quedan aprobadas como decisiones de diseño lógico. La aprobación no define todavía el procedimiento de recuperación de cuenta, la autoridad de revisión de merges, los detalles criptográficos por issuer ni la política exacta para evitar la pérdida del último método de acceso; esos asuntos requieren contratos específicos antes de implementar.
 
-## 9. Próximos pasos obligatorios
+## 9. Estado y siguientes pasos
 
-1. Redactar y revisar la enmienda normativa B1-B-03A-03 con texto preciso para B1-A-06, identity.md y operation-context.md; mantener los contratos vigentes sin modificación hasta aprobar el texto final.
-2. Especificar recuperación de cuenta y tratamiento de la última credencial/binding.
-3. Cerrar la matriz de revocación/invalidation/fencing de bindings y contextos con D4O-F/G/H.
-4. Contrastar consumer_id y PRIVATE authorization para asegurar que no se confundan con UserId/Identity.
-5. Solo al cerrar B1-B-03A, iniciar B1-B-03B (diseño físico SQLite).
+Las decisiones A–G permanecen aprobadas. La propuesta normativa coordinada B1-B-03A-03 fue aprobada por el propietario, y las enmiendas correspondientes se incorporaron documentalmente en DM-01, B1-A-06, `identity.md` y `operation-context.md` dentro de la rama `docs/b1-b02-logical-model-and-next-phase`.
 
-**Estado:** propuesta documental. No implementada. No hay migraciones ni cambios de runtime autorizados.
+Antes de declarar B1-B-03A cerrado se debe completar la verificación cruzada final: coherencia de los cuatro contratos, separación de Identity Authority/CAM/Consistency/Memory Gateway, preservación de compatibilidad legacy, revisión de los siete documentos, referencias, diff, rama y SHA. Las nueve cuestiones pendientes de B1-B-03A-03 §7 permanecen abiertas y no habilitan los flujos que dependen de ellas.
+
+Las nueve cuestiones posteriores son: recuperación de cuenta; política operativa linking/unlink; ciclo de vida y confianza de issuers; fusión de identidades; validación criptográfica por issuer; garantías físicas y persistencia de identificadores; revisiones, invalidación y consistencia; migración legacy; y evidencia/auditoría. Deben especificarse antes de habilitar los flujos correspondientes.
+
+**Estado:** consolidación normativa documental ejecutada; verificación final pendiente. No implementada. No hay migraciones, cambios de SQLite ni cambios de runtime autorizados. B1-B-03B no debe comenzar hasta el cierre formal de B1-B-03A y autorización explícita.
