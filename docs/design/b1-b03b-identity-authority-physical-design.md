@@ -1,6 +1,6 @@
 # B1-B-03B — Diseño físico de Identity Authority y persistencia
 
-**Estado:** DISEÑO TÉCNICO PROPUESTO; no es autorización de migración ni implementación.  
+**Estado:** DISEÑO TÉCNICO APROBADO PARA EL PRIMER INCREMENTO INTERNO; implementación inicial registrada en rama aislada, con verificación local pendiente. No autoriza aplicar migraciones sobre bases reales ni activar autenticación externa.  
 **Baseline normativo:** B1-A-06 aprobado; B1-B-03A cerrado normativamente el 15-11-2026.  
 **Baseline de código inspeccionado:** `feature/me-d4o-i-c4-sqlite-durable-authority-store`, commit `fba7c70933a77d883a7bdc1d86a755bd3b1a8674`.  
 **Schema actual:** SQLite v4.  
@@ -242,3 +242,17 @@ El primer incremento autorizado se limita a la persistencia interna de `UserId` 
 5. Mapeo legacy verificable.
 
 **Salida B1-B-03B:** modelo físico y decisiones de identificadores aprobados para el primer incremento; la implementación está autorizada únicamente en la rama aislada de desarrollo y dentro del alcance de §9.1. Las decisiones pendientes de §10.2 bloquean los flujos externos correspondientes. Aplicar migraciones sobre una base real, activar autenticación externa o desplegar requiere verificaciones, respaldo/restauración probados y autorización específica.
+
+
+## 11. Registro de implementación inicial (15-11-2026)
+
+- Rama aislada: `feature/identity-authority-user-identity-persistence`.
+- Baseline: `fba7c70933a77d883a7bdc1d86a755bd3b1a8674`.
+- Commit de implementación inicial: `9736653f333de16cd85ddff7a39d2959ad71bcf1`.
+- La rama contiene una única confirmación por delante de `feature/me-d4o-i-c4-sqlite-durable-authority-store`; no modifica `main` ni la rama fuente.
+- Añadidos: modelo `CanonicalUserIdentity`, puerto `IdentityAuthorityPort`, adaptador `SQLiteIdentityAuthority`, migración aditiva v5 y pruebas unitarias de persistencia.
+- La migración v5 crea `identity_records` y `atlas_users`, aplica validación UUIDv4 canónica, unicidad, FK, trigger de tipo USER, inmutabilidad de identificadores, revisión monotónica y tombstone para registros revocados.
+- Las pruebas nuevas cubren creación, unicidad, rollback, cardinalidad, UUID inválido, CAS, concurrencia y revocación terminal. También se actualizó la expectativa del ledger de migraciones a v5.
+- **Estado de verificación:** las pruebas no se han ejecutado en el entorno local del usuario. No declarar la implementación validada hasta ejecutar la suite en Windows/VS Code y revisar cualquier fallo.
+- **Siguiente paso:** sincronizar esta rama en el checkout Windows, confirmar árbol limpio y baseline, ejecutar primero las pruebas de SQLite/Identity y después la suite completa. Corregir los fallos en esta rama antes de considerar integración.
+- No se ha ejecutado migración contra una base real, no se ha desplegado y no se ha creado PR ni se ha integrado la rama.
