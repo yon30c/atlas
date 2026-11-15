@@ -157,7 +157,9 @@ class GrantManagementService:
                     "La clave de idempotencia ya pertenece a otro recurso"
                 )
             if existing.status is not AuthorityChangeStatus.REQUESTED:
-                return self._to_grant_result(existing, grant)
+                return self._to_grant_result(
+                    existing, grant, expected_operation_id=existing.operation_id
+                )
             reservation = self._change_coordinator.get_reservation(
                 existing.operation_id
             )
@@ -218,7 +220,10 @@ class GrantManagementService:
                             recovered.operation_id
                         )
                     else:
-                        return self._to_grant_result(recovered, grant)
+                        return self._to_grant_result(
+                            recovered, grant,
+                            expected_operation_id=recovered.operation_id,
+                        )
                 else:
                     raise ContractError(
                         "Reserva indeterminada; reintentar con la misma idempotency_key"
@@ -251,7 +256,10 @@ class GrantManagementService:
             )
             if existing_result is None:
                 return self._blocked_result(reservation)
-            return self._to_grant_result(existing_result, grant)
+            return self._to_grant_result(
+                existing_result, grant,
+                expected_operation_id=reservation.operation_id,
+            )
 
         authorization_request = GrantRevocationAuthorizationRequest(
             request_id=reservation.intent.request_context_ref,
@@ -329,7 +337,10 @@ class GrantManagementService:
                 change_result = None
         if change_result is None:
             return self._blocked_result(reservation)
-        return self._to_grant_result(change_result, grant)
+        return self._to_grant_result(
+            change_result, grant,
+            expected_operation_id=reservation.operation_id,
+        )
 
     def _abort_unstarted(
         self,
@@ -356,15 +367,33 @@ class GrantManagementService:
             )
         ):
             return self._blocked_result(reservation)
-        return self._to_grant_result(result, original_grant)
+        return self._to_grant_result(
+            result, original_grant,
+            expected_operation_id=reservation.operation_id,
+        )
 
     def _to_grant_result(
         self,
         result: AuthorityChangeResult,
         original_grant: Grant,
+        *,
+        expected_operation_id: str | None = None,
     ) -> GrantRevocationResult:
         if not isinstance(result, AuthorityChangeResult):
-            return self._blocked_for_grant(original_grant)
+            return self._blocked_for_grant(
+                original_grant,
+                operation_id=expected_operation_id or "unresolved",
+            )
+        if (
+            expected_operation_id is not None
+            and result.operation_id != expected_operation_id
+        ):
+            return self._blocked_for_grant(
+                original_grant,
+                operation_id=expected_operation_id,
+                previous_revision=original_grant.revision,
+                proposed_revision=original_grant.revision + 1,
+            )
 
         if (
             result.authority_kind is not AuthorityKind.GRANT
