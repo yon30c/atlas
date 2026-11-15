@@ -1,6 +1,6 @@
 # B1-B-03A-01 — Aclaración propuesta de owner_id e Identity Binding
 
-**Estado:** propuesta documental en consolidación. El propietario aprobó el texto propuesto para DM-01 §§4.2 y 6.4 y para B1-A-06 §§2.1 y 4.2 el 15 de noviembre de 2026. Los contratos normativos vigentes no han sido modificados; la aprobación es documental y no autoriza implementación.  
+**Estado:** decisiones conceptuales y textos propuestos aprobados; consolidación normativa documental ejecutada en la rama `docs/b1-b02-logical-model-and-next-phase`; verificación cruzada final pendiente. La consolidación no autoriza implementación, migraciones ni activación de runtime protegido.  
 **Fecha:** 15 de noviembre de 2026.  
 **Decisión de diseño de origen:** aprobada por el propietario el 15 de noviembre de 2026.  
 **Ámbito:** DM-01 §4.2 y §6.4; B1-A-06 §§2.1, 4.2 y 5; autorización PRIVATE y su comprobación por CAM.  
@@ -182,10 +182,10 @@ Hasta que estos puntos estén especificados, cualquier relación ambigua o no ve
 
 ## 9. Estado y siguiente paso
 
-La decisión conceptual y el texto propuesto para DM-01 §§4.2 y 6.4 están aprobados. También están aprobadas las propuestas coordinadas para B1-A-06 §§2.1 y 4.2, según el texto registrado en la sección 4.
+La decisión conceptual y los textos propuestos para DM-01 §§4.2 y 6.4, B1-A-06 §§2.1, 4.2 y 5, `identity.md` y `operation-context.md` han sido aprobados por el propietario. La separación entre VerifiedIdentityContext de Identity(USER) y la identidad del actor AGENT/SERVICE/WATCHER/SYSTEM también está aprobada.
 
-Los contratos normativos vigentes no se sustituyen hasta la aprobación formal del paquete completo. La aprobación de estas propuestas no autoriza implementación, migraciones, cambios de SQLite ni activación de runtime protegido.
+La consolidación documental de los cuatro contratos normativos se ha ejecutado en la rama `docs/b1-b02-logical-model-and-next-phase`. El cierre de B1-B-03A permanece condicionado a la verificación cruzada final de contenido, referencias, diff, rama y SHA de los siete documentos del paquete.
 
-Siguiente paso: continuar la revisión global de B1-B-03A, especialmente la separación entre VerifiedIdentityContext y la identidad del actor AGENT/SERVICE, y definir criterios explícitos de cierre del paquete.
+Los criterios de cierre aprobados son acumulativos: decisiones y trazabilidad completas; enmiendas incorporadas; coherencia entre contratos; separación de autoridades; compatibilidad legacy; cuestiones pendientes delimitadas; y verificación documental final. Las cuestiones técnicas aplazadas no bloquean el cierre normativo si permanecen explícitas y los flujos dependientes siguen deshabilitados.
 
-No iniciar B1-B-03B ni modificar SQLite hasta cerrar los restantes bloqueos de B1-B-03A y recibir autorización explícita.
+No iniciar B1-B-03B ni modificar SQLite. No se autoriza implementación, migración, PR, merge ni despliegue por esta consolidación.
