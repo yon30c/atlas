@@ -1,6 +1,7 @@
 """Servicio de administración de Grants y orquestación de revocaciones."""
 
 from datetime import datetime, timedelta
+from typing import cast
 
 from atlas.authorization.grant_revocation import (
     GrantRevocationAuthorityChangeAuthorization,
@@ -64,11 +65,17 @@ class GrantManagementService:
         ):
             raise ContractError("consumer_id debe ser una cadena no vacía")
         self._repository = repository
-        self._consumer_id = consumer_id
-        self._revocation_authorizer = revocation_authorizer
-        self._proof_authorization = proof_authorization
-        self._change_coordinator = change_coordinator
-        self._clock = clock
+        self._consumer_id = cast(str | None, consumer_id)
+        self._revocation_authorizer = cast(
+            GrantRevocationAuthorizationPort | None, revocation_authorizer
+        )
+        self._proof_authorization = cast(
+            GrantRevocationProofAuthorizationService | None, proof_authorization
+        )
+        self._change_coordinator = cast(
+            AuthorityChangeCoordinatorPort | None, change_coordinator
+        )
+        self._clock = cast(Clock | None, clock)
 
     def issue(
         self,
@@ -464,9 +471,25 @@ class GrantManagementService:
         intent: AuthorityChangeIntent,
     ) -> None:
         if not isinstance(reservation, AuthorityChangeReservation):
-            raise ContractError("el coordinador debe devolver AuthorityChangeReservation")
-        if reservation.intent != intent:
-            raise ContractError("la reserva no corresponde a la intención exacta")
+            raise ContractError(
+                "el coordinador debe devolver AuthorityChangeReservation"
+            )
+        stored = reservation.intent
+        if (
+            stored.idempotency_key != intent.idempotency_key
+            or stored.consumer_id != intent.consumer_id
+            or stored.authority_kind is not intent.authority_kind
+            or stored.authority_id != intent.authority_id
+            or stored.expected_revision != intent.expected_revision
+            or stored.proposed_revision != intent.proposed_revision
+            or stored.change_kind != intent.change_kind
+            or stored.request_context_ref != intent.request_context_ref
+        ):
+            raise ContractError(
+                "la reserva no corresponde a la misma intención idempotente"
+            )
+        # requested_at es la marca de tiempo original persistida. En un retry
+        # puede diferir el reloj del llamador; siempre prevalece la reserva.
 
     def _blocked_result(
         self,
