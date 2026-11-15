@@ -400,23 +400,26 @@ Este registro es la bitácora mínima para retomar el proyecto sin depender del 
 | Fecha | ID | Decisión | Estado |
 |---|---|---|---|
 | 2026-11-15 | B1-B-03A / D-01 | `Memory.owner_id` permanece como `UserId/subject`; `owner_identity_id` representa `identity_id` canónico; el vínculo se acredita con Identity Binding verificado y vigente. | Aprobada por el propietario; formalización normativa pendiente |
-| 2026-11-15 | B1-B-03A / D-01b | `UserId` es global y canónico en Atlas, independiente del issuer externo. Identity Authority debe relacionar los bindings externos con la identidad USER y el UserId canónico mediante evidencia verificable. | Aprobada por el propietario; autoridad de emisión y modelo de binding pendientes |
+| 2026-11-15 | B1-B-03A / D-01b | `UserId` es global y canónico en Atlas, independiente del issuer externo. Identity Authority emite UserId y mantiene la relación 1:1 con Identity(USER); una identidad puede tener múltiples bindings externos verificados. | Aprobada por el propietario |
+| 2026-11-15 | B1-B-03A / A–G | Autoridad emisora, cardinalidad, unicidad/no reasignación de bindings, linking/unlinking, VerifiedIdentityContext y compatibilidad legacy conforme a B1-B-03A-02. | Aprobadas por el propietario; enmienda normativa final pendiente |
 
 ### Próximos pasos obligatorios
 
 1. **Decisión aprobada y registrada:** `UserId` es global y canónico en Atlas. [B1-B-03A-01 — Aclaración de owner_id e Identity Binding](../contracts/b1-b03a-01-owner-identity-binding-clarification.md) documenta la semántica.
-2. **Propuesta preparada para revisión:** [B1-B-03A-02 — Modelo lógico de UserId canónico y bindings externos](../contracts/b1-b03a-02-canonical-user-and-external-identity-binding.md). Define Identity Authority como autoridad emisora recomendada, cardinalidad UserId↔Identity(USER), múltiples cuentas externas, linking/unlinking, recuperación, colisiones y compatibilidad legacy. Las decisiones A–G aún requieren aprobación del propietario.
-2. Identificar y comparar las fuentes/contratos disponibles para determinar quién emite y verifica `consumer_id`; no crear una tabla `consumers` ni derivarlo de `identity_id` sin decisión aprobada.
-3. Completar la matriz de compatibilidad de `PRIVATE_MEMORY_AUTHORIZATION` con D4O-F/G/H: AuthorityKind, revision set, snapshot, invalidation, source CAS, idempotencia y recovery evidence.
-4. Contrastar admissions, routes e inventarios ME-03K con ME-03F/H y documentar si falta alguna estructura, evitando duplicar las proyecciones existentes.
-5. Definir consistency domains/epochs por operación y su orden de adquisición/reconciliación.
-6. Especificar el contrato lógico del Content Store: staging inmutable, referencias opacas, lectura, integridad, cuarentena, huérfanos, backup/restore, retención y fallos.
-7. Definir invalidación/fencing al aprobar una nueva versión y la evidencia necesaria para completar o cancelar entregas anteriores.
-8. Publicar una matriz de cierre D-01 a D-07, señalando para cada punto: decisión, fuente normativa, cambio documental requerido, pruebas de conformidad y bloqueo restante.
-9. Solo después de cerrar B1-B-03A, comenzar B1-B-03B (diseño físico SQLite). B1-B-03C validará el diseño antes de solicitar aprobación explícita para implementación.
+2. **Decisiones A–G aprobadas (2026-11-15):** [B1-B-03A-02 — Modelo lógico de UserId canónico y bindings externos](../contracts/b1-b03a-02-canonical-user-and-external-identity-binding.md). Identity Authority emite UserId; relación 1:1 UserId↔Identity(USER); múltiples bindings externos; linking/unlinking controlados; binding revocado no reasignable; VerifiedIdentityContext ligado a UserId y binding; compatibilidad legacy.
+3. **Texto normativo en revisión:** [B1-B-03A-03 — Borrador de enmienda normativa](../contracts/b1-b03a-03-normative-amendment-draft-user-identity-binding.md), con propuestas coordinadas para B1-A-06, identity.md y operation-context.md. Requiere aprobación final del texto antes de modificar esos contratos.
+2. **Aprobación normativa pendiente:** revisar y aprobar el texto de B1-B-03A-03 antes de modificar B1-A-06, identity.md y operation-context.md.
+3. Identificar y comparar las fuentes/contratos disponibles para determinar quién emite y verifica `consumer_id`; no crear una tabla `consumers` ni derivarlo de `identity_id` sin decisión aprobada.
+4. Completar la matriz de compatibilidad de `PRIVATE_MEMORY_AUTHORIZATION` con D4O-F/G/H: AuthorityKind, revision set, snapshot, invalidation, source CAS, idempotencia y recovery evidence.
+5. Contrastar admissions, routes e inventarios ME-03K con ME-03F/H y documentar si falta alguna estructura, evitando duplicar las proyecciones existentes.
+6. Definir consistency domains/epochs por operación y su orden de adquisición/reconciliación.
+7. Especificar el contrato lógico del Content Store: staging inmutable, referencias opacas, lectura, integridad, cuarentena, huérfanos, backup/restore, retención y fallos.
+8. Definir invalidación/fencing al aprobar una nueva versión y la evidencia necesaria para completar o cancelar entregas anteriores.
+9. Publicar una matriz de cierre D-01 a D-07, señalando para cada punto: decisión, fuente normativa, cambio documental requerido, pruebas de conformidad y bloqueo restante.
+10. Solo después de cerrar B1-B-03A, comenzar B1-B-03B (diseño físico SQLite). B1-B-03C validará el diseño antes de solicitar aprobación explícita para implementación.
 
 ### Regla de continuidad
 
 Al terminar cada sesión/fase, actualizar este documento y el roadmap del README con: commit base, cambios realizados, decisiones aprobadas, decisiones pendientes, verificaciones ejecutadas y resultado, riesgos/bloqueos y el siguiente paso exacto. No marcar como completado algo que solo esté propuesto o documentado parcialmente.
 
-**Estado actual (2026-11-15):** B1-B-03A en curso. D-01 tiene aprobadas ambas decisiones conceptuales: (a) `Memory.owner_id: UserId/subject` se relaciona con `owner_identity_id` mediante Identity Binding verificado y vigente; (b) `UserId` es global y canónico en Atlas, independiente del issuer externo. La propuesta B1-B-03A-01 registra la semántica y sus consecuencias. Se ha redactado B1-B-03A-02 con una propuesta para la autoridad de emisión y el binding verificable entre `UserId`, `identity_id` y `(issuer, subject)`; las decisiones A–G de esa propuesta esperan aprobación. D-02 a D-07 siguen pendientes. No se ha autorizado diseño físico, migración ni implementación.
+**Estado actual (2026-11-15):** B1-B-03A en curso. D-01 y las decisiones A–G de B1-B-03A-02 están aprobadas por el propietario. B1-B-03A-03 contiene el texto normativo propuesto para B1-A-06, identity.md y operation-context.md; falta aprobación final de ese texto. Los procedimientos de recuperación, protección del último método de acceso, detalles criptográficos por issuer y proceso de merge permanecen pendientes. D-02 a D-07 siguen pendientes. No se ha autorizado diseño físico, migración ni implementación.
