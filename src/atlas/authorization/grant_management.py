@@ -264,20 +264,19 @@ class GrantManagementService:
             return self._blocked_result(reservation)
 
         try:
-            proof_result = self._proof_authorization.verify_and_consume(
+            authorization = self._proof_authorization.verify_and_consume_for_change(
                 request=authorization_request,
                 evidence=evidence,
                 operation_id=reservation.operation_id,
                 idempotency_key=idempotency_key,
+                proposed_revision=grant.revision + 1,
                 now=verification_now,
             )
         except Exception:
             # No abortar: el consumo pudo confirmarse y perderse su respuesta.
             return self._blocked_result(reservation)
-        if not isinstance(proof_result, GrantRevocationAuthorizationResult):
-            return self._blocked_result(reservation)
-        if not proof_result.authorized:
-            if proof_result.status in (
+        if isinstance(authorization, GrantRevocationAuthorizationResult):
+            if authorization.status in (
                 GrantRevocationAuthorizationStatus.DENIED,
                 GrantRevocationAuthorizationStatus.PROOF_REPLAY_CONFLICT,
             ):
@@ -285,15 +284,12 @@ class GrantManagementService:
             # Verificador no disponible o consumo incierto: conservar la misma
             # operación para recuperación con la misma clave, nunca abortarla.
             return self._blocked_result(reservation)
+        if not isinstance(
+            authorization,
+            GrantRevocationAuthorityChangeAuthorization,
+        ):
+            return self._blocked_result(reservation)
 
-        authorization = GrantRevocationAuthorityChangeAuthorization(
-            operation_id=reservation.operation_id,
-            request=authorization_request,
-            evidence=evidence,
-            authorization_result=proof_result,
-            proposed_revision=grant.revision + 1,
-            consumed_at=verification_now,
-        )
         try:
             change_result = self._change_coordinator.apply_change(
                 reservation,
