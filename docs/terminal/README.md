@@ -1,112 +1,130 @@
 # Atlas Terminal
 
-> Estado: fases 1 y 2 implementadas parcialmente en `feature/terminal-commands`; fase 2 pendiente de validación automatizada y manual. No iniciar fase 3 hasta su aceptación.
-> Registro: 16 de noviembre de 2026.
-> Alcance: prototipo funcional de la experiencia conversacional local de Atlas.
+> Estado: **Atlas Terminal funcional en la rama `feature/terminal-commands`**. Fases 1 y 2 implementadas en el alcance documentado; la suite local completa está aprobada.
+> Última validación automatizada: 16 de noviembre de 2026, commit `610f027f1fe91933278e431d8a9ec29dd291b96e`.
+> Alcance: experiencia conversacional local, con persistencia y administración de conversaciones. No equivale todavía al runtime autónomo completo de Atlas.
 
 ## 1. Objetivo
 
-La prioridad inmediata de Atlas es convertir la consola local existente en una experiencia de terminal utilizable, demostrable y verificable. El objetivo no es construir de inmediato toda la plataforma autónoma: primero se debe poder iniciar Atlas, conversar con él, conservar contexto, comprender sus límites y comprobar su comportamiento en sesiones reales.
+Atlas Terminal es la primera superficie funcional de Atlas. Permite iniciar el Assistant local, conversar con un modelo local cuando Ollama está disponible, conservar conversaciones entre ejecuciones y administrar su ciclo de vida. Esta implementación es software funcional en evolución, no una demostración estática ni la totalidad de la visión de Atlas.
 
-El desarrollo será incremental. Cada fase debe entregar una capacidad observable, pruebas automatizadas y una verificación manual reproducible antes de comenzar la siguiente.
+El desarrollo sigue siendo incremental: cada capacidad se inspecciona, implementa, prueba y documenta antes de ampliar el alcance.
 
-## 2. Estado actual comprobado en el código
+## 2. Estado funcional comprobado
 
-La fase 2 ha avanzado más allá del alcance inicial de esta documentación. Los incrementos 2A–2G están registrados como implementados en la rama de trabajo, pero **la fase completa permanece pendiente de validación**. Consulta `docs/terminal/roadmap.md` para el inventario de incrementos y la lista obligatoria de comprobaciones antes de avanzar.
+La rama `feature/terminal-commands` contiene:
 
-La revisión de `main` (commit `c2803a931b672cbf5c6843eb77816cb4824dd1c4`) confirma:
+- Consola local y composición ejecutable desde `src/atlas/cli.py`.
+- AssistantService, AtlasCore y ConversationContextProcessor conectados en el arranque.
+- Adaptador Ollama para `/api/chat`, streaming y validación del endpoint para loopback.
+- Modo `ATLAS_MODE=offline`, que permite iniciar la consola sin proveedor generativo y comunica esa limitación.
+- Comandos de terminal `/help`, `/clear` y `/exit`; `salir`, `exit` y `quit` siguen siendo alias de salida.
+- Manejo de EOF e interrupciones de consola.
+- Persistencia SQLite durable de conversaciones, metadatos, mensajes y referencia a la conversación activa.
+- Recuperación de la conversación activa al iniciar Atlas.
+- Gestión de conversaciones: crear, listar, seleccionar, renombrar, cerrar y eliminar con confirmación.
+- Proyección acotada al modelo: últimos 8 turnos y máximo 2.000 caracteres por mensaje histórico. El almacenamiento conserva el historial íntegro.
+- Exportación JSON versionada de conversaciones.
+- Respaldo cifrado, verificación de autenticidad e integridad y restauración a una ruta nueva.
+- Pruebas de repositorio y gestor, incluidos rollback transaccional y reemplazo de conversación activa después de eliminarla.
 
-- Existe una consola local en `src/atlas/adapters/console.py`.
-- La composición de ejecución está en `src/atlas/cli.py` y utiliza `AtlasCore`, `ConversationContextProcessor` y `AssistantService`.
-- El adaptador de Ollama admite streaming y limita el endpoint a loopback.
-- El modelo predeterminado configurado es `gemma4:e2b`; pueden seleccionarse modelo y URL mediante `ATLAS_MODEL` y `ATLAS_OLLAMA_URL`.
-- La consola transmite fragmentos de respuesta cuando el runtime ofrece `respond_streaming`.
-- El historial actual es `InMemoryConversationHistory`: conserva hasta 8 turnos por conversación y limita cada mensaje histórico a 2.000 caracteres.
-- La conversación actual recibe un identificador nuevo al crear `LocalConsoleRequestFactory`; el historial no sobrevive al cierre del proceso.
-- El modo `ATLAS_MODE=offline` informa honestamente que no hay un modelo generativo conectado.
+## 3. Persistencia y seguridad local
 
-La rama `feature/terminal-commands` incorpora `/help`, `/clear` y `/exit`, además de mantener `salir`, `exit` y `quit` como alias de salida. `/clear` limpia la pantalla mediante secuencias ANSI y **no borra ni reinicia el historial de la conversación**. La rama también maneja `Ctrl+C` durante el ciclo de consola. Estas modificaciones todavía requieren ejecución de pruebas y verificación manual en el entorno local; no deben atribuirse a `main` hasta que se integren.
+La base de conversaciones está separada de la base de autoridad:
 
-## 3. Principios de implementación
+`~/.local/state/atlas/conversations.sqlite3`
 
-1. **Progreso visible:** priorizar funciones que puedan probarse directamente desde la terminal.
-2. **Un incremento por vez:** no mezclar varias fases ni refactorizaciones amplias con nuevas capacidades.
-3. **Reutilizar lo que funciona:** extender la composición y los puertos existentes antes de reemplazarlos.
-4. **Evidencia antes de avanzar:** ejecutar pruebas focalizadas, suite relevante y una comprobación manual del flujo real.
-5. **Estado honesto:** distinguir generación, respuesta informativa, error, propuesta y operación ejecutada.
-6. **Control humano:** el modelo no obtiene autoridad por interpretar una solicitud o generar un plan.
+- Directorio dedicado con permisos `0700`.
+- Archivo SQLite con permisos `0600`.
+- La base puede seleccionarse mediante `ATLAS_CONVERSATION_DB` o el argumento `conversation_db_path` de `main()`.
+- El historial íntegro permanece almacenado; los límites de 8 turnos y 2.000 caracteres se aplican únicamente al contexto enviado al modelo.
+- Si el almacenamiento no puede prepararse o abrirse, Atlas falla al iniciar; no degrada silenciosamente a memoria.
+- No hay sincronización externa ni respaldos automáticos.
 
-## 4. Alcance de la primera versión funcional
+El modelo no recibe herramientas ni autoridad para ejecutar acciones. La consola no es un shell y no ofrece acceso directo a archivos, SQL, Docker, contenedores o capacidades privilegiadas.
 
-La primera versión utilizable de Atlas Terminal debe cubrir:
+## 4. Comandos
 
-- Inicio y salida previsibles.
-- Interfaz de conversación legible y entrada robusta.
-- Recepción progresiva de respuestas mediante streaming.
-- Indicadores comprensibles de generación, finalización y error, sin presentar una respuesta incompleta como éxito.
-- Comandos de ayuda, limpieza de pantalla y salida: `/help`, `/clear` y `/exit`.
-- Manejo controlado de entrada vacía, EOF, interrupciones y errores del proveedor.
-- Pruebas de los comandos y de los caminos de éxito y error.
+Los comandos de conversaciones y sus políticas están documentados en [Conversaciones locales](../conversations.md).
 
-En esta primera implementación, `/clear` limpia únicamente la pantalla; no crea una conversación nueva ni elimina el contexto en memoria. La gestión de conversaciones pertenece a la fase 2.
+| Comando | Función |
+|---|---|
+| `/help` | Muestra ayuda |
+| `/clear` | Limpia la pantalla; no borra el historial |
+| `/exit` | Sale de Atlas |
+| `/new [título]` | Crea y selecciona una conversación |
+| `/conversations [--all]` | Lista conversaciones |
+| `/use ID` | Selecciona una conversación |
+| `/rename título` | Renombra la activa |
+| `/close` | Cierra la activa y crea otra |
+| `/delete ID CONFIRM` | Elimina conversación y mensajes |
+| `/export [ID] "ruta"` | Exporta el historial a JSON |
+| `/backup "ruta"` | Crea respaldo cifrado |
+| `/verify-backup "ruta"` | Verifica un respaldo |
+| `/restore-backup "respaldo" "nueva-db"` | Restaura a una ruta nueva |
 
-## 5. Límites que permanecen vigentes
+## 5. Evidencia de validación local
 
-La prioridad Terminal no elimina los límites arquitectónicos y de seguridad existentes:
+El 16 de noviembre de 2026, en Debian, con el entorno virtual del proyecto activado, el usuario ejecutó:
 
-- Ollama continúa limitado a loopback; no exponerlo a la red.
-- La consola sigue siendo una interfaz conversacional, no un shell de sistema.
-- No conceder acceso directo a archivos, SQL, Docker, contenedores ni operaciones privilegiadas.
-- No permitir que prompts, modelos, agentes o Skills amplíen sus propios permisos.
-- Las capacidades protegidas deben pasar por sus contratos, identidad, autorización y mediación correspondientes.
-- No afirmar que una acción se ejecutó si solo se generó texto o un plan.
-- No modificar servicios o infraestructura de producción como parte de las pruebas del prototipo sin autorización explícita.
+```text
+python -m unittest tests.unit.test_conversation_deletion -v
+Ran 6 tests ... OK
 
-Estos son límites mínimos del prototipo; el trabajo de seguridad avanzada e integración completa se desarrollará en una fase posterior.
-
-## 6. Trabajo temporalmente pausado
-
-- **Atlas Desktop para Windows:** la dirección y decisiones previamente aprobadas se conservan, pero el desarrollo queda pausado.
-- **API remota de Atlas Assistant:** queda pausada; no es requisito para demostrar primero la experiencia local de Terminal.
-- La pausa no cancela decisiones anteriores ni autoriza a borrar ramas o documentación existentes.
-
-Las ramas de Desktop ya existentes permanecen separadas de `main`; esta prioridad no las fusiona ni modifica.
-
-## 7. Relación con el resto de Atlas
-
-El trabajo de Identity/CAM, Memory Engine, Broker, Skills, proyectos, agentes y Scheduler no se declara cancelado. Se reordena el trabajo inmediato para validar una experiencia Terminal funcional antes de ampliar la superficie de capacidades.
-
-Los contratos existentes siguen siendo normativos. En particular, el contrato de Atlas Assistant (CT-06) mantiene la separación entre inteligencia/coordinación y autoridad para ejecutar operaciones. La integración de MemoryGateway y de herramientas protegidas no debe adelantarse a la disponibilidad de sus fronteras durables y autorizadas.
-
-## 8. Verificación local
-
-Desde la raíz del repositorio:
-
-```bash
-PYTHONPATH=src python -m atlas
+python -m unittest discover -s tests -v
+Ran 844 tests ... OK
 ```
 
-Modo informativo sin proveedor LLM:
+Resultado: **6/6 pruebas focalizadas y 844/844 pruebas de la suite completa aprobadas**. Las pruebas de eliminación usan almacenamiento temporal; no modifican la base personal de conversaciones.
+
+También se habían realizado comprobaciones manuales locales de persistencia, backup, verificación, restauración, exportación y eliminación usando bases/rutas temporales. Estas evidencias no deben confundirse con una validación de despliegue productivo ni con CI de GitHub Actions.
+
+## 6. Límites actuales
+
+- La experiencia conversacional local funciona, pero no es todavía un agente con ejecución general de tareas.
+- El Assistant no tiene acceso directo al shell, archivos, SQL, Docker ni herramientas privilegiadas.
+- La integración con Ollama requiere que el servicio y el modelo estén instalados y disponibles localmente; Atlas no los instala ni inicia automáticamente.
+- El modo offline es informativo y no genera respuestas mediante un LLM.
+- Las conversaciones se almacenan localmente; no existe sincronización multi-dispositivo.
+- La exportación JSON no está cifrada.
+- La eliminación de una conversación no garantiza borrado forense de bloques liberados ni elimina copias dentro de respaldos previos.
+- La persistencia conversacional no equivale a persistencia del Memory Engine.
+- Las capacidades de Identity/CAM y Memory Engine no se consideran integradas de extremo a extremo en el flujo de conversación.
+
+## 7. Relación con la visión general de Atlas
+
+Atlas Terminal es una parte funcional de una plataforma mayor. Identity/CAM, Memory Engine, Broker, Skills, gestión de proyectos, agentes, Scheduler, aprobaciones, eventos, notificaciones y ejecución mediada continúan desarrollándose según sus propios contratos y estados. No se debe presentar un contrato, modelo o prueba aislada como un subsistema operativo completo.
+
+La prioridad Terminal ordena el trabajo inmediato; no cancela la visión ni los demás dominios. La integración de memoria protegida y herramientas debe esperar a que sus fronteras durables y autorizadas estén listas.
+
+## 8. Ejecución local
+
+Desde la raíz del repositorio, con el entorno virtual activado:
 
 ```bash
-ATLAS_MODE=offline PYTHONPATH=src python -m atlas
+source .venv/bin/activate
+python -m atlas
 ```
 
-Suite completa:
+Modo offline:
 
 ```bash
-PYTHONPATH=src python -m unittest discover -s tests -v
+ATLAS_MODE=offline python -m atlas
 ```
 
-La ejecución manual con un modelo local debe realizarse con Ollama disponible en loopback. No se debe inferir que el modelo está instalado o activo solo por estar configurado como predeterminado.
+Instalación editable si el entorno todavía no tiene el paquete instalado:
 
-## 9. Regla de cierre
+```bash
+python -m pip install -e .
+```
 
-Una fase se considera completada únicamente cuando:
+Configuración principal:
 
-- La funcionalidad está implementada y documentada.
-- Sus pruebas automatizadas pasan.
-- Se ha realizado una verificación manual reproducible.
-- Los errores y límites conocidos están documentados.
-- El README raíz y esta documentación reflejan el estado real.
+- `ATLAS_MODEL`: tag del modelo local; predeterminado `gemma4:e2b`.
+- `ATLAS_OLLAMA_URL`: endpoint Ollama; predeterminado `http://127.0.0.1:11434`.
+- `ATLAS_MODE=offline`: inicia el modo informativo sin LLM.
+- `ATLAS_CONVERSATION_DB`: selecciona una base de conversaciones alternativa.
 
+## 9. Próximo trabajo
+
+La siguiente fase de producto es evaluar de forma reproducible el comportamiento de modelos e instrucciones. La hoja de ruta está en [roadmap.md](roadmap.md). No se debe habilitar ejecución arbitraria ni saltarse las fronteras de autorización como atajo para hacer que Atlas parezca más autónomo.
