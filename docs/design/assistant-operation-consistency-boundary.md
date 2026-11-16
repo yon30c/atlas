@@ -549,3 +549,13 @@ Una revisión posterior cuya fecha efectiva sea posterior a `recorded_at` no inv
 **Límite:** esta comprobación depende de la integridad de los timestamps aportados por el registro local; no autentica externamente el reloj ni la procedencia del cambio. Sigue siendo una auditoría de solo lectura y no concede autoridad ni habilita efectos.
 
 **Estado: VALIDADO por el propietario; suite completa: 1135 tests en 9.444 s, todos OK.**
+
+## 48. F2.3.38 — Auditoría global de relaciones entre admisiones y operaciones
+
+La auditoría global amplía el control individual de cada recibo. Comprueba la existencia de la operación referenciada, detecta reutilización/duplicación de `evidence_id`, coteja el conjunto canónico de objetivos con los objetivos reservados y verifica que los claims actuales coincidan con la reserva. Si los claims ya fueron liberados, solo acepta la ausencia de claims cuando existe un recibo durable de liberación, la operación está en estado terminal y los objetivos terminales coinciden exactamente con los reservados.
+
+`RecoveryEvidenceAdmissionAuditReport` expone `global_diagnostic_codes` y `is_healthy`, además de los resultados por recibo. La auditoría sigue siendo de solo lectura y opera dentro de la UoW activa.
+
+**Límites:** no repara datos, no vuelve a autenticar evidencia externa, no trata el estado actual de una operación como autorización y no concede autoridad para efectos ni recuperación. Los duplicados están normalmente bloqueados por las restricciones SQL; la auditoría sirve como detección adicional ante corrupción o manipulación de la base.
+
+**Estado:** implementado en la rama; pruebas locales pendientes.
