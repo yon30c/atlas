@@ -7,6 +7,9 @@ from atlas.adapters.sqlite.authority_changes import SQLiteAuthorityChangeStore
 from atlas.adapters.sqlite.database import SQLiteDatabase
 from atlas.adapters.sqlite.grant_repository import SQLiteGrantRepository
 from atlas.adapters.sqlite.grant_renewal_repository import SQLiteGrantRenewalRepository
+from atlas.adapters.sqlite.project_environment_repository import (
+    SQLiteProjectEnvironmentRepository,
+)
 from atlas.adapters.sqlite.authorization_unit_of_work import (
     SQLiteAuthorizationUnitOfWorkFactory,
 )
@@ -25,6 +28,7 @@ class SQLiteLocalAuthorityFoundation:
     identity: SQLiteIdentityComposition
     grants: SQLiteGrantRepository
     renewals: SQLiteGrantRenewalRepository
+    projects_environments: SQLiteProjectEnvironmentRepository
     authorization_unit_of_work_factory: SQLiteAuthorizationUnitOfWorkFactory
     authority_changes: SQLiteAuthorityChangeStore
 
@@ -43,6 +47,10 @@ class SQLiteLocalAuthorityFoundation:
             raise ContractError("renewals debe ser SQLiteGrantRenewalRepository")
         if self.renewals._database is not self.database:
             raise ContractError("renewals debe compartir la base canónica")
+        if not isinstance(self.projects_environments, SQLiteProjectEnvironmentRepository):
+            raise ContractError("projects_environments debe ser SQLiteProjectEnvironmentRepository")
+        if self.projects_environments._database is not self.database:
+            raise ContractError("Project/Environment debe compartir la base canónica")
         if not isinstance(self.authorization_unit_of_work_factory, SQLiteAuthorizationUnitOfWorkFactory):
             raise ContractError("authorization_unit_of_work_factory inválida")
         if self.authorization_unit_of_work_factory._database is not self.database:
@@ -60,14 +68,15 @@ def compose_sqlite_local_authority(
 ) -> SQLiteLocalAuthorityFoundation:
     """Create the initial shared local authority composition.
 
-    This foundation currently includes Identity, Grants and the durable
-    authority-change ledger. Project and Environment sources, invalidation
-    coordination and admission remain deliberately uncomposed.
+    This foundation includes Identity, Grants, Project/Environment metadata
+    and the durable authority-change ledger. Invalidation coordination and
+    admission remain deliberately uncomposed.
     """
     database = SQLiteDatabase(path, busy_timeout_ms=busy_timeout_ms)
     identity = compose_sqlite_identity_on_database(database)
     grants = SQLiteGrantRepository(database)
     renewals = SQLiteGrantRenewalRepository(database)
+    projects_environments = SQLiteProjectEnvironmentRepository(database)
     authorization_unit_of_work_factory = SQLiteAuthorizationUnitOfWorkFactory(database)
     authority_changes = SQLiteAuthorityChangeStore(database)
     return SQLiteLocalAuthorityFoundation(
@@ -75,6 +84,7 @@ def compose_sqlite_local_authority(
         identity=identity,
         grants=grants,
         renewals=renewals,
+        projects_environments=projects_environments,
         authorization_unit_of_work_factory=authorization_unit_of_work_factory,
         authority_changes=authority_changes,
     )
