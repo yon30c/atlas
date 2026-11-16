@@ -8,7 +8,7 @@ from atlas.assistant.capabilities import (
     CapabilityRisk,
     build_default_capability_catalog,
 )
-from atlas.assistant.planning import IntentKind
+from atlas.assistant.planning import AssistantIntent, IntentKind
 from atlas.core.errors import ContractError
 
 
@@ -28,6 +28,18 @@ class CapabilityCatalogTests(unittest.TestCase):
         self.assertEqual(definition.parameter_names, ("workspace_id", "path"))
         self.assertEqual(definition.result_type, "WorkspaceFile")
         self.assertFalse(hasattr(definition, "handler"))
+
+    def test_validates_exact_intent_parameters(self):
+        catalog = build_default_capability_catalog()
+        intent = AssistantIntent(
+            IntentKind.WORKSPACE_READ,
+            (("workspace_id", "demo"), ("path", "notes.txt")),
+        )
+        self.assertIs(catalog.validate_intent(intent), catalog.get(IntentKind.WORKSPACE_READ))
+        with self.assertRaises(ContractError):
+            catalog.validate_intent(AssistantIntent(
+                IntentKind.WORKSPACE_READ, (("workspace_id", "demo"),)
+            ))
 
     def test_rejects_duplicate_and_mutable_definitions(self):
         definition = CapabilityDefinition(
