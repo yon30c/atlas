@@ -281,6 +281,12 @@ class SQLiteRecoveryEvidenceIssuerTrustPolicyRepositoryTests(unittest.TestCase):
             tuple(item.issuer_id for item in report.issuers),
             ("a-source", "z-source"),
         )
+        self.assertTrue(report.is_healthy)
+
+    def test_audit_all_empty_inventory_is_not_reported_healthy(self):
+        report = self.repository.audit_all()
+        self.assertEqual(report.issuers, ())
+        self.assertFalse(report.is_healthy)
 
 
 if __name__ == "__main__":
