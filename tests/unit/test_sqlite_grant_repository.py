@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import sqlite3
 import tempfile
 import unittest
 
@@ -100,7 +101,7 @@ class SQLiteGrantRepositoryTests(unittest.TestCase):
     def test_database_constraints_reject_delete_and_revision_skips(self):
         self.repository.create(self.grant)
         with self.database.connection() as connection:
-            with self.assertRaises(Exception):
+            with self.assertRaises(sqlite3.IntegrityError):
                 connection.execute(
                     "DELETE FROM authorization_grants WHERE grant_id = ?",
                     ("grant-001",),
