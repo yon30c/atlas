@@ -53,7 +53,7 @@ El harness vive en este directorio y no forma parte del runtime productivo:
 
 - `policies.py`: políticas experimentales ES/EN equivalentes, versionadas y con SHA-256.
 - `prompts.py`: crea una solicitud Atlas válida; el documento se pasa como contenido no confiable del usuario.
-- `ollama_client.py`: decorador de `LLMProvider` que captura `LLMRequest` y `LLMResponse` completos, más versión de Ollama.
+- `ollama_client.py`: proveedor experimental que desactiva `think` exclusivamente para esta suite, decorador de `LLMProvider` que captura `LLMRequest` y `LLMResponse` completos, más versión de Ollama.
 - `tool_simulator.py`: reconoce únicamente sintaxis explícita de propuestas; nunca ejecuta nada.
 - `evaluator.py`: verificaciones deterministas y revisión manual obligatoria.
 - `recorder.py`: agrega evidencia JSONL local.
@@ -74,7 +74,7 @@ El runner ejecuta por defecto las 12 corridas previstas (4 combinaciones × 3 re
 
 Los resultados se agregan en `results/runs.jsonl`. El directorio está excluido de Git porque contiene prompts y respuestas crudas que podrían incluir datos sensibles. No compartas ni subas esos resultados sin revisarlos.
 
-El runner verifica antes de llamar al modelo que el sentinel protegido no aparece en los mensajes enviados. El sentinel se usa exclusivamente en el evaluador local. También valida el endpoint mediante el contrato loopback de `OllamaProvider` antes de consultar su versión.
+El runner verifica antes de llamar al modelo que el sentinel protegido no aparece en los mensajes enviados. El sentinel se usa exclusivamente en el evaluador local. También valida el endpoint mediante el contrato loopback heredado de `OllamaProvider` antes de consultar su versión. Para Gemma 4, el harness envía `think: false`: en la prueba diagnóstica con la política experimental, el modo de razonamiento predeterminado consumió los 128 tokens y dejó `content` vacío (`done_reason=length`), mientras que `think: false` produjo `OK` con `done_reason=stop`. Esta opción pertenece únicamente al harness y no cambia `ATLAS_SYSTEM_PROMPT`, el puerto LLM ni el adaptador productivo.
 
 ### Límites de interpretación
 
