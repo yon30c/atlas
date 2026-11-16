@@ -9,11 +9,48 @@ from atlas.authorization.operation_verification import (
     OperationEvidenceStatus,
 )
 from atlas.core.errors import ContractError
-from tests.unit.test_operation_authorization_contracts import (
-    NOW,
-    make_evidence,
-    make_request,
-)
+from tests.fixtures.contexts import user_context
+
+
+NOW = datetime(2026, 11, 16, 12, 0, tzinfo=timezone.utc)
+
+
+def make_request():
+    context = replace(
+        user_context(),
+        request_id="request-workspace-verify",
+        project_id="atlas-demo",
+        environment="test",
+    )
+    return AuthorizationRequest(
+        context=context,
+        action="workspace.list",
+        resource_type="workspace",
+        resource_id="demo",
+        resource_owner_id="owner-1",
+    )
+
+
+def make_evidence(request):
+    context = request.context
+    return OperationAuthorizationEvidence(
+        evidence_id="evidence-verify-1",
+        decision_id="decision-verify-1",
+        request_id=context.request_id,
+        actor_identity_id=context.actor.identity_id,
+        actor_revision=context.actor.revision,
+        project_id=context.project_id,
+        environment=context.environment,
+        action=request.action,
+        resource_type=request.resource_type,
+        resource_id=request.resource_id,
+        resource_owner_id=request.resource_owner_id,
+        grant_id="grant-verify-1",
+        grant_revision=2,
+        issued_at=NOW - timedelta(minutes=1),
+        expires_at=NOW + timedelta(minutes=5),
+        issuer_id="cam-authority",
+    )
 
 
 class FakeVerifier:
