@@ -1,8 +1,6 @@
 """Canonical SQLite sources for Project and Environment metadata."""
 
-from contextlib import contextmanager
 import sqlite3
-from typing import Iterator
 
 from atlas.adapters.sqlite.database import SQLiteDatabase
 from atlas.core.errors import ConcurrencyError, ContractError, NotFoundError
