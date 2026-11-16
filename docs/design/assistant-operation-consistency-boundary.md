@@ -67,7 +67,7 @@ La lectura debe limitarse al workspace registrado y a rutas canónicas permitida
 
 ### Escrituras
 
-No se habilitan en esta fase. Una transacción SQLite no puede hacer commit atómico de una modificación del sistema de archivos. Antes de permitir `workspace.write` se requiere un protocolo durable específico: staging, identidad/idempotencia de operación, commit/rename controlado, reconciliación tras crash y tratamiento explícito de resultados inciertos. La aprobación humana tampoco resuelve esa atomicidad.
+No se habilitan como capacidad autorizada ni se conectan al runtime. El Ciclo 2 implementa un protocolo local de staging/commit/recovery de archivos (ver [assistant-workspace-write-protocol.md](assistant-workspace-write-protocol.md)), pero una transacción SQLite no puede hacer commit atómico de una modificación del sistema de archivos. El protocolo de archivos solo controla escrituras cooperativas del adaptador local; no implementa admisión CAM, fencing frente a revocaciones, coordinación con fuentes de autoridad ni atomicidad distribuida. Por tanto, `workspace.write` sigue fuera del catálogo y del runtime hasta completar su gate de autorización/consistencia.
 
 ## 6. Reutilización de componentes existentes
 
