@@ -2,7 +2,8 @@
 
 > Estado: **En curso**.
 > Inicio documentado: 16 de noviembre de 2026.
-> Modelo principal seleccionado: **Gemma 4 E2B**.\n> Tag fijado para P3-PI-002: `gemma4:e2b-it-q4_K_M`.
+> Modelo principal seleccionado: **Gemma 4 E2B**.
+> Tag fijado para P3-PI-002: `gemma4:e2b-it-q4_K_M`.
 > Rama: `feature/terminal-commands`.
 
 ## 1. Propósito
@@ -62,16 +63,18 @@ Inspección de `feature/terminal-commands` realizada el 16 de noviembre de 2026:
 
 ### 3.1 — Baseline y protocolo reproducible
 
-Estado: **En curso / primer incremento documental completado**.
+Estado: **En curso**. El primer incremento del harness está implementado; falta validación local.
 
 - [x] Registrar la decisión histórica de seleccionar Gemma 4 E2B.
 - [x] Registrar resultados y fallos históricos conocidos, diferenciando observación manual de benchmark reproducible.
 - [x] Inspeccionar el prompt y los adaptadores Ollama actuales.
 - [x] Identificar qué prueban y qué no prueban las pruebas automatizadas existentes.
-- [x] Crear un corpus versionado inicial con casos históricos y el siguiente caso de privacidad entre proyectos (`tests/evaluation/phase3/corpus.json`).
-- [ ] Completar un esquema de registro por ejecución con tag exacto del modelo, versión Ollama, parámetros, hash de política, fecha, respuesta cruda y evaluación separada.
-- [ ] Incorporar un runner reproducible al repositorio o verificar e integrar el runner local existente.
-- [ ] Definir y ejecutar repeticiones controladas de cada caso crítico para detectar variabilidad.
+- [x] Crear un corpus versionado inicial con casos históricos y el siguiente caso de privacidad entre proyectos.
+- [x] Incorporar esquema JSON, registro JSONL local, tag exacto, versión Ollama, parámetros, hash de política, fecha y respuesta cruda.
+- [x] Incorporar runner aislado que reutiliza `OllamaResponseGenerator._build_request()` y captura el `LLMResponse` completo.
+- [x] Incorporar políticas experimentales ES/EN, evaluador determinista y simulador pasivo sin ejecución.
+- [ ] Ejecutar pruebas unitarias del harness y revisar resultados.
+- [ ] Ejecutar P3-PI-002 con tres repeticiones por combinación y revisión manual de las 12 respuestas.
 
 ### 3.2 — Instrucciones e inyección de prompts
 
