@@ -307,7 +307,7 @@ Añadidos contratos inmutables para resultados terminales `COMPLETED` y `ABORTED
 
 **Límite:** por ahora solo se valida el contrato en memoria. No autentica la evidencia, no la persiste, no cambia el estado durable ni libera claims. Runtime desconectado.
 
-**Estado:** publicado; pendiente de validación local.
+**Estado:** validado por el propietario con 1014/1014 pruebas (16 de noviembre de 2026).
 
 ### F2.3.16 — Claims exclusivos multiobjetivo
 
@@ -321,5 +321,16 @@ Migración v11 añade claims con unicidad global por tipo/ID de autoridad. `SQLi
 Migración SQLite v12 añade tablas inmutables para el recibo terminal y cada objetivo observado. record_multi_terminal_evidence exige operación conocida en RECONCILING, conjunto completo de claims y coincidencia exacta del recibo con la reserva. Inserta recibo + objetivos + transición a COMPLETED/ABORTED dentro de una única UoW. Replay exacto recupera el recibo original; un recibo diferente se rechaza. La recuperación recalcula el digest y la canonicalización para detectar corrupción del contenido persistido. Triggers SQL impiden estado terminal sin evidencia y conjunto de objetivos completo, así como cambiar el estado terminal después. Claims permanecen retenidos.
 
 **Límite:** canonicalización/digest dan binding e idempotencia, no autenticidad ni verificación independiente de la evidencia externa. Sin CAM, fencing, invalidación, mutación de fuentes ni runtime.
+
+**Estado:** publicado; pendiente de validación local.
+
+
+### F2.3.19 — Liberación auditable de claims terminales
+
+Migración SQLite v13 incorpora un ledger inmutable de liberaciones. Solo permite registrar una liberación cuando la operación está COMPLETED/ABORTED, el recibo terminal y su digest coinciden, y los conjuntos de targets, observaciones y claims están completos. La eliminación de claims queda protegida por trigger y exige el recibo de liberación.
+
+`release_multi_claims` valida la evidencia persistida, compara los conjuntos exactos y registra el recibo + elimina todos los claims en una misma UoW. Reintentos son idempotentes; operaciones no terminales devuelven False; corrupción, evidencia incompleta o claims parciales fallan cerrados. La auditoría de liberación es inmutable y los recursos pueden reclamarse de nuevo después del commit.
+
+**Límite:** no autentica la referencia externa ni sustituye CAM, fencing, invalidación o un coordinador real. No se conecta al runtime.
 
 **Estado:** publicado; pendiente de validación local.
