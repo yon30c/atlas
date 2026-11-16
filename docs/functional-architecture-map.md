@@ -386,3 +386,12 @@ recommend_multi_recovery_decision convierte una evaluación de recuperación en 
 La decisión expone automatic_action_permitted = False para todas las disposiciones. No ofrece acciones de retry, no cambia estado, no libera claims y no autentica evidencia. La implementación permanece fuera del runtime.
 
 **Estado: VALIDADA.** Suite completa: 1061 tests en 7.206 s, todos OK.
+
+
+## 36. F2.3.26 — Evidencia independiente y verificación
+
+Nuevos contratos en memory, ports y application modelan evidencia de recuperación no confiable y delegan su autenticidad a un verificador explícitamente confiable. Se exige coincidencia exacta de operation_id, tipo de evidencia, todos los objetivos y sus revisiones; la ventana temporal debe estar vigente. Digest y referencia de atestación son datos declarativos, no prueba de autenticidad.
+
+El servicio falla cerrado: DENIED para evidencia inválida o no coincidente, UNAVAILABLE ante fallo del verificador y VERIFIED solo ante retorno exacto True. No habilita acciones ni altera el ledger. La implementación concreta de criptografía y adaptadores de fuentes autoritativas queda pendiente.
+
+**Estado:** implementación y pruebas publicadas; pendiente de validación local.
