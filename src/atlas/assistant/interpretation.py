@@ -1,8 +1,6 @@
 """Parser estricto para salidas estructuradas de interpretación de intención."""
 
 import json
-from typing import object as _object  # type: ignore[attr-defined]
-
 from atlas.assistant.planning import (
     AssistantIntent,
     IntentInterpretation,
