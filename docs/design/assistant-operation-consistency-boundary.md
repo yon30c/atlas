@@ -105,3 +105,35 @@ No se debe combinar estas piezas en un falso coordinador mediante composición s
 ## 9. Próximo incremento
 
 F2.3.5 debe ser una inspección de persistencia/composición: localizar exactamente dónde viven hoy Identity, Grant, Project y Environment, qué repositorios los modifican y qué instancias de base de datos usan. El resultado será una matriz fuente → repositorio → base de datos → UoW → caminos de mutación. No crear código de coordinador hasta que esa matriz confirme una estrategia implementable.
+
+
+## 10. F2.3.5 — Inventario real de persistencia y composición
+
+Inspección estática de la rama `feature/terminal-commands`:
+
+| Fuente | Contrato/implementación encontrada | Persistencia/UoW | Caminos de cambio observados | Conclusión |
+|---|---|---|---|---|
+| Identity | `IdentityAuthorityPort` / `SQLiteIdentityAuthority` | SQLite propia recibida por `compose_sqlite_identity(path)`; `get_user` usa conexión independiente y `update_user_status` abre su propia UoW | `create_user`, CAS de estado | No comparte UoW con CAM/Grant por composición actual; CAS no registra invalidación común |
+| Grant | `GrantRepository` Protocol; no se encontró adaptador SQLite concreto en `src/atlas/adapters/sqlite` | `AuthorizationUnitOfWork` agrupa Grants + renovaciones, pero no demuestra una UoW SQLite compartida con Identity/journal | `GrantManagementService.issue` escribe directamente al repositorio; renovación usa su UoW; revoke requiere coordinador inyectado y falla cerrado si falta | No existe persistencia canónica concreta común demostrada |
+| Project | `ProjectMetadataPort` + `ProjectMetadata` tipados bajo Memory | Sin adaptador canónico de proyecto encontrado en el código de producción | No se encontró servicio/repositorio de ciclo de vida de proyectos | Fuente y UoW no definidas |
+| Environment | `EnvironmentMetadataPort` + `EnvironmentMetadata` tipados bajo Memory | Sin adaptador canónico de entorno encontrado en el código de producción | No se encontró servicio/repositorio de ciclo de vida de entornos | Fuente y UoW no definidas |
+| Consistency journal | `SQLiteConsistencyJournal`, composición local de journal | Recibe `SQLiteDatabase`; puede compartir archivo solo si composición lo hace explícitamente | Append/posición del journal; Recovery Gate separado | No prueba compartir DB con Identity/Grant/Project/Environment |
+| Authority changes | `AuthorityChangeCoordinatorPort` + `SQLiteAuthorityChangeStore` | El store recibe SQLite, persiste reserva/idempotencia | No implementa invalidación, fencing, mutación de fuentes ni reconciliación | Coordinador completo no encontrado |
+
+### Hallazgos concretos
+
+- `compose_sqlite_identity(path)` crea una instancia nueva de `SQLiteDatabase` y su `SQLiteIdentityAuthority`; no acepta una instancia compartida desde una composición de aplicación.
+- `SQLiteIdentityAuthority.update_user_status` hace CAS, pero no pasa por `AuthorityChangeCoordinatorPort` ni escribe un evento de invalidación en el journal.
+- `GrantManagementService.issue` llama directamente a `GrantRepository.create`. La revocación está diseñada para delegar al coordinador, pero la configuración es opcional y falla cerrado cuando falta; no se encontró un coordinador concreto.
+- `AuthorizationUnitOfWork` solo agrupa Grants y renovaciones. No declara una misma instancia `SQLiteDatabase`, ni incluye Identity, Project, Environment o consistency journal.
+- Project/Environment solo aparecen como contratos de metadatos consumidos por Memory; no hay repositorios canónicos de producto identificados.
+- `SQLiteConsistencyJournal` usa una instancia `SQLiteDatabase` inyectada. La composición de journal demuestra compartir esa instancia entre journal y algunos puertos de recuperación, no con las fuentes CAM.
+- En `src/atlas/adapters/sqlite` no hay adaptador de Grant, Project o Environment en la rama inspeccionada.
+
+### Resultado de F2.3.5
+
+La estrategia de una única UoW SQLite para las cuatro autoridades **no es implementable con la composición actual sin introducir nuevas fuentes/adaptadores y cambiar caminos de mutación existentes**. No basta con añadir un verificador.
+
+La ruta recomendada es una composición de autoridad local explícita que reciba una única instancia `SQLiteDatabase` y que sea dueña de los repositorios canónicos Identity, Grant, Project, Environment, el journal y las tablas de admisión/invalidation. Todos los servicios de mutación deben usar el coordinador de esa composición; los métodos directos actuales deberán convertirse en fachadas delegadas o quedar fuera de la composición protegida. No se debe mantener un segundo repositorio "de espejo" como fuente de verdad.
+
+Antes de implementar, hay una decisión de alcance: ¿construir ahora esas cuatro fuentes canónicas mínimas para el perfil de prueba, o mantener el scope de F2 read-only sin autorización CAM integrada y avanzar primero con tareas/UX? No se ha cambiado código ni se ha habilitado ejecución.
