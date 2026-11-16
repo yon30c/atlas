@@ -1,0 +1,114 @@
+# F2.3 — Frontera de autorización, revisión y ejecución de workspace
+
+> Estado: diseño de frontera; todavía no implementa autorización, aprobación ni ejecución.
+> Fecha: 16 de noviembre de 2026.
+> Rama: `feature/terminal-commands`.
+
+## 1. Objetivo
+
+Definir cómo una propuesta `workspace.list` pasa de plan a operación ejecutable sin convertir al modelo, al chat ni a una confirmación informal en autoridad de seguridad.
+
+Este diseño cubre el primer flujo local de prueba. No conecta todavía el flujo al runtime conversacional, a `cli.py`, al Broker ni a un ejecutor general.
+
+## 2. Tres decisiones distintas
+
+El flujo debe conservar tres conceptos independientes:
+
+1. **Revisión del plan:** el propietario confirma que Atlas entendió correctamente la tarea y que desea continuar con esos parámetros. Esta confirmación expresa intención; no concede permisos.
+2. **Autorización CAM:** CAM determina si la identidad autenticada puede realizar la acción exacta sobre el recurso exacto, dentro del proyecto y entorno correspondientes. Un `DENY` nunca puede convertirse en permiso mediante confirmación humana.
+3. **Aprobación de seguridad:** cuando la política de CAM devuelve `REQUIRE_APPROVAL`, se necesita una aprobación válida emitida por el mecanismo de autoridad humana correspondiente. El texto "sí" en una conversación no es, por sí solo, evidencia autenticada de esa aprobación.
+
+La ejecución solo puede considerarse admisible cuando la autorización vigente permite la operación y se han satisfecho todas las aprobaciones requeridas por la política.
+
+## 3. Hallazgos de implementación existente
+
+- `AuthorizationEvaluator` evalúa `AuthorizationRequest` contra Grants explícitos y compara actor, propietario, proyecto, entorno, tipo de recurso, ID exacto, acción y vigencia.
+- `AuthorizationEvaluation` es un resultado interno. Su `ALLOW` conserva el Grant que coincidió, pero el propio contrato advierte que no constituye autorización pública.
+- `AuthorizationPort.evaluate` recibe `AuthorizationRequest` y devuelve `AuthorizationResult`.
+- `AuthorizationResult` exige un `AuthorizationSnapshot` de Memory cuando la decisión es `ALLOW`. Ese snapshot está diseñado para lecturas protegidas de Memory, no para operaciones generales de workspace.
+- `MemoryAuthorizationService` es una política específica de lectura de Memory y no debe reutilizarse para autorizar workspace.
+- No se encontró un puerto/servicio general de Approval Manager conectado a este flujo.
+- `OperationContext` transporta actor, usuario, proyecto, entorno, origen y propósito, pero permite que `project_id` y `environment` estén ausentes. Un flujo protegido debe resolverlos de forma confiable y fallar cerrado cuando sean obligatorios.
+
+**Conclusión:** no conectar directamente `AuthorizationPort` ni `MemoryAuthorizationService` al flujo workspace. Tampoco llamar a `AuthorizationEvaluation(ALLOW)` una autorización pública.
+
+## 4. Identidad de la operación
+
+La operación sometida a revisión/autorización debe quedar ligada a una representación inmutable que incluya, como mínimo:
+
+- identificador del plan y del paso;
+- capacidad exacta, inicialmente `workspace.list`;
+- workspace ID como recurso exacto;
+- acción CAM estable y explícita;
+- propietario/tenant del recurso resuelto por configuración confiable;
+- actor autenticado y usuario contextual, sin asumir que son equivalentes;
+- proyecto y entorno resueltos por autoridad confiable;
+- parámetros completos y normalizados;
+- referencia a la solicitud y correlación;
+- huella determinista del contenido operativo.
+
+La huella debe cubrir todos los campos que cambian el significado o alcance de la operación. No debe incluir texto descriptivo generado por el modelo si ese texto no afecta a la operación. Cambiar capacidad, workspace, parámetros, actor, proyecto o entorno invalida la revisión y cualquier aprobación anterior.
+
+La serialización canónica y el algoritmo de huella se definirán en el contrato de implementación; no se aceptará usar `repr()`, orden de diccionarios accidental ni texto libre como identidad de operación.
+
+## 5. Reglas de decisión
+
+| CAM | Revisión del plan | Aprobación requerida | Resultado |
+|---|---|---|---|
+| DENY | cualquiera | cualquiera | Bloqueado |
+| REQUIRE_APPROVAL | confirmada | ausente | Pendiente; no ejecutar |
+| REQUIRE_APPROVAL | confirmada | válida y vigente | Puede continuar solo si CAM confirma la autorización aplicable |
+| ALLOW | no confirmada | no requerida | Esperar revisión |
+| ALLOW | confirmada | no requerida | Puede continuar |
+| ALLOW | confirmada | requerida por política adicional | Esperar aprobación válida |
+
+La aprobación no crea ni modifica Grants, no amplía alcance y no puede revocar un `DENY`. Una aprobación caducada, revocada, reutilizada, emitida para otra huella o no verificable equivale a no aprobada.
+
+La autorización se debe comprobar de nuevo inmediatamente antes de ejecutar. Una decisión anterior no se conserva como permiso indefinido.
+
+## 6. Frontera de implementación propuesta
+
+Antes de integrar el flujo se necesitan contratos compatibles con operaciones generales, sin acoplarlos al snapshot de Memory:
+
+- una solicitud tipada de autorización de operación, basada en `OperationContext` y recurso/acción exactos;
+- una decisión pública de CAM cuyo `ALLOW` incluya evidencia verificable específica de operación, no un booleano ni un objeto de Memory;
+- un puerto de verificación/consumo de aprobación humana si CAM exige aprobación;
+- una solicitud de ejecución inmutable ligada a la huella revisada y autorizada;
+- un gate de aplicación que falle cerrado ante puerto ausente, error, respuesta mal formada, contexto incompleto o evidencia no coincidente.
+
+La implementación debe reutilizar la política CAM y el modelo de Grants existentes donde sean compatibles. Si el contrato público actual impide expresar una autorización general, se deberá extender/evolucionar CAM de forma explícita y con pruebas de regresión; no crear un segundo motor de permisos paralelo.
+
+Para el primer entorno de prueba pueden inyectarse dobles de prueba de los puertos, claramente confinados a pruebas unitarias. Un fake que devuelve ALLOW sirve para probar la orquestación, pero no constituye autorización real ni habilita la consola o el runtime.
+
+## 7. Límites de alcance
+
+F2.3 no implementa todavía:
+
+- un Approval Manager de producción;
+- autenticación interactiva nueva;
+- emisión o modificación de Grants;
+- autorización genérica productiva;
+- ejecución desde el chat o la consola;
+- escritura de archivos, shell o acceso al sistema de archivos fuera del workspace configurado;
+- integración con Scheduler, Broker o Skills.
+
+El primer ejecutor seguirá limitado a `workspace.list` y a una raíz de workspace configurada localmente. No se aceptarán rutas arbitrarias suministradas por el modelo.
+
+## 8. Pruebas de aceptación para el siguiente incremento
+
+1. Una propuesta de Gemma nunca puede autorizarse a sí misma.
+2. La confirmación de revisión no altera una decisión CAM.
+3. `DENY` bloquea incluso con confirmación humana.
+4. `REQUIRE_APPROVAL` bloquea si no hay aprobación verificable.
+5. Una aprobación ligada a otro plan, paso, actor, workspace, proyecto, entorno o conjunto de parámetros no coincide.
+6. Alterar un parámetro después de revisar invalida la revisión/aprobación.
+7. Un resultado CAM mal formado, ausente o no verificable falla cerrado.
+8. Un contexto sin los atributos obligatorios falla cerrado.
+9. Una autorización expirada o revocada no permite continuar.
+10. Una aprobación no puede reutilizarse si el contrato la define como de un solo uso.
+11. El fake de autorización solo se usa en pruebas y no se incorpora a la composición de CLI.
+12. La operación no ejecuta nada durante la revisión ni durante la autorización.
+
+## 9. Próximo paso
+
+Diseñar y probar el contrato genérico de evidencia de autorización de operación en CAM, sin modificar todavía el runtime. Después, definir la interfaz de aprobación y el gate de aplicación. Solo cuando ambos contratos tengan pruebas negativas suficientes se conectará el adaptador local `workspace.list`.
