@@ -498,4 +498,4 @@ Pruebas añadidas para cambio posterior válido y revisión posterior retrodatad
 
 **Límite:** no autentica la fuente del timestamp ni el reloj; no modifica recibos, no autoriza efectos y no habilita recuperación/runtime.
 
-**Estado:** implementado en GitHub; pendiente de pruebas locales del propietario.
+**Estado: VALIDADO por el propietario; suite completa: 1135 tests en 9.444 s, todos OK.**
