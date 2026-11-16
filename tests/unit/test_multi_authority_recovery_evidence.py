@@ -281,6 +281,23 @@ class MultiAuthorityRecoveryEvidenceVerificationTests(unittest.TestCase):
         self.assertEqual(result.status, RecoveryEvidenceVerificationStatus.DENIED)
         self.assertEqual(verifier.calls, 0)
 
+    def test_disabled_issuer_policy_is_denied_before_verifier(self):
+        verifier = FakeVerifier()
+        disabled = RecoveryEvidenceIssuerTrustPolicy(
+            issuer_id="trusted-source-1",
+            policy_revision=3,
+            enabled=False,
+            allowed_evidence_kinds=(
+                MultiAuthorityRecoveryEvidenceKind.SOURCE_OUTCOME_RECEIPT,
+            ),
+            valid_from=NOW - timedelta(days=1),
+            valid_until=NOW + timedelta(days=1),
+            max_evidence_lifetime_seconds=600,
+        )
+        result = self.verify(self.service(verifier, FakeTrustPolicyPort(disabled)))
+        self.assertEqual(result.status, RecoveryEvidenceVerificationStatus.DENIED)
+        self.assertEqual(verifier.calls, 0)
+
     def test_trust_policy_source_failure_is_unavailable(self):
         verifier = FakeVerifier()
         result = self.verify(
