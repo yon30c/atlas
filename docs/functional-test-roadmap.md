@@ -409,7 +409,7 @@ Implementados los contratos `RecoveryEvidenceIssuerTrustPolicy` y `RecoveryEvide
 
 La política es un filtro de confianza, no una prueba criptográfica. La autenticidad de la atestación, digest/payload, revocación de claves, replay y estado autoritativo permanecen en el verificador. No existe almacenamiento concreto ni conexión al runtime.
 
-**Estado:** IMPLEMENTADO; pendiente de validación local del propietario.
+**Estado: VALIDADO.** El propietario confirmó la suite completa con 1076 tests, todos OK.
 
 ## F2.3.28 — Repositorio durable de políticas de confianza
 
@@ -422,6 +422,6 @@ Implementar snapshots inmutables por emisor y revisión en SQLite, con migració
 
 ## F2.3.29 — Auditoría de integridad de políticas de confianza
 
-Implementar diagnósticos de solo lectura para políticas por emisor: continuidad de revisiones, contenido canónico y decodificable, política vigente deshabilitada y ausencia de política para un emisor consultado. `audit_all()` debe producir un snapshot consistente y no mutar la base. No incluir reparaciones automáticas, autenticación criptográfica ni autoridad de recuperación.
+Se implementan diagnósticos de solo lectura para políticas por emisor: continuidad de revisiones, contenido canónico y decodificable, política vigente deshabilitada y ausencia de política para un emisor consultado. `audit_all()` obtiene un snapshot consistente y no muta la base. No se incluyen reparaciones automáticas, autenticación criptográfica ni autoridad de recuperación.
 
 **Estado:** implementado en la rama; pendiente de validación local del propietario. Nota: `audit_all()` cubre emisores registrados en la tabla; detectar emisores esperados nunca registrados requiere un inventario autoritativo independiente.
