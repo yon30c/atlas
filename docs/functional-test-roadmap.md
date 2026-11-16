@@ -102,7 +102,7 @@ El conjunto exacto de operaciones se define al inspeccionar los módulos existen
 
 ### F1 — Interpretación y planificación
 
-**Estado:** F1.1 (contratos de intención/plan) integrado. F1.2 incluye parser JSON estricto y adaptador `OllamaIntentInterpreter` separado del flujo conversacional. El propietario validó 866/866 pruebas tras añadir el adaptador. Una prueba directa con el modelo `gemma4:e2b-it-q4_K_M` confirmó que Ollama devuelve el JSON esperado al enviar `think: false` y `format: "json"`. El adaptador `OllamaProvider` ahora admite ambas opciones de forma explícita y opcional, preservando el comportamiento predeterminado de las llamadas existentes. Las nuevas pruebas unitarias y la repetición de los cuatro casos con el adaptador configurado quedan pendientes de validación local.
+**Estado:** F1.1 (contratos de intención/plan) integrado. F1.2 incluye parser JSON estricto y adaptador `OllamaIntentInterpreter` separado del flujo conversacional. El propietario validó 866/866 pruebas tras añadir el adaptador y confirmó con Gemma `gemma4:e2b-it-q4_K_M` los cuatro resultados esperados: `workspace.list`, aclaración, `workspace.read` y solicitud no soportada. La prueba real utilizó `OllamaProvider(think=False, response_format="json")`; estas opciones ya están implementadas de forma opcional en el adaptador Ollama y no alteran el comportamiento predeterminado. F1.3 añade `AssistantPlanningService`, que convierte interpretaciones READY en planes declarativos de un paso y conserva sin cambios los resultados de aclaración/no soportados. Las pruebas nuevas del servicio y la suite completa quedan pendientes de validación local.
 
 - Clasificar la solicitud en una intención de producto.
 - Extraer parámetros y detectar datos faltantes.
@@ -206,4 +206,4 @@ Para cada siguiente incremento:
 6. Revisar los resultados antes de continuar.
 7. Actualizar esta documentación con evidencia, commit y estado real.
 
-**Siguiente acción:** actualizar el checkout Debian y ejecutar `tests.unit.test_ollama_interpreter` y la suite completa. Si pasan, probar el intérprete contra Gemma local con solicitudes representativas, sin conectarlo aún al flujo conversacional ni ejecutar capacidades. El primer flujo vertical será `workspace.list` sobre un workspace demo aislado.
+**Siguiente acción:** actualizar el checkout Debian y ejecutar las pruebas focalizadas de `tests.unit.test_assistant_planning_service` y después la suite completa. Si pasan, F1.3 quedará validado a nivel unitario y podremos diseñar la integración de interpretación + planificación en un caso de uso de aplicación, todavía sin ejecutar capacidades. El primer flujo vertical seguirá siendo `workspace.list` sobre un workspace demo aislado.
