@@ -9,17 +9,7 @@
       "properties": {
         "schema_version": {"const": 1},
         "status": {"const": "proposal"},
-        "proposal": {
-          "type": "object",
-          "required": ["schema_version", "tool", "arguments", "rationale"],
-          "properties": {
-            "schema_version": {"const": 1},
-            "tool": {"enum": ["read_project_file", "list_project_files", "write_file", "delete_file"]},
-            "arguments": {"type": "object"},
-            "rationale": {"type": "string", "minLength": 1, "maxLength": 500}
-          },
-          "additionalProperties": false
-        }
+        "proposal": {"$ref": "tool-proposal.schema.json"}
       },
       "additionalProperties": false
     },
