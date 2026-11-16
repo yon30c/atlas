@@ -47,7 +47,7 @@ class SQLiteLocalAuthorityCompositionTests(unittest.TestCase):
                     "SELECT name FROM sqlite_master WHERE type='table'"
                 )
             }
-        self.assertEqual(versions, [1, 2, 3, 4, 5, 6, 7])
+        self.assertEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8])
         self.assertIn("authorization_grants", tables)
         self.assertIn("authority_change_operations", tables)
 
