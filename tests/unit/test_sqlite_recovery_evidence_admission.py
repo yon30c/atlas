@@ -1,6 +1,8 @@
 """SQLite integration tests for atomic recovery evidence admission."""
 
 from concurrent.futures import ThreadPoolExecutor
+import hashlib
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import sqlite3
@@ -270,6 +272,119 @@ class SQLiteRecoveryEvidenceAdmissionTests(unittest.TestCase):
             self.assertEqual(report.corrupt_count, 1)
 
 
+
+
+    def test_audit_detects_unknown_persisted_evidence_kind(self):
+        operation_id = self._prepare()
+        command = self._command(operation_id)
+        with SQLiteLocalAuthorityUnitOfWork(self.database) as uow:
+            uow.recovery_evidence_admissions.admit(command)
+            uow.commit()
+
+        with SQLiteLocalAuthorityUnitOfWork(self.database) as uow:
+            connection = uow._unit._connection_for(self.database)
+            connection.execute("DROP TRIGGER recovery_evidence_admissions_no_update")
+            connection.execute("PRAGMA ignore_check_constraints = ON")
+            row = connection.execute(
+                "SELECT command_canonical FROM recovery_evidence_admissions "
+                "WHERE admission_id = ?",
+                ("admission-1",),
+            ).fetchone()
+            payload = json.loads(bytes(row["command_canonical"]).decode("utf-8"))
+            payload["evidence_kind"] = "UNKNOWN_EVIDENCE_KIND"
+            canonical = json.dumps(
+                payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+            ).encode("utf-8")
+            connection.execute(
+                """
+                UPDATE recovery_evidence_admissions
+                SET evidence_kind = ?, command_canonical = ?, command_digest = ?
+                WHERE admission_id = ?
+                """,
+                (
+                    "UNKNOWN_EVIDENCE_KIND",
+                    sqlite3.Binary(canonical),
+                    hashlib.sha256(canonical).hexdigest(),
+                    "admission-1",
+                ),
+            )
+            audit = uow.recovery_evidence_admissions.audit_admission("admission-1")
+            report = uow.recovery_evidence_admissions.audit_all()
+
+        self.assertEqual(audit.status.value, "CORRUPT")
+        self.assertIn("INVALID_EVIDENCE_KIND", audit.diagnostic_codes)
+        self.assertIn("INVALID_EVIDENCE_KIND", report.global_diagnostic_codes)
+        self.assertFalse(report.is_healthy)
+
+    def test_audit_detects_unknown_authority_kind_even_when_records_match(self):
+        operation_id = self._prepare()
+        command = self._command(operation_id)
+        with SQLiteLocalAuthorityUnitOfWork(self.database) as uow:
+            uow.recovery_evidence_admissions.admit(command)
+            uow.commit()
+
+        with SQLiteLocalAuthorityUnitOfWork(self.database) as uow:
+            connection = uow._unit._connection_for(self.database)
+            for table in (
+                "recovery_evidence_admissions",
+                "multi_authority_change_targets",
+                "multi_authority_change_claims",
+            ):
+                triggers = connection.execute(
+                    "SELECT name FROM sqlite_master "
+                    "WHERE type = 'trigger' AND tbl_name = ?",
+                    (table,),
+                ).fetchall()
+                for trigger in triggers:
+                    connection.execute(
+                        'DROP TRIGGER "' + trigger["name"].replace('"', '""') + '"'
+                    )
+            connection.execute("PRAGMA ignore_check_constraints = ON")
+            row = connection.execute(
+                "SELECT command_canonical FROM recovery_evidence_admissions "
+                "WHERE admission_id = ?",
+                ("admission-1",),
+            ).fetchone()
+            payload = json.loads(bytes(row["command_canonical"]).decode("utf-8"))
+            payload["targets"][0]["authority_kind"] = "unknown_authority_kind"
+            canonical = json.dumps(
+                payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+            ).encode("utf-8")
+            connection.execute(
+                """
+                UPDATE multi_authority_change_targets
+                SET authority_kind = ?
+                WHERE operation_id = ? AND authority_id = ?
+                """,
+                ("unknown_authority_kind", operation_id, "grant-1"),
+            )
+            connection.execute(
+                """
+                UPDATE multi_authority_change_claims
+                SET authority_kind = ?
+                WHERE operation_id = ? AND authority_id = ?
+                """,
+                ("unknown_authority_kind", operation_id, "grant-1"),
+            )
+            connection.execute(
+                """
+                UPDATE recovery_evidence_admissions
+                SET command_canonical = ?, command_digest = ?
+                WHERE admission_id = ?
+                """,
+                (
+                    sqlite3.Binary(canonical),
+                    hashlib.sha256(canonical).hexdigest(),
+                    "admission-1",
+                ),
+            )
+            audit = uow.recovery_evidence_admissions.audit_admission("admission-1")
+            report = uow.recovery_evidence_admissions.audit_all()
+
+        self.assertEqual(audit.status.value, "CORRUPT")
+        self.assertIn("INVALID_AUTHORITY_KIND", audit.diagnostic_codes)
+        self.assertIn("INVALID_AUTHORITY_KIND", report.global_diagnostic_codes)
+        self.assertFalse(report.is_healthy)
 
     def test_audit_accepts_issuer_change_effective_after_admission(self):
         operation_id = self._prepare()
