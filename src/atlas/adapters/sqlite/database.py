@@ -128,7 +128,12 @@ class SQLiteDatabase:
     def _enable_wal(self, connection: sqlite3.Connection) -> None:
         """Enable WAL, retrying SQLITE_BUSY/SQLITE_LOCKED within the configured timeout."""
         connection.execute("PRAGMA busy_timeout = 0")
-        deadline = monotonic() + self._busy_timeout_ms / 1000
+        # WAL mode changes require an exclusive database lock. During first-time
+        # composition, independent processes may race while opening the same file.
+        # Give that one-time initialization a bounded window independent of the
+        # shorter per-statement busy timeout.
+        retry_window_seconds = max(self._busy_timeout_ms / 1000, 30.0)
+        deadline = monotonic() + retry_window_seconds
         delay = 0.005
 
         while True:
@@ -147,14 +152,15 @@ class SQLiteDatabase:
                     sqlite3.SQLITE_BUSY,
                     sqlite3.SQLITE_LOCKED,
                 )
-                if error_code is None:
-                    # Some Python/SQLite combinations omit sqlite_errorcode
-                    # for PRAGMA journal_mode lock contention.
-                    message = str(exc).strip().lower()
-                    is_retryable_lock = message in {
-                        "database is locked",
-                        "database table is locked",
-                    }
+                # SQLite/Python builds do not report extended error codes
+                # consistently for PRAGMA journal_mode contention. The operation
+                # is safe to retry only for explicit BUSY/LOCKED codes or messages.
+                message = str(exc).strip().lower()
+                is_retryable_lock = is_retryable_lock or (
+                    "database is locked" in message
+                    or "database table is locked" in message
+                    or "database is busy" in message
+                )
                 remaining = deadline - monotonic()
                 if not is_retryable_lock or remaining <= 0:
                     raise
