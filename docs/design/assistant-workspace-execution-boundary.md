@@ -141,3 +141,18 @@ Se añadieron:
 - Pruebas: correspondencia alterada, expiración, evidencia aún no vigente, denegación autoritativa, fallo del verificador, respuesta mal formada e inputs inválidos.
 
 **Límite:** todavía no hay implementación concreta del puerto confiable. En particular, no se afirma que una lectura puntual de Grant sea suficiente para cerrar carreras de revocación concurrente. Para ejecución con efectos se requerirá una garantía de fencing/consistencia equivalente a la exigida por los contratos de consistencia existentes.
+
+
+## 12. F2.3.3a — Binding explícito de revisiones de autoridad
+
+La inspección del modelo `Grant`, `AuthorizationEvaluator`, `MemoryMetadataResolver` y los puertos de metadatos reveló que la evidencia general necesitaba declarar también las revisiones de proyecto y entorno. Se añadieron `project_revision` y `environment_revision` como enteros positivos obligatorios en `OperationAuthorizationEvidence`.
+
+Ahora los claims declaran las revisiones de:
+- identidad del actor;
+- Grant;
+- proyecto;
+- entorno.
+
+Las pruebas comprueban que las dos revisiones nuevas sean positivas, enteras y no booleanas. Los verificadores confiables deberán comparar estos valores con las fuentes canónicas actuales.
+
+**Límite:** esta ampliación no demuestra que las revisiones estén actuales ni elimina carreras concurrentes. El adaptador de verificación y la garantía de fencing siguen pendientes.
