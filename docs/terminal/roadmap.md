@@ -10,7 +10,7 @@
 |---|---|---|
 | 1 | Experiencia Terminal | Implementada y validada en el alcance actual |
 | 2 | Conversaciones | Implementada; suite local completa aprobada |
-| 3 | Inteligencia | Siguiente etapa: evaluación reproducible de modelos |
+| 3 | Inteligencia y comportamiento seguro | En curso: Gemma 4 E2B ya seleccionado; validación de instrucciones, inyección y salidas estructuradas |
 | 4 | Capacidades del Assistant | Planificación y herramientas integradas gradualmente |
 | 5 | Consolidación | Integración, pruebas y preparación para ampliar el sistema |
 
@@ -59,29 +59,23 @@ Antes de ampliar el alcance, cualquier nueva integración debe conservar los con
 
 La fase 2 queda cerrada para el alcance implementado y probado en esta rama. Las validaciones manuales adicionales de experiencia con Ollama y modo offline pueden repetirse como smoke tests de operación, pero no invalidan la evidencia automatizada ya aprobada.
 
-## Fase 3 — Inteligencia y comportamiento
+## Fase 3 — Inteligencia y comportamiento seguro
 
-**Estado: siguiente fase; todavía no declarada implementada.**
+**Estado: en curso. Modelo principal ya seleccionado: Gemma 4 E2B.** La selección inicial no se repite en esta fase. El trabajo actual consiste en reproducir y corregir fallos de comportamiento, probar instrucciones equivalentes en inglés y español, validar salidas estructuradas en sandbox y reforzar la honestidad operativa.
 
-**Objetivo:** evaluar y mejorar la calidad del Assistant sin confundir fluidez con fiabilidad.
-
-### Trabajo previsto
-
-1. Crear un conjunto versionado y reproducible de casos conversacionales.
-2. Comparar Gemma 4 E2B y otros modelos candidatos con entradas y parámetros equivalentes.
-3. Ejecutar pruebas A/B de instrucciones equivalentes en inglés y español.
-4. Incluir seguimiento de instrucciones, contexto, ambigüedad, incertidumbre, errores y prompt injection.
-5. Evaluar por separado calidad, cumplimiento de límites y honestidad sobre capacidades.
-6. Registrar modelo/tag, parámetros, prompt, entradas y resultados.
-7. Ajustar instrucciones únicamente a partir de resultados comparables.
+La evaluación histórica, los resultados observados, la inspección del código y los criterios de salida están registrados en [docs/phase-3-intelligence.md](../phase-3-intelligence.md). La primera tarea es completar el corpus reproducible y repetir el caso de prompt injection que produjo dos propuestas destructivas `delete_file`. No se modificarán todavía el prompt productivo ni el adaptador para habilitar herramientas; no se ejecutarán herramientas reales.
 
 ### Criterios de salida
 
-- Conjunto de evaluación versionado.
-- Comparaciones bajo condiciones equivalentes.
-- Resultados y fallos reproducibles.
-- Ningún modelo se considera seguro por una prueba aislada.
-- El Assistant conserva la distinción entre sugerir, planificar y ejecutar.
+- Corpus versionado y repetible con prompts, resultados esperados y criterios de evaluación.
+- Casos críticos de inyección y confusión entre propuesta/ejecución repetidos con resultados aceptables.
+- Salidas estructuradas validadas externamente; nunca conceden permisos.
+- Resultados registrados con tag del modelo, parámetros, versión de prompt y evidencia completa.
+- El Assistant conserva la distinción entre sugerir, planificar, solicitar autorización, ejecutar y verificar.
+
+## Orden general y registro de fases
+
+La hoja de ruta central, los criterios para declarar una fase completada y el registro de cambios están en [docs/roadmap.md](../roadmap.md). La Fase 3 tiene un expediente de trabajo específico en [docs/phase-3-intelligence.md](../phase-3-intelligence.md).
 
 ## Fase 4 — Capacidades del Assistant
 
