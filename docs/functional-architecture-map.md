@@ -494,4 +494,4 @@ El informe añade `global_diagnostic_codes` e `is_healthy` sin reemplazar el det
 
 La consulta es de solo lectura y no repara datos, no concede autoridad y no conecta recuperación ni runtime.
 
-**Estado:** implementado en la rama; pruebas locales pendientes.
+**Estado: VALIDADO por el propietario; suite completa: 1136 tests en 9.985 s, todos OK.**
