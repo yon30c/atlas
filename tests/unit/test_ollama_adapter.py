@@ -85,6 +85,41 @@ class OllamaProviderTests(unittest.TestCase):
         payload = transport.calls[0][1]
         self.assertNotIn("options", payload)
 
+    def test_applies_optional_thinking_and_json_format_settings(self):
+        transport = FakeTransport(self.result)
+        provider = OllamaProvider(
+            transport=transport,
+            think=False,
+            response_format="json",
+        )
+
+        provider.generate(self.request)
+
+        payload = transport.calls[0][1]
+        self.assertIs(payload["think"], False)
+        self.assertEqual(payload["format"], "json")
+
+    def test_omits_thinking_and_format_settings_by_default(self):
+        transport = FakeTransport(self.result)
+        provider = OllamaProvider(transport=transport)
+
+        provider.generate(self.request)
+
+        payload = transport.calls[0][1]
+        self.assertNotIn("think", payload)
+        self.assertNotIn("format", payload)
+
+    def test_rejects_invalid_thinking_and_format_settings(self):
+        for kwargs in (
+            {"think": "false"},
+            {"think": 0},
+            {"response_format": "xml"},
+            {"response_format": {}},
+        ):
+            with self.subTest(kwargs=kwargs):
+                with self.assertRaises(ContractError):
+                    OllamaProvider(transport=FakeTransport(self.result), **kwargs)
+
     def test_accepts_localhost_and_loopback_addresses(self):
         for address in (
             "http://localhost:11434",
