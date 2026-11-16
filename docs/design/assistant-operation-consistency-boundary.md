@@ -411,4 +411,4 @@ La migración v14 agrega triggers para limitar el ledger multiobjetivo a transic
 
 `transition_multi_status(operation_id, expected_status, new_status)` ofrece CAS atómico: rechaza estado esperado obsoleto, rechaza reintentos con estado esperado obsoleto y falla cerrado ante claims incompletos. Los triggers protegen incluso escrituras SQL directas. El método solo registra avance del ledger; no demuestra que invalidación, mutación o reconciliación externa hayan sucedido. No autoriza ni ejecuta acciones. La transición a BLOCKED y su recuperación se dejan fuera hasta definir evidencia y semántica de reanudación.
 
-**Estado:** implementación y pruebas publicadas; pendiente de validación local.
+**Estado:** VALIDADA localmente por el propietario; suite completa: 1048 tests en 9.026 s, todos OK.
