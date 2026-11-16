@@ -715,9 +715,9 @@ class MultiAuthorityRecoveryDecisionContractTests(unittest.TestCase):
             MultiAuthorityRecoveryEvidenceRequirement.FENCING_STATE,
             decision.required_evidence,
         )
-        self.assertNotEqual(
+        self.assertEqual(
             decision.decision,
-            MultiAuthorityRecoveryDecisionKind.RETRY_SOURCE,
+            MultiAuthorityRecoveryDecisionKind.VERIFY_SOURCE_OUTCOME,
         )
 
     def test_terminal_claim_release_requires_authenticated_evidence(self):
