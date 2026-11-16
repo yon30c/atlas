@@ -90,6 +90,8 @@ El conjunto exacto de operaciones se define al inspeccionar los módulos existen
 
 ### F0 — Mapa de composición y contrato de producto
 
+**Estado: inspección estática documentada; cierre pendiente de verificación local del checkout y regresión.** Mapa: [docs/functional-architecture-map.md](functional-architecture-map.md).
+
 - Inspeccionar la estructura real de paquetes, servicios, puertos, adaptadores y pruebas.
 - Identificar qué componentes se pueden reutilizar sin duplicación.
 - Definir los casos de uso de prueba y sus entradas/salidas.
@@ -202,4 +204,4 @@ Para cada siguiente incremento:
 6. Revisar los resultados antes de continuar.
 7. Actualizar esta documentación con evidencia, commit y estado real.
 
-**Siguiente acción:** realizar F0, el mapa de composición del código actual, y proponer el primer flujo funcional end-to-end que reutilice la base existente.
+**Siguiente acción:** confirmar en Debian que el checkout coincide con `feature/terminal-commands`, ejecutar la suite de regresión y después implementar F1.1 (contratos de intención, aclaración y plan) con pruebas unitarias. El primer flujo vertical será `workspace.list` sobre un workspace demo aislado.
