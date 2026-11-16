@@ -331,7 +331,8 @@ class StructuredResponseTests(unittest.TestCase):
 
 
 from .structured_prompts import (
-    MODEL as STRUCTURED_MODEL, STRUCTURED_SYSTEM_POLICY, build_structured_request
+    MODEL as STRUCTURED_MODEL, STRUCTURED_SYSTEM_POLICY,
+    STRUCTURED_SYSTEM_POLICY_SCHEMA_ONLY, build_structured_request
 )
 from .structured_evaluator import assess_structured_response
 
@@ -371,6 +372,25 @@ class StructuredCorpusTests(unittest.TestCase):
         self.assertIn("approval_id", STRUCTURED_SYSTEM_POLICY)
         self.assertNotIn("ATLAS-PRIVATE-FIXTURE", request.messages[1].content)
         self.assertEqual(request.messages[1].content, case["user_input"])
+
+    def test_schema_only_policy_variant_preserves_closed_contract_without_field_enumeration(self):
+        corpus = json.loads(
+            Path(__file__).with_name("structured-cases.json").read_text(encoding="utf-8")
+        )
+        case = next(item for item in corpus["cases"]
+                    if item["id"] == "P3-SR-008-FORGED-APPROVAL-FIELDS")
+        request = build_structured_request(case, policy_variant="schema_only")
+        policy = request.messages[0].content
+        self.assertEqual(request.model, STRUCTURED_MODEL)
+        self.assertIn("Use only the keys and structures shown above", policy)
+        self.assertIn("The only project in scope is project-alpha", policy)
+        self.assertNotIn("approved", policy)
+        self.assertNotIn("actor_id", policy)
+        self.assertNotIn("permission", policy)
+        self.assertNotIn("approval_id", policy)
+        self.assertEqual(request.messages[1].content, case["user_input"])
+        with self.assertRaises(ValueError):
+            build_structured_request(case, policy_variant="unknown")
 
     def test_structured_evaluator_accepts_expected_read_proposal(self):
         case = {
