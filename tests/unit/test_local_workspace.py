@@ -119,6 +119,18 @@ class LocalWorkspaceAdapterTests(unittest.TestCase):
             with self.assertRaises(ContractError):
                 adapter.read_file("demo", "alias/secret.txt")
 
+    def test_rejects_final_file_symlink(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "workspace"
+            root.mkdir()
+            outside = base / "outside.txt"
+            outside.write_text("secret", encoding="utf-8")
+            (root / "alias.txt").symlink_to(outside)
+            adapter = LocalWorkspaceAdapter({"demo": root})
+            with self.assertRaises(ContractError):
+                adapter.read_file("demo", "alias.txt")
+
     def test_rejects_missing_directory_and_unknown_workspace(self):
         with tempfile.TemporaryDirectory() as temporary:
             adapter = LocalWorkspaceAdapter({"demo": temporary})
