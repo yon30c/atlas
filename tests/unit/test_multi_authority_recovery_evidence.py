@@ -11,6 +11,9 @@ from atlas.application.recovery_evidence import (
 from atlas.authorization.recovery_evidence_trust import (
     RecoveryEvidenceIssuerTrustPolicy,
 )
+from atlas.authorization.recovery_evidence_issuer_registry import (
+    RecoveryEvidenceIssuerRegistration,
+)
 from atlas.memory.authority_changes import (
     AuthorityChangeTarget,
     AuthorityChangeTargetKind,
@@ -59,6 +62,24 @@ def make_evidence(**overrides):
     }
     values.update(overrides)
     return MultiAuthorityRecoveryEvidence(**values)
+
+
+class FakeIssuerRegistryPort:
+    def __init__(self, registration=None, error=None):
+        self.registration = registration or RecoveryEvidenceIssuerRegistration(
+            issuer_id="trusted-source-1",
+            registry_revision=1,
+            enabled=True,
+            changed_at=NOW - timedelta(days=2),
+        )
+        self.error = error
+        self.calls = 0
+
+    def get_registration(self, issuer_id):
+        self.calls += 1
+        if self.error is not None:
+            raise self.error
+        return self.registration
 
 
 class FakeTrustPolicyPort:
@@ -163,10 +184,16 @@ class MultiAuthorityRecoveryEvidenceContractTests(unittest.TestCase):
 
 
 class MultiAuthorityRecoveryEvidenceVerificationTests(unittest.TestCase):
-    def service(self, verifier, trust_policy_port=None):
+    def service(
+        self,
+        verifier,
+        trust_policy_port=None,
+        issuer_registry_port=None,
+    ):
         return MultiAuthorityRecoveryEvidenceVerificationService(
             verifier,
             trust_policy_port or FakeTrustPolicyPort(),
+            issuer_registry_port or FakeIssuerRegistryPort(),
         )
 
     def verify(self, service, evidence=None, **overrides):
@@ -235,9 +262,17 @@ class MultiAuthorityRecoveryEvidenceVerificationTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             self.verify(service, now=datetime(2026, 11, 16, 12, 0))
         with self.assertRaises(ContractError):
-            MultiAuthorityRecoveryEvidenceVerificationService(object(), FakeTrustPolicyPort())
+            MultiAuthorityRecoveryEvidenceVerificationService(
+                object(), FakeTrustPolicyPort(), FakeIssuerRegistryPort()
+            )
         with self.assertRaises(ContractError):
-            MultiAuthorityRecoveryEvidenceVerificationService(FakeVerifier(), object())
+            MultiAuthorityRecoveryEvidenceVerificationService(
+                FakeVerifier(), object(), FakeIssuerRegistryPort()
+            )
+        with self.assertRaises(ContractError):
+            MultiAuthorityRecoveryEvidenceVerificationService(
+                FakeVerifier(), FakeTrustPolicyPort(), object()
+            )
 
     def test_untrusted_or_disabled_issuer_is_denied_before_verifier(self):
         verifier = FakeVerifier()
@@ -295,6 +330,60 @@ class MultiAuthorityRecoveryEvidenceVerificationTests(unittest.TestCase):
             max_evidence_lifetime_seconds=600,
         )
         result = self.verify(self.service(verifier, FakeTrustPolicyPort(disabled)))
+        self.assertEqual(result.status, RecoveryEvidenceVerificationStatus.DENIED)
+        self.assertEqual(verifier.calls, 0)
+
+
+    def test_unregistered_issuer_is_denied_before_policy_and_verifier(self):
+        verifier = FakeVerifier()
+        policies = FakeTrustPolicyPort()
+        registry = FakeIssuerRegistryPort(registration=None)
+        result = self.verify(self.service(verifier, policies, registry))
+        self.assertEqual(result.status, RecoveryEvidenceVerificationStatus.DENIED)
+        self.assertEqual(registry.calls, 1)
+        self.assertEqual(policies.calls, 0)
+        self.assertEqual(verifier.calls, 0)
+
+    def test_disabled_registry_issuer_is_denied_before_policy_and_verifier(self):
+        verifier = FakeVerifier()
+        policies = FakeTrustPolicyPort()
+        registry = FakeIssuerRegistryPort(
+            registration=RecoveryEvidenceIssuerRegistration(
+                issuer_id="trusted-source-1",
+                registry_revision=2,
+                enabled=False,
+                changed_at=NOW - timedelta(minutes=1),
+            )
+        )
+        result = self.verify(self.service(verifier, policies, registry))
+        self.assertEqual(result.status, RecoveryEvidenceVerificationStatus.DENIED)
+        self.assertEqual(policies.calls, 0)
+        self.assertEqual(verifier.calls, 0)
+
+    def test_registry_source_failure_is_unavailable(self):
+        verifier = FakeVerifier()
+        policies = FakeTrustPolicyPort()
+        registry = FakeIssuerRegistryPort(error=RuntimeError("registry unavailable"))
+        result = self.verify(self.service(verifier, policies, registry))
+        self.assertEqual(result.status, RecoveryEvidenceVerificationStatus.UNAVAILABLE)
+        self.assertEqual(policies.calls, 0)
+        self.assertEqual(verifier.calls, 0)
+
+    def test_registry_identity_mismatch_is_denied(self):
+        verifier = FakeVerifier()
+        registration = RecoveryEvidenceIssuerRegistration(
+            issuer_id="different-issuer",
+            registry_revision=1,
+            enabled=True,
+            changed_at=NOW - timedelta(minutes=1),
+        )
+        result = self.verify(
+            self.service(
+                verifier,
+                FakeTrustPolicyPort(),
+                FakeIssuerRegistryPort(registration=registration),
+            )
+        )
         self.assertEqual(result.status, RecoveryEvidenceVerificationStatus.DENIED)
         self.assertEqual(verifier.calls, 0)
 
