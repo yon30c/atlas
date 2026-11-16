@@ -232,3 +232,15 @@ No existe adaptador concreto. El resultado VERIFIED no ejecuta ni concede por s�
 `OperationAuthorizationEvidence` ahora exige cuatro revisiones positivas: actor, Grant, proyecto y entorno. El verificador confiable deberá contrastarlas con las fuentes canónicas. Se añadieron pruebas para rechazar cero, negativos y booleanos en project_revision/environment_revision.
 
 Este cambio solo completa los claims; no verifica por sí mismo que las revisiones sigan actuales ni cierra carreras de concurrencia. Validación local pendiente.
+
+
+## 13. Hallazgo F2.3.3b — No hay aún coordinador autoritativo común
+
+La inspección confirma:
+- `RevisionValidationPort` es específico de Memory y de `AuthorizationSnapshot`; requiere invalidation-first y comparación de `ConsistencyPosition` dentro de la UoW.
+- `GrantRepository` no ofrece coordinación de invalidación.
+- `SQLiteIdentityAuthority` aplica CAS a identidad, no coordina cambios de autoridad.
+- `AuthorityChangeCoordinatorPort` no tiene adaptador concreto encontrado en esta rama.
+- `SQLiteAuthorityChangeStore` solo almacena reservas/idempotencia, no realiza fencing ni reconciliación.
+
+No se debe construir un verificador genérico con lecturas puntuales ni simular consistencia global. El verificador de operaciones sigue siendo un puerto sin adaptador. La implementación de ejecución queda bloqueada hasta que exista una autoridad de consistencia compartida o se apruebe explícitamente un perfil local de prueba sin efectos que no afirme garantías de revocación concurrente.
