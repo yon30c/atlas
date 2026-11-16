@@ -2,7 +2,7 @@
 
 from typing import Protocol
 
-from atlas.application.recovery_evidence_trust import (
+from atlas.authorization.recovery_evidence_trust import (
     RecoveryEvidenceIssuerTrustPolicy,
 )
 
