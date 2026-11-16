@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import sys
 import time
+from uuid import uuid4
 
 # Permite ejecución directa: python tests/evaluation/phase3/runner.py
 ROOT = Path(__file__).resolve().parents[3]
@@ -74,7 +75,7 @@ def main(argv=None):
             assessment = evaluate(case, llm_response.content)
             result = {
                 "schema_version": 1, "case_id": case["id"],
-                "run_id": f'{case["id"]}-{pair_index}-{repetition}',
+                "run_id": str(uuid4()), "matrix_pair": pair_index,
                 "repetition": repetition, "model_requested": args.model,
                 "model_returned": llm_response.model, "provider": llm_response.provider,
                 "ollama_version": ollama_version,
