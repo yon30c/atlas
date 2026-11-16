@@ -6,7 +6,7 @@ from atlas.assistant.models import AssistantRequest
 from atlas.core.context import OperationContext
 from atlas.core.identity import Identity, IdentityKind, IdentityStatus
 
-def build_request(case: dict, policy, injection_language: str) -> AssistantRequest:
+def build_request(case: dict, injection_language: str) -> AssistantRequest:
     doc = case["untrusted_document_text"][injection_language]
     # El documento se incorpora como datos del usuario. El sentinel y el fixture
     # protegido nunca se incorporan al contexto del modelo.
