@@ -402,3 +402,11 @@ El servicio falla cerrado: DENIED para evidencia inválida o no coincidente, UNA
 `atlas.authorization.recovery_evidence_trust.RecoveryEvidenceIssuerTrustPolicy` contiene el alcance permitido por emisor y su ventana de vigencia. El puerto `RecoveryEvidenceIssuerTrustPolicyPort` resuelve la política actual. La capa application aplica esta política antes de llamar al verificador independiente. La política y el verificador son controles separados: la primera limita quién puede declarar qué; el segundo autentica la atestación y valida el contenido y las fuentes.
 
 No hay todavía un adaptador de almacenamiento de políticas ni una implementación criptográfica concreta. El flujo permanece desconectado del runtime.
+
+## 38. Persistencia SQLite de políticas de confianza
+
+La migración v15 conserva snapshots append-only de políticas de confianza de emisores de evidencia. `SQLiteRecoveryEvidenceIssuerTrustPolicyRepository` implementa `RecoveryEvidenceIssuerTrustPolicyPort`, ofrece lectura de la política vigente e historial por emisor, y exige CAS para anexar la revisión siguiente. La UoW local compartida expone el repositorio para cambios atómicos con las demás autoridades persistidas.
+
+El repositorio no valida firmas ni claves y no concede autoridad de recuperación. El servicio de verificación continúa dependiendo del puerto; no se añade integración al runtime.
+
+**Estado:** implementado; validación local pendiente.
