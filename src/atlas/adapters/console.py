@@ -25,6 +25,16 @@ def _write_stdout(content: str) -> None:
     sys.stdout.flush()
 
 
+def _show_help(output_fn: Callable[[str], None]) -> None:
+    output_fn(
+        "Comandos de Atlas:\n"
+        "  /help   Muestra esta ayuda.\n"
+        "  /clear  Limpia la pantalla; conserva el historial de la sesión.\n"
+        "  /exit   Finaliza Atlas.\n"
+        "También puedes usar 'salir', 'exit' o 'quit' para terminar."
+    )
+
+
 def run_console(
     runtime: AssistantRuntime,
     *,
@@ -33,43 +43,58 @@ def run_console(
     write_fn: Callable[[str], None] = _write_stdout,
 ) -> None:
     """Ejecuta la conversación delegando la coordinación en AtlasCore."""
-    output_fn("Atlas está listo. Escribe 'salir' para terminar.")
+    output_fn("Atlas está listo. Escribe '/help' para ver los comandos.")
 
-    while True:
-        try:
-            content = input_fn("Tú> ")
-        except EOFError:
-            output_fn("Atlas: sesión finalizada.")
-            return
-        if not isinstance(content, str):
-            raise TypeError("input_fn debe devolver texto")
+    try:
+        while True:
+            try:
+                content = input_fn("Tú> ")
+            except EOFError:
+                output_fn("Atlas: sesión finalizada.")
+                return
 
-        normalized = content.strip()
-        if not normalized:
-            continue
-        if normalized.casefold() in {"salir", "exit", "quit"}:
-            output_fn("Atlas: hasta luego.")
-            return
+            if not isinstance(content, str):
+                raise TypeError("input_fn debe devolver texto")
 
-        streaming_responder = getattr(runtime, "respond_streaming", None)
-        if callable(streaming_responder):
-            write_fn("Atlas> ")
-            streamed: list[str] = []
+            normalized = content.strip()
+            if not normalized:
+                continue
 
-            def emit(token: str) -> None:
-                if not isinstance(token, str):
-                    raise TypeError("el streaming debe emitir fragmentos de texto")
-                streamed.append(token)
-                write_fn(token)
+            command = normalized.casefold()
+            if command == "/help":
+                _show_help(output_fn)
+                continue
+            if command == "/clear":
+                # Limpiar la terminal no debe alterar el contexto conversacional.
+                write_fn("\033[2J\033[H")
+                continue
+            if command == "/exit" or command in {"salir", "exit", "quit"}:
+                output_fn("Atlas: hasta luego.")
+                return
 
-            response = streaming_responder(content, emit)
-            if response.kind is AssistantResponseKind.ERROR:
-                if streamed:
-                    write_fn("\nAtlas> " + response.content + "\n")
+            streaming_responder = getattr(runtime, "respond_streaming", None)
+            if callable(streaming_responder):
+                write_fn("Atlas> ")
+                streamed: list[str] = []
+
+                def emit(token: str) -> None:
+                    if not isinstance(token, str):
+                        raise TypeError(
+                            "el streaming debe emitir fragmentos de texto"
+                        )
+                    streamed.append(token)
+                    write_fn(token)
+
+                response = streaming_responder(content, emit)
+                if response.kind is AssistantResponseKind.ERROR:
+                    if streamed:
+                        write_fn("\nAtlas> " + response.content + "\n")
+                    else:
+                        write_fn(response.content + "\n")
                 else:
-                    write_fn(response.content + "\n")
+                    write_fn("\n")
             else:
-                write_fn("\n")
-        else:
-            response = runtime.respond(content)
-            output_fn(f"Atlas> {response.content}")
+                response = runtime.respond(content)
+                output_fn(f"Atlas> {response.content}")
+    except KeyboardInterrupt:
+        output_fn("Atlas: interrupción recibida. Sesión finalizada.")
