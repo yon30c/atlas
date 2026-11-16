@@ -62,6 +62,12 @@ class LocalWorkspaceWriteAdapterTests(unittest.TestCase):
         with self.assertRaises(ConcurrencyError):
             self.adapter.commit_write("demo", self.operation_id)
 
+    def test_does_not_claim_external_matching_file_as_its_commit(self):
+        self.adapter.stage_write("demo", "notes.txt", "Atlas", self.operation_id)
+        (self.root / "notes.txt").write_text("Atlas", encoding="utf-8")
+        with self.assertRaises(ConcurrencyError):
+            self.adapter.commit_write("demo", self.operation_id)
+
     def test_update_requires_exact_expected_hash(self):
         target = self.root / "notes.txt"
         target.write_text("before", encoding="utf-8")
