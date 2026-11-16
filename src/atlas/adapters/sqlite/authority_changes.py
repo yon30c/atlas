@@ -157,7 +157,7 @@ class SQLiteAuthorityChangeStore:
         if self._unit_of_work is not None:
             yield self._unit_of_work._connection_for(self._database)
         else:
-            with self._read_connection() as connection:
+            with self._database.connection() as connection:
                 yield connection
 
     @contextmanager
