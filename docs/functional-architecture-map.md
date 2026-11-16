@@ -475,3 +475,13 @@ Se incorporan pruebas concurrentes con dos instancias independientes de `SQLiteD
 Las pruebas no amplían el comportamiento de producción: validan el bloqueo transaccional `BEGIN IMMEDIATE` ya existente. No demuestran fencing de efectos externos, coordinación distribuida ni habilitan recuperación/runtime.
 
 **Estado: VALIDADO por el propietario; suite completa: 1133 tests en 9.225 s, todos OK.**
+
+## 47. F2.3.37 — Auditoría temporal del inventario del emisor
+
+La auditoría de recibos ahora valida el estado histórico del emisor en `recorded_at`: la revisión referenciada debe existir y estar habilitada, su fecha `changed_at` no puede ser posterior al recibo y no debe existir una revisión superior efectiva en ese mismo instante. Una revisión posterior efectiva después del recibo no corrompe el registro histórico.
+
+Se incorporan pruebas para ambos lados de esa frontera temporal: una desactivación posterior legítima mantiene HEALTHY; una revisión superior retrodatada produce CORRUPT con `ISSUER_REVISION_NOT_LATEST_AT_ADMISSION`.
+
+La comprobación es de solo lectura y depende de timestamps almacenados localmente; no autentica el reloj ni la procedencia externa de los cambios. No habilita acciones, efectos ni runtime.
+
+**Estado:** implementado en la rama; pruebas locales pendientes.
