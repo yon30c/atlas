@@ -372,3 +372,14 @@ Migración v14 restringe los cambios de estado del ledger multiobjetivo a la sec
 `SQLiteAuthorityChangeStore.transition_multi_status` aplica compare-and-set con estado esperado, rechazo de reintentos obsoletos cuando el estado ya avanzó y rechazo de llamadas obsoletas. Cada avance intermedio exige el conjunto íntegro de claims exclusivos. La transición registra progreso del ledger únicamente: no acredita que una invalidación externa haya ocurrido, no autoriza mutaciones de fuentes y no ejecuta efectos. No se habilita todavía transición a BLOCKED ni recuperación desde ella; eso requiere un contrato de recuperación separado.
 
 **Estado:** VALIDADA localmente por el propietario; suite completa: 1048 tests en 9.026 s, todos OK.
+
+
+### F2.3.24 — Diagnóstico de recuperación multiobjetivo
+
+Se añade `MultiAuthorityRecoveryAssessment` y `MultiAuthorityRecoveryDisposition`, junto con `SQLiteAuthorityChangeStore.assess_multi_recovery(operation_id)`. La evaluación es de solo lectura y combina el estado durable del ciclo de vida con la auditoría existente de claims/evidencia.
+
+Distingue solicitudes no iniciadas, claims adquiridos antes de invalidación, invalidación con resultado desconocido, mutación de fuente con resultado desconocido, confirmación de fuente registrada, reconciliación en curso, claims terminales retenidos, operación terminal liberada y estado inconsistente. Una operación desconocida devuelve `None`.
+
+**Límite de seguridad:** `SOURCE_PENDING` se clasifica como resultado desconocido; nunca como no ejecutado. La clasificación no demuestra que un efecto externo haya ocurrido, no autoriza reintentos, no reanuda operaciones, no cambia estados y no libera claims. No se añade transición a `BLOCKED`.
+
+**Estado:** implementación y pruebas publicadas; pendiente de validación local.
