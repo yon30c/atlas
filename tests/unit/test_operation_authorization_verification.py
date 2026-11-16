@@ -47,6 +47,8 @@ def make_evidence(request):
         resource_owner_id=request.resource_owner_id,
         grant_id="grant-verify-1",
         grant_revision=2,
+        project_revision=3,
+        environment_revision=4,
         issued_at=NOW - timedelta(minutes=1),
         expires_at=NOW + timedelta(minutes=5),
         issuer_id="cam-authority",
@@ -74,6 +76,25 @@ class OperationAuthorizationEvidenceVerificationTests(unittest.TestCase):
         self.service = OperationAuthorizationEvidenceVerificationService(
             self.verifier
         )
+
+
+    def test_project_revision_must_be_positive_integer(self):
+        with self.assertRaises(ContractError):
+            replace(self.evidence, project_revision=0)
+        with self.assertRaises(ContractError):
+            replace(self.evidence, project_revision=True)
+
+    def test_environment_revision_must_be_positive_integer(self):
+        with self.assertRaises(ContractError):
+            replace(self.evidence, environment_revision=0)
+        with self.assertRaises(ContractError):
+            replace(self.evidence, environment_revision=True)
+
+    def test_evidence_carries_all_authority_revisions(self):
+        self.assertEqual(self.evidence.actor_revision, self.request.context.actor.revision)
+        self.assertEqual(self.evidence.grant_revision, 2)
+        self.assertEqual(self.evidence.project_revision, 3)
+        self.assertEqual(self.evidence.environment_revision, 4)
 
     def test_valid_claims_are_delegated_to_trusted_verifier(self):
         result = self.service.verify(self.request, self.evidence, NOW)
