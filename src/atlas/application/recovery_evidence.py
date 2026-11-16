@@ -39,12 +39,29 @@ class RecoveryEvidenceVerification:
 
     status: RecoveryEvidenceVerificationStatus
     evidence_id: str
+    issuer_registry_revision: int | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.status, RecoveryEvidenceVerificationStatus):
             raise ContractError("status debe ser RecoveryEvidenceVerificationStatus")
         if not isinstance(self.evidence_id, str) or not self.evidence_id.strip():
             raise ContractError("evidence_id debe ser una cadena no vacía")
+        if self.issuer_registry_revision is not None and (
+            isinstance(self.issuer_registry_revision, bool)
+            or not isinstance(self.issuer_registry_revision, int)
+            or self.issuer_registry_revision < 1
+        ):
+            raise ContractError("issuer_registry_revision debe ser un entero positivo")
+        if (
+            self.status is RecoveryEvidenceVerificationStatus.VERIFIED
+            and self.issuer_registry_revision is None
+        ):
+            raise ContractError("VERIFIED requiere la revisión del inventario")
+        if (
+            self.status is not RecoveryEvidenceVerificationStatus.VERIFIED
+            and self.issuer_registry_revision is not None
+        ):
+            raise ContractError("solo VERIFIED puede incluir revisión del inventario")
 
 
 def _validate_utc(value: datetime, field: str) -> None:
@@ -160,9 +177,42 @@ class MultiAuthorityRecoveryEvidenceVerificationService:
                 evidence.evidence_id,
             )
 
+        if verified is not True:
+            return RecoveryEvidenceVerification(
+                RecoveryEvidenceVerificationStatus.DENIED,
+                evidence.evidence_id,
+            )
+
+        # Re-read after the potentially slow cryptographic verifier. A revision
+        # change during verification invalidates this result. This is a bounded
+        # stale-snapshot check, not a lease or an effect-time fencing guarantee.
+        try:
+            current_registration = self._issuer_registry_port.get_registration(
+                evidence.issuer_id
+            )
+        except Exception:
+            return RecoveryEvidenceVerification(
+                RecoveryEvidenceVerificationStatus.UNAVAILABLE,
+                evidence.evidence_id,
+            )
+
+        if (
+            current_registration is None
+            or not isinstance(
+                current_registration, RecoveryEvidenceIssuerRegistration
+            )
+            or current_registration.issuer_id != evidence.issuer_id
+            or current_registration.enabled is not True
+            or current_registration.registry_revision
+            != registration.registry_revision
+        ):
+            return RecoveryEvidenceVerification(
+                RecoveryEvidenceVerificationStatus.DENIED,
+                evidence.evidence_id,
+            )
+
         return RecoveryEvidenceVerification(
-            RecoveryEvidenceVerificationStatus.VERIFIED
-            if verified is True
-            else RecoveryEvidenceVerificationStatus.DENIED,
+            RecoveryEvidenceVerificationStatus.VERIFIED,
             evidence.evidence_id,
+            registration.registry_revision,
         )
