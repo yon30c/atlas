@@ -267,6 +267,28 @@ class SQLiteRecoveryEvidenceIssuerRegistryRepositoryTests(unittest.TestCase):
         )
         self.assertIn("REGISTRY_REVISION_SEQUENCE_GAP", audit.diagnostic_codes)
 
+    def test_cross_audit_detects_registry_timestamp_regression(self):
+        first = make_registration()
+        self.repository.create(first)
+        with self.database.connection() as connection:
+            connection.execute(
+                "DROP TRIGGER recovery_evidence_issuer_registry_revision_sequential"
+            )
+            connection.execute(
+                """
+                INSERT INTO recovery_evidence_issuer_registry
+                (issuer_id, registry_revision, enabled, changed_at)
+                VALUES ('source-a', 2, 0, ?)
+                """,
+                ((NOW - timedelta(minutes=1)).isoformat(timespec="microseconds"),),
+            )
+        audit = self.repository.audit_inventory().issuers[0]
+        self.assertEqual(
+            audit.status,
+            RecoveryEvidenceIssuerInventoryAuditStatus.REGISTRY_CORRUPT,
+        )
+        self.assertIn("REGISTRY_TIMESTAMP_REGRESSION", audit.diagnostic_codes)
+
     def test_cross_audit_is_read_only(self):
         self.repository.create(make_registration())
         self.policies.create(make_policy())
