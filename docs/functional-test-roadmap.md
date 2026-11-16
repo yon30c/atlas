@@ -509,3 +509,10 @@ El informe global expone códigos diagnósticos consolidados y `is_healthy`. Se 
 **Límite:** solo lectura; sin reparación, autorización, ejecución de efectos ni integración runtime.
 
 **Estado: VALIDADO por el propietario; suite completa: 1136 tests en 9.985 s, todos OK.**
+### F2.3.39 — Validación semántica de tipos persistidos
+
+Comprobar que los valores persistidos de `evidence_kind` y `authority_kind` pertenecen a sus enums canónicos, incluso si la columna, el payload y la reserva coinciden entre sí. Añadir pruebas de corrupción controlada para ambos casos y verificar que `audit_admission` y `audit_all` los reportan como corruptos.
+
+**Límite:** auditoría de solo lectura; sin cambios de esquema, reparación, autoridad, ejecución de efectos ni integración runtime.
+
+**Estado:** implementado en GitHub; pruebas locales pendientes.
