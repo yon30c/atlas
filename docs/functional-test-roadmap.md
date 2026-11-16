@@ -288,3 +288,9 @@ Se verificó que la UoW hace atómica la actualización de Grant + solicitud al 
 Se documentó un contrato multiobjetivo para operaciones que mutan más de una fuente canónica. Es necesario para aprobación de renovación, que cambia Grant y solicitud en una única decisión lógica: un operation_id, una clave idempotente, todos los objetivos/revisiones tipados, reserva atómica, CAM sobre el conjunto exacto, fencing conjunto, CAS en una UoW y reconciliación completa. Se especificaron también semánticas separadas para solicitar, aprobar y rechazar renovaciones, migración aditiva y pruebas de concurrencia/crash.
 
 **Estado:** diseño publicado; sin código runtime ni pruebas. El contrato actual de una sola autoridad permanece sin cambios. No habilitar aprobación de renovación coordinada ni admisión.
+
+### F2.3.14 — Modelos multiobjetivo inmutables
+
+Añadidos `AuthorityChangeTargetKind`, `AuthorityChangeTarget` y `MultiAuthorityChangeIntent`. Distinguen Grant y Grant renewal, fijan cada transición de revisión en +1, exigen dos o más objetivos, canonicalizan el orden, rechazan duplicados y validan actor/owner/action/idempotency/context/UTC. Se añadieron pruebas unitarias de contratos.
+
+**Estado:** publicado; pendiente de validación local. Los modelos aún no están conectados al store, al CAM ni al coordinador.
