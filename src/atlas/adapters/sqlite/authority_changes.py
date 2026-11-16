@@ -403,6 +403,134 @@ class SQLiteAuthorityChangeStore:
                 )
             return self._multi_reservation(connection, row)
 
+    def acquire_multi_claims(self, operation_id: str) -> bool:
+        """Atomically claim every target for a REQUESTED multi-authority operation.
+
+        Returns False when another operation owns any target or the operation
+        is absent/not claimable. Exact retries by the same operation return
+        True. BEGIN IMMEDIATE serializes competing claim sets across SQLite
+        connections sharing this database.
+        
+        Claims are deliberately not released by this store. A future
+        consistency coordinator must provide durable terminal reconciliation
+        evidence before a release protocol can safely exist.
+        """
+        if not isinstance(operation_id, str) or not operation_id.strip():
+            raise ContractError("operation_id debe ser una cadena no vacía")
+
+        with self._database.unit_of_work() as unit:
+            connection = unit._connection_for(self._database)
+            operation = connection.execute(
+                """
+                SELECT status FROM multi_authority_change_operations
+                WHERE operation_id = ?
+                """,
+                (operation_id,),
+            ).fetchone()
+            if operation is None or operation["status"] != AuthorityChangeStatus.REQUESTED.value:
+                return False
+
+            targets = connection.execute(
+                """
+                SELECT authority_kind, authority_id
+                FROM multi_authority_change_targets
+                WHERE operation_id = ?
+                ORDER BY authority_kind, authority_id
+                """,
+                (operation_id,),
+            ).fetchall()
+            if len(targets) < 2:
+                raise sqlite3.DatabaseError(
+                    "operación multiobjetivo sin conjunto completo de targets"
+                )
+
+            expected = {
+                (row["authority_kind"], row["authority_id"])
+                for row in targets
+            }
+            current_rows = connection.execute(
+                """
+                SELECT authority_kind, authority_id
+                FROM multi_authority_change_claims
+                WHERE operation_id = ?
+                """,
+                (operation_id,),
+            ).fetchall()
+            current = {
+                (row["authority_kind"], row["authority_id"])
+                for row in current_rows
+            }
+            if current:
+                if current == expected:
+                    return True
+                raise sqlite3.DatabaseError(
+                    "conjunto de claims parcial o inconsistente; requiere recuperación"
+                )
+
+            for authority_kind, authority_id in sorted(expected):
+                conflict = connection.execute(
+                    """
+                    SELECT operation_id
+                    FROM multi_authority_change_claims
+                    WHERE authority_kind = ? AND authority_id = ?
+                    """,
+                    (authority_kind, authority_id),
+                ).fetchone()
+                if conflict is not None and conflict["operation_id"] != operation_id:
+                    return False
+
+            acquired_at = _utc_text(datetime.now(timezone.utc))
+            for authority_kind, authority_id in sorted(expected):
+                connection.execute(
+                    """
+                    INSERT INTO multi_authority_change_claims (
+                        authority_kind, authority_id, operation_id, acquired_at
+                    ) VALUES (?, ?, ?, ?)
+                    """,
+                    (authority_kind, authority_id, operation_id, acquired_at),
+                )
+            claimed_count = connection.execute(
+                """
+                SELECT COUNT(*) FROM multi_authority_change_claims
+                WHERE operation_id = ?
+                """,
+                (operation_id,),
+            ).fetchone()[0]
+            if claimed_count != len(expected):
+                raise sqlite3.DatabaseError(
+                    "adquisición de claims no produjo el conjunto completo"
+                )
+            return True
+
+    def get_multi_claims(self, operation_id: str) -> tuple[AuthorityChangeTarget, ...]:
+        """Return the immutable target claims currently held by an operation."""
+        if not isinstance(operation_id, str) or not operation_id.strip():
+            raise ContractError("operation_id debe ser una cadena no vacía")
+        with self._database.connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT t.authority_kind, t.authority_id,
+                       t.expected_revision, t.proposed_revision
+                FROM multi_authority_change_claims AS c
+                JOIN multi_authority_change_targets AS t
+                  ON t.operation_id = c.operation_id
+                 AND t.authority_kind = c.authority_kind
+                 AND t.authority_id = c.authority_id
+                WHERE c.operation_id = ?
+                ORDER BY t.authority_kind, t.authority_id
+                """,
+                (operation_id,),
+            ).fetchall()
+        return tuple(
+            AuthorityChangeTarget(
+                authority_kind=AuthorityChangeTargetKind(row["authority_kind"]),
+                authority_id=row["authority_id"],
+                expected_revision=row["expected_revision"],
+                proposed_revision=row["proposed_revision"],
+            )
+            for row in rows
+        )
+
     def get_multi_reservation(
         self,
         operation_id: str,
