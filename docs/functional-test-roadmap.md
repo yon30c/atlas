@@ -392,3 +392,12 @@ Se añaden decisiones tipadas y requisitos de evidencia por disposición del dia
 Ninguna decisión permite ejecución automática ni reintentos. El contrato no cambia el ledger, no libera claims, no crea transiciones BLOCKED y no se conecta al runtime. La evidencia requerida es una condición para una futura revisión/coordinación, no autorización.
 
 **Estado: VALIDADA.** Suite completa: 1061 tests en 7.206 s, todos OK.
+
+
+### F2.3.26 — Contrato de evidencia independiente de recuperación
+
+Se incorpora un modelo inmutable de evidencia no confiable, ligado a operation_id, tipo de evidencia, issuer, ventana temporal, digest y conjunto completo de objetivos/revisiones. Se agrega un puerto verificador de confianza y un servicio que valida binding/ventana antes de delegar autenticidad.
+
+El servicio diferencia VERIFIED, DENIED y UNAVAILABLE. Solo True exacto del verificador produce VERIFIED; excepciones producen UNAVAILABLE. No se confunde digest/referencia con autenticidad. La implementación concreta de criptografía, claves y fuentes autoritativas queda fuera de esta fase.
+
+**Estado:** implementación y pruebas publicadas; pendiente de validación local.
