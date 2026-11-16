@@ -506,7 +506,7 @@ El puerto define la obligación del futuro adaptador: comprobar en una sola tran
 
 **Límite deliberado:** esta fase incorpora contratos, no una implementación SQLite del puerto. Por tanto, todavía no existe admisión durable real ni protección de efecto. Incluso una admisión futura no autorizará por sí sola la recuperación: el efecto externo tendrá que compartir la misma frontera coordinada/fenced. Runtime y acciones permanecen desconectados.
 
-**Estado:** implementado en la rama; pruebas locales pendientes.
+**Estado: VALIDADO por el propietario; suite completa: 1131 tests en 10.314 s, todos OK.**
 
 ## 44. F2.3.34 — Admisión SQLite transaccional y consumo único
 
