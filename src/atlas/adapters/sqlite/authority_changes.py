@@ -500,8 +500,6 @@ class SQLiteAuthorityChangeStore:
             if row is None:
                 return False
             current = AuthorityChangeStatus(row["status"])
-            if current is new_status:
-                return True
             if current is not expected_status:
                 return False
 
