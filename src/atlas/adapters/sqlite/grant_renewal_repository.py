@@ -145,10 +145,22 @@ class SQLiteGrantRenewalRepository(GrantRenewalRepository):
             or expected_version < 1
         ):
             raise ContractError("expected_version debe ser un entero positivo")
-        if request.version != expected_version + 1:
-            raise ContractError("la nueva versión debe ser expected_version + 1")
         try:
             with self._write_connection() as connection:
+                current = connection.execute(
+                    """
+                    SELECT version FROM authorization_grant_renewals
+                    WHERE renewal_id = ?
+                    """,
+                    (values[0],),
+                ).fetchone()
+                # A stale or missing record is a normal CAS conflict, not a
+                # malformed update. Check it before validating the proposed
+                # next version so callers can safely handle stale requests.
+                if current is None or current["version"] != expected_version:
+                    return False
+                if request.version != expected_version + 1:
+                    raise ContractError("la nueva versión debe ser expected_version + 1")
                 cursor = connection.execute(
                     """
                     UPDATE authorization_grant_renewals
