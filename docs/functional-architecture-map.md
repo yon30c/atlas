@@ -474,4 +474,4 @@ Se incorporan pruebas concurrentes con dos instancias independientes de `SQLiteD
 
 Las pruebas no amplían el comportamiento de producción: validan el bloqueo transaccional `BEGIN IMMEDIATE` ya existente. No demuestran fencing de efectos externos, coordinación distribuida ni habilitan recuperación/runtime.
 
-**Estado:** implementado en la rama; pruebas locales pendientes.
+**Estado: VALIDADO por el propietario; suite completa: 1133 tests en 9.225 s, todos OK.**
