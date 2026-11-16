@@ -298,4 +298,4 @@ La auditoría confirma que la persistencia compartida no equivale a consistencia
 
 ## 21. F2.3.11 — Emisión de Grant fail-closed
 
-`GrantManagementService.issue` exige ahora `unit_of_work_factory` y rechaza emitir si falta, eliminando su fallback de escritura directa. La unicidad y creación siguen dentro de una UoW. Prueba nueva cubre ausencia de UoW. Publicado, pendiente de validación local; no equivale a coordinación de invalidación/fencing.
+`GrantManagementService.issue` exige ahora `unit_of_work_factory` y rechaza emitir si falta, eliminando su fallback de escritura directa. La unicidad y creación siguen dentro de una UoW. Prueba nueva cubre ausencia de UoW. Validado por el propietario con 968/968 pruebas; no equivale a coordinación de invalidación/fencing.
