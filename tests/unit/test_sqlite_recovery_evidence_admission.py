@@ -226,15 +226,15 @@ class SQLiteRecoveryEvidenceAdmissionTests(unittest.TestCase):
         with SQLiteLocalAuthorityUnitOfWork(self.database) as uow:
             connection = uow._unit._connection_for(self.database)
             connection.execute("DROP TRIGGER multi_authority_change_claims_no_delete")
-            connection.execute(
+            deleted = connection.execute(
                 """
                 DELETE FROM multi_authority_change_claims
                 WHERE operation_id = ?
-                  AND authority_kind = 'GRANT'
                   AND authority_id = 'grant-1'
                 """,
                 (operation_id,),
             )
+            self.assertEqual(deleted.rowcount, 1)
             report = uow.recovery_evidence_admissions.audit_all()
             self.assertEqual(report.healthy_count, 0)
             self.assertEqual(report.corrupt_count, 1)
