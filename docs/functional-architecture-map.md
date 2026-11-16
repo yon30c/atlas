@@ -509,4 +509,4 @@ La auditoría del inventario valida que `changed_at` sea no decreciente entre re
 
 La prueba de corrupción controlada confirma que una revisión posterior retrodatada se detecta sin reparar datos. La auditoría sigue siendo de solo lectura; no autentica el reloj ni habilita autoridad, recuperación o runtime.
 
-**Estado:** implementado en GitHub; pruebas locales pendientes.
+**Estado: VALIDADO por el propietario; suite completa: 1139 tests en 8.811 s, todos OK.**
