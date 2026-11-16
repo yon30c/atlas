@@ -13,7 +13,7 @@ from atlas.memory.authority_changes import (
 from atlas.ports.multi_authority_recovery_evidence_verifier import (
     MultiAuthorityRecoveryEvidenceVerifierPort,
 )
-from atlas.application.recovery_evidence_trust import (
+from atlas.authorization.recovery_evidence_trust import (
     RecoveryEvidenceIssuerTrustPolicy,
 )
 from atlas.ports.recovery_evidence_issuer_trust import (
