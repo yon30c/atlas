@@ -1,6 +1,6 @@
 # F2.3 — Frontera de autorización, revisión y ejecución de workspace
 
-> Estado: diseño de frontera; todavía no implementa autorización, aprobación ni ejecución.
+> Estado: contratos de evidencia/puerto implementados; validación local pendiente. No hay emisor CAM general, aprobación ni ejecución integrada.
 > Fecha: 16 de noviembre de 2026.
 > Rama: `feature/terminal-commands`.
 
@@ -109,6 +109,22 @@ El primer ejecutor seguirá limitado a `workspace.list` y a una raíz de workspa
 11. El fake de autorización solo se usa en pruebas y no se incorpora a la composición de CLI.
 12. La operación no ejecuta nada durante la revisión ni durante la autorización.
 
-## 9. Próximo paso
+## 9. F2.3.1 — Contrato inicial implementado
 
-Diseñar y probar el contrato genérico de evidencia de autorización de operación en CAM, sin modificar todavía el runtime. Después, definir la interfaz de aprobación y el gate de aplicación. Solo cuando ambos contratos tengan pruebas negativas suficientes se conectará el adaptador local `workspace.list`.
+Se añadieron, sin modificar el contrato histórico de Memory:
+
+- `src/atlas/authorization/operation_models.py`
+  - `OperationAuthorizationEvidence`: claims ligados a request ID, actor y revisión, proyecto, entorno, acción, recurso exacto, propietario, Grant/revisión, ventana temporal e issuer.
+  - `matches(request)`: comprueba la correspondencia exacta con `AuthorizationRequest`.
+  - `is_current_at(now)`: comprueba únicamente la ventana temporal.
+  - `OperationAuthorizationResult`: `ALLOW` requiere evidencia de operación; `DENY` y `REQUIRE_APPROVAL` no pueden transportarla.
+- `src/atlas/ports/operation_authorization.py`
+  - `OperationAuthorizationPort.authorize_operation(request, now)`.
+- `tests/unit/test_operation_authorization_contracts.py`
+  - Pruebas de validación, inmutabilidad, correspondencia exacta, contexto, revisiones y ventana temporal.
+
+**Limitación deliberada:** los claims son datos estructurados, no una firma ni prueba de autenticidad. `matches()` y `is_current_at()` no comprueban emisor, revocación actual del Grant, revisión vigente de proyecto/entorno ni consumo de aprobación. El puerto todavía no tiene un adaptador de producción. No se ha conectado al runtime.
+
+## 10. Próximo paso
+
+Validar localmente los contratos. Si pasan, diseñar la verificación de evidencia y su vinculación con el estado actual de Grant/identidad/proyecto/entorno. Después definir la interfaz de aprobación humana y el gate de aplicación. Solo cuando ambos contratos tengan pruebas negativas suficientes se conectará el adaptador local `workspace.list`.
