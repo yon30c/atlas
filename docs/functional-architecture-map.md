@@ -93,7 +93,17 @@ RequestPlanningResult
 - La configuración del proveedor para Gemma debe incluir `think=False` y `response_format="json"`, según la prueba manual reportada por el propietario.
 - Este flujo todavía no se instancia desde `cli.py`, no recibe solicitudes de la consola y no ejecuta capacidades.
 
-## 3.2 Lectura de workspace y catálogo de capacidades (Ciclo 1 F2)\n\nLa rama incorpora contratos y adaptadores de lectura independientes del runtime conversacional:\n\n- `LocalWorkspaceAdapter.list_entries(workspace_id)` enumera solo entradas inmediatas y clasifica symlinks sin seguirlos.\n- `LocalWorkspaceAdapter.read_file(workspace_id, path)` acepta rutas relativas POSIX normalizadas, rechaza traversal, rutas absolutas y symlinks, exige archivo regular UTF-8 y limita la lectura a 1 MiB por defecto.\n- `WorkspaceFileReadingService` valida el tipo y el binding exacto de workspace/ruta del resultado.\n- `CapabilityCatalog` contiene exclusivamente `workspace.list` y `workspace.read`, ambas `READ_ONLY`; `validate_intent` comprueba parámetros exactos. El catálogo no contiene handlers ni concede autorización.\n- Estas capacidades aún no están conectadas a `cli.py`, a la consola ni al runtime. La lectura tampoco sustituye CAM ni el gate de ejecución.\n\n## 4. Límites observados
+## 3.2 Lectura de workspace y catálogo de capacidades (Ciclo 1 F2)
+
+La rama incorpora contratos y adaptadores de lectura independientes del runtime conversacional:
+
+- `LocalWorkspaceAdapter.list_entries(workspace_id)` enumera solo entradas inmediatas y clasifica symlinks sin seguirlos.
+- `LocalWorkspaceAdapter.read_file(workspace_id, path)` acepta rutas relativas POSIX normalizadas, rechaza traversal, rutas absolutas y symlinks, exige archivo regular UTF-8 y limita la lectura a 1 MiB por defecto.
+- `WorkspaceFileReadingService` valida el tipo y el binding exacto de workspace/ruta del resultado.
+- `CapabilityCatalog` contiene exclusivamente `workspace.list` y `workspace.read`, ambas `READ_ONLY`; `validate_intent` comprueba parámetros exactos. El catálogo no contiene handlers ni concede autorización.
+- Estas capacidades aún no están conectadas a `cli.py`, a la consola ni al runtime. La lectura tampoco sustituye CAM ni el gate de ejecución.
+
+## 4. Límites observados
 
 - `AtlasCore` solo expone `respond` y `respond_streaming`; no tiene un caso de uso de planificación ni ejecución.
 - `AssistantService` solo genera texto informativo.
