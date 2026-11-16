@@ -106,3 +106,19 @@ Ejecutar las pruebas locales con:
 ```bash
 python -m unittest tests.evaluation.phase3.test_harness -v
 ```
+
+
+## Incremento 3.3 — autorización externa simulada
+
+`authorization_simulator.py` separa la propuesta validada de la decisión de autoridad. Recibe un `AuthorizationContext` tipado que debe construirse fuera de la respuesta del modelo y contiene identidad del actor, ámbitos de proyecto, permisos de herramienta y concesiones de aprobación humana.
+
+Reglas del simulador:
+
+- La identidad del actor debe estar presente.
+- El proyecto debe estar dentro de `project_scopes` y la herramienta dentro de `tool_permissions`.
+- `write_file` y `delete_file` requieren una concesión humana externa que coincida exactamente con proyecto y herramienta.
+- Una aprobación para otro proyecto u otra herramienta no sirve.
+- Los datos de autoridad deben ser estructuras inmutables (`frozenset` y `tuple`); no se acepta un diccionario generado por el modelo como contexto confiable.
+- El simulador verifica que la propuesta siga en estado `PROPOSAL_ONLY` y rechaza una propuesta cuyo estado interno haya sido alterado.
+
+Los resultados posibles son `DENIED` o `AUTHORIZED_FOR_SIMULATION`. Ambos mantienen `execution_permitted=false`. La segunda etiqueta solo indica que los controles simulados permitirían avanzar a una siguiente etapa de evaluación; no constituye permiso real ni ejecuta una operación. No hay conexión con CAM, Broker, sistema de archivos ni ejecutores.
