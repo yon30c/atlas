@@ -40,7 +40,7 @@ class SQLiteProjectEnvironmentRepository(
         if self._unit_of_work is not None:
             yield self._unit_of_work._connection_for(self._database)
         else:
-            with self._read_connection() as connection:
+            with self._database.connection() as connection:
                 yield connection
 
     @contextmanager
@@ -59,7 +59,7 @@ class SQLiteProjectEnvironmentRepository(
 
     def get_project(self, project_id: ProjectId) -> ProjectMetadata | None:
         key = self._required_id(project_id, "project_id")
-        with self._database.connection() as connection:
+        with self._read_connection() as connection:
             row = connection.execute(
                 "SELECT project_id, status, revision FROM atlas_projects WHERE project_id = ?",
                 (key,),
