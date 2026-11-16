@@ -294,3 +294,9 @@ Se documentó un contrato multiobjetivo para operaciones que mutan más de una f
 Añadidos `AuthorityChangeTargetKind`, `AuthorityChangeTarget` y `MultiAuthorityChangeIntent`. Distinguen Grant y Grant renewal, fijan cada transición de revisión en +1, exigen dos o más objetivos, canonicalizan el orden, rechazan duplicados y validan actor/owner/action/idempotency/context/UTC. Se añadieron pruebas unitarias de contratos.
 
 **Estado:** publicado; pendiente de validación local. Los modelos aún no están conectados al store, al CAM ni al coordinador.
+
+### F2.3.15 — Persistencia SQLite de reservas multiobjetivo
+
+Migración v10 aditiva y tablas separadas para operación, idempotencia y conjunto de objetivos. Se añadieron persistencia atómica de intención completa, canonicalización, replay idempotente, rechazo de clave reutilizada con intención distinta y triggers de inmutabilidad/sellado. Store con reserva y recuperación por operation_id o clave idempotente. Pruebas añadidas.
+
+**Estado:** publicado; pendiente de validación local. Es registro durable, no exclusión mutua/claim de objetivos ni coordinador. No hay CAM, fencing, invalidación, mutación de fuentes ni runtime.
