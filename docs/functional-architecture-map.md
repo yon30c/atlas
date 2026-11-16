@@ -290,4 +290,4 @@ Validado por el propietario con 957/957 pruebas. Pendiente: obligar todo el wiri
 
 Migración v9: tablas `atlas_projects` y `atlas_environments` con identificador inmutable, estado, revisión CAS y retención de tombstones. `SQLiteProjectEnvironmentRepository` implementa los dos puertos de metadatos existentes y se añade a `SQLiteLocalAuthorityFoundation` usando la misma instancia SQLite compartida con Identity, Grants, renovaciones y authority-change ledger.
 
-Pendiente de validación local. Las mutaciones de Project/Environment aún no están coordinadas por invalidación/fencing y no deben utilizarse como prueba de admisión segura.
+Validado por el propietario con 967/967 pruebas. Las mutaciones de Project/Environment aún no están coordinadas por invalidación/fencing y no deben utilizarse como prueba de admisión segura.
