@@ -468,8 +468,8 @@ class SQLiteAuthorityChangeStore:
     ) -> bool:
         """Advance one operation through the strict forward lifecycle.
 
-        The compare-and-set is atomic. Exact retries at the requested state
-        succeed; stale callers return False. This records lifecycle progress
+        The compare-and-set is atomic. A stale expected state returns False,
+        including retries after the operation has already advanced. This records lifecycle progress
         only: it does not prove invalidation, authorize source mutation, or
         perform any external side effect.
         """
