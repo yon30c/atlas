@@ -185,3 +185,10 @@ La decisión completa se registra en [assistant-operation-consistency-boundary.m
 No se reutilizará `RevisionValidationPort` como verificador genérico: pertenece a Memory y su snapshot/posición tienen semántica específica. `SQLiteUnitOfWork` solo ofrece serialización suficiente si todas las fuentes relevantes participan en la misma base y transacción, sin caminos de mutación alternativos.
 
 El primer perfil propuesto es read-only (`workspace.list` y `workspace.read`). Escrituras y runtime siguen desconectados. F2.3.5 inspeccionará la persistencia y composición real de Identity, Grant, Project y Environment antes de implementar el coordinador.
+
+
+## 15. F2.3.5 — Inventario de persistencia
+
+La inspección confirma que la composición actual no permite una transacción compartida entre Identity, Grant, Project, Environment y journal. Identity crea su propia SQLiteDatabase y cambia estado mediante CAS directo; Grant carece de adaptador SQLite concreto, su UoW cubre solo Grant/renovaciones y emisión escribe directo; Project/Environment solo tienen contratos de metadatos bajo Memory; journal y store de cambios de autoridad no están conectados a esas fuentes.
+
+Por tanto, no hay coordinador de invalidación/fencing que pueda cerrar las carreras de autorización. El siguiente paso requiere decidir si se construye una composición canónica local con las cuatro fuentes y se migran todos los caminos de mutación, o si se aplaza CAM integrado para el primer perfil read-only. No se ha conectado el runtime.
