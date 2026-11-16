@@ -558,4 +558,4 @@ La auditoría global amplía el control individual de cada recibo. Comprueba la 
 
 **Límites:** no repara datos, no vuelve a autenticar evidencia externa, no trata el estado actual de una operación como autorización y no concede autoridad para efectos ni recuperación. Los duplicados están normalmente bloqueados por las restricciones SQL; la auditoría sirve como detección adicional ante corrupción o manipulación de la base.
 
-**Estado:** implementado en la rama; pruebas locales pendientes.
+**Estado: VALIDADO por el propietario; suite completa: 1136 tests en 9.985 s, todos OK.**
