@@ -313,3 +313,18 @@ Se añadieron `AuthorityChangeTargetKind`, `AuthorityChangeTarget` y `MultiAutho
 Se añadieron pruebas unitarias para binding de Grant + renovación, orden canónico, duplicados, mínimo de objetivos, salto de revisión, booleanos como revisión, campos requeridos, UTC e inmutabilidad.
 
 **Límite:** estos modelos aún no son aceptados por `SQLiteAuthorityChangeStore`, no reservan ni mutan recursos y no autorizan operaciones. Pendiente de pruebas locales.
+
+
+### F2.3.15 — Persistencia de reservas multiobjetivo (publicada; pendiente de validación)
+
+Se añadió la migración SQLite v10 con tres tablas separadas del ledger histórico de una sola autoridad:
+
+- `multi_authority_change_operations`: identidad de operación, actor, propietario, acción, contexto y estado.
+- `multi_authority_change_idempotency`: namespace consumidor/clave y digest + canonicalización semántica.
+- `multi_authority_change_targets`: conjunto completo de objetivos tipados con revisiones esperada/propuesta.
+
+La separación evita insertar valores sintéticos en las columnas NOT NULL del ledger antiguo y preserva intactas las operaciones históricas. La reserva inserta operación, todos los objetivos y binding idempotente dentro de una única SQLiteUnitOfWork. El conjunto se canonicaliza; el replay exacto recupera la misma operación y la misma marca temporal original; una misma clave con intención distinta se rechaza. Triggers impiden actualizar/eliminar objetivos, ampliar el conjunto después del binding idempotente o alterar/eliminar dicho binding.
+
+Se añadieron `MultiAuthorityChangeReservation`, `reserve_multi_change`, `get_multi_reservation` y `get_multi_by_idempotency_key`, además de pruebas para persistencia tras reinicio, replay, conflicto semántico, aislamiento por consumidor y sellado del conjunto.
+
+**Límite de seguridad importante:** esto persiste una reserva lógica, pero todavía no adquiere claims exclusivos sobre recursos, no serializa dos operaciones diferentes que intenten cambiar el mismo objetivo, no ejecuta CAM, no aplica fencing/invalidation, no muta fuentes ni coordina recuperación. No se debe usar como coordinador ni habilitar cambios multiobjetivo en runtime hasta implementar esas garantías.
