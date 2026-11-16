@@ -43,6 +43,8 @@ class OperationAuthorizationEvidence:
     resource_owner_id: str
     grant_id: str
     grant_revision: int
+    project_revision: int
+    environment_revision: int
     issued_at: datetime
     expires_at: datetime
     issuer_id: str
@@ -66,7 +68,12 @@ class OperationAuthorizationEvidence:
             if not isinstance(value, str) or not value.strip():
                 raise ContractError(f"{field} debe ser una cadena no vacía")
 
-        for field in ("actor_revision", "grant_revision"):
+        for field in (
+            "actor_revision",
+            "grant_revision",
+            "project_revision",
+            "environment_revision",
+        ):
             value = getattr(self, field)
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                 raise ContractError(f"{field} debe ser un entero positivo")
