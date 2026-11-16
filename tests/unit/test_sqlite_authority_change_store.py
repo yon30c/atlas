@@ -125,8 +125,6 @@ class SQLiteAuthorityChangeStoreTests(unittest.TestCase):
         }.issubset(names))
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class SQLiteMultiAuthorityChangeStoreTests(unittest.TestCase):
@@ -285,3 +283,7 @@ class SQLiteMultiAuthorityChangeStoreTests(unittest.TestCase):
                     "DELETE FROM multi_authority_change_idempotency WHERE operation_id = ?",
                     (first.operation_id,),
                 )
+
+
+if __name__ == "__main__":
+    unittest.main()
