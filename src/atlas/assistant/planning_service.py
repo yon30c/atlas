@@ -5,6 +5,7 @@ from datetime import datetime
 from atlas.assistant.planning import (
     AssistantPlan,
     IntentInterpretation,
+    IntentKind,
     InterpretationStatus,
     PlanStep,
 )
@@ -31,7 +32,7 @@ class AssistantPlanningService:
         values = dict(parameters)
         workspace_id = values["workspace_id"]
 
-        if intent.kind.value == "workspace.list":
+        if intent.kind is IntentKind.WORKSPACE_LIST:
             goal = f"Listar archivos del workspace '{workspace_id}'"
             expected_result = (
                 f"Listado de entradas del workspace '{workspace_id}'"
