@@ -132,8 +132,8 @@ class SQLiteConversationRepository(ConversationRepository, ConversationHistorySt
             row = self._get(connection, conversation_id)
             if row is None:
                 raise NotFoundError("conversación no encontrada")
-            if updated_at < _parse_utc(row["created_at"]):
-                raise ContractError("updated_at no puede ser anterior a created_at")
+            if updated_at < _parse_utc(row["updated_at"]):
+                raise ContractError("updated_at no puede retroceder")
             connection.execute(
                 "UPDATE conversations SET title = ?, updated_at = ? WHERE conversation_id = ?",
                 (title, timestamp, conversation_id),
@@ -153,8 +153,8 @@ class SQLiteConversationRepository(ConversationRepository, ConversationHistorySt
             row = self._get(connection, conversation_id)
             if row is None:
                 raise NotFoundError("conversación no encontrada")
-            if updated_at < _parse_utc(row["created_at"]):
-                raise ContractError("updated_at no puede ser anterior a created_at")
+            if updated_at < _parse_utc(row["updated_at"]):
+                raise ContractError("updated_at no puede retroceder")
             connection.execute(
                 """
                 UPDATE conversations
