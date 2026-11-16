@@ -269,6 +269,34 @@ class SQLiteMultiAuthorityChangeStoreTests(unittest.TestCase):
                     (first.operation_id,),
                 )
 
+    def test_multi_reservation_rolls_back_operation_and_all_targets_on_partial_failure(self):
+        with self.database.connection() as connection:
+            connection.execute(
+                """
+                CREATE TRIGGER fail_second_multi_target
+                BEFORE INSERT ON multi_authority_change_targets
+                WHEN NEW.authority_id = 'renewal-001'
+                BEGIN
+                    SELECT RAISE(ABORT, 'simulated target insert failure');
+                END;
+                """
+            )
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.store.reserve_multi_change(self.intent())
+        with self.database.connection() as connection:
+            operation_count = connection.execute(
+                "SELECT COUNT(*) FROM multi_authority_change_operations"
+            ).fetchone()[0]
+            target_count = connection.execute(
+                "SELECT COUNT(*) FROM multi_authority_change_targets"
+            ).fetchone()[0]
+            idempotency_count = connection.execute(
+                "SELECT COUNT(*) FROM multi_authority_change_idempotency"
+            ).fetchone()[0]
+        self.assertEqual(operation_count, 0)
+        self.assertEqual(target_count, 0)
+        self.assertEqual(idempotency_count, 0)
+
     def test_multi_idempotency_binding_cannot_be_updated_or_deleted(self):
         first = self.store.reserve_multi_change(self.intent())
         with self.database.connection() as connection:
