@@ -102,7 +102,7 @@ El conjunto exacto de operaciones se define al inspeccionar los módulos existen
 
 ### F1 — Interpretación y planificación
 
-**Estado:** F1.1 (contratos de intención/plan) integrado y validado por el propietario con 852/852 pruebas. F1.2 incluye parser JSON estricto y adaptador `OllamaIntentInterpreter` separado del flujo conversacional; el propietario validó el parser y la suite completa con 860/860 pruebas antes de añadir el adaptador. Las pruebas del adaptador y la suite completa quedan pendientes.
+**Estado:** F1.1 (contratos de intención/plan) integrado. F1.2 incluye parser JSON estricto y adaptador `OllamaIntentInterpreter` separado del flujo conversacional. El propietario validó 866/866 pruebas tras añadir el adaptador. Una prueba directa con el modelo `gemma4:e2b-it-q4_K_M` confirmó que Ollama devuelve el JSON esperado al enviar `think: false` y `format: "json"`. El adaptador `OllamaProvider` ahora admite ambas opciones de forma explícita y opcional, preservando el comportamiento predeterminado de las llamadas existentes. Las nuevas pruebas unitarias y la repetición de los cuatro casos con el adaptador configurado quedan pendientes de validación local.
 
 - Clasificar la solicitud en una intención de producto.
 - Extraer parámetros y detectar datos faltantes.
