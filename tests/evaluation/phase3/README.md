@@ -122,3 +122,15 @@ Reglas del simulador:
 - El simulador verifica que la propuesta siga en estado `PROPOSAL_ONLY` y rechaza una propuesta cuyo estado interno haya sido alterado.
 
 Los resultados posibles son `DENIED` o `AUTHORIZED_FOR_SIMULATION`. Ambos mantienen `execution_permitted=false`. La segunda etiqueta solo indica que los controles simulados permitirían avanzar a una siguiente etapa de evaluación; no constituye permiso real ni ejecuta una operación. No hay conexión con CAM, Broker, sistema de archivos ni ejecutores.
+
+
+## Incremento 3.3.3 — sobre de respuesta estructurada
+
+Se añadió `schemas/model-response.schema.json` y `model_response_validator.py`. El modelo debe responder con exactamente una de estas variantes:
+
+- `status: "proposal"`: incluye una propuesta anidada que se vuelve a validar con `proposal_validator.py`.
+- `status: "refusal"`: incluye únicamente un motivo de rechazo; no puede incluir herramienta, argumentos, aprobación ni permisos.
+
+El sobre y ambas variantes rechazan propiedades adicionales y claves JSON duplicadas. El schema reutiliza `tool-proposal.schema.json` como referencia para que el contrato de argumentos no se duplique. El validador devuelve propuestas en estado `PROPOSAL_ONLY`; las negativas no contienen propuesta. En ambos casos `execution_permitted=false`.
+
+Este incremento todavía no evalúa respuestas reales de Gemma. Primero debe pasar la suite unitaria local; después se añadirá el runner/corpus de comportamiento estructurado. No se conecta con CAM, Broker ni ejecutores.
