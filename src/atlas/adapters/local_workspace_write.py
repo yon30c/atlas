@@ -197,9 +197,15 @@ class LocalWorkspaceWriteAdapter:
             raise ContractError("manifest de staging corrupto") from exc
         if not isinstance(manifest, dict) or set(manifest) != _MANIFEST_KEYS:
             raise ContractError("esquema de manifest de staging inválido")
-        if manifest["schema_version"] != 1:
+        if (
+            isinstance(manifest["schema_version"], bool)
+            or not isinstance(manifest["schema_version"], int)
+            or manifest["schema_version"] != 1
+        ):
             raise ContractError("versión de manifest no soportada")
-        if manifest["state"] not in {state.value for state in WorkspaceWriteState}:
+        if not isinstance(manifest["state"], str) or manifest["state"] not in {
+            state.value for state in WorkspaceWriteState
+        }:
             raise ContractError("estado de staging desconocido")
         if not isinstance(manifest["workspace_id"], str) or not manifest["workspace_id"].strip():
             raise ContractError("workspace_id inválido en manifest")
@@ -256,10 +262,6 @@ class LocalWorkspaceWriteAdapter:
             or not re.fullmatch(r"[0-9a-f]{64}", expected_sha256)
         ):
             raise ContractError("expected_sha256 debe ser SHA-256 hexadecimal")
-        target = self._target(root, path)
-        current_hash = self._hash_file(target)
-        if current_hash != expected_sha256:
-            raise ConcurrencyError("el destino no coincide con expected_sha256")
         content_hash = hashlib.sha256(raw).hexdigest()
         staging_root = self._staging_root(root)
         operation_dir = staging_root / operation_id
@@ -278,6 +280,10 @@ class LocalWorkspaceWriteAdapter:
                 raise ConcurrencyError("operation_id ya está ligado a otra escritura")
             return self._stage_result(manifest)
 
+        target = self._target(root, path)
+        current_hash = self._hash_file(target)
+        if current_hash != expected_sha256:
+            raise ConcurrencyError("el destino no coincide con expected_sha256")
         operation_dir.mkdir(mode=0o700)
         payload_path = operation_dir / "payload"
         descriptor = os.open(
