@@ -764,11 +764,6 @@ CORE_SCHEMA_V7 = SQLiteMigration(
     """,
 )
 
-SQLITE_MIGRATIONS = (
-    CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
-    CORE_SCHEMA_V5, CORE_SCHEMA_V6, CORE_SCHEMA_V7, CORE_SCHEMA_V8,
-)
-
 # v8 adds durable Grant renewal requests to the same local authority database.
 CORE_SCHEMA_V8 = SQLiteMigration(
     version=8,
