@@ -974,6 +974,16 @@ CORE_SCHEMA_V10 = SQLiteMigration(
     CREATE INDEX multi_authority_change_targets_resource
         ON multi_authority_change_targets(authority_kind, authority_id);
 
+    CREATE TRIGGER multi_authority_change_idempotency_requires_complete_targets
+    BEFORE INSERT ON multi_authority_change_idempotency
+    WHEN (
+        SELECT COUNT(*) FROM multi_authority_change_targets
+        WHERE operation_id = NEW.operation_id
+    ) < 2
+    BEGIN
+        SELECT RAISE(ABORT, 'Multi-authority operation requires at least two targets');
+    END;
+
     CREATE TRIGGER multi_authority_change_operation_identity_immutable
     BEFORE UPDATE OF operation_id, consumer_id, action, actor_identity_id,
                      owner_id, project_id, environment_id, request_context_ref,
