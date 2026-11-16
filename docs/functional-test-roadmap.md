@@ -114,7 +114,7 @@ El conjunto exacto de operaciones se define al inspeccionar los módulos existen
 
 ### F2 — Capacidades y herramientas de prueba
 
-**Estado:** F2.1 fue validada con 893/893 pruebas. F2.2 añade `WorkspaceListingService`, que consume `WorkspaceReader`, valida el ID y verifica el tipo y la correspondencia del resultado. El propietario validó F2.2 y la regresión completa con 900/900 pruebas (16 de noviembre de 2026). F2.3 documenta la frontera entre revisión del plan, autorización CAM y aprobación humana en [F2.3 — Frontera de autorización, revisión y ejecución](design/assistant-workspace-execution-boundary.md). Es un diseño, no una implementación: no hay todavía autorización genérica pública, Approval Manager integrado ni ejecución desde consola/runtime.
+**Estado:** F2.1 validada con 893/893 pruebas. F2.2 implementada y validada por el propietario con 900/900 pruebas (16 de noviembre de 2026). F2.3 documenta la separación entre revisión del plan, autorización CAM y aprobación humana. F2.3.1 añade los contratos `OperationAuthorizationEvidence`, `OperationAuthorizationResult` y `OperationAuthorizationPort`, además de pruebas unitarias; validación local pendiente. No hay todavía emisor CAM general, verificador de evidencia, Approval Manager integrado ni ejecución desde consola/runtime.
 
 - Definir un catálogo pequeño de capacidades reales.
 - Implementar adaptadores concretos para el workspace de prueba.
@@ -208,4 +208,4 @@ Para cada siguiente incremento:
 6. Revisar los resultados antes de continuar.
 7. Actualizar esta documentación con evidencia, commit y estado real.
 
-**Siguiente acción:** diseñar el contrato genérico de evidencia de autorización de operación en CAM, con pruebas negativas y sin modificar el runtime. Después definir la interfaz de aprobación humana y el gate de aplicación para `workspace.list`. No integrar consola ni ejecutar capacidades hasta validar esos contratos.
+**Siguiente acción:** actualizar el checkout Debian y ejecutar las pruebas focalizadas `tests.unit.test_operation_authorization_contracts`, más `tests.unit.test_authorization` y `tests.unit.test_evaluator`, y después la suite completa. Si pasan, continuar con el verificador confiable de evidencia y la vigencia de autoridad. No integrar consola ni ejecutar capacidades todavía.
