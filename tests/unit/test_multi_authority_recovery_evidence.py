@@ -8,6 +8,9 @@ from atlas.application.recovery_evidence import (
     MultiAuthorityRecoveryEvidenceVerificationService,
     RecoveryEvidenceVerificationStatus,
 )
+from atlas.application.recovery_evidence_trust import (
+    RecoveryEvidenceIssuerTrustPolicy,
+)
 from atlas.memory.authority_changes import (
     AuthorityChangeTarget,
     AuthorityChangeTargetKind,
@@ -56,6 +59,29 @@ def make_evidence(**overrides):
     }
     values.update(overrides)
     return MultiAuthorityRecoveryEvidence(**values)
+
+
+class FakeTrustPolicyPort:
+    def __init__(self, policy=None, error=None):
+        self.policy = policy or RecoveryEvidenceIssuerTrustPolicy(
+            issuer_id="trusted-source-1",
+            policy_revision=1,
+            enabled=True,
+            allowed_evidence_kinds=(
+                MultiAuthorityRecoveryEvidenceKind.SOURCE_OUTCOME_RECEIPT,
+            ),
+            valid_from=NOW - timedelta(days=1),
+            valid_until=NOW + timedelta(days=1),
+            max_evidence_lifetime_seconds=600,
+        )
+        self.error = error
+        self.calls = 0
+
+    def get_policy(self, issuer_id):
+        self.calls += 1
+        if self.error is not None:
+            raise self.error
+        return self.policy
 
 
 class FakeVerifier:
@@ -137,8 +163,11 @@ class MultiAuthorityRecoveryEvidenceContractTests(unittest.TestCase):
 
 
 class MultiAuthorityRecoveryEvidenceVerificationTests(unittest.TestCase):
-    def service(self, verifier):
-        return MultiAuthorityRecoveryEvidenceVerificationService(verifier)
+    def service(self, verifier, trust_policy_port=None):
+        return MultiAuthorityRecoveryEvidenceVerificationService(
+            verifier,
+            trust_policy_port or FakeTrustPolicyPort(),
+        )
 
     def verify(self, service, evidence=None, **overrides):
         args = {
@@ -206,7 +235,62 @@ class MultiAuthorityRecoveryEvidenceVerificationTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             self.verify(service, now=datetime(2026, 11, 16, 12, 0))
         with self.assertRaises(ContractError):
-            MultiAuthorityRecoveryEvidenceVerificationService(object())
+            MultiAuthorityRecoveryEvidenceVerificationService(object(), FakeTrustPolicyPort())
+        with self.assertRaises(ContractError):
+            MultiAuthorityRecoveryEvidenceVerificationService(FakeVerifier(), object())
+
+    def test_untrusted_or_disabled_issuer_is_denied_before_verifier(self):
+        verifier = FakeVerifier()
+        policy = RecoveryEvidenceIssuerTrustPolicy(
+            issuer_id="other-issuer",
+            policy_revision=1,
+            enabled=True,
+            allowed_evidence_kinds=(
+                MultiAuthorityRecoveryEvidenceKind.SOURCE_OUTCOME_RECEIPT,
+            ),
+            valid_from=NOW - timedelta(days=1),
+            valid_until=NOW + timedelta(days=1),
+            max_evidence_lifetime_seconds=600,
+        )
+        result = self.verify(self.service(verifier, FakeTrustPolicyPort(policy)))
+        self.assertEqual(result.status, RecoveryEvidenceVerificationStatus.DENIED)
+        self.assertEqual(verifier.calls, 0)
+
+    def test_policy_restricts_evidence_kind_and_maximum_lifetime(self):
+        verifier = FakeVerifier()
+        wrong_kind = RecoveryEvidenceIssuerTrustPolicy(
+            issuer_id="trusted-source-1",
+            policy_revision=2,
+            enabled=True,
+            allowed_evidence_kinds=(
+                MultiAuthorityRecoveryEvidenceKind.INVALIDATION_RECEIPT,
+            ),
+            valid_from=NOW - timedelta(days=1),
+            valid_until=NOW + timedelta(days=1),
+            max_evidence_lifetime_seconds=600,
+        )
+        result = self.verify(self.service(verifier, FakeTrustPolicyPort(wrong_kind)))
+        self.assertEqual(result.status, RecoveryEvidenceVerificationStatus.DENIED)
+        long_lived = make_evidence(
+            expires_at=NOW + timedelta(minutes=20)
+        )
+        result = self.verify(
+            self.service(verifier),
+            evidence=long_lived,
+        )
+        self.assertEqual(result.status, RecoveryEvidenceVerificationStatus.DENIED)
+        self.assertEqual(verifier.calls, 0)
+
+    def test_trust_policy_source_failure_is_unavailable(self):
+        verifier = FakeVerifier()
+        result = self.verify(
+            self.service(
+                verifier,
+                FakeTrustPolicyPort(error=RuntimeError("policy source unavailable")),
+            )
+        )
+        self.assertEqual(result.status, RecoveryEvidenceVerificationStatus.UNAVAILABLE)
+        self.assertEqual(verifier.calls, 0)
 
 
 if __name__ == "__main__":
