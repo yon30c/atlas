@@ -141,7 +141,10 @@ class ConversationBackup:
         snapshot = self._decrypt(payload, passphrase)
         self._validate_snapshot(snapshot)
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-        fd = os.open(target, flags, 0o600)
+        try:
+            fd = os.open(target, flags, 0o600)
+        except OSError as exc:
+            raise ContractError("no se pudo crear la base restaurada sin sobrescribir archivos") from exc
         try:
             os.fchmod(fd, 0o600)
             view = memoryview(snapshot)
