@@ -8,6 +8,11 @@ import sqlite3
 from atlas.adapters.sqlite.database import SQLiteDatabase, SQLiteUnitOfWork
 from atlas.application.recovery_admission import RecoveryEvidenceAdmissionCommand
 from atlas.core.errors import ContractError
+from atlas.authorization.recovery_evidence_admission_audit import (
+    RecoveryEvidenceAdmissionAudit,
+    RecoveryEvidenceAdmissionAuditReport,
+    RecoveryEvidenceAdmissionAuditStatus,
+)
 from atlas.ports.recovery_evidence_admission import (
     RecoveryEvidenceAdmissionPort,
     RecoveryEvidenceAdmissionResult,
@@ -61,6 +66,150 @@ class SQLiteRecoveryEvidenceAdmissionRepository(RecoveryEvidenceAdmissionPort):
         return json.dumps(
             payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
         ).encode("utf-8")
+
+    @staticmethod
+    def _audit_row(
+        connection: sqlite3.Connection,
+        row: sqlite3.Row,
+    ) -> RecoveryEvidenceAdmissionAudit:
+        diagnostics: list[str] = []
+        admission_id = row["admission_id"]
+
+        try:
+            canonical_bytes = bytes(row["command_canonical"])
+            payload = json.loads(canonical_bytes.decode("utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("canonical command must be an object")
+            recanonical = json.dumps(
+                payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+            ).encode("utf-8")
+            if recanonical != canonical_bytes:
+                diagnostics.append("NON_CANONICAL_COMMAND")
+        except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+            payload = None
+            diagnostics.append("INVALID_CANONICAL_COMMAND")
+
+        if hashlib.sha256(bytes(row["command_canonical"])).hexdigest() != row["command_digest"]:
+            diagnostics.append("COMMAND_DIGEST_MISMATCH")
+
+        if not isinstance(row["evidence_digest"], str) or (
+            len(row["evidence_digest"]) != 64
+            or any(char not in "0123456789abcdef" for char in row["evidence_digest"])
+        ):
+            diagnostics.append("INVALID_EVIDENCE_DIGEST")
+
+        if payload is not None:
+            expected = {
+                "admission_id": row["admission_id"],
+                "operation_id": row["operation_id"],
+                "evidence_id": row["evidence_id"],
+                "evidence_digest": row["evidence_digest"],
+                "issuer_id": row["issuer_id"],
+                "issuer_registry_revision": row["issuer_registry_revision"],
+                "evidence_kind": row["evidence_kind"],
+                "requested_at": row["requested_at"],
+            }
+            for field, value in expected.items():
+                if payload.get(field) != value:
+                    diagnostics.append("COLUMN_BINDING_MISMATCH")
+                    break
+
+            targets = payload.get("targets")
+            if not isinstance(targets, list) or len(targets) != row["target_count"]:
+                diagnostics.append("TARGET_COUNT_MISMATCH")
+            elif any(
+                not isinstance(target, dict)
+                or set(target) != {
+                    "authority_kind", "authority_id",
+                    "expected_revision", "proposed_revision",
+                }
+                or not isinstance(target.get("authority_kind"), str)
+                or not isinstance(target.get("authority_id"), str)
+                or not target.get("authority_id", "").strip()
+                or isinstance(target.get("expected_revision"), bool)
+                or not isinstance(target.get("expected_revision"), int)
+                or target["expected_revision"] < 1
+                or isinstance(target.get("proposed_revision"), bool)
+                or not isinstance(target.get("proposed_revision"), int)
+                or target["proposed_revision"] != target["expected_revision"] + 1
+                for target in targets
+            ):
+                diagnostics.append("INVALID_TARGET_BINDING")
+            else:
+                identities = tuple(
+                    (target["authority_kind"], target["authority_id"])
+                    for target in targets
+                )
+                if identities != tuple(sorted(set(identities))):
+                    diagnostics.append("NON_CANONICAL_TARGET_SET")
+                reserved = connection.execute(
+                    """
+                    SELECT authority_kind, authority_id, expected_revision, proposed_revision
+                    FROM multi_authority_change_targets
+                    WHERE operation_id = ?
+                    ORDER BY authority_kind, authority_id
+                    """,
+                    (row["operation_id"],),
+                ).fetchall()
+                reserved_targets = tuple(
+                    (item["authority_kind"], item["authority_id"],
+                     item["expected_revision"], item["proposed_revision"])
+                    for item in reserved
+                )
+                supplied_targets = tuple(
+                    (target["authority_kind"], target["authority_id"],
+                     target["expected_revision"], target["proposed_revision"])
+                    for target in targets
+                )
+                if supplied_targets != reserved_targets:
+                    diagnostics.append("OPERATION_TARGET_MISMATCH")
+
+        for field in ("requested_at", "recorded_at"):
+            try:
+                parsed = datetime.fromisoformat(row[field])
+                if (
+                    parsed.tzinfo is None
+                    or parsed.utcoffset() is None
+                    or parsed.utcoffset().total_seconds() != 0
+                    or parsed.isoformat(timespec="microseconds") != row[field]
+                ):
+                    diagnostics.append("NON_CANONICAL_TIMESTAMP")
+                    break
+            except (TypeError, ValueError, OverflowError):
+                diagnostics.append("INVALID_TIMESTAMP")
+                break
+
+        codes = tuple(sorted(set(diagnostics)))
+        return RecoveryEvidenceAdmissionAudit(
+            admission_id=admission_id,
+            status=(
+                RecoveryEvidenceAdmissionAuditStatus.CORRUPT
+                if codes else RecoveryEvidenceAdmissionAuditStatus.HEALTHY
+            ),
+            diagnostic_codes=codes,
+        )
+
+    def audit_admission(
+        self,
+        admission_id: str,
+    ) -> RecoveryEvidenceAdmissionAudit | None:
+        if not isinstance(admission_id, str) or not admission_id.strip():
+            raise ContractError("admission_id debe ser una cadena no vacía")
+        connection = self._connection()
+        row = connection.execute(
+            "SELECT * FROM recovery_evidence_admissions WHERE admission_id = ?",
+            (admission_id,),
+        ).fetchone()
+        return None if row is None else self._audit_row(connection, row)
+
+    def audit_all(self) -> RecoveryEvidenceAdmissionAuditReport:
+        """Audit all persisted receipts from the active UoW read snapshot."""
+        connection = self._connection()
+        rows = connection.execute(
+            "SELECT * FROM recovery_evidence_admissions ORDER BY admission_id"
+        ).fetchall()
+        audits = tuple(self._audit_row(connection, row) for row in rows)
+        return RecoveryEvidenceAdmissionAuditReport(audits)
 
     def admit(
         self,
