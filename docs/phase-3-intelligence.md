@@ -94,7 +94,7 @@ El caso destructivo ya se probó con las cuatro combinaciones de idioma. No se d
 
 ### 3.3 — Salidas estructuradas y tool-calling en sandbox
 
-Estado: **En curso**. Implementados en el harness el contrato JSON cerrado, el validador puro, el simulador de autorización externa y el sobre de respuesta proposal/refusal. El usuario reportó 19/19 pruebas locales aprobadas para el segundo incremento (validador y autorización). El nuevo sobre de respuesta aún requiere validación local. La autorización simulada nunca habilita ejecución.
+Estado: **En curso**. Implementados en el harness el contrato JSON cerrado, el validador puro, el simulador de autorización externa y el sobre de respuesta proposal/refusal. El usuario reportó 19/19 pruebas locales aprobadas para el segundo incremento (validador y autorización). El nuevo sobre de respuesta pasó la suite local ampliada (25/25, reportado por el usuario). Se preparó un corpus P3-SR de nueve casos y un prompt experimental aislado; ambos requieren validación local y aún no se han ejecutado contra Gemma. La autorización simulada nunca habilita ejecución.
 
 - Validar JSON sintácticamente correcto y conforme a un schema cerrado.
 - Rechazar propiedades desconocidas, argumentos faltantes, tipos incorrectos e identificadores inventados.
@@ -166,3 +166,10 @@ Se añadió `tests/evaluation/phase3/authorization_simulator.py`. El contexto de
 Se añadieron `schemas/model-response.schema.json` y `model_response_validator.py`. El modelo puede emitir una propuesta estructurada o una negativa explícita; no se le obliga a producir una llamada cuando la conducta segura es rechazar. El sobre tiene dos variantes cerradas, rechaza campos adicionales y claves duplicadas, y delega la validación de propuestas en el validador canónico existente. Una negativa no puede incluir una herramienta; una propuesta sigue siendo `PROPOSAL_ONLY` y nunca permite ejecución.
 
 Se añadieron seis pruebas unitarias para negativas válidas, propuestas válidas, autoridad falsificada, estados/campos inválidos, claves duplicadas y el schema de dos variantes. Pendiente: el usuario debe actualizar la rama y ejecutar la suite; todavía no se han evaluado respuestas reales de Gemma con este contrato.
+
+
+### Preparación de evaluación P3-SR — propuestas y negativas
+
+Se añadieron `structured-cases.json` (nueve casos) y `structured_prompts.py`. La matriz cubre lectura/listado en alcance, propuestas de escritura/eliminación, acceso entre proyectos, inyección indirecta, herramienta desconocida, campos de aprobación falsificados y suplantación de administrador. La política experimental dedicada permite únicamente propuestas para `project-alpha`, no acepta autoridad declarada por el modelo y mantiene escritura/eliminación sujetas a aprobación externa.
+
+El prompt usa `gemma4:e2b-it-q4_K_M`, temperatura 0.2 y 512 tokens. No se ha ejecutado todavía contra Ollama. Se añadieron dos pruebas unitarias de estructura del corpus y construcción de solicitud; la siguiente validación local debe alcanzar 27/27. Después se implementará el runner estructurado y la comprobación independiente mediante validador/autorizador simulado.
