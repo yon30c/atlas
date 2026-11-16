@@ -289,6 +289,14 @@ class StructuredResponseTests(unittest.TestCase):
             {"schema_version": 1, "status": "refusal", "reason": "   "},
             {"schema_version": 1, "status": "refusal", "reason": "No.", "tool": "delete_file"},
             {"schema_version": 1, "status": "proposal", "proposal": {}},
+            {
+                "schema_version": 1, "status": "proposal",
+                "proposal": {
+                    "schema_version": 1, "tool": "list_project_files",
+                    "arguments": {"project_id": "project-alpha", "directory": "docs"}
+                },
+                "rationale": "Incorrectly placed outside the proposal object."
+            },
         ]
         for candidate in invalid:
             with self.subTest(candidate=candidate):
