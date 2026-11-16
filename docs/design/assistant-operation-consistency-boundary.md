@@ -478,4 +478,4 @@ La migración v16 añade `recovery_evidence_issuer_registry`, un historial appen
 
 El inventario se compone dentro de `SQLiteLocalAuthorityUnitOfWork`, compartiendo transacción con las políticas de confianza. `audit_inventory()` cruza inventario y políticas en un único snapshot de lectura y distingue emisor saludable, deshabilitado en inventario, sin política, con política deshabilitada, con política corrupta, registro corrupto y política huérfana sin inventario.
 
-Registrar un emisor no lo autentica ni le concede confianza. La auditoría no repara datos, no autentica evidencia y no concede autoridad de recuperación. Implementado; pruebas locales pendientes.
+Registrar un emisor no lo autentica ni le concede confianza. El estado del inventario es metadato de control y aún no se integra como comprobación del servicio verificador; el puerto de política sigue siendo la fuente que consulta dicho servicio. La auditoría no repara datos, no autentica evidencia y no concede autoridad de recuperación. Implementado; pruebas locales pendientes.
