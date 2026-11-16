@@ -15,6 +15,7 @@ from atlas.memory.authority_changes import (
     AuthorityChangeTerminalOutcome,
     AuthorityChangeTerminalTarget,
     MultiAuthorityChangeIntent,
+    MultiAuthorityClaimAuditStatus,
 )
 
 
@@ -435,6 +436,98 @@ class SQLiteMultiTerminalEvidenceTests(unittest.TestCase):
             self.store.get_multi_claims(second.operation_id),
             second_intent.targets,
         )
+
+
+    def test_claim_audit_classifies_unclaimed_operation(self):
+        reservation = self.store.reserve_multi_change(
+            MultiAuthorityChangeIntent(
+                idempotency_key="audit-unclaimed",
+                consumer_id="atlas-consumer",
+                action="grant.renewal.approve",
+                actor_identity_id="user-001",
+                owner_id="user-001",
+                project_id="project-001",
+                environment_id="development",
+                targets=(
+                    AuthorityChangeTarget(AuthorityChangeTargetKind.GRANT, "grant-001", 4, 5),
+                    AuthorityChangeTarget(AuthorityChangeTargetKind.GRANT_RENEWAL, "renewal-001", 2, 3),
+                ),
+                request_context_ref="request-audit",
+                requested_at=NOW,
+            )
+        )
+        audit = self.store.audit_multi_claims(reservation.operation_id)
+        self.assertEqual(audit.audit_status, MultiAuthorityClaimAuditStatus.UNCLAIMED)
+        self.assertEqual(audit.reserved_targets, reservation.intent.targets)
+        self.assertEqual(audit.claimed_targets, ())
+
+    def test_claim_audit_classifies_active_claims(self):
+        reservation = self._prepare_reconciling(key="audit-claimed")
+        audit = self.store.audit_multi_claims(reservation.operation_id)
+        self.assertEqual(audit.audit_status, MultiAuthorityClaimAuditStatus.CLAIMED)
+        self.assertEqual(audit.claimed_targets, reservation.intent.targets)
+
+    def test_claim_audit_classifies_terminal_claims_held(self):
+        reservation = self._prepare_reconciling(key="audit-terminal-held")
+        evidence = self._evidence(reservation)
+        self.store.record_multi_terminal_evidence(evidence)
+        audit = self.store.audit_multi_claims(reservation.operation_id)
+        self.assertEqual(
+            audit.audit_status,
+            MultiAuthorityClaimAuditStatus.TERMINAL_CLAIMS_HELD,
+        )
+        self.assertEqual(audit.terminal_evidence, evidence)
+        self.assertEqual(audit.claimed_targets, reservation.intent.targets)
+
+    def test_claim_audit_classifies_released_operation_after_restart(self):
+        reservation = self._prepare_reconciling(key="audit-released")
+        self.store.record_multi_terminal_evidence(self._evidence(reservation))
+        self.store.release_multi_claims(reservation.operation_id)
+        restarted = SQLiteAuthorityChangeStore(SQLiteDatabase(self.database_path))
+        audit = restarted.audit_multi_claims(reservation.operation_id)
+        self.assertEqual(audit.audit_status, MultiAuthorityClaimAuditStatus.RELEASED)
+        self.assertEqual(audit.claimed_targets, ())
+        self.assertEqual(len(audit.release_digest), 64)
+
+    def test_claim_audit_detects_partial_claim_set(self):
+        reservation = self._prepare_reconciling(key="audit-partial")
+        with self.database.connection() as connection:
+            connection.execute("DROP TRIGGER multi_authority_change_claims_no_delete")
+            connection.execute(
+                """
+                DELETE FROM multi_authority_change_claims
+                WHERE operation_id = ? AND authority_kind = 'grant_renewal'
+                """,
+                (reservation.operation_id,),
+            )
+        audit = self.store.audit_multi_claims(reservation.operation_id)
+        self.assertEqual(
+            audit.audit_status,
+            MultiAuthorityClaimAuditStatus.INCONSISTENT,
+        )
+
+    def test_claim_audit_detects_corrupt_terminal_receipt(self):
+        reservation = self._prepare_reconciling(key="audit-corrupt-receipt")
+        self.store.record_multi_terminal_evidence(self._evidence(reservation))
+        with self.database.connection() as connection:
+            connection.execute("DROP TRIGGER multi_terminal_evidence_no_update")
+            connection.execute(
+                """
+                UPDATE multi_authority_change_terminal_evidence
+                SET evidence_digest = ?
+                WHERE operation_id = ?
+                """,
+                ("0" * 64, reservation.operation_id),
+            )
+        audit = self.store.audit_multi_claims(reservation.operation_id)
+        self.assertEqual(
+            audit.audit_status,
+            MultiAuthorityClaimAuditStatus.INCONSISTENT,
+        )
+        self.assertIsNone(audit.terminal_evidence)
+
+    def test_claim_audit_returns_none_for_unknown_operation(self):
+        self.assertIsNone(self.store.audit_multi_claims("missing-operation"))
 
 
 if __name__ == "__main__":
