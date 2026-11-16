@@ -373,7 +373,7 @@ Migración SQLite v13 añade `multi_authority_change_claim_releases`, un recibo 
 
 **Límite:** la integridad/digest no autentica al registrador ni prueba por sí sola la veracidad externa de la referencia. Este mecanismo es persistencia local y no sustituye un coordinador de autoridad completo, CAM, invalidación/fencing ni reconciliación real. Runtime permanece desconectado.
 
-**Estado:** implementación y pruebas publicadas; pendiente de validación local.
+**Estado:** validado por el propietario con 1030/1030 pruebas (16 de noviembre de 2026).
 
 
 ## 21. F2.3.20 — Auditoría de recuperación de claims
