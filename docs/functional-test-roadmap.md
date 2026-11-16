@@ -307,7 +307,7 @@ Añadidos contratos inmutables para resultados terminales `COMPLETED` y `ABORTED
 
 **Límite:** por ahora solo se valida el contrato en memoria. No autentica la evidencia, no la persiste, no cambia el estado durable ni libera claims. Runtime desconectado.
 
-**Estado:** validado por el propietario con 1014/1014 pruebas (16 de noviembre de 2026).
+**Estado:** validado por el propietario con 1003/1003 pruebas.
 
 ### F2.3.16 — Claims exclusivos multiobjetivo
 
@@ -322,7 +322,7 @@ Migración SQLite v12 añade tablas inmutables para el recibo terminal y cada ob
 
 **Límite:** canonicalización/digest dan binding e idempotencia, no autenticidad ni verificación independiente de la evidencia externa. Sin CAM, fencing, invalidación, mutación de fuentes ni runtime.
 
-**Estado:** publicado; pendiente de validación local.
+**Estado:** validado por el propietario con 1014/1014 pruebas (16 de noviembre de 2026).
 
 
 ### F2.3.19 — Liberación auditable de claims terminales
