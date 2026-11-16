@@ -44,11 +44,12 @@ Atlas es software funcional en desarrollo incremental, no solamente un conjunto 
 
 ## Desarrollo actual: Atlas Terminal
 
-Atlas Terminal ya es una superficie funcional en `feature/terminal-commands`: inicia la consola, conversa con Ollama cuando está disponible, conserva conversaciones en SQLite y permite administrarlas. Las fases 1 y 2 están implementadas y validadas en el alcance descrito. Consulta la [documentación de Atlas Terminal](docs/terminal/README.md), la [hoja de ruta](docs/terminal/roadmap.md) y la [guía de conversaciones](docs/conversations.md). Esta rama no debe confundirse con `main`; el estado aquí documentado corresponde a la rama indicada en el encabezado. La hoja de ruta general marca las fases 1 y 2 como completadas y la Fase 3 como activa. Gemma 4 E2B ya fue seleccionado en las evaluaciones iniciales; el trabajo actual valida su comportamiento y seguridad, no repite la selección de modelo. Consulta [roadmap](docs/roadmap.md) y [plan de Fase 3](docs/phase-3-intelligence.md).
+Atlas Terminal ya es una superficie funcional en `feature/terminal-commands`: inicia la consola, conversa con Ollama cuando está disponible, conserva conversaciones en SQLite y permite administrarlas. Las fases 1 y 2 están implementadas y validadas en el alcance descrito. Consulta la [documentación de Atlas Terminal](docs/terminal/README.md), la [hoja de ruta](docs/terminal/roadmap.md) y la [guía de conversaciones](docs/conversations.md). Esta rama no debe confundirse con `main`; el estado aquí documentado corresponde a la rama indicada en el encabezado. La hoja de ruta general marca las fases 1 y 2 como completadas. La Fase 3 (evaluación de inteligencia y seguridad) queda pausada por decisión del propietario; sus resultados y pendientes se conservan, pero no serán el foco inmediato. La prioridad pasa a construir un Atlas funcional de prueba, ampliando las capacidades del Assistant de forma incremental en un entorno local controlado. Consulta [roadmap](docs/roadmap.md), [estado vigente](docs/status-current.md) y el [plan de Atlas funcional de prueba](docs/functional-test-roadmap.md).
 
 ## Documentación del proyecto
 
 - [Estado vigente de Atlas](docs/status-current.md)
+- [Plan de Atlas funcional de prueba](docs/functional-test-roadmap.md)
 - [Hoja de ruta general por fases](docs/roadmap.md)
 - [Fase 3 — Inteligencia y comportamiento seguro](docs/phase-3-intelligence.md)
 - [Atlas Terminal](docs/terminal/README.md)
