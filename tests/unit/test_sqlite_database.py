@@ -66,6 +66,43 @@ class SQLiteDatabaseTests(unittest.TestCase):
         )
         wait.assert_called_once()
 
+    def test_wal_initialization_retries_transient_locked_errors(self):
+        class Cursor:
+            def fetchone(self):
+                return ("wal",)
+
+        class Connection:
+            def __init__(self):
+                self.lock_attempts = 1
+                self.statements = []
+
+            def execute(self, statement):
+                self.statements.append(statement)
+                if statement == "PRAGMA journal_mode = WAL" and self.lock_attempts:
+                    self.lock_attempts -= 1
+                    error = sqlite3.OperationalError("database table is locked")
+                    error.sqlite_errorcode = sqlite3.SQLITE_LOCKED
+                    raise error
+                if statement == "PRAGMA journal_mode = WAL":
+                    return Cursor()
+                return self
+
+        connection = Connection()
+        with patch("atlas.adapters.sqlite.database.sleep") as wait:
+            self.database._enable_wal(connection)
+
+        self.assertEqual(connection.lock_attempts, 0)
+        self.assertEqual(
+            connection.statements,
+            [
+                "PRAGMA busy_timeout = 0",
+                "PRAGMA journal_mode = WAL",
+                "PRAGMA journal_mode = WAL",
+                "PRAGMA busy_timeout = 1200",
+            ],
+        )
+        wait.assert_called_once()
+
     def test_wal_initialization_does_not_retry_non_busy_errors(self):
         class Connection:
             def __init__(self):
