@@ -19,7 +19,7 @@ from atlas.memory.authority_changes import (
 )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class RecoveryEvidenceAdmissionCommand:
     """Exact, immutable binding submitted to an atomic admission coordinator."""
 
@@ -66,6 +66,11 @@ class RecoveryEvidenceAdmissionCommand:
         ):
             raise ContractError("requested_at debe ser un datetime UTC")
 
+    def __init__(self, *args, **kwargs) -> None:
+        raise ContractError(
+            "use from_verified_evidence para construir un comando de admisión"
+        )
+
     @classmethod
     def from_verified_evidence(
         cls,
@@ -91,13 +96,18 @@ class RecoveryEvidenceAdmissionCommand:
             raise ContractError("verification no contiene revisión del inventario")
         if not evidence.matches(operation_id, evidence_kind, targets):
             raise ContractError("evidence no coincide con operación, tipo y objetivos")
-        return cls(
-            admission_id=admission_id,
-            operation_id=operation_id,
-            evidence_id=evidence.evidence_id,
-            issuer_id=evidence.issuer_id,
-            issuer_registry_revision=verification.issuer_registry_revision,
-            evidence_kind=evidence_kind,
-            targets=targets,
-            requested_at=requested_at,
-        )
+        command = object.__new__(cls)
+        values = {
+            "admission_id": admission_id,
+            "operation_id": operation_id,
+            "evidence_id": evidence.evidence_id,
+            "issuer_id": evidence.issuer_id,
+            "issuer_registry_revision": verification.issuer_registry_revision,
+            "evidence_kind": evidence_kind,
+            "targets": targets,
+            "requested_at": requested_at,
+        }
+        for field, value in values.items():
+            object.__setattr__(command, field, value)
+        command.__post_init__()
+        return command
