@@ -369,4 +369,4 @@ Se cubre commit y rollback conjuntos de cambios canónicos y reserva de operaci�
 
 La migración v14 y `transition_multi_status` imponen una máquina de estados forward-only con compare-and-set y claims completos en cada avance. SQLite protege también las transiciones directas que evadan el repositorio. COMPLETED/ABORTED continúan protegidos por la evidencia terminal durable. Los estados intermedios son marcadores de flujo, no pruebas de efectos externos ni autorización. BLOCKED/recovery y runtime siguen desconectados.
 
-**Estado:** implementación publicada; pendiente de validación local.
+**Estado:** VALIDADA localmente por el propietario; suite completa: 1048 tests en 9.026 s, todos OK.
