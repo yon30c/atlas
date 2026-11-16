@@ -359,3 +359,18 @@ El orden recomendado evita conectar el Assistant a capacidades que aún no tiene
 ## Alcance de este repositorio
 
 Este repositorio contiene el código y la documentación de Atlas. La existencia de un contrato o componente no autoriza cambios en infraestructura, servicios, datos o entornos externos. Las migraciones y adaptadores deben validarse primero con bases temporales y pruebas de upgrade, integridad, concurrencia y recuperación.
+
+## Cliente de escritorio Windows
+
+Se aprobaron las decisiones iniciales para Atlas Desktop:
+
+- **Tecnología:** C# + .NET + WinUI 3; plataforma inicial Windows.
+- **Conexión:** API remota de Atlas Assistant a través de la Tailscale VPN existente y HTTPS/TLS.
+- **Identidad del cliente:** vinculación explícita por dispositivo, independiente de Tailscale; credenciales individuales, revocables y almacenadas de forma segura.
+- **Interfaz inicial:** Chat, Conversaciones, Conexión y Configuración. La primera etapa es de texto; no incluye reconocimiento de voz ni controles de micrófono.
+- **Seguridad:** la API es la única puerta de entrada desde Desktop. No hay conexión directa desde Windows a Ollama, Piper, Docker, archivos, SQL ni administración de identidades. El dispositivo queda limitado a funciones de conversación.
+- **Audio futuro:** Piper TTS es la elección provisional; Phonon queda descartado. Esta decisión no significa que Piper esté instalado o integrado.
+
+Los detalles visuales, la persistencia de conversaciones, el flujo definitivo de vinculación y los detalles de voz/audio continúan pendientes. Estas decisiones describen el objetivo aprobado, no funcionalidades implementadas.
+
+Documento de referencia: [Atlas Desktop para Windows — decisiones aprobadas](docs/desktop/README.md).
