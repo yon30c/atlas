@@ -420,4 +420,4 @@ La migración v14 agrega triggers para limitar el ledger multiobjetivo a transic
 
 `SOURCE_PENDING` siempre significa que el resultado de la mutación de fuente es desconocido. No se puede inferir que la operación no se ejecutó ni repetirla automáticamente. La evaluación no cambia datos, no libera claims y no constituye autorización ni evidencia externa.
 
-**Estado:** implementación y pruebas publicadas; pendiente de validación local.
+**Estado: VALIDADA.** Suite completa: 1054 tests OK.
