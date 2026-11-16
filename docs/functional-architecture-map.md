@@ -502,3 +502,11 @@ La auditoría no acepta como íntegra una admisión solo porque el tipo de evide
 Las pruebas fuerzan valores desconocidos en registros persistidos y confirman detección sin reparación. No se modifica el flujo de admisión ni se concede autoridad.
 
 **Estado: VALIDADO por el propietario; suite completa: 1138 tests en 8.814 s, todos OK.**
+
+## 50. F2.3.40 — Orden temporal del historial de emisores
+
+La auditoría del inventario valida que `changed_at` sea no decreciente entre revisiones consecutivas. Detecta regresiones estrictas con `REGISTRY_TIMESTAMP_REGRESSION` y clasifica el registro como corrupto. Se permiten timestamps iguales y reactivaciones registradas mediante nuevas revisiones.
+
+La prueba de corrupción controlada confirma que una revisión posterior retrodatada se detecta sin reparar datos. La auditoría sigue siendo de solo lectura; no autentica el reloj ni habilita autoridad, recuperación o runtime.
+
+**Estado:** implementado en GitHub; pruebas locales pendientes.
