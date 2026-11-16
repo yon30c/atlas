@@ -277,7 +277,12 @@ class SQLiteRecoveryEvidenceAdmissionRepository(RecoveryEvidenceAdmissionPort):
                         )
                         for item in terminal_targets
                     )
-                    if release is None or released_targets != reserved_targets:
+                    if (
+                        release is None
+                        or operation is None
+                        or operation["status"] not in {"COMPLETED", "ABORTED"}
+                        or released_targets != reserved_targets
+                    ):
                         diagnostics.append("OPERATION_CLAIMS_MISMATCH")
 
         for field in ("requested_at", "recorded_at"):
