@@ -556,7 +556,7 @@ class SQLiteAuthorityChangeStore:
             )
             for target in target_rows
         )
-        return AuthorityChangeTerminalEvidence(
+        evidence = AuthorityChangeTerminalEvidence(
             evidence_id=row["evidence_id"],
             operation_id=row["operation_id"],
             outcome=AuthorityChangeTerminalOutcome(row["outcome"]),
@@ -565,6 +565,15 @@ class SQLiteAuthorityChangeStore:
             recorded_by=row["recorded_by"],
             recorded_at=_parse_utc(row["recorded_at"]),
         )
+        canonical = _canonical_terminal_evidence(evidence)
+        if (
+            hashlib.sha256(canonical).hexdigest() != row["evidence_digest"]
+            or canonical != bytes(row["evidence_canonical"])
+        ):
+            raise sqlite3.DatabaseError(
+                "la evidencia terminal persistida no supera la verificación de integridad"
+            )
+        return evidence
 
     def record_multi_terminal_evidence(
         self,
