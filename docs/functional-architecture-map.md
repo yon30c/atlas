@@ -215,3 +215,13 @@ Se añadieron contratos separados del resultado de autorización de Memory:
 - Pruebas en `tests/unit/test_operation_authorization_contracts.py`.
 
 Estos modelos no autentican al issuer, no prueban revocación actual ni sustituyen un servicio CAM confiable. No existe todavía adaptador productivo ni integración al Assistant/CLI. La validación local de este incremento está pendiente.
+
+
+## 11. Verificación de evidencia de operación (F2.3.2)
+
+- Puerto `OperationAuthorizationEvidenceVerifierPort`: contrato para validar emisor y decisión CAM, estado/revisión de identidad, Grant, proyecto y entorno.
+- Servicio `OperationAuthorizationEvidenceVerificationService`: valida coincidencia exacta y vigencia temporal local; delega la comprobación autoritativa al puerto.
+- Estados `VERIFIED`, `DENIED`, `UNAVAILABLE`; cualquier excepción del verificador falla cerrado.
+- Pruebas en `tests/unit/test_operation_authorization_verification.py`.
+
+No existe adaptador concreto. El resultado VERIFIED no ejecuta ni concede por sí solo una capacidad. Para operaciones con efectos se necesita una garantía contra carreras de revocación, no una lectura puntual eventual. Validación local pendiente.
