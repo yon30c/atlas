@@ -65,12 +65,16 @@ def make_evidence(**overrides):
 
 
 class FakeIssuerRegistryPort:
-    def __init__(self, registration=None, error=None):
-        self.registration = registration or RecoveryEvidenceIssuerRegistration(
-            issuer_id="trusted-source-1",
-            registry_revision=1,
-            enabled=True,
-            changed_at=NOW - timedelta(days=2),
+    def __init__(self, registration="default", error=None):
+        self.registration = (
+            RecoveryEvidenceIssuerRegistration(
+                issuer_id="trusted-source-1",
+                registry_revision=1,
+                enabled=True,
+                changed_at=NOW - timedelta(days=2),
+            )
+            if registration == "default"
+            else registration
         )
         self.error = error
         self.calls = 0
