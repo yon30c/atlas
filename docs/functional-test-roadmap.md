@@ -102,7 +102,7 @@ El conjunto exacto de operaciones se define al inspeccionar los módulos existen
 
 ### F1 — Interpretación y planificación
 
-**Estado:** F1.1 (contratos de intención/plan) integrado. F1.2 incluye parser JSON estricto y adaptador `OllamaIntentInterpreter` separado del flujo conversacional. El propietario validó 866/866 pruebas tras añadir el adaptador y confirmó con Gemma `gemma4:e2b-it-q4_K_M` los cuatro resultados esperados: `workspace.list`, aclaración, `workspace.read` y solicitud no soportada. La prueba real utilizó `OllamaProvider(think=False, response_format="json")`; estas opciones ya están implementadas de forma opcional en el adaptador Ollama y no alteran el comportamiento predeterminado. F1.3 añade `AssistantPlanningService`, que convierte interpretaciones READY en planes declarativos de un paso y conserva sin cambios los resultados de aclaración/no soportados. Las pruebas nuevas del servicio y la suite completa quedan pendientes de validación local.
+**Estado:** F1.1 (contratos de intención/plan) integrado. F1.2 incluye parser JSON estricto y adaptador `OllamaIntentInterpreter` separado del flujo conversacional. El propietario validó 866/866 pruebas y confirmó con Gemma `gemma4:e2b-it-q4_K_M` los cuatro resultados esperados usando `OllamaProvider(think=False, response_format="json")`. F1.3 añade `AssistantPlanningService`; el propietario validó 875/875 pruebas. F1.4 añade `AssistantRequestPlanner` y `RequestPlanningResult`: coordina interpretación y planificación, devuelve `planned`, `needs_clarification` o `unsupported`, y no ejecuta capacidades. Las pruebas del orquestador y la suite completa están pendientes de validación local.
 
 - Clasificar la solicitud en una intención de producto.
 - Extraer parámetros y detectar datos faltantes.
@@ -206,4 +206,4 @@ Para cada siguiente incremento:
 6. Revisar los resultados antes de continuar.
 7. Actualizar esta documentación con evidencia, commit y estado real.
 
-**Siguiente acción:** actualizar el checkout Debian y ejecutar las pruebas focalizadas de `tests.unit.test_assistant_planning_service` y después la suite completa. Si pasan, F1.3 quedará validado a nivel unitario y podremos diseñar la integración de interpretación + planificación en un caso de uso de aplicación, todavía sin ejecutar capacidades. El primer flujo vertical seguirá siendo `workspace.list` sobre un workspace demo aislado.
+**Siguiente acción:** actualizar el checkout Debian y ejecutar `tests.unit.test_assistant_request_planner` y después la suite completa. Si pasan, F1.4 quedará validado a nivel unitario. El siguiente incremento será preparar la composición del caso de uso de planificación, sin conectarlo aún a la consola ni ejecutar capacidades. El primer flujo vertical seguirá siendo `workspace.list` sobre un workspace demo aislado.
