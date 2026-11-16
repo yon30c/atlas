@@ -416,4 +416,12 @@ El repositorio no valida firmas ni claves y no concede autoridad de recuperació
 
 Se añadieron `RecoveryEvidenceIssuerTrustPolicyAuditStatus`, `RecoveryEvidenceIssuerTrustPolicyAudit` y `RecoveryEvidenceIssuerTrustPolicyAuditReport`, además de `audit_issuer()` y `audit_all()` en el repositorio SQLite. Los diagnósticos distinguen `HEALTHY`, `DISABLED`, `CORRUPT` y `MISSING_POLICY`; detectan saltos de revisión, registros no canónicos y contenido inválido. La auditoría es de solo lectura y no modifica ni repara el estado.
 
-`audit_all()` usa una única consulta ordenada para obtener un snapshot coherente. Sin un registro independiente de emisores esperados, no puede descubrir emisores que nunca se registraron; para ese caso se consulta `audit_issuer(issuer_id)`. **Estado: implementado; validación local pendiente.**
+`audit_all()` usa una única consulta ordenada para obtener un snapshot coherente. Sin un registro independiente de emisores esperados, no puede descubrir emisores que nunca se registraron; para ese caso se consulta `audit_issuer(issuer_id)`. **Estado: VALIDADO.** Suite completa: 1094 tests OK.
+
+## 40. Inventario autoritativo de emisores de evidencia
+
+Se añade el contrato `RecoveryEvidenceIssuerRegistration`, su puerto de lectura y el adaptador SQLite `SQLiteRecoveryEvidenceIssuerRegistryRepository`. La migración v16 conserva snapshots append-only, con revisiones consecutivas y prohibición SQL de UPDATE/DELETE. Los cambios de estado requieren append con `expected_revision`.
+
+La UoW local compartida expone `recovery_evidence_issuer_registry`. `audit_inventory()` cruza los emisores registrados con las políticas de confianza desde un único snapshot y detecta emisores esperados sin política, políticas huérfanas, estados deshabilitados y corrupción de historial. Es diagnóstico de solo lectura; no autentica emisores ni autoriza evidencia.
+
+**Estado: implementado; pruebas locales pendientes.**
