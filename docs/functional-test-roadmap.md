@@ -461,3 +461,13 @@ El contrato del puerto exige que el futuro adaptador haga en una única frontera
 **Fuera de alcance:** no se implementa todavía el adaptador SQLite, no hay registro durable de admisiones y el resultado nunca permite efectos. No se conecta runtime ni recuperación automática.
 
 **Estado:** implementado en la rama; pruebas locales pendientes.
+
+## F2.3.34 — Persistencia atómica de admisión de evidencia
+
+Añadida migración SQLite v17 y `SQLiteRecoveryEvidenceAdmissionRepository`, compuesto dentro de `SQLiteLocalAuthorityUnitOfWork`. La admisión usa la misma transacción `BEGIN IMMEDIATE` para comprobar que el emisor sigue habilitado en la revisión exacta, que la operación permanece en un estado recuperable y que los targets/revisiones coinciden exactamente con el conjunto completo de claims. Los recibos guardan el comando canónico y digest SHA-256; admission_id y evidence_id son únicos e inmutables. Un replay exacto devuelve REPLAYED; una evidencia reutilizada o un binding distinto se rechaza.
+
+Pruebas añadidas para persistencia, replay, revisión obsoleta, emisor deshabilitado, discrepancia de objetivos, reutilización de evidencia y trigger de revisión vigente.
+
+**Límite:** la transacción solo hace atómica la admisión local. No protege un efecto posterior ni habilita recuperación/runtime. ADMITTED no es autoridad de ejecución.
+
+**Estado:** implementado en la rama; pruebas locales pendientes.
