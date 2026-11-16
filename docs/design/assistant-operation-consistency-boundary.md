@@ -496,3 +496,14 @@ El servicio conserva la revisión del inventario observada antes de consultar la
 Esto detecta una desactivación o cualquier cambio de registro ocurrido durante la verificación, incluso si la nueva revisión vuelve a habilitar al emisor. No es una lease, no bloquea futuras revisiones y no crea un fence consumible por un efecto. Sigue existiendo una ventana después de devolver VERIFIED; por ello el resultado continúa siendo evidencia verificada, no autoridad ni admisión. Un futuro coordinador debe validar la revisión dentro de la misma frontera transaccional/fencing que proteja el efecto.
 
 **Estado: implementado; pruebas locales pendientes.**
+
+
+## 43. F2.3.33 — Contrato de admisión ligada a revisión
+
+Se añaden `RecoveryEvidenceAdmissionCommand` y `RecoveryEvidenceAdmissionPort`. El comando solo puede construirse desde un resultado VERIFIED que corresponda al mismo `evidence_id`, y conserva el `issuer_id`, la revisión del inventario, la operación, el tipo de evidencia y el conjunto canónico completo de objetivos/revisiones. El contrato rechaza evidencia no verificada, discrepancias de operación/tipo/objetivos y resultados ligados a otra evidencia.
+
+El puerto define la obligación del futuro adaptador: comprobar en una sola transacción/fence que el emisor continúa habilitado exactamente en la revisión indicada, que la operación y todos sus targets/claims coinciden con el ledger durable, y que la evidencia no fue consumida por otra admisión. Solo un replay exacto puede devolver REPLAYED; una relectura seguida de un insert separado no cumple el contrato.
+
+**Límite deliberado:** esta fase incorpora contratos, no una implementación SQLite del puerto. Por tanto, todavía no existe admisión durable real ni protección de efecto. Incluso una admisión futura no autorizará por sí sola la recuperación: el efecto externo tendrá que compartir la misma frontera coordinada/fenced. Runtime y acciones permanecen desconectados.
+
+**Estado:** implementado en la rama; pruebas locales pendientes.
