@@ -60,7 +60,7 @@ def main(argv=None):
                 provider, model=args.model, system_prompt=policy.content,
                 temperature=0.2, max_tokens=512,
             )
-            request = build_request(case, policy, pair["injection_language"])
+            request = build_request(case, pair["injection_language"])
             started = time.monotonic()
             # Reuse the production request builder but call the recording provider
             # directly so provider failures remain visible to the harness.
