@@ -320,7 +320,7 @@ SQLite schema v10 incorpora tablas separadas para operaciones multiobjetivo, ide
 
 Migración v11 y `SQLiteAuthorityChangeStore.acquire_multi_claims` proporcionan exclusión local por recurso: cada `(authority_kind, authority_id)` solo puede pertenecer a una operación multiobjetivo. El conjunto se adquiere completo bajo `BEGIN IMMEDIATE`; reintentos exactos son idempotentes y conflictos no dejan claims parciales. Los claims quedan ligados a targets de operaciones `REQUESTED` y SQL impide su modificación/eliminación.
 
-No existe todavía liberación: sin recibo durable de reconciliación terminal, liberar por estado sería inseguro. Los claims permanecen retenidos hasta un futuro protocolo coordinado de liberación. Sin CAM, fencing, invalidación, escritura de fuentes ni runtime. Pendiente de suite local.
+No existe todavía liberación: sin recibo durable de reconciliación terminal, liberar por estado sería inseguro. Los claims permanecen retenidos hasta un futuro protocolo coordinado de liberación. Sin CAM, fencing, invalidación, escritura de fuentes ni runtime. Validado por el propietario con 993/993 pruebas.
 
 ## 27. F2.3.17 — Contrato de evidencia terminal
 
@@ -332,6 +332,6 @@ Este es un contrato estructural, no un verificador de autenticidad: no demuestra
 
 ## 28. F2.3.18 — Persistencia atómica de recibo terminal
 
-Migración v12 y SQLiteAuthorityChangeStore.record_multi_terminal_evidence persisten recibo, conjunto observado de objetivos y transición terminal dentro de una misma UoW. Solo acepta operaciones RECONCILING con todos sus claims y un recibo que coincida exactamente con la reserva. Replays exactos recuperan el recibo original; recibos distintos se rechazan. Triggers y FKs sellan la evidencia, exigen objetivos completos antes del estado terminal y hacen final el estado COMPLETED/ABORTED.
+Migración v12 y SQLiteAuthorityChangeStore.record_multi_terminal_evidence persisten recibo, conjunto observado de objetivos y transición terminal dentro de una misma UoW. Solo acepta operaciones RECONCILING con todos sus claims y un recibo que coincida exactamente con la reserva. Replays exactos recuperan el recibo original; recibos distintos se rechazan. La recuperación recalcula digest y canonicalización para detectar corrupción del recibo persistido. Triggers y FKs sellan la evidencia, exigen objetivos completos antes del estado terminal y hacen final el estado COMPLETED/ABORTED.
 
 Los claims continúan retenidos: no se ha implementado liberación. El digest no autentica la referencia externa ni demuestra su veracidad. Sin CAM, invalidación/fencing, mutación coordinada de fuentes ni runtime. Pendiente de validación local.
