@@ -567,4 +567,4 @@ Se añaden diagnósticos `INVALID_EVIDENCE_KIND` e `INVALID_AUTHORITY_KIND`, tam
 
 **Límites:** no cambia la admisión, no modifica el esquema, no autentica evidencia externa y no habilita efectos ni recuperación/runtime.
 
-**Estado:** implementado en GitHub; pruebas locales pendientes.
+**Estado: VALIDADO por el propietario; suite completa: 1138 tests en 8.814 s, todos OK.**
