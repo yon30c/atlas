@@ -424,4 +424,12 @@ Se añade el contrato `RecoveryEvidenceIssuerRegistration`, su puerto de lectura
 
 La UoW local compartida expone `recovery_evidence_issuer_registry`. `audit_inventory()` cruza los emisores registrados con las políticas de confianza desde un único snapshot y detecta emisores esperados sin política, políticas huérfanas, estados deshabilitados y corrupción de historial. Es diagnóstico de solo lectura; no autentica emisores ni autoriza evidencia.
 
-**Estado: implementado; pruebas locales pendientes.**
+**Estado: VALIDADO por el propietario; suite completa: 1106 tests en 9.086 s, todos OK.**
+
+## 41. F2.3.31 — Gate del inventario en el servicio verificador
+
+`MultiAuthorityRecoveryEvidenceVerificationService` ahora exige el puerto del inventario además del puerto de políticas y del verificador independiente. La evidencia debe pasar primero el binding y la ventana temporal; después, el servicio consulta el registro vigente del emisor. Ausencia, deshabilitación o discrepancia de issuer_id producen DENIED sin consultar política ni verificador. Una excepción del inventario produce UNAVAILABLE y falla cerrado.
+
+Solo después se consulta la política vigente y, si esta permite la evidencia, se invoca el verificador independiente. Registro, política y autenticidad criptográfica son controles separados.
+
+**Límite de concurrencia:** la lectura previa del inventario no prueba que el emisor siga habilitado en el instante de un efecto posterior. La garantía frente a desactivaciones concurrentes requiere coordinación de admisión/fencing y verificación en el punto de efecto. Esta fase no autoriza recuperación ni conecta el runtime. Implementado; pruebas locales pendientes.
