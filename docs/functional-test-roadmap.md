@@ -515,4 +515,4 @@ Comprobar que los valores persistidos de `evidence_kind` y `authority_kind` pert
 
 **Límite:** auditoría de solo lectura; sin cambios de esquema, reparación, autoridad, ejecución de efectos ni integración runtime.
 
-**Estado:** implementado en GitHub; pruebas locales pendientes.
+**Estado: VALIDADO por el propietario; suite completa: 1138 tests en 8.814 s, todos OK.**
