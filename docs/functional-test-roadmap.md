@@ -114,7 +114,7 @@ El conjunto exacto de operaciones se define al inspeccionar los módulos existen
 
 ### F2 — Capacidades y herramientas de prueba
 
-**Estado:** F2.1 validada con 893/893 pruebas. F2.2 implementada y validada por el propietario con 900/900 pruebas (16 de noviembre de 2026). F2.3 documenta la separación entre revisión del plan, autorización CAM y aprobación humana. F2.3.1 añadió los contratos `OperationAuthorizationEvidence`, `OperationAuthorizationResult` y `OperationAuthorizationPort`, validados por el propietario con 913/913 pruebas. F2.3.2 añade el puerto de verificación confiable y `OperationAuthorizationEvidenceVerificationService`, validado por el propietario con 922/922 pruebas. F2.3.3a amplía la evidencia para incluir revisiones explícitas de proyecto y entorno; validación local pendiente. No hay todavía adaptador concreto del verificador, Approval Manager integrado ni ejecución desde consola/runtime.
+**Estado:** F2.1 validada con 893/893 pruebas. F2.2 implementada y validada por el propietario con 900/900 pruebas (16 de noviembre de 2026). F2.3 documenta la separación entre revisión del plan, autorización CAM y aprobación humana. F2.3.1 añadió los contratos `OperationAuthorizationEvidence`, `OperationAuthorizationResult` y `OperationAuthorizationPort`, validados por el propietario con 913/913 pruebas. F2.3.2 añade el puerto de verificación confiable y `OperationAuthorizationEvidenceVerificationService`, validado por el propietario con 922/922 pruebas. F2.3.3a amplía la evidencia para incluir revisiones explícitas de proyecto y entorno; el propietario validó 925/925 pruebas. F2.3.3b inspeccionó las fuentes de autoridad y documentó por qué todavía no es seguro crear un adaptador de verificación genérico: no existe un coordinador concreto de invalidación/fencing en esta rama. No hay todavía adaptador concreto del verificador, coordinador durable de invalidación/fencing integrado, Approval Manager ni ejecución desde consola/runtime.
 
 - Definir un catálogo pequeño de capacidades reales.
 - Implementar adaptadores concretos para el workspace de prueba.
@@ -209,3 +209,10 @@ Para cada siguiente incremento:
 7. Actualizar esta documentación con evidencia, commit y estado real.
 
 **Siguiente acción:** actualizar el checkout Debian y ejecutar `tests.unit.test_operation_authorization_contracts` y `tests.unit.test_operation_authorization_verification`, además de `tests.unit.test_authorization` y `tests.unit.test_evaluator`; después, la suite completa. Si pasan, diseñar el adaptador de verificación contra autoridad vigente y su garantía ante revocaciones concurrentes. No integrar consola ni ejecutar capacidades todavía.
+
+
+### F2.3.3b — Inspección de autoridad y consistencia
+
+La inspección confirmó que los contratos de Memory `RevisionValidationPort` dependen de `AuthorizationSnapshot` y `ConsistencyPosition`, y exigen invalidation-first + revalidación transaccional; no hay adaptador concreto que lo demuestre. `GrantRepository` es persistencia simple; `SQLiteIdentityAuthority` aplica CAS pero no coordina invalidación; `AuthorityChangeCoordinatorPort` no tiene implementación concreta en la rama; `SQLiteAuthorityChangeStore` solo reserva/idempotencia.
+
+Por tanto, no se implementará un verificador que haga lecturas puntuales multi-repositorio ni se declarará que estas cierran carreras de revocación. El siguiente diseño debe decidir entre completar la autoridad durable común (coordinador + fencing + UoW compartida) o restringir expresamente el perfil de prueba sin efectos y sin garantías de revocación concurrente. El runtime permanece desconectado.
