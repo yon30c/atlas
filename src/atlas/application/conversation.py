@@ -151,12 +151,21 @@ class InMemoryConversationHistory:
 
 
 class ConversationContextProcessor:
-    """Enriquece solicitudes con historial y persiste solo turnos exitosos."""
+    """Proyecta historial durable al contexto acotado del modelo.
+
+    El almacén conserva el historial íntegro. Los límites se aplican únicamente
+    a la instantánea adjunta a cada solicitud del asistente.
+    """
+
+    _TRUNCATION_MARKER = "\n[...contenido histórico truncado...]"
 
     def __init__(
         self,
         assistant: AssistantProcessor,
         history_store: ConversationHistoryStore,
+        *,
+        max_history_turns: int = 8,
+        max_message_chars: int = 2000,
     ) -> None:
         if not callable(getattr(assistant, "respond", None)):
             raise ContractError("assistant debe implementar respond(request)")
@@ -170,8 +179,22 @@ class ConversationContextProcessor:
             raise ContractError(
                 "history_store debe implementar get_history() y append_turn()"
             )
+        if (
+            isinstance(max_history_turns, bool)
+            or not isinstance(max_history_turns, int)
+            or max_history_turns < 1
+        ):
+            raise ContractError("max_history_turns debe ser un entero positivo")
+        if (
+            isinstance(max_message_chars, bool)
+            or not isinstance(max_message_chars, int)
+            or max_message_chars <= len(self._TRUNCATION_MARKER)
+        ):
+            raise ContractError("max_message_chars debe superar el marcador de truncamiento")
         self._assistant = assistant
         self._history_store = history_store
+        self._max_history_messages = max_history_turns * 2
+        self._max_message_chars = max_message_chars
 
     def respond(self, request: AssistantRequest) -> AssistantResponse:
         enriched_request = self._with_history(request)
@@ -196,8 +219,22 @@ class ConversationContextProcessor:
             raise ContractError("request debe ser AssistantRequest")
         if request.conversation_id is None:
             raise ContractError("la solicitud requiere conversation_id")
-        history = self._history_store.get_history(request.conversation_id)
+        stored_history = self._history_store.get_history(request.conversation_id)
+        recent_history = stored_history[-self._max_history_messages:]
+        history = tuple(
+            ConversationMessage(
+                message.role,
+                self._bound_message_content(message.content),
+            )
+            for message in recent_history
+        )
         return replace(request, history=history)
+
+    def _bound_message_content(self, content: str) -> str:
+        if len(content) <= self._max_message_chars:
+            return content
+        prefix_length = self._max_message_chars - len(self._TRUNCATION_MARKER)
+        return content[:prefix_length] + self._TRUNCATION_MARKER
 
     def _commit_successful_turn(
         self,
