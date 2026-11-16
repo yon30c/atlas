@@ -349,6 +349,13 @@ class LocalWorkspaceWriteAdapter:
         try:
             current_hash = self._hash_file(target)
             if current_hash == manifest["content_sha256"]:
+                if (
+                    manifest["state"] == WorkspaceWriteState.STAGED.value
+                    and manifest["expected_sha256"] != manifest["content_sha256"]
+                ):
+                    raise ConcurrencyError(
+                        "el destino contiene el nuevo contenido sin que el commit se haya iniciado"
+                    )
                 leftover_payload = operation_dir / "payload"
                 if leftover_payload.exists():
                     leftover_payload.unlink()
