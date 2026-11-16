@@ -454,3 +454,11 @@ Se añade `RecoveryEvidenceIssuerTrustPolicy` como contrato inmutable en `atlas.
 `RecoveryEvidenceIssuerTrustPolicyPort` proporciona la política actual por emisor. `MultiAuthorityRecoveryEvidenceVerificationService` consulta primero esa fuente y solo delega al verificador criptográfico si la política existe y permite la evidencia. Política inexistente o incompatible produce DENIED; indisponibilidad de la fuente produce UNAVAILABLE. Una política de confianza no autentica firma, digest, payload, revocación de claves ni estado de la fuente: esas verificaciones siguen siendo responsabilidad del verificador.
 
 No se implementa aún almacenamiento concreto de políticas, gestión de claves, firma, adaptadores de fuentes, integración runtime ni autoridad de recuperación. El puerto exige una fuente autoritativa actual; una caché obsoleta no satisface la garantía de revocación.
+
+## 38. F2.3.28 — Persistencia versionada de políticas de confianza
+
+La migración SQLite v15 añade `recovery_evidence_issuer_trust_policies`. Cada emisor conserva snapshots completos por revisión; los triggers impiden actualizar o borrar historia y exigen revisiones consecutivas. `SQLiteRecoveryEvidenceIssuerTrustPolicyRepository` implementa el puerto de lectura vigente y permite crear la revisión inicial, anexar una revisión con CAS (`expected_revision`) y consultar el historial.
+
+El repositorio puede operar de forma independiente o dentro de `SQLiteLocalAuthorityUnitOfWork`, compartiendo la misma transacción SQLite. Una revisión deshabilitada se conserva como la política actual y bloquea al emisor sin borrar su historia.
+
+Este incremento solo persiste configuración declarativa. No autentica firmas, no gestiona claves criptográficas, no autoriza recuperación y no conecta el flujo al runtime. Implementado; validación local pendiente.
