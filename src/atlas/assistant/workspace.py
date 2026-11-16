@@ -1,4 +1,4 @@
-"Modelos de resultado para capacidades de workspace."""
+"""Modelos de resultado para capacidades de workspace."""
 
 from dataclasses import dataclass
 from enum import Enum
