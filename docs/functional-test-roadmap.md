@@ -499,3 +499,13 @@ Pruebas añadidas para cambio posterior válido y revisión posterior retrodatad
 **Límite:** no autentica la fuente del timestamp ni el reloj; no modifica recibos, no autoriza efectos y no habilita recuperación/runtime.
 
 **Estado: VALIDADO por el propietario; suite completa: 1135 tests en 9.444 s, todos OK.**
+
+### F2.3.38 — Auditoría global de relaciones de admisión
+
+Ampliar la auditoría para detectar referencias a operaciones inexistentes, revisiones de emisor ausentes, duplicados de `evidence_id` y discrepancias entre objetivos reservados y claims. La auditoría debe aceptar la liberación histórica de claims únicamente cuando exista recibo de liberación, la operación sea terminal y los objetivos terminales coincidan con los reservados.
+
+El informe global expone códigos diagnósticos consolidados y `is_healthy`. Se añade una prueba que elimina deliberadamente un claim tras retirar el trigger protector y confirma que la auditoría detecta la inconsistencia sin repararla.
+
+**Límite:** solo lectura; sin reparación, autorización, ejecución de efectos ni integración runtime.
+
+**Estado:** implementado en GitHub; pendiente de pruebas locales del propietario.
