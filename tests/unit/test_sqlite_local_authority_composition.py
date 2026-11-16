@@ -24,6 +24,8 @@ class SQLiteLocalAuthorityCompositionTests(unittest.TestCase):
         self.assertIs(composition.identity.database, composition.database)
         self.assertIs(composition.identity.authority._database, composition.database)
         self.assertIs(composition.grants._database, composition.database)
+        self.assertIs(composition.renewals._database, composition.database)
+        self.assertIs(composition.authorization_unit_of_work_factory._database, composition.database)
         self.assertIs(composition.authority_changes._database, composition.database)
 
         user = composition.identity.authority.create_user()
@@ -61,6 +63,8 @@ class SQLiteLocalAuthorityCompositionTests(unittest.TestCase):
                 database=first.database,
                 identity=other.identity,
                 grants=first.grants,
+                renewals=first.renewals,
+                authorization_unit_of_work_factory=first.authorization_unit_of_work_factory,
                 authority_changes=first.authority_changes,
             )
 
