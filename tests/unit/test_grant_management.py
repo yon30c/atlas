@@ -32,6 +32,25 @@ class InMemoryGrantRepository:
         )
 
 
+class InMemoryAuthorizationUnitOfWork:
+    def __init__(self, grants):
+        self.grants = grants
+        self.renewals = object()
+        self.committed = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return None
+
+    def commit(self):
+        self.committed = True
+
+    def rollback(self):
+        self.committed = False
+
+
 class GrantManagementTests(unittest.TestCase):
     def setUp(self):
         self.actor = Identity(
@@ -64,7 +83,16 @@ class GrantManagementTests(unittest.TestCase):
             expires_at=NOW + timedelta(days=7),
         )
         self.repository = InMemoryGrantRepository()
-        self.service = GrantManagementService(self.repository)
+        self.service = GrantManagementService(
+            self.repository,
+            unit_of_work_factory=lambda: InMemoryAuthorizationUnitOfWork(self.repository),
+        )
+
+    def test_issue_fails_closed_without_transactional_unit_of_work(self):
+        service = GrantManagementService(self.repository)
+        with self.assertRaisesRegex(ContractError, "unidad de trabajo transaccional"):
+            service.issue(self.context, self.grant, NOW)
+        self.assertIsNone(self.repository.get(self.grant.grant_id))
 
     def test_issue_stores_and_returns_grant(self):
         result = self.service.issue(self.context, self.grant, NOW)
