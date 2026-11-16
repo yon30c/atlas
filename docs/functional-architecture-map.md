@@ -311,3 +311,7 @@ Diseño publicado para operaciones que modifican varias autoridades. Aprobación
 ## 24. F2.3.14 — Modelos multiobjetivo
 
 Contratos inmutables añadidos para cambios que afectan varias autoridades: targets tipados (incl. Grant y Grant renewal), revisión +1, orden canónico, no duplicados, contexto de actor/owner/action e idempotencia. Pruebas de contrato añadidas. Publicado, pendiente de validación local; sin store/coordinador/runtime.
+
+## 25. F2.3.15 — Persistencia multiobjetivo
+
+SQLite schema v10 incorpora tablas separadas para operaciones multiobjetivo, idempotencia y targets. El store persiste operación + conjunto completo + clave idempotente en una UoW; replays exactos recuperan la reserva, conflictos semánticos se rechazan y triggers sellan los targets. El ledger de una autoridad permanece intacto. Publicado, pendiente de validación local. No hay claims exclusivos, CAM, fencing, invalidación ni coordinación de fuentes.
