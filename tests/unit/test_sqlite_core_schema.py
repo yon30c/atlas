@@ -67,7 +67,7 @@ class SQLiteCoreSchemaTests(unittest.TestCase):
             "multi_authority_change_terminal_evidence",
             "multi_authority_change_terminal_targets", "multi_authority_change_claim_releases",
             "recovery_evidence_issuer_trust_policies",
-            "recovery_evidence_issuer_registry",
+            "recovery_evidence_issuer_registry", "recovery_evidence_admissions",
         }.issubset(tables))
         self.assertIn("journal_operations_idempotency_unique", indexes)
 
