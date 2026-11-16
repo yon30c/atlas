@@ -460,6 +460,66 @@ class SQLiteAuthorityChangeStore:
                 )
             return self._multi_reservation(connection, row)
 
+    def transition_multi_status(
+        self,
+        operation_id: str,
+        expected_status: AuthorityChangeStatus,
+        new_status: AuthorityChangeStatus,
+    ) -> bool:
+        """Advance one operation through the strict forward lifecycle.
+
+        The compare-and-set is atomic. Exact retries at the requested state
+        succeed; stale callers return False. This records lifecycle progress
+        only: it does not prove invalidation, authorize source mutation, or
+        perform any external side effect.
+        """
+        if not isinstance(operation_id, str) or not operation_id.strip():
+            raise ContractError("operation_id debe ser una cadena no vacía")
+        if not isinstance(expected_status, AuthorityChangeStatus):
+            raise ContractError("expected_status debe ser AuthorityChangeStatus")
+        if not isinstance(new_status, AuthorityChangeStatus):
+            raise ContractError("new_status debe ser AuthorityChangeStatus")
+
+        allowed = {
+            AuthorityChangeStatus.REQUESTED: AuthorityChangeStatus.INVALIDATION_PENDING,
+            AuthorityChangeStatus.INVALIDATION_PENDING: AuthorityChangeStatus.SOURCE_PENDING,
+            AuthorityChangeStatus.SOURCE_PENDING: AuthorityChangeStatus.SOURCE_CONFIRMED,
+            AuthorityChangeStatus.SOURCE_CONFIRMED: AuthorityChangeStatus.RECONCILING,
+        }
+        if allowed.get(expected_status) is not new_status:
+            raise ContractError("transición multiobjetivo no permitida")
+
+        with self._write_connection() as connection:
+            row = connection.execute(
+                """
+                SELECT status FROM multi_authority_change_operations
+                WHERE operation_id = ?
+                """,
+                (operation_id,),
+            ).fetchone()
+            if row is None:
+                return False
+            current = AuthorityChangeStatus(row["status"])
+            if current is new_status:
+                return True
+            if current is not expected_status:
+                return False
+
+            changed = connection.execute(
+                """
+                UPDATE multi_authority_change_operations
+                SET status = ?, updated_at = ?
+                WHERE operation_id = ? AND status = ?
+                """,
+                (
+                    new_status.value,
+                    _utc_text(datetime.now(timezone.utc)),
+                    operation_id,
+                    expected_status.value,
+                ),
+            ).rowcount
+            return changed == 1
+
     def acquire_multi_claims(self, operation_id: str) -> bool:
         """Atomically claim every target for a REQUESTED multi-authority operation.
 
