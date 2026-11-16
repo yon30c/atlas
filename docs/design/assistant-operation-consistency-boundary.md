@@ -214,3 +214,17 @@ El coordinador requerido no es una simple función que actualice el registro. De
 ### Decisión
 
 No se implementa todavía un `SQLiteAuthorityChangeCoordinator` de producción. `SQLiteAuthorityChangeStore` solo persiste reservas e idempotencia; no debe confundirse con el coordinador. El puerto `AuthorityChangeCoordinatorPort` es un contrato, no una implementación. Tampoco se conecta F2.3 al runtime. Esta pausa es deliberada para evitar una falsa garantía de consistencia.
+
+
+## 16. F2.3.12 — Auditoría detallada de renovaciones y APIs de mutación
+
+La revisión del servicio `GrantRenewalService` confirma:
+
+- `request_renewal` crea la solicitud dentro de la UoW compartida; no cambia la revisión del Grant, pero cambia estado de autorización pendiente y debe quedar en el mismo dominio transaccional y auditable.
+- `approve_renewal` actualiza Grant (revisión +1 y nuevo vencimiento) y solicitud (versión +1) en una misma UoW. La atomicidad SQLite evita estados parciales, pero no invalida/fencea admisiones que dependan de la revisión anterior.
+- `reject_renewal` actualiza solo la solicitud dentro de UoW; requiere política explícita de auditoría y autorización de la decisión, aunque no cambia la revisión del Grant.
+- Los métodos de repositorio `create/update/update_if_version` siguen siendo primitivas de persistencia accesibles desde la capa de aplicación y pruebas; no constituyen por sí mismos una API de autoridad coordinada.
+
+La futura operación coordinada de aprobación debe vincular la reserva durable a `renewal_id`, `grant_id`, Grant expected/proposed revision, renewal expected/proposed version, actor, owner, proyecto, entorno, acción y contexto. La decisión humana del propietario debe persistirse como aprobación explícita, pero no sustituye la autorización CAM. El cambio de vencimiento del Grant debe pasar por el mismo fencing/invalidation/CAS/reconciliation que cualquier otro cambio de Grant. El rechazo y la creación de solicitudes requieren una política diferenciada porque no mutan el Grant.
+
+**No cambiar aún el servicio para aceptar un coordinador ficticio ni reutilizar el autorizador CAM específico de revocación.** Primero definir contratos neutrales de autorización para cambios de autoridad y una composición que garantice atomicidad entre la decisión humana, renovación, Grant, journal e invalidación.
