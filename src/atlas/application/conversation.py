@@ -1,9 +1,11 @@
-"""Contexto conversacional acotado a la sesión actual de Atlas."""
+"""Contexto conversacional y contratos de aplicación de Atlas."""
 
 from dataclasses import replace
+from datetime import datetime
 from threading import RLock
 from typing import Callable, Protocol
 
+from atlas.assistant.conversation import Conversation
 from atlas.assistant.models import (
     AssistantRequest,
     AssistantResponse,
@@ -26,6 +28,44 @@ class AssistantProcessor(Protocol):
         on_token: Callable[[str], None],
     ) -> AssistantResponse:
         """Genera una respuesta progresiva."""
+
+
+class ConversationRepository(Protocol):
+    """Contrato para administrar metadatos y selección de conversaciones."""
+
+    def create(self, conversation: Conversation) -> Conversation:
+        """Registra una conversación nueva."""
+
+    def get(self, conversation_id: str) -> Conversation | None:
+        """Obtiene una conversación por su identificador."""
+
+    def list_conversations(
+        self,
+        *,
+        include_closed: bool = False,
+    ) -> tuple[Conversation, ...]:
+        """Lista conversaciones, excluyendo cerradas por defecto."""
+
+    def rename(
+        self,
+        conversation_id: str,
+        title: str,
+        updated_at: datetime,
+    ) -> Conversation:
+        """Cambia el título y la fecha de actualización."""
+
+    def close(
+        self,
+        conversation_id: str,
+        updated_at: datetime,
+    ) -> Conversation:
+        """Cierra una conversación."""
+
+    def get_active_conversation(self) -> Conversation | None:
+        """Devuelve la conversación seleccionada, si existe."""
+
+    def set_active_conversation(self, conversation_id: str) -> None:
+        """Selecciona una conversación existente y no cerrada."""
 
 
 class ConversationHistoryStore(Protocol):
