@@ -16,6 +16,9 @@ from atlas.adapters.sqlite.identity_authority import SQLiteIdentityAuthority
 from atlas.adapters.sqlite.project_environment_repository import (
     SQLiteProjectEnvironmentRepository,
 )
+from atlas.adapters.sqlite.recovery_evidence_trust_policy_repository import (
+    SQLiteRecoveryEvidenceIssuerTrustPolicyRepository,
+)
 from atlas.core.errors import ContractError
 
 
@@ -27,6 +30,7 @@ class SQLiteLocalAuthorityUnitOfWork(SQLiteAuthorizationUnitOfWork):
         self.identity = None
         self.project_environments = None
         self.authority_changes = None
+        self.recovery_evidence_trust_policies = None
 
     def __enter__(self) -> Self:
         super().__enter__()
@@ -42,6 +46,12 @@ class SQLiteLocalAuthorityUnitOfWork(SQLiteAuthorizationUnitOfWork):
             self.authority_changes = SQLiteAuthorityChangeStore(
                 self._database,
                 unit_of_work=self._unit,
+            )
+            self.recovery_evidence_trust_policies = (
+                SQLiteRecoveryEvidenceIssuerTrustPolicyRepository(
+                    self._database,
+                    unit_of_work=self._unit,
+                )
             )
             return self
         except BaseException as exc:
