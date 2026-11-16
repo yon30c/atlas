@@ -355,4 +355,11 @@ No autentica evidencia externa ni demuestra reconciliación real. Sin CAM, fenci
 
 Se incorpora `SQLiteLocalAuthorityUnitOfWork`, una composición sobre una sola transacción SQLite para Identity, Grants, renovaciones, Project y Environment. Identity y Project/Environment aceptan una UoW externa, sin abrir transacciones anidadas. Las pruebas cubren atomicidad entre repositorios, rollback por excepción, propiedad de la base y ciclo de vida de la UoW.
 
-No incluye `SQLiteAuthorityChangeStore` porque aún abre transacciones propias; no existe todavía atomicidad entre el ledger de operaciones/claims y las mutaciones de fuentes. No es coordinador CAM ni habilita runtime. Pendiente de validación local.
+No incluye atomicidad con el ledger de operaciones/claims. No es coordinador CAM ni habilita runtime. Validado por el propietario con 1040/1040 pruebas.
+
+
+## 32. F2.3.22 — Ledger de operaciones integrado en UoW compartida
+
+`SQLiteAuthorityChangeStore` acepta una `SQLiteUnitOfWork` externa y dirige tanto sus lecturas como sus escrituras por la conexión activa. La composición `SQLiteLocalAuthorityUnitOfWork` expone ahora Identity, Grants, renovaciones, Project, Environment y el ledger de operaciones/claims sobre una única transacción SQLite.
+
+Se cubre commit y rollback conjuntos de cambios canónicos y reserva de operación, además del uso posterior al cierre. La atomicidad se limita a persistencia SQLite. No define política de coordinación, autorización CAM, admisión, invalidación, fencing ni reconciliación externa. Runtime desconectado. Pendiente de validación local.
