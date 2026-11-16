@@ -1,8 +1,8 @@
 """Shared SQLite transaction scope for canonical local authority repositories.
 
 This is a persistence composition seam, not an authorization or consistency
-coordinator. It does not admit operations, invalidate grants, fence routes,
-or release authority-change claims.
+coordinator. It can persist recovery-evidence admission receipts, but does not
+authorize operations, invalidate grants, fence effects, or release claims.
 """
 
 from typing import Self
