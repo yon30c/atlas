@@ -133,5 +133,51 @@ class SQLiteProjectEnvironmentRepositoryTests(unittest.TestCase):
         self.assertEqual(repository.get_environment("test"), self.environment)
 
 
+    def test_project_and_environment_creates_join_outer_transaction(self):
+        with self.assertRaisesRegex(RuntimeError, "force outer rollback"):
+            with self.database.unit_of_work() as unit:
+                joined = SQLiteProjectEnvironmentRepository(
+                    self.database,
+                    unit_of_work=unit,
+                )
+                joined.create_project(self.project)
+                joined.create_environment(self.environment)
+                raise RuntimeError("force outer rollback")
+        self.assertIsNone(self.repository.get_project("atlas"))
+        self.assertIsNone(self.repository.get_environment("test"))
+
+    def test_project_and_environment_updates_join_outer_transaction(self):
+        self.repository.create_project(self.project)
+        self.repository.create_environment(self.environment)
+        with self.assertRaisesRegex(RuntimeError, "force outer rollback"):
+            with self.database.unit_of_work() as unit:
+                joined = SQLiteProjectEnvironmentRepository(
+                    self.database,
+                    unit_of_work=unit,
+                )
+                joined.update_project(
+                    replace(self.project, status="suspended", revision=2),
+                    expected_revision=1,
+                )
+                joined.update_environment(
+                    replace(self.environment, status="disabled", revision=2),
+                    expected_revision=1,
+                )
+                raise RuntimeError("force outer rollback")
+        self.assertEqual(self.repository.get_project("atlas"), self.project)
+        self.assertEqual(self.repository.get_environment("test"), self.environment)
+
+    def test_project_environment_repository_rejects_foreign_unit_of_work(self):
+        other = SQLiteDatabase(Path(self.temp_dir.name) / "other.sqlite")
+        other.apply_migrations(SQLITE_MIGRATIONS)
+        with other.unit_of_work() as unit:
+            joined = SQLiteProjectEnvironmentRepository(
+                self.database,
+                unit_of_work=unit,
+            )
+            with self.assertRaises(ContractError):
+                joined.create_project(self.project)
+
+
 if __name__ == "__main__":
     unittest.main()
