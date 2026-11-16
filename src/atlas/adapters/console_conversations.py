@@ -1,6 +1,7 @@
 """Comandos de consola para administrar conversaciones locales."""
 
 from getpass import getpass
+import shlex
 
 from atlas.adapters.sqlite.conversation_backup import ConversationBackup
 from atlas.application.conversation_manager import ConversationManager
@@ -9,10 +10,7 @@ from atlas.core.errors import ContractError, NotFoundError
 
 
 class ConversationConsoleCommands:
-    def __init__(
-        self, manager: ConversationManager, request_factory: LocalConsoleRequestFactory,
-        backup: ConversationBackup,
-    ) -> None:
+    def __init__(self, manager: ConversationManager, request_factory: LocalConsoleRequestFactory, backup: ConversationBackup) -> None:
         self._manager = manager
         self._request_factory = request_factory
         self._backup = backup
@@ -52,7 +50,7 @@ class ConversationConsoleCommands:
             if command == "/delete":
                 parts = argument.rsplit(" ", 1)
                 if len(parts) != 2 or parts[1] != "CONFIRM":
-                    return "Uso: /delete <conversation_id> CONFIRM. Esta acción elimina permanentemente su historial."
+                    return "Uso: /delete <conversation_id> CONFIRM. Elimina permanentemente el historial."
                 self._manager.delete(parts[0])
                 active = self._manager.active()
                 if active is None:
@@ -60,20 +58,32 @@ class ConversationConsoleCommands:
                 self._request_factory.set_conversation_id(active.conversation_id)
                 return "Conversación eliminada permanentemente."
             if command == "/backup":
-                if not argument:
-                    return "Uso: /backup <ruta_absoluta>"
+                args = shlex.split(argument)
+                if len(args) != 1:
+                    return 'Uso: /backup "<ruta_absoluta>"'
                 password = getpass("Contraseña del respaldo (mínimo 12 caracteres): ")
                 confirmation = getpass("Repite la contraseña: ")
                 if password != confirmation:
                     return "Las contraseñas no coinciden; no se creó el respaldo."
-                path = self._backup.create(argument, password)
+                path = self._backup.create(args[0], password)
                 return f"Respaldo cifrado creado: {path}"
             if command == "/verify-backup":
-                if not argument:
-                    return "Uso: /verify-backup <ruta>"
+                args = shlex.split(argument)
+                if len(args) != 1:
+                    return 'Uso: /verify-backup "<ruta>"'
                 password = getpass("Contraseña del respaldo: ")
-                self._backup.verify(argument, password)
+                self._backup.verify(args[0], password)
                 return "Respaldo auténtico e íntegro; esquema de conversaciones verificado."
-        except (ContractError, NotFoundError) as exc:
+            if command == "/restore-backup":
+                args = shlex.split(argument)
+                if len(args) != 2:
+                    return 'Uso: /restore-backup "<respaldo>" "<nueva-ruta-db>"'
+                password = getpass("Contraseña del respaldo: ")
+                restored = self._backup.restore_to(args[0], password, args[1])
+                return (
+                    f"Base restaurada y verificada en {restored}. "
+                    f"Sal de Atlas y reinicia con ATLAS_CONVERSATION_DB={restored} atlas."
+                )
+        except (ContractError, NotFoundError, ValueError) as exc:
             return f"No se pudo ejecutar el comando: {exc}"
         return None

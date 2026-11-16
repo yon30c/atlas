@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import secrets
 import sqlite3
+import stat
 import tempfile
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -20,7 +21,7 @@ _NONCE_BYTES = 12
 
 
 class ConversationBackup:
-    """Crea snapshots SQLite cifrados con scrypt + AES-256-GCM."""
+    """Snapshots SQLite cifrados con scrypt + AES-256-GCM."""
 
     def __init__(self, database: SQLiteDatabase) -> None:
         if not isinstance(database, SQLiteDatabase):
@@ -31,10 +32,7 @@ class ConversationBackup:
     def _derive_key(passphrase: str, salt: bytes) -> bytes:
         if not isinstance(passphrase, str) or len(passphrase) < 12:
             raise ContractError("la contraseña del respaldo debe tener al menos 12 caracteres")
-        return hashlib.scrypt(
-            passphrase.encode("utf-8"), salt=salt,
-            n=2**15, r=8, p=1, dklen=32,
-        )
+        return hashlib.scrypt(passphrase.encode("utf-8"), salt=salt, n=2**15, r=8, p=1, dklen=32)
 
     @classmethod
     def _decrypt(cls, payload: bytes, passphrase: str) -> bytes:
@@ -45,10 +43,9 @@ class ConversationBackup:
         salt = payload[offset:offset + _SALT_BYTES]
         nonce_start = offset + _SALT_BYTES
         nonce = payload[nonce_start:nonce_start + _NONCE_BYTES]
-        ciphertext = payload[nonce_start + _NONCE_BYTES:]
         try:
             return AESGCM(cls._derive_key(passphrase, salt)).decrypt(
-                nonce, ciphertext, _MAGIC,
+                nonce, payload[nonce_start + _NONCE_BYTES:], _MAGIC,
             )
         except Exception as exc:
             raise ContractError("contraseña incorrecta o respaldo alterado") from exc
@@ -60,39 +57,25 @@ class ConversationBackup:
             temp.flush()
             connection = sqlite3.connect(f"file:{temp.name}?mode=ro", uri=True)
             try:
-                result = connection.execute("PRAGMA integrity_check").fetchone()[0]
-                if result != "ok":
+                if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                     raise ContractError("integridad SQLite del respaldo no válida")
-                tables = {
-                    row[0] for row in connection.execute(
-                        "SELECT name FROM sqlite_master WHERE type='table'"
-                    )
-                }
-                if not {"schema_migrations", "conversations", "conversation_messages", "conversation_state"} <= tables:
+                tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                required = {"schema_migrations", "conversations", "conversation_messages", "conversation_state"}
+                if not required <= tables:
                     raise ContractError("el respaldo no contiene el esquema de conversaciones Atlas")
-                applied = connection.execute(
-                    "SELECT version, name, checksum FROM schema_migrations ORDER BY version"
-                ).fetchall()
-                expected = [
-                    (m.version, m.name, m.checksum) for m in CONVERSATION_MIGRATIONS
-                ]
+                applied = connection.execute("SELECT version, name, checksum FROM schema_migrations ORDER BY version").fetchall()
+                expected = [(m.version, m.name, m.checksum) for m in CONVERSATION_MIGRATIONS]
                 if applied != expected:
                     raise ContractError("el historial de migraciones del respaldo no coincide")
             finally:
                 connection.close()
 
     def create(self, destination: str | Path, passphrase: str) -> Path:
-        """Crea un backup cifrado sin sobrescribir un archivo existente."""
         target = Path(destination).expanduser()
         if not target.is_absolute() or not target.parent.is_dir():
             raise ContractError("el destino del respaldo debe ser absoluto y su directorio debe existir")
-        if len(passphrase) < 12:
-            raise ContractError("la contraseña del respaldo debe tener al menos 12 caracteres")
-
-        fd, snapshot_path = tempfile.mkstemp(
-            prefix=".atlas-snapshot-", suffix=".sqlite3",
-            dir=self._database.path.parent,
-        )
+        self._derive_key(passphrase, b"0" * _SALT_BYTES)
+        fd, snapshot_path = tempfile.mkstemp(prefix=".atlas-snapshot-", suffix=".sqlite3", dir=self._database.path.parent)
         os.fchmod(fd, 0o600)
         os.close(fd)
         try:
@@ -104,13 +87,9 @@ class ConversationBackup:
                     target_db.close()
             snapshot = Path(snapshot_path).read_bytes()
             self._validate_snapshot(snapshot)
-            salt = secrets.token_bytes(_SALT_BYTES)
-            nonce = secrets.token_bytes(_NONCE_BYTES)
-            ciphertext = AESGCM(self._derive_key(passphrase, salt)).encrypt(
-                nonce, snapshot, _MAGIC,
-            )
+            salt, nonce = secrets.token_bytes(_SALT_BYTES), secrets.token_bytes(_NONCE_BYTES)
+            ciphertext = AESGCM(self._derive_key(passphrase, salt)).encrypt(nonce, snapshot, _MAGIC)
             payload = _MAGIC + salt + nonce + ciphertext
-
             flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
             output_fd = os.open(target, flags, 0o600)
             try:
@@ -134,24 +113,29 @@ class ConversationBackup:
                 pass
 
     def verify(self, source: str | Path, passphrase: str) -> None:
-        """Descifra en memoria temporal y valida autenticidad, esquema e integridad."""
-        path = Path(source).expanduser()
         try:
-            payload = path.read_bytes()
+            payload = Path(source).expanduser().read_bytes()
         except OSError as exc:
             raise ContractError("no se pudo leer el archivo de respaldo") from exc
         self._validate_snapshot(self._decrypt(payload, passphrase))
 
-    def restore_to(
-        self, source: str | Path, passphrase: str, destination: str | Path,
-    ) -> Path:
-        """Restaura a una ruta nueva; nunca reemplaza una base existente."""
+    def restore_to(self, source: str | Path, passphrase: str, destination: str | Path) -> Path:
+        """Restaura a una base nueva dentro de un directorio privado."""
         target = Path(destination).expanduser()
         if not target.is_absolute() or target.exists() or target.is_symlink():
             raise ContractError("la restauración requiere una ruta absoluta que no exista")
-        if not target.parent.is_dir():
-            raise ContractError("el directorio de destino debe existir")
-        payload = Path(source).expanduser().read_bytes()
+        try:
+            info = target.parent.lstat()
+        except OSError as exc:
+            raise ContractError("el directorio de destino debe existir") from exc
+        if not stat.S_ISDIR(info.st_mode) or info.st_mode & 0o077:
+            raise ContractError("el directorio de restauración debe ser privado (0700)")
+        if hasattr(os, "getuid") and info.st_uid != os.getuid():
+            raise ContractError("el directorio de restauración debe pertenecer al usuario actual")
+        try:
+            payload = Path(source).expanduser().read_bytes()
+        except OSError as exc:
+            raise ContractError("no se pudo leer el respaldo") from exc
         snapshot = self._decrypt(payload, passphrase)
         self._validate_snapshot(snapshot)
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)

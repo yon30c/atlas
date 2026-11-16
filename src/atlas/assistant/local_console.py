@@ -13,10 +13,7 @@ from atlas.ports.clock import Clock
 class LocalConsoleRequestFactory:
     """Construye solicitudes ligadas a la cuenta local del sistema."""
 
-    def __init__(
-        self, clock: Clock, user_id: str | None = None,
-        conversation_id: str | None = None,
-    ) -> None:
+    def __init__(self, clock: Clock, user_id: str | None = None, conversation_id: str | None = None) -> None:
         if not callable(getattr(clock, "now", None)):
             raise ContractError("clock debe implementar now()")
         resolved_user = getuser() if user_id is None else user_id
@@ -24,7 +21,7 @@ class LocalConsoleRequestFactory:
             raise ContractError("user_id local debe ser una cadena no vacía")
         self._clock = clock
         self._user_id = resolved_user.strip()
-        self.set_conversation_id(conversation_id or str(uuid4()))
+        self.set_conversation_id(str(uuid4()) if conversation_id is None else conversation_id)
 
     def set_conversation_id(self, conversation_id: str) -> None:
         if not isinstance(conversation_id, str) or not conversation_id.strip():
@@ -35,11 +32,7 @@ class LocalConsoleRequestFactory:
         now = self._clock.now()
         request_id = str(uuid4())
         local_user_id = f"local:{self._user_id}"
-        actor = Identity(
-            identity_id=f"local-user:{self._user_id}",
-            kind=IdentityKind.USER,
-            status=IdentityStatus.ACTIVE,
-        )
+        actor = Identity(identity_id=f"local-user:{self._user_id}", kind=IdentityKind.USER, status=IdentityStatus.ACTIVE)
         context = OperationContext(
             request_id=request_id, correlation_id=request_id, actor=actor,
             user_id=local_user_id, origin="console", delegation=None,

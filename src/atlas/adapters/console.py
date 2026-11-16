@@ -19,23 +19,24 @@ def _write_stdout(content: str) -> None:
 def _show_help(output_fn: Callable[[str], None]) -> None:
     output_fn(
         "Comandos de Atlas:\n"
-        "  /help                 Muestra esta ayuda.\n"
-        "  /clear                Limpia la pantalla.\n"
-        "  /new [título]         Crea y selecciona una conversación.\n"
-        "  /conversations [--all] Lista conversaciones.\n"
-        "  /use <id>             Selecciona una conversación existente.\n"
-        "  /rename <título>      Renombra la conversación activa.\n"
-        "  /close                Cierra la activa y crea otra.\n"
-        "  /exit                 Finaliza Atlas."
+        "  /help                    Muestra esta ayuda.\n"
+        "  /clear                   Limpia la pantalla.\n"
+        "  /new [título]            Crea y selecciona una conversación.\n"
+        "  /conversations [--all]   Lista conversaciones.\n"
+        "  /use <id>                Selecciona una conversación.\n"
+        "  /rename <título>         Renombra la conversación activa.\n"
+        "  /close                   Cierra la activa y crea otra.\n"
+        "  /delete <id> CONFIRM     Elimina una conversación.\n"
+        "  /backup <ruta>           Crea un respaldo cifrado.\n"
+        "  /verify-backup <ruta>    Verifica un respaldo.\n"
+        "  /restore-backup <f> <db> Restaura a una base nueva.\n"
+        "  /exit                    Finaliza Atlas."
     )
 
 
 def run_console(
-    runtime: AssistantRuntime,
-    *,
-    input_fn: Callable[[str], str] = input,
-    output_fn: Callable[[str], None] = print,
-    write_fn: Callable[[str], None] = _write_stdout,
+    runtime: AssistantRuntime, *, input_fn: Callable[[str], str] = input,
+    output_fn: Callable[[str], None] = print, write_fn: Callable[[str], None] = _write_stdout,
     command_handler: Callable[[str], str | None] | None = None,
 ) -> None:
     output_fn("Atlas está listo. Escribe '/help' para ver los comandos.")

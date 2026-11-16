@@ -35,9 +35,15 @@ def main(
     model: str | None = None, ollama_url: str | None = None,
     conversation_db_path: str | Path | None = None,
 ) -> None:
-    """Inicia Atlas con historial SQLite privado, gestión y backup cifrado."""
+    """Inicia Atlas con historial SQLite privado, gestión y backup cifrado.
+
+    ATLAS_CONVERSATION_DB permite seleccionar una base restaurada o alternativa.
+    """
     clock = SystemClock()
-    database_path = prepare_conversation_database_path(conversation_db_path)
+    selected_db_path = conversation_db_path
+    if selected_db_path is None:
+        selected_db_path = os.environ.get("ATLAS_CONVERSATION_DB")
+    database_path = prepare_conversation_database_path(selected_db_path)
     database = SQLiteDatabase(database_path)
     repository = SQLiteConversationRepository(database)
     repository.initialize()
@@ -55,7 +61,7 @@ def main(
     request_factory = LocalConsoleRequestFactory(clock, user_id=user_id, conversation_id=active.conversation_id)
     manager = ConversationManager(repository, clock)
     backup = ConversationBackup(database)
-    command_handler = ConversationConsoleCommands(manager, request_factory, backup)
+    handler = ConversationConsoleCommands(manager, request_factory, backup)
 
     if os.environ.get("ATLAS_MODE", "").strip().casefold() == "offline":
         generator = LocalModeResponseGenerator()
@@ -72,7 +78,7 @@ def main(
         max_message_chars=DEFAULT_CONVERSATION_MESSAGE_CHARS,
     )
     core = AtlasCore(request_factory=request_factory, assistant=processor)
-    options = {"input_fn": input_fn, "output_fn": output_fn, "command_handler": command_handler.handle}
+    options = {"input_fn": input_fn, "output_fn": output_fn, "command_handler": handler.handle}
     if write_fn is not None:
         options["write_fn"] = write_fn
     run_console(core, **options)
