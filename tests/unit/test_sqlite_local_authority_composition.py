@@ -50,11 +50,13 @@ class SQLiteLocalAuthorityCompositionTests(unittest.TestCase):
                     "SELECT name FROM sqlite_master WHERE type='table'"
                 )
             }
-        self.assertEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9])
+        self.assertEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
         self.assertIn("authorization_grants", tables)
         self.assertIn("atlas_projects", tables)
         self.assertIn("atlas_environments", tables)
         self.assertIn("authority_change_operations", tables)
+        self.assertIn("multi_authority_change_operations", tables)
+        self.assertIn("multi_authority_change_targets", tables)
 
     def test_composition_contract_rejects_mismatched_database(self):
         first = compose_sqlite_local_authority(self.path)
