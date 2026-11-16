@@ -279,3 +279,9 @@ Pruebas para reutilización exacta de la instancia y rechazo de tipos inválidos
 Migración SQLite v7 y adaptador `SQLiteGrantRepository`. Grants se almacenan como una unidad de revisión: IDs/scope/acciones inmutables, CAS por revisión, revocación terminal y retención de tombstones. `SQLiteLocalAuthorityFoundation` compone Identity, Grants y el ledger de cambios sobre la misma instancia SQLite.
 
 Pendiente: UoW transaccional para Grant + renovaciones, migración de emisión/renovación a esa UoW, fuentes canónicas Project/Environment y coordinador durable de invalidación/fencing. Sin runtime.
+
+## 18. F2.3.8 — UoW transaccional de Grant + renovaciones
+
+Migración v8 y `SQLiteGrantRenewalRepository`. `SQLiteAuthorizationUnitOfWorkFactory` une repositorios de Grant y renovación en una misma transacción SQLite inmediata; la confirmación es explícita y solo se materializa al salir sin excepción. Se conectan `GrantRenewalService` y el modo configurado de `GrantManagementService.issue` a esta abstracción. El repositorio de renovaciones conserva binding inmutable, CAS de versión, decisión terminal e historial no borrable.
+
+Pendiente: obligar el wiring de emisión a usar la fábrica, incorporar todas las mutaciones al coordinador común, Project/Environment canónicos, invalidación/fencing y admisión.
