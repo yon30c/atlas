@@ -348,4 +348,4 @@ El historial de liberación se conserva y los recursos quedan disponibles para n
 
 Se incorpora `MultiAuthorityClaimAudit` y `SQLiteAuthorityChangeStore.audit_multi_claims`, API de solo lectura que contrasta estado de operación, targets reservados, claims activos, evidencia terminal reconstruida y ledger de liberación. Clasifica estados sanos como UNCLAIMED, CLAIMED, TERMINAL_CLAIMS_HELD y RELEASED; clasifica cualquier contradicción, corrupción de digest o conjunto parcial como INCONSISTENT. No modifica ni repara datos y no libera claims. Operación desconocida devuelve None.
 
-No autentica evidencia externa ni demuestra reconciliación real. Sin CAM, fencing, invalidación o coordinador de fuentes; runtime desconectado. Pendiente de validación local.
+No autentica evidencia externa ni demuestra reconciliación real. Sin CAM, fencing, invalidación o coordinador de fuentes; runtime desconectado. Validado por el propietario con 1030/1030 pruebas (16 de noviembre de 2026).
