@@ -436,7 +436,7 @@ class SQLiteMultiAuthorityChangeStoreTests(unittest.TestCase):
             self.assertTrue(self.store.transition_multi_status(
                 reservation.operation_id, expected, target
             ))
-            self.assertTrue(self.store.transition_multi_status(
+            self.assertFalse(self.store.transition_multi_status(
                 reservation.operation_id, expected, target
             ))
             self.assertEqual(
