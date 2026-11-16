@@ -126,7 +126,7 @@ class SQLiteDatabase:
             connection.close()
 
     def _enable_wal(self, connection: sqlite3.Connection) -> None:
-        """Enable WAL, retrying only SQLITE_BUSY within the configured timeout."""
+        """Enable WAL, retrying SQLITE_BUSY/SQLITE_LOCKED within the configured timeout."""
         connection.execute("PRAGMA busy_timeout = 0")
         deadline = monotonic() + self._busy_timeout_ms / 1000
         delay = 0.005
