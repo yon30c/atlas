@@ -98,3 +98,8 @@ Antes de exponer escritura a Atlas conversacional, debe existir el gate de aplic
 - detección de corrupción del manifest;
 - recuperación de crash simulado después del reemplazo;
 - validación del servicio de aplicación y aislamiento del staging respecto a lectura/listado.
+
+
+## 8. Validación local
+
+**Estado: VALIDADO por el propietario.** La suite completa ejecutada en Debian terminó con **1,182 tests en 9.769 s, todos OK**. Esta evidencia valida las pruebas automatizadas del protocolo y sus servicios; no amplía sus garantías documentadas ni habilita integración con el runtime.
