@@ -7,80 +7,31 @@ from typing import Callable, Protocol
 
 from atlas.assistant.conversation import Conversation
 from atlas.assistant.models import (
-    AssistantRequest,
-    AssistantResponse,
-    AssistantResponseKind,
-    ConversationMessage,
-    ConversationMessageRole,
+    AssistantRequest, AssistantResponse, AssistantResponseKind,
+    ConversationMessage, ConversationMessageRole,
 )
 from atlas.core.errors import ContractError
 
 
 class AssistantProcessor(Protocol):
-    """Procesador de solicitudes completas y en streaming."""
-
-    def respond(self, request: AssistantRequest) -> AssistantResponse:
-        """Genera una respuesta completa."""
-
-    def respond_streaming(
-        self,
-        request: AssistantRequest,
-        on_token: Callable[[str], None],
-    ) -> AssistantResponse:
-        """Genera una respuesta progresiva."""
+    def respond(self, request: AssistantRequest) -> AssistantResponse: ...
+    def respond_streaming(self, request: AssistantRequest, on_token: Callable[[str], None]) -> AssistantResponse: ...
 
 
 class ConversationRepository(Protocol):
-    """Contrato para administrar metadatos y selección de conversaciones."""
-
-    def create(self, conversation: Conversation) -> Conversation:
-        """Registra una conversación nueva."""
-
-    def get(self, conversation_id: str) -> Conversation | None:
-        """Obtiene una conversación por su identificador."""
-
-    def list_conversations(
-        self,
-        *,
-        include_closed: bool = False,
-    ) -> tuple[Conversation, ...]:
-        """Lista conversaciones, excluyendo cerradas por defecto."""
-
-    def rename(
-        self,
-        conversation_id: str,
-        title: str,
-        updated_at: datetime,
-    ) -> Conversation:
-        """Cambia el título y la fecha de actualización."""
-
-    def close(
-        self,
-        conversation_id: str,
-        updated_at: datetime,
-    ) -> Conversation:
-        """Cierra una conversación."""
-
-    def get_active_conversation(self) -> Conversation | None:
-        """Devuelve la conversación seleccionada, si existe."""
-
-    def set_active_conversation(self, conversation_id: str) -> None:
-        """Selecciona una conversación existente y no cerrada."""
+    def create(self, conversation: Conversation) -> Conversation: ...
+    def get(self, conversation_id: str) -> Conversation | None: ...
+    def list_conversations(self, *, include_closed: bool = False) -> tuple[Conversation, ...]: ...
+    def rename(self, conversation_id: str, title: str, updated_at: datetime) -> Conversation: ...
+    def close(self, conversation_id: str, updated_at: datetime) -> Conversation: ...
+    def delete(self, conversation_id: str) -> None: ...
+    def get_active_conversation(self) -> Conversation | None: ...
+    def set_active_conversation(self, conversation_id: str) -> None: ...
 
 
 class ConversationHistoryStore(Protocol):
-    """Almacenamiento intercambiable del historial por conversación."""
-
-    def get_history(self, conversation_id: str) -> tuple[ConversationMessage, ...]:
-        """Devuelve una instantánea inmutable del historial."""
-
-    def append_turn(
-        self,
-        conversation_id: str,
-        user_content: str,
-        assistant_content: str,
-    ) -> None:
-        """Añade un turno completo de usuario y asistente."""
+    def get_history(self, conversation_id: str) -> tuple[ConversationMessage, ...]: ...
+    def append_turn(self, conversation_id: str, user_content: str, assistant_content: str) -> None: ...
 
 
 class InMemoryConversationHistory:
@@ -88,22 +39,10 @@ class InMemoryConversationHistory:
 
     _TRUNCATION_MARKER = "\n[...contenido histórico truncado...]"
 
-    def __init__(
-        self,
-        max_turns: int = 8,
-        max_message_chars: int = 2000,
-    ) -> None:
-        if (
-            isinstance(max_turns, bool)
-            or not isinstance(max_turns, int)
-            or max_turns < 1
-        ):
+    def __init__(self, max_turns: int = 8, max_message_chars: int = 2000) -> None:
+        if isinstance(max_turns, bool) or not isinstance(max_turns, int) or max_turns < 1:
             raise ContractError("max_turns debe ser un entero positivo")
-        if (
-            isinstance(max_message_chars, bool)
-            or not isinstance(max_message_chars, int)
-            or max_message_chars <= len(self._TRUNCATION_MARKER)
-        ):
+        if isinstance(max_message_chars, bool) or not isinstance(max_message_chars, int) or max_message_chars <= len(self._TRUNCATION_MARKER):
             raise ContractError("max_message_chars debe ser un entero mayor que el marcador")
         self._max_messages = max_turns * 2
         self._max_message_chars = max_message_chars
@@ -120,29 +59,17 @@ class InMemoryConversationHistory:
             raise ContractError("el contenido histórico debe ser una cadena no vacía")
         if len(content) <= self._max_message_chars:
             return content
-        prefix_length = self._max_message_chars - len(self._TRUNCATION_MARKER)
-        return content[:prefix_length] + self._TRUNCATION_MARKER
+        return content[:self._max_message_chars - len(self._TRUNCATION_MARKER)] + self._TRUNCATION_MARKER
 
     def get_history(self, conversation_id: str) -> tuple[ConversationMessage, ...]:
         self._validate_conversation_id(conversation_id)
         with self._lock:
             return tuple(self._histories.get(conversation_id, ()))
 
-    def append_turn(
-        self,
-        conversation_id: str,
-        user_content: str,
-        assistant_content: str,
-    ) -> None:
+    def append_turn(self, conversation_id: str, user_content: str, assistant_content: str) -> None:
         self._validate_conversation_id(conversation_id)
-        user_message = ConversationMessage(
-            ConversationMessageRole.USER,
-            self._bound_content(user_content),
-        )
-        assistant_message = ConversationMessage(
-            ConversationMessageRole.ASSISTANT,
-            self._bound_content(assistant_content),
-        )
+        user_message = ConversationMessage(ConversationMessageRole.USER, self._bound_content(user_content))
+        assistant_message = ConversationMessage(ConversationMessageRole.ASSISTANT, self._bound_content(assistant_content))
         with self._lock:
             history = self._histories.setdefault(conversation_id, [])
             history.extend((user_message, assistant_message))
@@ -151,45 +78,21 @@ class InMemoryConversationHistory:
 
 
 class ConversationContextProcessor:
-    """Proyecta historial durable al contexto acotado del modelo.
-
-    El almacén conserva el historial íntegro. Los límites se aplican únicamente
-    a la instantánea adjunta a cada solicitud del asistente.
-    """
+    """Proyecta historial durable al contexto acotado del modelo."""
 
     _TRUNCATION_MARKER = "\n[...contenido histórico truncado...]"
 
     def __init__(
-        self,
-        assistant: AssistantProcessor,
-        history_store: ConversationHistoryStore,
-        *,
-        max_history_turns: int = 8,
-        max_message_chars: int = 2000,
+        self, assistant: AssistantProcessor, history_store: ConversationHistoryStore,
+        *, max_history_turns: int = 8, max_message_chars: int = 2000,
     ) -> None:
-        if not callable(getattr(assistant, "respond", None)):
-            raise ContractError("assistant debe implementar respond(request)")
-        if not callable(getattr(assistant, "respond_streaming", None)):
-            raise ContractError(
-                "assistant debe implementar respond_streaming(request, on_token)"
-            )
-        if not callable(getattr(history_store, "get_history", None)) or not callable(
-            getattr(history_store, "append_turn", None)
-        ):
-            raise ContractError(
-                "history_store debe implementar get_history() y append_turn()"
-            )
-        if (
-            isinstance(max_history_turns, bool)
-            or not isinstance(max_history_turns, int)
-            or max_history_turns < 1
-        ):
+        if not callable(getattr(assistant, "respond", None)) or not callable(getattr(assistant, "respond_streaming", None)):
+            raise ContractError("assistant debe implementar respond() y respond_streaming()")
+        if not callable(getattr(history_store, "get_history", None)) or not callable(getattr(history_store, "append_turn", None)):
+            raise ContractError("history_store debe implementar get_history() y append_turn()")
+        if isinstance(max_history_turns, bool) or not isinstance(max_history_turns, int) or max_history_turns < 1:
             raise ContractError("max_history_turns debe ser un entero positivo")
-        if (
-            isinstance(max_message_chars, bool)
-            or not isinstance(max_message_chars, int)
-            or max_message_chars <= len(self._TRUNCATION_MARKER)
-        ):
+        if isinstance(max_message_chars, bool) or not isinstance(max_message_chars, int) or max_message_chars <= len(self._TRUNCATION_MARKER):
             raise ContractError("max_message_chars debe superar el marcador de truncamiento")
         self._assistant = assistant
         self._history_store = history_store
@@ -197,21 +100,17 @@ class ConversationContextProcessor:
         self._max_message_chars = max_message_chars
 
     def respond(self, request: AssistantRequest) -> AssistantResponse:
-        enriched_request = self._with_history(request)
-        response = self._assistant.respond(enriched_request)
-        self._commit_successful_turn(enriched_request, response)
+        enriched = self._with_history(request)
+        response = self._assistant.respond(enriched)
+        self._commit_successful_turn(enriched, response)
         return response
 
-    def respond_streaming(
-        self,
-        request: AssistantRequest,
-        on_token: Callable[[str], None],
-    ) -> AssistantResponse:
+    def respond_streaming(self, request: AssistantRequest, on_token: Callable[[str], None]) -> AssistantResponse:
         if not callable(on_token):
             raise ContractError("on_token debe ser invocable")
-        enriched_request = self._with_history(request)
-        response = self._assistant.respond_streaming(enriched_request, on_token)
-        self._commit_successful_turn(enriched_request, response)
+        enriched = self._with_history(request)
+        response = self._assistant.respond_streaming(enriched, on_token)
+        self._commit_successful_turn(enriched, response)
         return response
 
     def _with_history(self, request: AssistantRequest) -> AssistantRequest:
@@ -219,42 +118,25 @@ class ConversationContextProcessor:
             raise ContractError("request debe ser AssistantRequest")
         if request.conversation_id is None:
             raise ContractError("la solicitud requiere conversation_id")
-        stored_history = self._history_store.get_history(request.conversation_id)
-        recent_history = stored_history[-self._max_history_messages:]
+        stored = self._history_store.get_history(request.conversation_id)
         history = tuple(
-            ConversationMessage(
-                message.role,
-                self._bound_message_content(message.content),
-            )
-            for message in recent_history
+            ConversationMessage(message.role, self._bound_message_content(message.content))
+            for message in stored[-self._max_history_messages:]
         )
         return replace(request, history=history)
 
     def _bound_message_content(self, content: str) -> str:
         if len(content) <= self._max_message_chars:
             return content
-        prefix_length = self._max_message_chars - len(self._TRUNCATION_MARKER)
-        return content[:prefix_length] + self._TRUNCATION_MARKER
+        return content[:self._max_message_chars - len(self._TRUNCATION_MARKER)] + self._TRUNCATION_MARKER
 
-    def _commit_successful_turn(
-        self,
-        request: AssistantRequest,
-        response: object,
-    ) -> None:
+    def _commit_successful_turn(self, request: AssistantRequest, response: object) -> None:
         if not isinstance(response, AssistantResponse):
             raise ContractError("assistant debe devolver AssistantResponse")
-        if (
-            response.request_id != request.request_id
-            or response.context != request.context
-        ):
+        if response.request_id != request.request_id or response.context != request.context:
             raise ContractError("la respuesta no corresponde a la solicitud")
         if response.kind is AssistantResponseKind.ERROR:
             return
-        conversation_id = request.conversation_id
-        if conversation_id is None:
+        if request.conversation_id is None:
             raise ContractError("la solicitud requiere conversation_id")
-        self._history_store.append_turn(
-            conversation_id,
-            request.content,
-            response.content,
-        )
+        self._history_store.append_turn(request.conversation_id, request.content, response.content)

@@ -13,11 +13,7 @@ from atlas.core.errors import ContractError, NotFoundError
 
 
 def _utc_text(value: datetime) -> str:
-    if (
-        not isinstance(value, datetime)
-        or value.tzinfo is None
-        or value.utcoffset() != timezone.utc.utcoffset(value)
-    ):
+    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() != timezone.utc.utcoffset(value):
         raise ContractError("datetime debe estar en UTC")
     return value.isoformat(timespec="microseconds")
 
@@ -35,11 +31,7 @@ def _require_content(value: str, field: str) -> None:
 
 
 class SQLiteConversationRepository(ConversationRepository, ConversationHistoryStore):
-    """One adapter implementing metadata and unbounded durable conversation history.
-
-    The adapter uses an independent migration ledger in its dedicated database.
-    Context-window limits belong to the application projection, never this store.
-    """
+    """Persistencia independiente: metadatos y el historial íntegro."""
 
     def __init__(self, database: SQLiteDatabase) -> None:
         if not isinstance(database, SQLiteDatabase):
@@ -47,29 +39,21 @@ class SQLiteConversationRepository(ConversationRepository, ConversationHistorySt
         self._database = database
 
     def initialize(self) -> None:
-        """Create/upgrade only the conversation database schema."""
         self._database.apply_migrations(CONVERSATION_MIGRATIONS)
 
     @staticmethod
     def _from_row(row: sqlite3.Row) -> Conversation:
         return Conversation(
-            conversation_id=row["conversation_id"],
-            title=row["title"],
+            conversation_id=row["conversation_id"], title=row["title"],
             status=ConversationStatus(row["status"]),
             created_at=_parse_utc(row["created_at"]),
             updated_at=_parse_utc(row["updated_at"]),
-            last_message_at=(
-                None if row["last_message_at"] is None
-                else _parse_utc(row["last_message_at"])
-            ),
+            last_message_at=None if row["last_message_at"] is None else _parse_utc(row["last_message_at"]),
         )
 
     @staticmethod
     def _get(connection: sqlite3.Connection, conversation_id: str):
-        return connection.execute(
-            "SELECT * FROM conversations WHERE conversation_id = ?",
-            (conversation_id,),
-        ).fetchone()
+        return connection.execute("SELECT * FROM conversations WHERE conversation_id = ?", (conversation_id,)).fetchone()
 
     def create(self, conversation: Conversation) -> Conversation:
         if not isinstance(conversation, Conversation):
@@ -78,21 +62,12 @@ class SQLiteConversationRepository(ConversationRepository, ConversationHistorySt
             with self._database.unit_of_work() as unit:
                 connection = unit._connection_for(self._database)
                 connection.execute(
-                    """
-                    INSERT INTO conversations (
-                        conversation_id, title, status, created_at,
-                        updated_at, last_message_at
-                    ) VALUES (?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        conversation.conversation_id,
-                        conversation.title,
-                        conversation.status.value,
-                        _utc_text(conversation.created_at),
-                        _utc_text(conversation.updated_at),
-                        None if conversation.last_message_at is None
-                        else _utc_text(conversation.last_message_at),
-                    ),
+                    """INSERT INTO conversations (
+                        conversation_id, title, status, created_at, updated_at, last_message_at
+                    ) VALUES (?, ?, ?, ?, ?, ?)""",
+                    (conversation.conversation_id, conversation.title, conversation.status.value,
+                     _utc_text(conversation.created_at), _utc_text(conversation.updated_at),
+                     None if conversation.last_message_at is None else _utc_text(conversation.last_message_at)),
                 )
         except sqlite3.IntegrityError as exc:
             raise ContractError("conversation_id ya existe o viola el esquema") from exc
@@ -104,11 +79,7 @@ class SQLiteConversationRepository(ConversationRepository, ConversationHistorySt
             row = self._get(connection, conversation_id)
             return None if row is None else self._from_row(row)
 
-    def list_conversations(
-        self,
-        *,
-        include_closed: bool = False,
-    ) -> tuple[Conversation, ...]:
+    def list_conversations(self, *, include_closed: bool = False) -> tuple[Conversation, ...]:
         if not isinstance(include_closed, bool):
             raise ContractError("include_closed debe ser booleano")
         query = "SELECT * FROM conversations"
@@ -118,12 +89,7 @@ class SQLiteConversationRepository(ConversationRepository, ConversationHistorySt
         with self._database.connection() as connection:
             return tuple(self._from_row(row) for row in connection.execute(query))
 
-    def rename(
-        self,
-        conversation_id: str,
-        title: str,
-        updated_at: datetime,
-    ) -> Conversation:
+    def rename(self, conversation_id: str, title: str, updated_at: datetime) -> Conversation:
         _require_content(conversation_id, "conversation_id")
         _require_content(title, "title")
         timestamp = _utc_text(updated_at)
@@ -134,18 +100,10 @@ class SQLiteConversationRepository(ConversationRepository, ConversationHistorySt
                 raise NotFoundError("conversación no encontrada")
             if updated_at < _parse_utc(row["updated_at"]):
                 raise ContractError("updated_at no puede retroceder")
-            connection.execute(
-                "UPDATE conversations SET title = ?, updated_at = ? WHERE conversation_id = ?",
-                (title, timestamp, conversation_id),
-            )
-            updated = self._get(connection, conversation_id)
-            return self._from_row(updated)
+            connection.execute("UPDATE conversations SET title = ?, updated_at = ? WHERE conversation_id = ?", (title, timestamp, conversation_id))
+            return self._from_row(self._get(connection, conversation_id))
 
-    def close(
-        self,
-        conversation_id: str,
-        updated_at: datetime,
-    ) -> Conversation:
+    def close(self, conversation_id: str, updated_at: datetime) -> Conversation:
         _require_content(conversation_id, "conversation_id")
         timestamp = _utc_text(updated_at)
         with self._database.unit_of_work() as unit:
@@ -155,32 +113,26 @@ class SQLiteConversationRepository(ConversationRepository, ConversationHistorySt
                 raise NotFoundError("conversación no encontrada")
             if updated_at < _parse_utc(row["updated_at"]):
                 raise ContractError("updated_at no puede retroceder")
-            connection.execute(
-                """
-                UPDATE conversations
-                SET status = 'closed', updated_at = ?
-                WHERE conversation_id = ?
-                """,
-                (timestamp, conversation_id),
-            )
-            connection.execute(
-                """
-                UPDATE conversation_state SET active_conversation_id = NULL
-                WHERE singleton = 1 AND active_conversation_id = ?
-                """,
-                (conversation_id,),
-            )
+            connection.execute("UPDATE conversations SET status = 'closed', updated_at = ? WHERE conversation_id = ?", (timestamp, conversation_id))
+            connection.execute("UPDATE conversation_state SET active_conversation_id = NULL WHERE singleton = 1 AND active_conversation_id = ?", (conversation_id,))
             return self._from_row(self._get(connection, conversation_id))
+
+    def delete(self, conversation_id: str) -> None:
+        _require_content(conversation_id, "conversation_id")
+        with self._database.unit_of_work() as unit:
+            connection = unit._connection_for(self._database)
+            if self._get(connection, conversation_id) is None:
+                raise NotFoundError("conversación no encontrada")
+            connection.execute("UPDATE conversation_state SET active_conversation_id = NULL WHERE singleton = 1 AND active_conversation_id = ?", (conversation_id,))
+            connection.execute("DELETE FROM conversation_messages WHERE conversation_id = ?", (conversation_id,))
+            connection.execute("DELETE FROM conversations WHERE conversation_id = ?", (conversation_id,))
 
     def get_active_conversation(self) -> Conversation | None:
         with self._database.connection() as connection:
             row = connection.execute(
-                """
-                SELECT c.* FROM conversation_state AS s
-                JOIN conversations AS c
-                  ON c.conversation_id = s.active_conversation_id
-                WHERE s.singleton = 1 AND c.status = 'active'
-                """
+                """SELECT c.* FROM conversation_state AS s
+                JOIN conversations AS c ON c.conversation_id = s.active_conversation_id
+                WHERE s.singleton = 1 AND c.status = 'active'"""
             ).fetchone()
             return None if row is None else self._from_row(row)
 
@@ -192,12 +144,8 @@ class SQLiteConversationRepository(ConversationRepository, ConversationHistorySt
             if row is None or row["status"] != ConversationStatus.ACTIVE.value:
                 raise NotFoundError("conversación activa no encontrada")
             connection.execute(
-                """
-                INSERT INTO conversation_state(singleton, active_conversation_id)
-                VALUES (1, ?)
-                ON CONFLICT(singleton) DO UPDATE SET
-                    active_conversation_id = excluded.active_conversation_id
-                """,
+                """INSERT INTO conversation_state(singleton, active_conversation_id) VALUES (1, ?)
+                ON CONFLICT(singleton) DO UPDATE SET active_conversation_id = excluded.active_conversation_id""",
                 (conversation_id,),
             )
 
@@ -205,23 +153,12 @@ class SQLiteConversationRepository(ConversationRepository, ConversationHistorySt
         _require_content(conversation_id, "conversation_id")
         with self._database.connection() as connection:
             rows = connection.execute(
-                """
-                SELECT role, content FROM conversation_messages
-                WHERE conversation_id = ? ORDER BY sequence
-                """,
+                "SELECT role, content FROM conversation_messages WHERE conversation_id = ? ORDER BY sequence",
                 (conversation_id,),
             ).fetchall()
-            return tuple(
-                ConversationMessage(ConversationMessageRole(row["role"]), row["content"])
-                for row in rows
-            )
+            return tuple(ConversationMessage(ConversationMessageRole(row["role"]), row["content"]) for row in rows)
 
-    def append_turn(
-        self,
-        conversation_id: str,
-        user_content: str,
-        assistant_content: str,
-    ) -> None:
+    def append_turn(self, conversation_id: str, user_content: str, assistant_content: str) -> None:
         _require_content(conversation_id, "conversation_id")
         _require_content(user_content, "user_content")
         _require_content(assistant_content, "assistant_content")
@@ -233,10 +170,7 @@ class SQLiteConversationRepository(ConversationRepository, ConversationHistorySt
             if row is None or row["status"] != ConversationStatus.ACTIVE.value:
                 raise NotFoundError("conversación activa no encontrada")
             sequence = connection.execute(
-                """
-                SELECT COALESCE(MAX(sequence), 0) + 1
-                FROM conversation_messages WHERE conversation_id = ?
-                """,
+                "SELECT COALESCE(MAX(sequence), 0) + 1 FROM conversation_messages WHERE conversation_id = ?",
                 (conversation_id,),
             ).fetchone()[0]
             for offset, (role, content) in enumerate((
@@ -244,18 +178,12 @@ class SQLiteConversationRepository(ConversationRepository, ConversationHistorySt
                 (ConversationMessageRole.ASSISTANT.value, assistant_content),
             )):
                 connection.execute(
-                    """
-                    INSERT INTO conversation_messages (
+                    """INSERT INTO conversation_messages (
                         message_id, conversation_id, sequence, role, content, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?)
-                    """,
+                    ) VALUES (?, ?, ?, ?, ?, ?)""",
                     (str(uuid4()), conversation_id, sequence + offset, role, content, timestamp),
                 )
             connection.execute(
-                """
-                UPDATE conversations
-                SET updated_at = ?, last_message_at = ?
-                WHERE conversation_id = ?
-                """,
+                "UPDATE conversations SET updated_at = ?, last_message_at = ? WHERE conversation_id = ?",
                 (timestamp, timestamp, conversation_id),
             )

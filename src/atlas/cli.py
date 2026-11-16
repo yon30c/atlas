@@ -10,6 +10,7 @@ from atlas.adapters.console_conversations import ConversationConsoleCommands
 from atlas.adapters.ollama import OllamaProvider
 from atlas.adapters.ollama_assistant import OllamaResponseGenerator
 from atlas.adapters.sqlite import SQLiteConversationRepository, SQLiteDatabase
+from atlas.adapters.sqlite.conversation_backup import ConversationBackup
 from atlas.adapters.sqlite.conversation_storage import prepare_conversation_database_path
 from atlas.adapters.system_clock import SystemClock
 from atlas.application import AtlasCore, ConversationContextProcessor
@@ -34,7 +35,7 @@ def main(
     model: str | None = None, ollama_url: str | None = None,
     conversation_db_path: str | Path | None = None,
 ) -> None:
-    """Inicia Atlas con historial SQLite privado y administración local."""
+    """Inicia Atlas con historial SQLite privado, gestión y backup cifrado."""
     clock = SystemClock()
     database_path = prepare_conversation_database_path(conversation_db_path)
     database = SQLiteDatabase(database_path)
@@ -51,28 +52,27 @@ def main(
         repository.create(active)
         repository.set_active_conversation(active.conversation_id)
 
-    request_factory = LocalConsoleRequestFactory(
-        clock, user_id=user_id, conversation_id=active.conversation_id,
-    )
+    request_factory = LocalConsoleRequestFactory(clock, user_id=user_id, conversation_id=active.conversation_id)
     manager = ConversationManager(repository, clock)
-    command_handler = ConversationConsoleCommands(manager, request_factory)
+    backup = ConversationBackup(database)
+    command_handler = ConversationConsoleCommands(manager, request_factory, backup)
 
     if os.environ.get("ATLAS_MODE", "").strip().casefold() == "offline":
-        response_generator = LocalModeResponseGenerator()
+        generator = LocalModeResponseGenerator()
     else:
         selected_model = model if model is not None else (os.environ.get("ATLAS_MODEL") or DEFAULT_MODEL)
         selected_url = ollama_url if ollama_url is not None else os.environ.get("ATLAS_OLLAMA_URL", DEFAULT_OLLAMA_URL)
         selected_provider = provider if provider is not None else OllamaProvider(base_url=selected_url)
-        response_generator = OllamaResponseGenerator(provider=selected_provider, model=selected_model)
+        generator = OllamaResponseGenerator(provider=selected_provider, model=selected_model)
 
-    assistant_service = AssistantService(response_generator=response_generator, clock=clock)
-    conversation_processor = ConversationContextProcessor(
-        assistant=assistant_service, history_store=repository,
+    service = AssistantService(response_generator=generator, clock=clock)
+    processor = ConversationContextProcessor(
+        assistant=service, history_store=repository,
         max_history_turns=DEFAULT_CONVERSATION_HISTORY_TURNS,
         max_message_chars=DEFAULT_CONVERSATION_MESSAGE_CHARS,
     )
-    atlas_core = AtlasCore(request_factory=request_factory, assistant=conversation_processor)
+    core = AtlasCore(request_factory=request_factory, assistant=processor)
     options = {"input_fn": input_fn, "output_fn": output_fn, "command_handler": command_handler.handle}
     if write_fn is not None:
         options["write_fn"] = write_fn
-    run_console(atlas_core, **options)
+    run_console(core, **options)

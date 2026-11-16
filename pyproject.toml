@@ -8,9 +8,10 @@ version = "0.1.0"
 description = "Fundamentos modulares y contratos de Atlas"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = ["cryptography>=42"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
 [project.scripts]
 atlas = "atlas.cli:main"
