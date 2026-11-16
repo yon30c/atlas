@@ -137,3 +137,22 @@ El README raíz describe el estado observado del Assistant y de Atlas en general
 ## 9. Regla de evolución
 
 Cualquier cambio de framework de escritorio, plataforma inicial, frontera de comunicación, modelo de autenticación, permisos del dispositivo o motor TTS debe registrarse como una nueva decisión explícita. Las decisiones visuales y los detalles técnicos pendientes pueden resolverse durante el diseño sin presentarlos retroactivamente como decisiones ya tomadas.
+
+
+## 10. Primer incremento: shell Windows
+
+Se añadió `src/atlas-desktop/windows/Atlas.Desktop.sln` con un proyecto WinUI 3 para .NET 10 y una ventana inicial con navegación a las cuatro áreas aprobadas. La implementación solo actualiza el título y texto de estado de cada sección. Usa controles y estilos predeterminados, sin definir una identidad visual.
+
+No existe aún un endpoint/API HTTP remoto en el repositorio inspeccionado; el Assistant disponible es local (servicio/consola y adaptador Ollama). El cliente no realiza conexiones ni maneja credenciales, identidad, vinculación, persistencia o audio. Autenticación y vinculación permanecen pendientes de diseño aprobado. Piper continúa provisional y Phonon descartado; ninguno se instala o integra aquí.
+
+### Verificación local en Windows
+
+Con .NET 10 SDK, Visual Studio 2026 con la carga de trabajo para aplicaciones WinUI/Windows App SDK y conectividad NuGet:
+
+```powershell
+ dotnet restore src/atlas-desktop/windows/Atlas.Desktop.sln
+ dotnet build src/atlas-desktop/windows/Atlas.Desktop.sln --no-restore
+ dotnet run --project src/atlas-desktop/windows/Atlas.Desktop/Atlas.Desktop.csproj
+```
+
+La revisión de esta rama se realizó mediante el árbol y archivos de GitHub. No se ejecutó una compilación Windows desde el espejo del proyecto, que no contiene un checkout del repositorio.
