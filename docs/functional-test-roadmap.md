@@ -102,7 +102,7 @@ El conjunto exacto de operaciones se define al inspeccionar los módulos existen
 
 ### F1 — Interpretación y planificación
 
-**Estado:** F1.1 (contratos de intención/plan) integrado. F1.2 incluye parser JSON estricto y adaptador `OllamaIntentInterpreter` separado del flujo conversacional. El propietario validó 866/866 pruebas y confirmó con Gemma `gemma4:e2b-it-q4_K_M` los cuatro resultados esperados usando `OllamaProvider(think=False, response_format="json")`. F1.3 añade `AssistantPlanningService`; el propietario validó 875/875 pruebas. F1.4 añade `AssistantRequestPlanner` y `RequestPlanningResult`: coordina interpretación y planificación, devuelve `planned`, `needs_clarification` o `unsupported`, y no ejecuta capacidades. Las pruebas del orquestador y la suite completa están pendientes de validación local.
+**Estado:** F1.1 (contratos de intención/plan) integrado. F1.2 incluye parser JSON estricto y adaptador `OllamaIntentInterpreter` separado del flujo conversacional. El propietario validó 866/866 pruebas y confirmó con Gemma `gemma4:e2b-it-q4_K_M` los cuatro resultados esperados usando `OllamaProvider(think=False, response_format="json")`. F1.3 añade `AssistantPlanningService`; el propietario validó 875/875 pruebas. F1.4 añade `AssistantRequestPlanner` y `RequestPlanningResult`: coordina interpretación y planificación, devuelve `planned`, `needs_clarification` o `unsupported`, y no ejecuta capacidades. El propietario validó 882/882 pruebas. F1.5 añade `build_request_planner` en `atlas.bootstrap`, que compone el adaptador Ollama y el orquestador usando un proveedor inyectado; no modifica `cli.py` ni conecta el planificador a la consola. Las pruebas de composición están pendientes de validación local.
 
 - Clasificar la solicitud en una intención de producto.
 - Extraer parámetros y detectar datos faltantes.
@@ -206,4 +206,4 @@ Para cada siguiente incremento:
 6. Revisar los resultados antes de continuar.
 7. Actualizar esta documentación con evidencia, commit y estado real.
 
-**Siguiente acción:** actualizar el checkout Debian y ejecutar `tests.unit.test_assistant_request_planner` y después la suite completa. Si pasan, F1.4 quedará validado a nivel unitario. El siguiente incremento será preparar la composición del caso de uso de planificación, sin conectarlo aún a la consola ni ejecutar capacidades. El primer flujo vertical seguirá siendo `workspace.list` sobre un workspace demo aislado.
+**Siguiente acción:** actualizar el checkout Debian y ejecutar `tests.unit.test_bootstrap` y después la suite completa. Si pasan, F1.5 quedará validado a nivel unitario. Después se probará la composición con Gemma real mediante un pequeño comando Python manual; todavía sin conectarla a la consola ni ejecutar capacidades. El primer flujo vertical seguirá siendo `workspace.list` sobre un workspace demo aislado.
