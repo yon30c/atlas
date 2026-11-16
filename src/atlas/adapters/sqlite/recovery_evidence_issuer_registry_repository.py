@@ -183,6 +183,22 @@ class SQLiteRecoveryEvidenceIssuerRegistryRepository(
             ).fetchall()
         return tuple(self._from_row(row) for row in rows)
 
+    def list_history(
+        self,
+        issuer_id: str,
+    ) -> tuple[RecoveryEvidenceIssuerRegistration, ...]:
+        key = self._required_issuer(issuer_id)
+        with self._read_connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM recovery_evidence_issuer_registry
+                WHERE issuer_id = ?
+                ORDER BY registry_revision
+                """,
+                (key,),
+            ).fetchall()
+        return tuple(self._from_row(row) for row in rows)
+
     @staticmethod
     def _audit_registry_rows(
         issuer_id: str,
