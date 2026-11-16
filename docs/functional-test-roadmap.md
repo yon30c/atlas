@@ -424,4 +424,12 @@ Implementar snapshots inmutables por emisor y revisión en SQLite, con migració
 
 Se implementan diagnósticos de solo lectura para políticas por emisor: continuidad de revisiones, contenido canónico y decodificable, política vigente deshabilitada y ausencia de política para un emisor consultado. `audit_all()` obtiene un snapshot consistente y no muta la base. No se incluyen reparaciones automáticas, autenticación criptográfica ni autoridad de recuperación.
 
-**Estado:** implementado en la rama; pendiente de validación local del propietario. Nota: `audit_all()` cubre emisores registrados en la tabla; detectar emisores esperados nunca registrados requiere un inventario autoritativo independiente.
+**Estado: VALIDADO.** El propietario ejecutó la suite completa: 1094 tests, todos OK.
+
+## F2.3.30 — Inventario autoritativo de emisores
+
+Implementar un inventario persistente y versionado de emisores esperados, separado de las políticas de confianza. Cada emisor tendrá snapshots append-only y cambios mediante CAS; SQL impedirá reescritura o eliminación de historial. Componer el repositorio en la UoW local compartida y cruzar inventario/políticas en una auditoría consistente de solo lectura.
+
+La auditoría debe detectar registros sin política, políticas huérfanas, emisor deshabilitado, política deshabilitada y corrupción de ambos historiales. Registrar un emisor nunca constituye autenticación ni confianza.
+
+**Estado:** implementado en la rama; pendiente de pruebas locales del propietario.
