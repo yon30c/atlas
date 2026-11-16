@@ -38,8 +38,8 @@ class SQLiteLocalAuthorityUnitOfWork(SQLiteAuthorizationUnitOfWork):
                 unit_of_work=self._unit,
             )
             return self
-        except BaseException:
-            self.__exit__(*__import__("sys").exc_info())
+        except BaseException as exc:
+            self.__exit__(type(exc), exc, exc.__traceback__)
             raise
 
 
