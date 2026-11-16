@@ -44,11 +44,13 @@ Atlas es software funcional en desarrollo incremental, no solamente un conjunto 
 
 ## Desarrollo actual: Atlas Terminal
 
-Atlas Terminal ya es una superficie funcional en `feature/terminal-commands`: inicia la consola, conversa con Ollama cuando está disponible, conserva conversaciones en SQLite y permite administrarlas. Las fases 1 y 2 están implementadas y validadas en el alcance descrito. Consulta la [documentación de Atlas Terminal](docs/terminal/README.md), la [hoja de ruta](docs/terminal/roadmap.md) y la [guía de conversaciones](docs/conversations.md). Esta rama no debe confundirse con `main`; el estado aquí documentado corresponde a la rama indicada en el encabezado.
+Atlas Terminal ya es una superficie funcional en `feature/terminal-commands`: inicia la consola, conversa con Ollama cuando está disponible, conserva conversaciones en SQLite y permite administrarlas. Las fases 1 y 2 están implementadas y validadas en el alcance descrito. Consulta la [documentación de Atlas Terminal](docs/terminal/README.md), la [hoja de ruta](docs/terminal/roadmap.md) y la [guía de conversaciones](docs/conversations.md). Esta rama no debe confundirse con `main`; el estado aquí documentado corresponde a la rama indicada en el encabezado. La hoja de ruta general marca las fases 1 y 2 como completadas y la Fase 3 como activa. Gemma 4 E2B ya fue seleccionado en las evaluaciones iniciales; el trabajo actual valida su comportamiento y seguridad, no repite la selección de modelo. Consulta [roadmap](docs/roadmap.md) y [plan de Fase 3](docs/phase-3-intelligence.md).
 
 ## Documentación del proyecto
 
 - [Estado vigente de Atlas](docs/status-current.md)
+- [Hoja de ruta general por fases](docs/roadmap.md)
+- [Fase 3 — Inteligencia y comportamiento seguro](docs/phase-3-intelligence.md)
 - [Atlas Terminal](docs/terminal/README.md)
 - [Hoja de ruta](docs/terminal/roadmap.md)
 - [Gestión de conversaciones](docs/conversations.md)
