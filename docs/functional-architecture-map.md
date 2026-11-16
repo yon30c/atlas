@@ -466,4 +466,4 @@ El resultado VERIFIED conserva el digest canónico SHA-256 de la evidencia compl
 
 **Límite:** la integridad histórica del recibo no demuestra autoridad vigente ni concede permiso para efectos o recuperación.
 
-**Estado:** implementado en la rama; pruebas locales pendientes.
+**Estado: VALIDADO por el propietario; suite completa: 1131 tests en 10.314 s, todos OK.**
