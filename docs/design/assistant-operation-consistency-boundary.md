@@ -298,3 +298,18 @@ La persistencia actual guarda una autoridad por operación. Se requiere tabla hi
 No implementar renovación como dos cambios independientes; no tratar UoW como sustituto de fencing; no transportar objetivos ocultos en texto libre; no considerar aprobación humana como permiso CAM. No se implementa todavía coordinador SQLite ni se conecta este diseño al runtime.
 
 **Criterio de salida:** contrato multiobjetivo, esquema aditivo, repositorio, coordinador durable, adaptadores CAM y pruebas de concurrencia/recuperación completados antes de habilitar aprobaciones de renovación.
+
+
+### F2.3.14 — Modelos inmutables multiobjetivo
+
+Se añadieron `AuthorityChangeTargetKind`, `AuthorityChangeTarget` y `MultiAuthorityChangeIntent` en `atlas.memory.authority_changes`.
+
+- Los tipos distinguen `grant` y `grant_renewal` sin alterar todavía el enum ni el esquema histórico de operaciones de un solo objetivo.
+- Cada target exige transición de revisión exactamente +1.
+- La intención requiere al menos dos objetivos, acción, actor, propietario, clave idempotente, consumidor, contexto y timestamp UTC.
+- Los objetivos se canonicalizan por tipo e ID antes de comparar/hash de intención; los duplicados se rechazan.
+- Los modelos son inmutables y no asignan `operation_id`.
+
+Se añadieron pruebas unitarias para binding de Grant + renovación, orden canónico, duplicados, mínimo de objetivos, salto de revisión, booleanos como revisión, campos requeridos, UTC e inmutabilidad.
+
+**Límite:** estos modelos aún no son aceptados por `SQLiteAuthorityChangeStore`, no reservan ni mutan recursos y no autorizan operaciones. Pendiente de pruebas locales.
