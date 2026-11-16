@@ -694,12 +694,6 @@ CORE_SCHEMA_V6 = SQLiteMigration(
 )
 
 
-SQLITE_MIGRATIONS = (
-    CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
-    CORE_SCHEMA_V5, CORE_SCHEMA_V6,
-)
-
-
 # v7 introduces the canonical local Grant source. Permission scopes are stored
 # as canonical JSON in one row so each Grant revision changes atomically.
 CORE_SCHEMA_V7 = SQLiteMigration(
@@ -758,4 +752,9 @@ CORE_SCHEMA_V7 = SQLiteMigration(
         SELECT RAISE(ABORT, 'Grants are retained as authority tombstones');
     END;
     """,
+)
+
+SQLITE_MIGRATIONS = (
+    CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
+    CORE_SCHEMA_V5, CORE_SCHEMA_V6, CORE_SCHEMA_V7,
 )
