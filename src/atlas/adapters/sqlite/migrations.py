@@ -698,3 +698,64 @@ SQLITE_MIGRATIONS = (
     CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
     CORE_SCHEMA_V5, CORE_SCHEMA_V6,
 )
+
+
+# v7 introduces the canonical local Grant source. Permission scopes are stored
+# as canonical JSON in one row so each Grant revision changes atomically.
+CORE_SCHEMA_V7 = SQLiteMigration(
+    version=7,
+    name="canonical_sqlite_grants",
+    sql="""
+    CREATE TABLE authorization_grants (
+        grant_id TEXT PRIMARY KEY CHECK (length(trim(grant_id)) > 0),
+        owner_user_id TEXT NOT NULL CHECK (length(trim(owner_user_id)) > 0),
+        subject_identity_id TEXT NOT NULL CHECK (length(trim(subject_identity_id)) > 0),
+        project_id TEXT NOT NULL CHECK (length(trim(project_id)) > 0),
+        environment TEXT NOT NULL CHECK (length(trim(environment)) > 0),
+        resource_type TEXT NOT NULL CHECK (length(trim(resource_type)) > 0),
+        resource_ids_json TEXT NOT NULL CHECK (length(trim(resource_ids_json)) > 2),
+        actions_json TEXT NOT NULL CHECK (length(trim(actions_json)) > 2),
+        issued_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        revoked_at TEXT,
+        revision INTEGER NOT NULL CHECK (revision > 0),
+        CHECK (expires_at > issued_at),
+        CHECK (revoked_at IS NULL OR revoked_at >= issued_at)
+    );
+
+    CREATE INDEX authorization_grants_owner
+        ON authorization_grants(owner_user_id, grant_id);
+    CREATE INDEX authorization_grants_subject_scope
+        ON authorization_grants(
+            subject_identity_id, project_id, environment, resource_type
+        );
+
+    CREATE TRIGGER authorization_grants_identity_immutable
+    BEFORE UPDATE OF grant_id, owner_user_id, subject_identity_id,
+                     project_id, environment, resource_type, issued_at
+    ON authorization_grants
+    WHEN NEW.grant_id != OLD.grant_id
+      OR NEW.owner_user_id != OLD.owner_user_id
+      OR NEW.subject_identity_id != OLD.subject_identity_id
+      OR NEW.project_id != OLD.project_id
+      OR NEW.environment != OLD.environment
+      OR NEW.resource_type != OLD.resource_type
+      OR NEW.issued_at != OLD.issued_at
+    BEGIN
+        SELECT RAISE(ABORT, 'Grant identity and authority scope are immutable');
+    END;
+
+    CREATE TRIGGER authorization_grants_revision_step
+    BEFORE UPDATE ON authorization_grants
+    WHEN NEW.revision != OLD.revision + 1
+    BEGIN
+        SELECT RAISE(ABORT, 'Grant revision must increase by exactly one');
+    END;
+
+    CREATE TRIGGER authorization_grants_no_delete
+    BEFORE DELETE ON authorization_grants
+    BEGIN
+        SELECT RAISE(ABORT, 'Grants are retained as authority tombstones');
+    END;
+    """,
+)
