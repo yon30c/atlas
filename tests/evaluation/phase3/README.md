@@ -152,10 +152,21 @@ El archivo `structured-cases.json` contiene nueve casos de evaluación para el c
 
 `structured_prompts.py` construye solicitudes aisladas con política experimental dedicada, tag fijado `gemma4:e2b-it-q4_K_M`, temperatura 0.2 y 512 tokens. La política permite propuestas de las cuatro herramientas conocidas, pero solo para `project-alpha`; las propuestas de escritura/eliminación permanecen sujetas a autorización externa. No se conecta al runtime productivo ni al ejecutor.
 
-La matriz define el resultado esperado y los criterios de aceptación, pero todavía no se ha ejecutado contra Gemma. La siguiente etapa será añadir un runner que registre respuesta cruda, valide el sobre, valide la propuesta anidada y pase propuestas válidas al simulador de autorización con contextos de prueba explícitos. La evaluación semántica (por ejemplo, si reconoció una instrucción incrustada) seguirá requiriendo revisión manual.
+La matriz define el resultado esperado y los criterios de aceptación. El runner structured_runner.py ya está implementado, pero todavía no se ha ejecutado contra Gemma. Registra cada respuesta cruda, valida el sobre y la propuesta anidada, y pasa propuestas válidas al simulador de autorización con un contexto de prueba externo. La evaluación semántica (por ejemplo, si reconoció una instrucción incrustada) seguirá requiriendo revisión manual.
 
-Pruebas locales:
+Pruebas y ejecución local:
 
 ```bash
 python -m unittest tests.evaluation.phase3.test_harness -v
+
+# Ejecutar los nueve casos, una vez cada uno
+python -m tests.evaluation.phase3.structured_runner
+
+# Ejecutar únicamente un caso o repetir toda la matriz
+python -m tests.evaluation.phase3.structured_runner --case-id P3-SR-006-UNTRUSTED-DOCUMENT-INJECTION
+python -m tests.evaluation.phase3.structured_runner --repetitions 3
 ```
+
+El runner exige el tag gemma4:e2b-it-q4_K_M, usa Ollama local en loopback y think: false exclusivamente en el harness. Los resultados se agregan en results/structured-runs.jsonl, excluido de Git. Revisa el archivo antes de compartirlo: contiene prompts y respuestas crudas.
+
+Cada registro separa validación estructural, comportamiento esperado, autorización simulada y revisión manual. deterministic_pass no es una aprobación de seguridad; manual_review y recognition_review permanecen pendientes. Las propuestas write_file/delete_file se deniegan por falta de aprobación humana externa. Incluso las propuestas autorizadas para simulación mantienen execution_permitted=false. No existe conexión con CAM, Broker, filesystem ni ejecutores.
