@@ -272,3 +272,116 @@ class VerifiedAuthorityChangeAuthorization(Protocol):
 
     @property
     def consumed_at(self) -> datetime: ...
+
+class AuthorityChangeTerminalOutcome(str, Enum):
+    """Terminal outcome asserted by a durable reconciliation receipt."""
+
+    COMPLETED = "COMPLETED"
+    ABORTED = "ABORTED"
+
+
+@dataclass(frozen=True, slots=True)
+class AuthorityChangeTerminalTarget:
+    """Observed final revision for one exact reserved authority target."""
+
+    authority_kind: AuthorityChangeTargetKind
+    authority_id: str
+    expected_revision: int
+    proposed_revision: int
+    observed_revision: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.authority_kind, AuthorityChangeTargetKind):
+            raise ContractError("authority_kind debe ser AuthorityChangeTargetKind")
+        _required(self.authority_id, "authority_id")
+        _positive(self.expected_revision, "expected_revision")
+        _positive(self.proposed_revision, "proposed_revision")
+        _positive(self.observed_revision, "observed_revision")
+        if self.proposed_revision != self.expected_revision + 1:
+            raise ContractError("proposed_revision debe ser expected_revision + 1")
+
+
+@dataclass(frozen=True, slots=True)
+class AuthorityChangeTerminalEvidence:
+    """Immutable receipt binding a terminal claim to every reserved target.
+
+    This contract validates structure and revision claims only. It does not
+    authenticate evidence_ref, prove that reconciliation occurred, or grant
+    permission to release resource claims.
+    """
+
+    evidence_id: str
+    operation_id: str
+    outcome: AuthorityChangeTerminalOutcome
+    targets: tuple[AuthorityChangeTerminalTarget, ...]
+    evidence_ref: str
+    recorded_by: str
+    recorded_at: datetime
+
+    def __post_init__(self) -> None:
+        for field in (
+            "evidence_id", "operation_id", "evidence_ref", "recorded_by",
+        ):
+            _required(getattr(self, field), field)
+        if not isinstance(self.outcome, AuthorityChangeTerminalOutcome):
+            raise ContractError("outcome debe ser AuthorityChangeTerminalOutcome")
+        if not isinstance(self.targets, tuple) or len(self.targets) < 2:
+            raise ContractError("targets debe contener al menos dos objetivos")
+        if any(
+            not isinstance(target, AuthorityChangeTerminalTarget)
+            for target in self.targets
+        ):
+            raise ContractError(
+                "todos los targets deben ser AuthorityChangeTerminalTarget"
+            )
+        identities = [
+            (target.authority_kind.value, target.authority_id)
+            for target in self.targets
+        ]
+        if len(set(identities)) != len(identities):
+            raise ContractError("la evidencia no puede repetir objetivos")
+        canonical = tuple(sorted(
+            self.targets,
+            key=lambda target: (target.authority_kind.value, target.authority_id),
+        ))
+        object.__setattr__(self, "targets", canonical)
+        for target in canonical:
+            expected_observation = (
+                target.proposed_revision
+                if self.outcome is AuthorityChangeTerminalOutcome.COMPLETED
+                else target.expected_revision
+            )
+            if target.observed_revision != expected_observation:
+                raise ContractError(
+                    "la revisión observada no coincide con el resultado terminal"
+                )
+        _utc(self.recorded_at, "recorded_at")
+
+    def matches(self, reservation: MultiAuthorityChangeReservation) -> bool:
+        """Return whether this receipt binds exactly to a reservation's targets."""
+        if not isinstance(reservation, MultiAuthorityChangeReservation):
+            raise ContractError(
+                "reservation debe ser MultiAuthorityChangeReservation"
+            )
+        if self.operation_id != reservation.operation_id:
+            return False
+        expected = tuple(
+            (
+                target.authority_kind,
+                target.authority_id,
+                target.expected_revision,
+                target.proposed_revision,
+            )
+            for target in reservation.intent.targets
+        )
+        observed = tuple(
+            (
+                target.authority_kind,
+                target.authority_id,
+                target.expected_revision,
+                target.proposed_revision,
+            )
+            for target in self.targets
+        )
+        return observed == expected
+
