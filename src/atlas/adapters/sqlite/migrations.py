@@ -766,5 +766,85 @@ CORE_SCHEMA_V7 = SQLiteMigration(
 
 SQLITE_MIGRATIONS = (
     CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
-    CORE_SCHEMA_V5, CORE_SCHEMA_V6, CORE_SCHEMA_V7,
+    CORE_SCHEMA_V5, CORE_SCHEMA_V6, CORE_SCHEMA_V7, CORE_SCHEMA_V8,
+)
+
+# v8 adds durable Grant renewal requests to the same local authority database.
+CORE_SCHEMA_V8 = SQLiteMigration(
+    version=8,
+    name="canonical_sqlite_grant_renewals",
+    sql="""
+    CREATE TABLE authorization_grant_renewals (
+        renewal_id TEXT PRIMARY KEY CHECK (length(trim(renewal_id)) > 0),
+        grant_id TEXT NOT NULL CHECK (length(trim(grant_id)) > 0),
+        owner_user_id TEXT NOT NULL CHECK (length(trim(owner_user_id)) > 0),
+        subject_identity_id TEXT NOT NULL CHECK (length(trim(subject_identity_id)) > 0),
+        requested_by_identity_id TEXT NOT NULL CHECK (length(trim(requested_by_identity_id)) > 0),
+        current_expires_at TEXT NOT NULL,
+        proposed_expires_at TEXT NOT NULL,
+        requested_at TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
+        decided_at TEXT,
+        decided_by_user_id TEXT,
+        version INTEGER NOT NULL CHECK (version > 0),
+        CHECK (proposed_expires_at > current_expires_at),
+        CHECK (
+            (status = 'pending' AND decided_at IS NULL AND decided_by_user_id IS NULL)
+            OR
+            (status IN ('approved', 'rejected')
+             AND decided_at IS NOT NULL
+             AND length(trim(decided_by_user_id)) > 0)
+        ),
+        FOREIGN KEY (grant_id) REFERENCES authorization_grants(grant_id)
+            ON UPDATE NO ACTION ON DELETE NO ACTION
+    );
+
+    CREATE INDEX authorization_grant_renewals_grant
+        ON authorization_grant_renewals(grant_id, requested_at, renewal_id);
+    CREATE INDEX authorization_grant_renewals_owner
+        ON authorization_grant_renewals(owner_user_id, status, requested_at);
+
+    CREATE TRIGGER authorization_grant_renewals_binding_immutable
+    BEFORE UPDATE OF renewal_id, grant_id, owner_user_id, subject_identity_id,
+                     requested_by_identity_id, current_expires_at,
+                     proposed_expires_at, requested_at
+    ON authorization_grant_renewals
+    WHEN NEW.renewal_id != OLD.renewal_id
+      OR NEW.grant_id != OLD.grant_id
+      OR NEW.owner_user_id != OLD.owner_user_id
+      OR NEW.subject_identity_id != OLD.subject_identity_id
+      OR NEW.requested_by_identity_id != OLD.requested_by_identity_id
+      OR NEW.current_expires_at != OLD.current_expires_at
+      OR NEW.proposed_expires_at != OLD.proposed_expires_at
+      OR NEW.requested_at != OLD.requested_at
+    BEGIN
+        SELECT RAISE(ABORT, 'Grant renewal request binding is immutable');
+    END;
+
+    CREATE TRIGGER authorization_grant_renewals_version_step
+    BEFORE UPDATE ON authorization_grant_renewals
+    WHEN NEW.version != OLD.version + 1
+    BEGIN
+        SELECT RAISE(ABORT, 'Grant renewal version must increase by exactly one');
+    END;
+
+    CREATE TRIGGER authorization_grant_renewals_decision_terminal
+    BEFORE UPDATE OF status ON authorization_grant_renewals
+    WHEN OLD.status != 'pending' AND NEW.status != OLD.status
+    BEGIN
+        SELECT RAISE(ABORT, 'Grant renewal decision is terminal');
+    END;
+
+    CREATE TRIGGER authorization_grant_renewals_no_delete
+    BEFORE DELETE ON authorization_grant_renewals
+    BEGIN
+        SELECT RAISE(ABORT, 'Grant renewal requests are retained as tombstones');
+    END;
+    """,
+)
+
+
+SQLITE_MIGRATIONS = (
+    CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
+    CORE_SCHEMA_V5, CORE_SCHEMA_V6, CORE_SCHEMA_V7, CORE_SCHEMA_V8,
 )
