@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from pathlib import Path
+import sqlite3
 import tempfile
 import unittest
 
@@ -154,7 +155,7 @@ class SQLiteRecoveryEvidenceAdmissionTests(unittest.TestCase):
 
     def test_schema_rejects_non_current_issuer_revision(self):
         operation_id = self._prepare(revision=2)
-        with self.assertRaises(Exception):
+        with self.assertRaises(sqlite3.IntegrityError):
             with SQLiteLocalAuthorityUnitOfWork(self.database) as uow:
                 uow._unit._connection_for(self.database).execute(
                     """
