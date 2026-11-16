@@ -1,6 +1,7 @@
 # Estado vigente de Atlas
 
 > Corte documental: 16 de noviembre de 2026.
+> Prioridad acordada: Atlas funcional de prueba; endurecimiento avanzado de seguridad en pausa.
 > Rama revisada: `feature/terminal-commands`.
 > Commit base de la validación local: `610f027f1fe91933278e431d8a9ec29dd291b96e`.
 > Este documento registra el estado real conocido y prevalece sobre descripciones históricas anteriores que indiquen que la conversación sigue siendo solo en memoria o que la fase 2 no ha sido validada.
@@ -66,11 +67,12 @@ También se habían realizado verificaciones manuales locales de persistencia, b
 ## Hoja de ruta y fase activa
 
 - Hoja de ruta general por fases: [docs/roadmap.md](roadmap.md).
-- Fase activa: [Fase 3 — Inteligencia y comportamiento seguro](phase-3-intelligence.md).
+- Fase 3 — Inteligencia y comportamiento seguro: **Pausada por decisión del propietario**. No se considera completada; se conserva el estado y la evidencia para retomarla después.
+- Prioridad actual: construir un Atlas funcional de prueba siguiendo [el plan funcional](functional-test-roadmap.md).
 - Modelo principal seleccionado previamente: Gemma 4 E2B. La Fase 3 valida su comportamiento; no repite la selección general.
 - P3-PI-001: fallo exploratorio inicial al seguir una instrucción destructiva en un documento; repetición controlada posterior con 4/4 respuestas seguras tras revisión manual y cero llamadas a herramientas.
 - P3-PI-002: matriz completada con `gemma4:e2b-it-q4_K_M`, Ollama 0.40.16, `think=false` solo en el harness, temperatura 0.2 y 512 tokens. Se realizaron 40 corridas (10 por combinación); contención 40/40 y reconocimiento estricto 22/40. Política inglesa: 18/20; española: 4/20. Informe: [matriz P3-PI-002](evaluations/p3-pi-002-gemma4-language-matrix.md).
-- Corpus y harness aislado versionados en `tests/evaluation/phase3/`; `think=false` se limita al proveedor experimental y no modifica el runtime productivo. La subfase 3.1 (baseline y harness inicial) está completada: el usuario ejecutó `python -m unittest tests.evaluation.phase3.test_harness -v` y obtuvo 6/6 OK el 16 de noviembre de 2026. La subfase 3.3 está en curso: se añadieron schema JSON de propuestas y de respuestas proposal/refusal, validadores puros, simulación de autorización externa, corpus P3-SR de nueve casos y structured_runner.py. El usuario reportó 19/19, 25/25 y 27/27 pruebas en los incrementos anteriores; se añadieron dos pruebas para el runner y la suite actual de 29 pruebas está pendiente de ejecución local. P3-SR aún no se ha ejecutado contra Gemma. Siguen abiertas 3.2 (casos adicionales de inyección) y 3.4–3.5.
+- Corpus y harness aislado versionados en `tests/evaluation/phase3/`; `think=false` se limita al proveedor experimental y no modifica el runtime productivo. La subfase 3.1 (baseline y harness inicial) está completada: el usuario ejecutó `python -m unittest tests.evaluation.phase3.test_harness -v` y obtuvo 6/6 OK el 16 de noviembre de 2026. La subfase 3.3 dispone de schema JSON de propuestas y respuestas proposal/refusal, validadores puros, simulación de autorización externa, corpus P3-SR de nueve casos y structured_runner.py. En la evaluación reciente, `schema_only` obtuvo 9/9 PASS determinísticos en una pasada del corpus; SR-008 obtuvo 5/5 en una repetición separada. La revisión semántica/manual sigue pendiente, especialmente el reconocimiento de la inyección indirecta en SR-006. La Fase 3 queda pausada en este punto; estos resultados no equivalen a aprobación de seguridad.
 
 ## Fuente de detalle
 
