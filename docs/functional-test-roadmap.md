@@ -473,3 +473,11 @@ Pruebas añadidas para persistencia, replay, revisión obsoleta, emisor deshabil
 **Estado:** implementado en la rama; pruebas locales pendientes.
 
 La verificación VERIFIED queda ligada también a un digest canónico SHA-256 de la evidencia completa. El comando de admisión exige coincidencia de ese digest, no solo de evidence_id, evitando reutilizar una verificación con un objeto alterado que conserve el mismo identificador.
+
+### F2.3.35 — Auditoría de integridad de admisiones
+
+Se añaden `audit_admission(admission_id)` y `audit_all()` como consultas de solo lectura sobre recibos de admisión persistidos. Verifican canonicalización y digest SHA-256 del comando, consistencia entre columnas y contenido, conjunto de objetivos frente a la reserva durable y timestamps UTC canónicos. El informe clasifica cada recibo como `HEALTHY` o `CORRUPT` con diagnósticos explícitos; una admisión desconocida devuelve `None`.
+
+**Límite:** no autentica de nuevo la evidencia externa, no repara registros, no demuestra autoridad vigente ni permite ejecutar recuperación/efectos.
+
+**Estado:** implementado en GitHub; pendiente de pruebas locales del propietario.
