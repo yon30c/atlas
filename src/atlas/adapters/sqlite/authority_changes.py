@@ -735,6 +735,167 @@ class SQLiteAuthorityChangeStore:
                 else self._terminal_evidence(connection, row)
             )
 
+
+    def release_multi_claims(self, operation_id: str) -> bool:
+        """Release a complete claim set only after validating durable terminal evidence.
+
+        The immutable release receipt and deletion of every claim are committed
+        in one SQLite UoW. Exact retries return True; absent/non-terminal
+        operations return False. Corrupt or partial state fails closed.
+        """
+        if not isinstance(operation_id, str) or not operation_id.strip():
+            raise ContractError("operation_id debe ser una cadena no vacía")
+
+        with self._database.unit_of_work() as unit:
+            connection = unit._connection_for(self._database)
+            operation = self._select_multi_operation(connection, operation_id)
+            if operation is None:
+                return False
+            status = AuthorityChangeStatus(operation["status"])
+            if status not in (
+                AuthorityChangeStatus.COMPLETED,
+                AuthorityChangeStatus.ABORTED,
+            ):
+                return False
+
+            receipt = connection.execute(
+                """
+                SELECT * FROM multi_authority_change_terminal_evidence
+                WHERE operation_id = ?
+                """,
+                (operation_id,),
+            ).fetchone()
+            if receipt is None:
+                raise sqlite3.DatabaseError(
+                    "operación terminal sin recibo durable"
+                )
+            evidence = self._terminal_evidence(connection, receipt)
+            if evidence.outcome.value != status.value:
+                raise sqlite3.DatabaseError(
+                    "estado terminal y recibo no coinciden"
+                )
+
+            targets = connection.execute(
+                """
+                SELECT authority_kind, authority_id, expected_revision,
+                       proposed_revision
+                FROM multi_authority_change_targets
+                WHERE operation_id = ?
+                ORDER BY authority_kind, authority_id
+                """,
+                (operation_id,),
+            ).fetchall()
+            terminal_targets = connection.execute(
+                """
+                SELECT authority_kind, authority_id, expected_revision,
+                       proposed_revision, observed_revision
+                FROM multi_authority_change_terminal_targets
+                WHERE operation_id = ?
+                ORDER BY authority_kind, authority_id
+                """,
+                (operation_id,),
+            ).fetchall()
+            claims = connection.execute(
+                """
+                SELECT authority_kind, authority_id
+                FROM multi_authority_change_claims
+                WHERE operation_id = ?
+                ORDER BY authority_kind, authority_id
+                """,
+                (operation_id,),
+            ).fetchall()
+            reserved_set = {
+                (row["authority_kind"], row["authority_id"],
+                 row["expected_revision"], row["proposed_revision"])
+                for row in targets
+            }
+            evidence_set = {
+                (row["authority_kind"], row["authority_id"],
+                 row["expected_revision"], row["proposed_revision"])
+                for row in terminal_targets
+            }
+            claim_set = {
+                (row["authority_kind"], row["authority_id"])
+                for row in claims
+            }
+            expected_claims = {
+                (row["authority_kind"], row["authority_id"])
+                for row in targets
+            }
+            if (
+                len(reserved_set) < 2
+                or evidence_set != reserved_set
+                or claim_set != expected_claims
+                or len(claims) != len(targets)
+                or evidence.targets != tuple(
+                    AuthorityChangeTerminalTarget(
+                        authority_kind=AuthorityChangeTargetKind(row["authority_kind"]),
+                        authority_id=row["authority_id"],
+                        expected_revision=row["expected_revision"],
+                        proposed_revision=row["proposed_revision"],
+                        observed_revision=row["observed_revision"],
+                    )
+                    for row in terminal_targets
+                )
+            ):
+                raise sqlite3.DatabaseError(
+                    "conjunto de claims o evidencia terminal incompleto/inconsistente"
+                )
+
+            existing_release = connection.execute(
+                """
+                SELECT evidence_digest FROM multi_authority_change_claim_releases
+                WHERE operation_id = ?
+                """,
+                (operation_id,),
+            ).fetchone()
+            if existing_release is not None:
+                if existing_release["evidence_digest"] != receipt["evidence_digest"]:
+                    raise sqlite3.DatabaseError(
+                        "el recibo de liberación no coincide con la evidencia terminal"
+                    )
+                if claims:
+                    raise sqlite3.DatabaseError(
+                        "liberación registrada pero quedan claims activos"
+                    )
+                return True
+
+            connection.execute(
+                """
+                INSERT INTO multi_authority_change_claim_releases (
+                    operation_id, evidence_digest, released_at
+                ) VALUES (?, ?, ?)
+                """,
+                (
+                    operation_id,
+                    receipt["evidence_digest"],
+                    _utc_text(datetime.now(timezone.utc)),
+                ),
+            )
+            deleted = connection.execute(
+                """
+                DELETE FROM multi_authority_change_claims
+                WHERE operation_id = ?
+                """,
+                (operation_id,),
+            )
+            if deleted.rowcount != len(targets):
+                raise sqlite3.DatabaseError(
+                    "no se liberó el conjunto completo de claims"
+                )
+            remaining = connection.execute(
+                """
+                SELECT COUNT(*) FROM multi_authority_change_claims
+                WHERE operation_id = ?
+                """,
+                (operation_id,),
+            ).fetchone()[0]
+            if remaining != 0:
+                raise sqlite3.DatabaseError(
+                    "quedaron claims activos después de la liberación"
+                )
+            return True
+
     def get_multi_claims(self, operation_id: str) -> tuple[AuthorityChangeTarget, ...]:
         """Return the immutable target claims currently held by an operation."""
         if not isinstance(operation_id, str) or not operation_id.strip():
