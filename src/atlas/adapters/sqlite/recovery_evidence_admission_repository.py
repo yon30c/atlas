@@ -1,0 +1,205 @@
+"""SQLite persistence for one-time recovery evidence admission."""
+
+from contextlib import contextmanager
+from datetime import datetime, timezone
+import hashlib
+import json
+import sqlite3
+
+from atlas.adapters.sqlite.database import SQLiteDatabase, SQLiteUnitOfWork
+from atlas.application.recovery_admission import RecoveryEvidenceAdmissionCommand
+from atlas.core.errors import ContractError
+from atlas.ports.recovery_evidence_admission import (
+    RecoveryEvidenceAdmissionPort,
+    RecoveryEvidenceAdmissionResult,
+    RecoveryEvidenceAdmissionStatus,
+)
+
+
+class SQLiteRecoveryEvidenceAdmissionRepository(RecoveryEvidenceAdmissionPort):
+    """Persist admission under the shared local-authority BEGIN IMMEDIATE UoW.
+
+    This records evidence admission only. It does not authorize or execute effects.
+    """
+
+    def __init__(
+        self,
+        database: SQLiteDatabase,
+        *,
+        unit_of_work: SQLiteUnitOfWork,
+    ) -> None:
+        if not isinstance(database, SQLiteDatabase):
+            raise ContractError("database debe ser SQLiteDatabase")
+        if not isinstance(unit_of_work, SQLiteUnitOfWork):
+            raise ContractError("unit_of_work debe ser SQLiteUnitOfWork")
+        self._database = database
+        self._unit_of_work = unit_of_work
+
+    def _connection(self) -> sqlite3.Connection:
+        return self._unit_of_work._connection_for(self._database)
+
+    @staticmethod
+    def _canonical(command: RecoveryEvidenceAdmissionCommand) -> bytes:
+        payload = {
+            "admission_id": command.admission_id,
+            "operation_id": command.operation_id,
+            "evidence_id": command.evidence_id,
+            "issuer_id": command.issuer_id,
+            "issuer_registry_revision": command.issuer_registry_revision,
+            "evidence_kind": command.evidence_kind.value,
+            "targets": [
+                {
+                    "authority_kind": target.authority_kind.value,
+                    "authority_id": target.authority_id,
+                    "expected_revision": target.expected_revision,
+                    "proposed_revision": target.proposed_revision,
+                }
+                for target in command.targets
+            ],
+            "requested_at": command.requested_at.isoformat(timespec="microseconds"),
+        }
+        return json.dumps(
+            payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode("utf-8")
+
+    def admit(
+        self,
+        command: RecoveryEvidenceAdmissionCommand,
+    ) -> RecoveryEvidenceAdmissionResult:
+        if not isinstance(command, RecoveryEvidenceAdmissionCommand):
+            raise ContractError("command debe ser RecoveryEvidenceAdmissionCommand")
+        connection = self._connection()
+        canonical = self._canonical(command)
+        digest = hashlib.sha256(canonical).hexdigest()
+
+        existing = connection.execute(
+            """
+            SELECT admission_id, evidence_id, command_digest, command_canonical
+            FROM recovery_evidence_admissions
+            WHERE admission_id = ? OR evidence_id = ?
+            """,
+            (command.admission_id, command.evidence_id),
+        ).fetchall()
+        if existing:
+            if (
+                len(existing) == 1
+                and existing[0]["admission_id"] == command.admission_id
+                and existing[0]["evidence_id"] == command.evidence_id
+                and existing[0]["command_digest"] == digest
+                and bytes(existing[0]["command_canonical"]) == canonical
+            ):
+                return RecoveryEvidenceAdmissionResult(
+                    RecoveryEvidenceAdmissionStatus.REPLAYED,
+                    command.admission_id,
+                )
+            status = (
+                RecoveryEvidenceAdmissionStatus.EVIDENCE_REUSED
+                if any(row["evidence_id"] == command.evidence_id for row in existing)
+                else RecoveryEvidenceAdmissionStatus.OPERATION_MISMATCH
+            )
+            return RecoveryEvidenceAdmissionResult(status, command.admission_id)
+
+        issuer = connection.execute(
+            """
+            SELECT registry_revision, enabled
+            FROM recovery_evidence_issuer_registry
+            WHERE issuer_id = ?
+            ORDER BY registry_revision DESC LIMIT 1
+            """,
+            (command.issuer_id,),
+        ).fetchone()
+        if issuer is None or issuer["registry_revision"] != command.issuer_registry_revision:
+            return RecoveryEvidenceAdmissionResult(
+                RecoveryEvidenceAdmissionStatus.STALE_ISSUER, command.admission_id
+            )
+        if issuer["enabled"] != 1:
+            return RecoveryEvidenceAdmissionResult(
+                RecoveryEvidenceAdmissionStatus.ISSUER_DISABLED, command.admission_id
+            )
+
+        operation = connection.execute(
+            """
+            SELECT status FROM multi_authority_change_operations
+            WHERE operation_id = ?
+            """,
+            (command.operation_id,),
+        ).fetchone()
+        if operation is None or operation["status"] not in {
+            "INVALIDATION_PENDING", "SOURCE_PENDING",
+            "SOURCE_CONFIRMED", "RECONCILING",
+        }:
+            return RecoveryEvidenceAdmissionResult(
+                RecoveryEvidenceAdmissionStatus.OPERATION_MISMATCH,
+                command.admission_id,
+            )
+
+        target_rows = connection.execute(
+            """
+            SELECT authority_kind, authority_id, expected_revision, proposed_revision
+            FROM multi_authority_change_targets
+            WHERE operation_id = ?
+            ORDER BY authority_kind, authority_id
+            """,
+            (command.operation_id,),
+        ).fetchall()
+        claim_rows = connection.execute(
+            """
+            SELECT authority_kind, authority_id
+            FROM multi_authority_change_claims
+            WHERE operation_id = ?
+            ORDER BY authority_kind, authority_id
+            """,
+            (command.operation_id,),
+        ).fetchall()
+        expected_targets = tuple(
+            (
+                row["authority_kind"], row["authority_id"],
+                row["expected_revision"], row["proposed_revision"],
+            )
+            for row in target_rows
+        )
+        supplied_targets = tuple(
+            (
+                target.authority_kind.value, target.authority_id,
+                target.expected_revision, target.proposed_revision,
+            )
+            for target in command.targets
+        )
+        expected_claims = tuple((row[0], row[1]) for row in target_rows)
+        supplied_claims = tuple((row[0], row[1]) for row in claim_rows)
+        if (
+            len(expected_targets) < 2
+            or expected_targets != supplied_targets
+            or expected_claims != supplied_claims
+        ):
+            return RecoveryEvidenceAdmissionResult(
+                RecoveryEvidenceAdmissionStatus.OPERATION_MISMATCH,
+                command.admission_id,
+            )
+
+        recorded_at = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+        try:
+            connection.execute(
+                """
+                INSERT INTO recovery_evidence_admissions (
+                    admission_id, evidence_id, operation_id, issuer_id,
+                    issuer_registry_revision, evidence_kind, target_count,
+                    command_digest, command_canonical, requested_at, recorded_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    command.admission_id, command.evidence_id, command.operation_id,
+                    command.issuer_id, command.issuer_registry_revision,
+                    command.evidence_kind.value, len(command.targets), digest,
+                    sqlite3.Binary(canonical),
+                    command.requested_at.isoformat(timespec="microseconds"),
+                    recorded_at,
+                ),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise sqlite3.DatabaseError(
+                "la admisión no superó las restricciones transaccionales SQLite"
+            ) from exc
+        return RecoveryEvidenceAdmissionResult(
+            RecoveryEvidenceAdmissionStatus.ADMITTED, command.admission_id
+        )
