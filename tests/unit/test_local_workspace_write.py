@@ -50,6 +50,18 @@ class LocalWorkspaceWriteAdapterTests(unittest.TestCase):
             WorkspaceRecoveryStatus.COMMITTED,
         )
 
+    def test_stage_retry_after_commit_returns_original_operation(self):
+        first = self.adapter.stage_write("demo", "notes.txt", "Atlas", self.operation_id)
+        self.adapter.commit_write("demo", self.operation_id)
+        second = self.adapter.stage_write("demo", "notes.txt", "Atlas", self.operation_id)
+        self.assertEqual(first, second)
+
+    def test_detects_destination_created_after_stage(self):
+        self.adapter.stage_write("demo", "notes.txt", "Atlas", self.operation_id)
+        (self.root / "notes.txt").write_text("external", encoding="utf-8")
+        with self.assertRaises(ConcurrencyError):
+            self.adapter.commit_write("demo", self.operation_id)
+
     def test_update_requires_exact_expected_hash(self):
         target = self.root / "notes.txt"
         target.write_text("before", encoding="utf-8")
