@@ -391,6 +391,15 @@ Un recibo corrupto, un conjunto parcial, un estado terminal sin evidencia, una l
 
 Identity y Project/Environment ahora pueden participar en una `SQLiteUnitOfWork` externa, verificando que pertenece a la misma instancia de `SQLiteDatabase` y que sigue activa. `SQLiteLocalAuthorityUnitOfWork` extiende la composición transaccional existente para exponer Identity, Grants, renovaciones y Project/Environment sobre la misma conexión y transacción.
 
-La composición puede confirmar o revertir en conjunto estas fuentes canónicas. Todavía no incluye `SQLiteAuthorityChangeStore`: sus reservas/claims/evidencias siguen en transacciones independientes, por lo que no debe interpretarse como atomicidad de una operación de autoridad completa. No implementa CAM, invalidación, fencing ni reconciliación real. Runtime desconectado.
+La composición puede confirmar o revertir en conjunto estas fuentes canónicas. La siguiente ampliación integra también `SQLiteAuthorityChangeStore` en la misma UoW; véase F2.3.22. La frontera continúa siendo solo de persistencia y no define el protocolo de coordinación. No implementa CAM, invalidación, fencing ni reconciliación real. Runtime desconectado.
+
+**Estado:** implementación y pruebas publicadas; pendiente de validación local.
+
+
+## 23. F2.3.22 — Ledger de operaciones dentro de la UoW compartida
+
+`SQLiteAuthorityChangeStore` puede construirse con la UoW externa y utiliza esa conexión para sus reservas, claims, evidencias terminales, liberaciones y consultas. La composición local expone `authority_changes` junto a Identity, Grants, renovaciones y Project/Environment. Así, una transacción puede confirmar o revertir en conjunto los registros canónicos y el ledger de operación.
+
+Esto elimina la separación transaccional SQLite entre el ledger y esas fuentes cuando todos participan explícitamente en la misma UoW. No crea por sí solo un coordinador: faltan política de admisión, autorización CAM, orden de mutación, invalidación, fencing, reconciliación externa y pruebas de concurrencia de extremo a extremo. Runtime desconectado.
 
 **Estado:** implementación y pruebas publicadas; pendiente de validación local.
