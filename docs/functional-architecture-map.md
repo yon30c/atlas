@@ -432,4 +432,11 @@ La UoW local compartida expone `recovery_evidence_issuer_registry`. `audit_inven
 
 Solo después se consulta la política vigente y, si esta permite la evidencia, se invoca el verificador independiente. Registro, política y autenticidad criptográfica son controles separados.
 
-**Límite de concurrencia:** la lectura previa del inventario no prueba que el emisor siga habilitado en el instante de un efecto posterior. La garantía frente a desactivaciones concurrentes requiere coordinación de admisión/fencing y verificación en el punto de efecto. Esta fase no autoriza recuperación ni conecta el runtime. Implementado; pruebas locales pendientes.
+**Límite de concurrencia:** la lectura previa del inventario no prueba que el emisor siga habilitado en el instante de un efecto posterior. La garantía frente a desactivaciones concurrentes requiere coordinación de admisión/fencing y verificación en el punto de efecto. Esta fase no autoriza recuperación ni conecta el runtime. **Estado: VALIDADO por el propietario; suite completa: 1110 tests en 8.196 s, todos OK.**
+## 42. F2.3.32 — Revalidación de revisión del emisor
+
+La verificación queda ligada a la revisión inicial del inventario. Tras el retorno positivo del verificador, se vuelve a leer el registro; el servicio solo devuelve VERIFIED si el emisor continúa habilitado y la revisión no cambió. El resultado incluye `issuer_registry_revision`. Un cambio durante la verificación produce DENIED y una segunda lectura no disponible produce UNAVAILABLE.
+
+Esta comprobación detecta cambios concurrentes durante el cálculo criptográfico, pero no es un fence consumible ni protege la ventana posterior al retorno. La admisión y el efecto real aún necesitarán coordinación transaccional/fencing en su propio punto de efecto. No se habilita runtime ni recuperación.
+
+**Estado: implementado; pruebas locales pendientes.**
