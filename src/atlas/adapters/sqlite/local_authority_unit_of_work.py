@@ -11,6 +11,7 @@ from atlas.adapters.sqlite.authorization_unit_of_work import (
     SQLiteAuthorizationUnitOfWork,
 )
 from atlas.adapters.sqlite.database import SQLiteDatabase
+from atlas.adapters.sqlite.authority_changes import SQLiteAuthorityChangeStore
 from atlas.adapters.sqlite.identity_authority import SQLiteIdentityAuthority
 from atlas.adapters.sqlite.project_environment_repository import (
     SQLiteProjectEnvironmentRepository,
@@ -25,6 +26,7 @@ class SQLiteLocalAuthorityUnitOfWork(SQLiteAuthorizationUnitOfWork):
         super().__init__(database)
         self.identity = None
         self.project_environments = None
+        self.authority_changes = None
 
     def __enter__(self) -> Self:
         super().__enter__()
@@ -34,6 +36,10 @@ class SQLiteLocalAuthorityUnitOfWork(SQLiteAuthorizationUnitOfWork):
                 unit_of_work=self._unit,
             )
             self.project_environments = SQLiteProjectEnvironmentRepository(
+                self._database,
+                unit_of_work=self._unit,
+            )
+            self.authority_changes = SQLiteAuthorityChangeStore(
                 self._database,
                 unit_of_work=self._unit,
             )
