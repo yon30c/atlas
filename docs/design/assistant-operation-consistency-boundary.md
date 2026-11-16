@@ -228,3 +228,73 @@ La revisión del servicio `GrantRenewalService` confirma:
 La futura operación coordinada de aprobación debe vincular la reserva durable a `renewal_id`, `grant_id`, Grant expected/proposed revision, renewal expected/proposed version, actor, owner, proyecto, entorno, acción y contexto. La decisión humana del propietario debe persistirse como aprobación explícita, pero no sustituye la autorización CAM. El cambio de vencimiento del Grant debe pasar por el mismo fencing/invalidation/CAS/reconciliation que cualquier otro cambio de Grant. El rechazo y la creación de solicitudes requieren una política diferenciada porque no mutan el Grant.
 
 **No cambiar aún el servicio para aceptar un coordinador ficticio ni reutilizar el autorizador CAM específico de revocación.** Primero definir contratos neutrales de autorización para cambios de autoridad y una composición que garantice atomicidad entre la decisión humana, renovación, Grant, journal e invalidación.
+
+
+## 17. F2.3.13 — Contrato de cambios sobre múltiples autoridades
+
+**Estado:** diseño normativo; no implementado.
+
+### Problema
+
+El `AuthorityChangeIntent` actual reserva una única autoridad `(authority_kind, authority_id)` y una pareja de revisiones. Sirve para una revocación individual, pero no representa completamente la aprobación de una renovación: esta modifica en una misma decisión el Grant (vencimiento/revisión) y la solicitud (estado APPROVED/versión). La UoW SQLite hace atómica la escritura local, pero no invalida admisiones antiguas ni bloquea rutas que consuman revisiones previas.
+
+La segunda mutación no debe esconderse en `request_context_ref`, `change_kind` ni JSON opaco.
+
+### Modelo propuesto
+
+Introducir un conjunto inmutable de objetivos de cambio:
+
+- `AuthorityChangeTarget`: `authority_kind`, `authority_id`, `expected_revision`, `proposed_revision`.
+- `AuthorityChangeIntent`: `consumer_id`, `idempotency_key`, acción, actor, propietario, proyecto/entorno, conjunto de objetivos, referencia de contexto y timestamp.
+
+Cada objetivo exige revisión esperada positiva y propuesta estrictamente superior. No se permiten objetivos duplicados; se fija un orden canónico antes de calcular la huella idempotente. La clave queda vinculada a la intención completa. Reutilizarla con cualquier diferencia semántica se rechaza. Una sola operación y reserva durable reclaman todos los objetivos atómicamente; nunca se reserva un subconjunto.
+
+### Aprobación de renovación
+
+| Objetivo | Recurso | Revisión esperada | Revisión propuesta |
+|---|---|---:|---:|
+| Grant | `grant_id` | `grant.revision` | `grant.revision + 1` |
+| Solicitud | `renewal_id` | `renewal.version` | `renewal.version + 1` |
+
+La solicitud CAM debe incluir actor USER activo, propietario, proyecto, entorno, acción `grant.renewal.approve`, IDs exactos, vencimiento actual/propuesto y solicitud pendiente. La aprobación humana es una decisión de negocio autenticada y auditable; no reemplaza CAM. La evidencia consumida debe vincularse a operation_id, clave idempotente, actor, propietario, todos los objetivos/revisiones, proyecto, entorno, acción, emisor y tiempos.
+
+### Orden durable
+
+1. Leer y validar fuentes canónicas.
+2. Construir intención inmutable con todos los objetivos.
+3. Reservar todos los objetivos bajo una operación idempotente y una transacción.
+4. Obtener, verificar y consumir evidencia CAM exacta.
+5. Aplicar fencing a admisiones/rutas incompatibles para todos los objetivos.
+6. Aplicar todos los cambios fuente en una misma UoW SQLite y CAS por objetivo.
+7. Persistir resultado fuente y posición de consistencia.
+8. Reconciliar invalidaciones/rutas y verificar todas las revisiones propuestas.
+9. Marcar COMPLETED y retirar fencing solo tras reconciliación completa.
+
+Si falla un CAS, no puede confirmarse parcialmente el conjunto. Ante incertidumbre se mantiene BLOCKED/fenced; timeout nunca significa rollback ni ABORTED.
+
+### Otras operaciones
+
+- Solicitar renovación: crea una solicitud pendiente sin incrementar Grant; debe registrar actor/delegación y revisión/vencimiento observados, y rechazar solicitudes incompatibles con un Grant cambiado.
+- Rechazar renovación: muta solo la solicitud; requiere decisión del propietario y autorización/auditoría explícita.
+- Aprobar renovación: muta Grant + solicitud; requiere dos objetivos y atomicidad.
+
+### Persistencia futura
+
+La persistencia actual guarda una autoridad por operación. Se requiere tabla hija de objetivos (p. ej. `authority_change_targets`) con FK a operación, clave única por operación/autoridad, revisiones esperada/propuesta e inmutabilidad tras reserva. Operación, clave idempotente y todos los objetivos se insertan en una única transacción `BEGIN IMMEDIATE`. La migración será aditiva y compatible con operaciones históricas de un objetivo; nunca se fabrican objetivos secundarios para filas antiguas.
+
+### Pruebas obligatorias
+
+- Reservas concurrentes sobre el mismo Grant o la misma solicitud: solo una gana.
+- No existe reserva parcial del conjunto.
+- Revisión obsoleta de cualquiera de los objetivos impide aplicar todos.
+- Fallo entre escrituras nunca deja Grant aprobado con solicitud pendiente, ni viceversa.
+- Revocación concurrente con aprobación produce un orden válido; no resucita Grants revocados.
+- Replay exacto recupera la misma operación; misma clave con objetivo/acción/revisión diferente se rechaza.
+- Crashes tras reserva, consumo CAM, fencing, CAS, resultado y reconciliación conservan bloqueo hasta recuperar el estado autoritativo.
+- COMPLETED demuestra la revisión final de cada objetivo y la invalidación reconciliada.
+
+### Decisiones
+
+No implementar renovación como dos cambios independientes; no tratar UoW como sustituto de fencing; no transportar objetivos ocultos en texto libre; no considerar aprobación humana como permiso CAM. No se implementa todavía coordinador SQLite ni se conecta este diseño al runtime.
+
+**Criterio de salida:** contrato multiobjetivo, esquema aditivo, repositorio, coordinador durable, adaptadores CAM y pruebas de concurrencia/recuperación completados antes de habilitar aprobaciones de renovación.
