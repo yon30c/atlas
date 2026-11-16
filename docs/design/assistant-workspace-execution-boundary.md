@@ -6,7 +6,7 @@
 
 ## 1. Objetivo
 
-Definir cómo una propuesta `workspace.list` pasa de plan a operación ejecutable sin convertir al modelo, al chat ni a una confirmación informal en autoridad de seguridad.
+Definir cómo una propuesta `workspace.list` o `workspace.read` pasa de plan a operación ejecutable sin convertir al modelo, al chat ni a una confirmación informal en autoridad de seguridad.
 
 Este diseño cubre el primer flujo local de prueba. No conecta todavía el flujo al runtime conversacional, a `cli.py`, al Broker ni a un ejecutor general.
 
@@ -37,7 +37,7 @@ La ejecución solo puede considerarse admisible cuando la autorización vigente 
 La operación sometida a revisión/autorización debe quedar ligada a una representación inmutable que incluya, como mínimo:
 
 - identificador del plan y del paso;
-- capacidad exacta, inicialmente `workspace.list`;
+- capacidad exacta: `workspace.list` o `workspace.read`;
 - workspace ID como recurso exacto;
 - acción CAM estable y explícita;
 - propietario/tenant del recurso resuelto por configuración confiable;
@@ -92,7 +92,7 @@ F2.3 no implementa todavía:
 - escritura de archivos, shell o acceso al sistema de archivos fuera del workspace configurado;
 - integración con Scheduler, Broker o Skills.
 
-El primer ejecutor seguirá limitado a `workspace.list` y a una raíz de workspace configurada localmente. No se aceptarán rutas arbitrarias suministradas por el modelo.
+El primer ejecutor seguirá limitado a `workspace.list` y `workspace.read` sobre workspaces configurados localmente. `workspace.read` solo aceptará rutas relativas normalizadas, archivos regulares UTF-8 y un límite de tamaño; no seguirá symlinks ni aceptará rutas arbitrarias fuera del workspace. Ninguna de estas capacidades está conectada aún al runtime.
 
 ## 8. Pruebas de aceptación para el siguiente incremento
 
@@ -127,7 +127,7 @@ Se añadieron, sin modificar el contrato histórico de Memory:
 
 ## 10. Próximo paso
 
-Validar localmente los contratos. Si pasan, diseñar la verificación de evidencia y su vinculación con el estado actual de Grant/identidad/proyecto/entorno. Después definir la interfaz de aprobación humana y el gate de aplicación. Solo cuando ambos contratos tengan pruebas negativas suficientes se conectará el adaptador local `workspace.list`.
+Validar localmente los contratos de lectura y el catálogo. La implementación actual de `workspace.list` y `workspace.read` permanece desconectada del runtime. Antes de conectarla, completar la verificación de evidencia y su vinculación con el estado actual de Grant/identidad/proyecto/entorno, definir la interfaz de aprobación humana y el gate de aplicación con pruebas negativas suficientes.
 
 
 ## 11. F2.3.2 — Servicio de verificación de evidencia
