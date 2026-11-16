@@ -851,7 +851,67 @@ CORE_SCHEMA_V8 = SQLiteMigration(
 )
 
 
+# v9 establishes canonical, revisioned Project and Environment metadata.
+CORE_SCHEMA_V9 = SQLiteMigration(
+    version=9,
+    name="canonical_sqlite_project_environment_authorities",
+    sql="""
+    CREATE TABLE atlas_projects (
+        project_id TEXT PRIMARY KEY CHECK (length(trim(project_id)) > 0),
+        status TEXT NOT NULL CHECK (length(trim(status)) > 0),
+        revision INTEGER NOT NULL CHECK (revision > 0)
+    );
+
+    CREATE TABLE atlas_environments (
+        environment_id TEXT PRIMARY KEY CHECK (length(trim(environment_id)) > 0),
+        status TEXT NOT NULL CHECK (length(trim(status)) > 0),
+        revision INTEGER NOT NULL CHECK (revision > 0)
+    );
+
+    CREATE TRIGGER atlas_projects_identity_immutable
+    BEFORE UPDATE OF project_id ON atlas_projects
+    WHEN NEW.project_id != OLD.project_id
+    BEGIN
+        SELECT RAISE(ABORT, 'Project identity is immutable');
+    END;
+
+    CREATE TRIGGER atlas_projects_revision_step
+    BEFORE UPDATE ON atlas_projects
+    WHEN NEW.revision != OLD.revision + 1
+    BEGIN
+        SELECT RAISE(ABORT, 'Project revision must increase by exactly one');
+    END;
+
+    CREATE TRIGGER atlas_projects_no_delete
+    BEFORE DELETE ON atlas_projects
+    BEGIN
+        SELECT RAISE(ABORT, 'Projects are retained as authority tombstones');
+    END;
+
+    CREATE TRIGGER atlas_environments_identity_immutable
+    BEFORE UPDATE OF environment_id ON atlas_environments
+    WHEN NEW.environment_id != OLD.environment_id
+    BEGIN
+        SELECT RAISE(ABORT, 'Environment identity is immutable');
+    END;
+
+    CREATE TRIGGER atlas_environments_revision_step
+    BEFORE UPDATE ON atlas_environments
+    WHEN NEW.revision != OLD.revision + 1
+    BEGIN
+        SELECT RAISE(ABORT, 'Environment revision must increase by exactly one');
+    END;
+
+    CREATE TRIGGER atlas_environments_no_delete
+    BEFORE DELETE ON atlas_environments
+    BEGIN
+        SELECT RAISE(ABORT, 'Environments are retained as authority tombstones');
+    END;
+    """,
+)
+
 SQLITE_MIGRATIONS = (
     CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
     CORE_SCHEMA_V5, CORE_SCHEMA_V6, CORE_SCHEMA_V7, CORE_SCHEMA_V8,
+    CORE_SCHEMA_V9,
 )
