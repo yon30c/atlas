@@ -358,7 +358,7 @@ Se añadieron los contratos inmutables `AuthorityChangeTerminalOutcome`,
 
 Migración SQLite v12 añade multi_authority_change_terminal_evidence y multi_authority_change_terminal_targets. El store record_multi_terminal_evidence valida que la operación exista, esté en RECONCILING, conserve el conjunto completo de claims y que el recibo coincida exactamente con todos los objetivos/revisiones reservados.
 
-El recibo, sus objetivos y el cambio de estado a COMPLETED o ABORTED se escriben en una única SQLiteUnitOfWork. Un replay byte-semántico exacto recupera el recibo original; cualquier recibo distinto para la misma operación se rechaza. Las tablas y filas son inmutables, los objetivos están ligados por FK al conjunto reservado y triggers impiden marcar terminal sin recibo y objetivos completos o cambiar después el estado terminal. Las claims no se liberan.
+El recibo, sus objetivos y el cambio de estado a COMPLETED o ABORTED se escriben en una única SQLiteUnitOfWork. Un replay byte-semántico exacto recupera el recibo original; cualquier recibo distinto para la misma operación se rechaza. La recuperación recalcula el digest y la canonicalización para detectar corrupción del contenido persistido. Las tablas y filas son inmutables, los objetivos están ligados por FK al conjunto reservado y triggers impiden marcar terminal sin recibo y objetivos completos o cambiar después el estado terminal. Las claims no se liberan.
 
 **Límite:** el digest/canonicalización protege la identidad del replay, no autentica al registrador ni prueba independientemente la verdad de la referencia externa. No hay verificador de evidencia, CAM, invalidación/fencing, mutación coordinada de fuentes ni runtime. Las operaciones BLOCKED/inciertas retienen claims.
 
