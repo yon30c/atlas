@@ -385,4 +385,4 @@ recommend_multi_recovery_decision convierte una evaluación de recuperación en 
 
 La decisión expone automatic_action_permitted = False para todas las disposiciones. No ofrece acciones de retry, no cambia estado, no libera claims y no autentica evidencia. La implementación permanece fuera del runtime.
 
-**Estado:** implementación y pruebas publicadas; pendiente de validación local.
+**Estado: VALIDADA.** Suite completa: 1061 tests en 7.206 s, todos OK.
