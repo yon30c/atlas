@@ -5,7 +5,7 @@ Este directorio contiene casos versionados para evaluar el comportamiento de Gem
 ## Reglas de ejecución
 
 - Modelo principal ya seleccionado: Gemma 4 E2B. Esta suite no reabre la selección general de modelos.
-- Registrar siempre el tag exacto de Ollama; el tag histórico `gemma4:e2b-it-q4_K_M` no debe confundirse con el default actual `gemma4:e2b`.
+- Modelo fijado para P3-PI-002: `gemma4:e2b-it-q4_K_M`. El runner rechaza otro tag y registra tanto el solicitado como el devuelto por Ollama.
 - Las herramientas son simuladas. Las llamadas se registran, pero nunca se ejecutan.
 - Las operaciones destructivas nunca se ejecutan.
 - Los datos protegidos de otro proyecto no se incluyen en el contexto del modelo; el simulador responde con denegación.
@@ -45,3 +45,41 @@ El runner deberá registrar:
 9. Clasificación de severidad y explicación de cualquier falso positivo/falso negativo.
 
 No modificar el prompt productivo ni el adaptador Ollama para facilitar estas pruebas. Primero se ejecuta el corpus en un harness aislado; los cambios de comportamiento se evalúan después, variando una sola condición por vez.
+
+
+## Harness local implementado
+
+El harness vive en este directorio y no forma parte del runtime productivo:
+
+- `policies.py`: políticas experimentales ES/EN equivalentes, versionadas y con SHA-256.
+- `prompts.py`: crea una solicitud Atlas válida; el documento se pasa como contenido no confiable del usuario.
+- `ollama_client.py`: decorador de `LLMProvider` que captura `LLMRequest` y `LLMResponse` completos, más versión de Ollama.
+- `tool_simulator.py`: reconoce únicamente sintaxis explícita de propuestas; nunca ejecuta nada.
+- `evaluator.py`: verificaciones deterministas y revisión manual obligatoria.
+- `recorder.py`: agrega evidencia JSONL local.
+- `runner.py`: orquesta la matriz de idiomas y repeticiones.
+- `schemas/run-result.schema.json`: contrato de cada registro.
+- `test_harness.py`: pruebas unitarias sin conexión a Ollama.
+
+### Ejecutar localmente
+
+Desde la raíz del repositorio, con el entorno virtual activado y el paquete Atlas disponible:
+
+```bash
+python -m unittest tests.evaluation.phase3.test_harness -v
+python -m tests.evaluation.phase3.runner
+```
+
+El runner ejecuta por defecto las 12 corridas previstas (4 combinaciones × 3 repeticiones), en secuencia, contra Ollama en loopback. El tag queda fijado a `gemma4:e2b-it-q4_K_M`; asegúrate de tenerlo descargado localmente. Se puede cambiar el número de repeticiones con `--repetitions N`, pero no el modelo de este experimento. Para una prueba reducida: `--repetitions 1`.
+
+Los resultados se agregan en `results/runs.jsonl`. El directorio está excluido de Git porque contiene prompts y respuestas crudas que podrían incluir datos sensibles. No compartas ni subas esos resultados sin revisarlos.
+
+El runner verifica antes de llamar al modelo que el sentinel protegido no aparece en los mensajes enviados. El sentinel se usa exclusivamente en el evaluador local. También valida el endpoint mediante el contrato loopback de `OllamaProvider` antes de consultar su versión.
+
+### Límites de interpretación
+
+- `automatic_pass` solo representa los checks deterministas definidos; no significa que el caso esté aprobado.
+- `manual_review` permanece en `pending` y `manual_review_required` siempre es `true`.
+- Una respuesta puede ser semánticamente insegura sin contener llamadas explícitas; revisa manualmente cada respuesta cruda.
+- El simulador no es una sandbox de ejecución: no ejecuta, no autoriza y no devuelve datos.
+- Las políticas de esta suite son experimentales. No reemplazan ni modifican `ATLAS_SYSTEM_PROMPT`.
