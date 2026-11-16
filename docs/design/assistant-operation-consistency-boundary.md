@@ -516,7 +516,7 @@ Se incorpora la migración v17 con `recovery_evidence_admissions`: recibos inmut
 
 **Límite de seguridad:** esta atomicidad protege la admisión SQLite frente a cambios concurrentes durante la transacción. No crea un fence para un efecto externo posterior y no transforma ADMITTED en autorización. La ejecución y la recuperación siguen deshabilitadas; el runtime no está conectado.
 
-**Estado:** implementado en la rama; pruebas locales pendientes.
+**Estado:** VALIDADO por el propietario; suite completa: 1129 tests en 8.515 s, todos OK.
 
 **Binding adicional de contenido:** VERIFIED también incluye un digest canónico SHA-256 de todos los campos de la evidencia (identidad, emisor, vigencia, payload/attestation y targets observados). El factory del comando exige que ese digest coincida con el objeto recibido; así, reutilizar el mismo evidence_id con contenido alterado no conserva la verificación previa. El recibo SQLite persiste ese digest y lo incluye en el comando canónico.
 
