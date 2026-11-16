@@ -5,10 +5,13 @@ import tempfile
 import unittest
 
 from atlas.adapters.sqlite.database import SQLiteDatabase
+from atlas.adapters.sqlite.identity_authority import SQLiteIdentityAuthority
+from atlas.adapters.sqlite.project_environment_repository import SQLiteProjectEnvironmentRepository
 from atlas.adapters.sqlite.local_authority_unit_of_work import (
     SQLiteLocalAuthorityUnitOfWorkFactory,
 )
 from atlas.adapters.sqlite.migrations import SQLITE_MIGRATIONS
+from atlas.core.errors import ContractError
 from atlas.core.identity import IdentityStatus
 from atlas.memory.metadata import EnvironmentMetadata, ProjectMetadata
 from atlas.memory.models import EnvironmentId, ProjectId
@@ -43,10 +46,12 @@ class SQLiteLocalAuthorityUnitOfWorkTests(unittest.TestCase):
             unit.project_environments.create_environment(environment)
             unit.commit()
 
-        self.assertEqual(unit.identity.get_user(user.user_id), user)
-        self.assertEqual(unit.project_environments.get_project("atlas"), project)
+        identity = SQLiteIdentityAuthority(self.database)
+        project_environments = SQLiteProjectEnvironmentRepository(self.database)
+        self.assertEqual(identity.get_user(user.user_id), user)
+        self.assertEqual(project_environments.get_project("atlas"), project)
         self.assertEqual(
-            unit.project_environments.get_environment("local"),
+            project_environments.get_environment("local"),
             environment,
         )
 
@@ -89,7 +94,7 @@ class SQLiteLocalAuthorityUnitOfWorkTests(unittest.TestCase):
         with self.factory() as unit:
             user = unit.identity.create_user()
             unit.commit()
-        with self.assertRaises(Exception):
+        with self.assertRaises(ContractError):
             unit.identity.update_user_status(
                 user.user_id,
                 expected_revision=1,
