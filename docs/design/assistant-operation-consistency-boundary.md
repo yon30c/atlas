@@ -403,3 +403,12 @@ La composición puede confirmar o revertir en conjunto estas fuentes canónicas.
 Esto elimina la separación transaccional SQLite entre el ledger y esas fuentes cuando todos participan explícitamente en la misma UoW. No crea por sí solo un coordinador: faltan política de admisión, autorización CAM, orden de mutación, invalidación, fencing, reconciliación externa y pruebas de concurrencia de extremo a extremo. Runtime desconectado.
 
 **Estado:** validado por el propietario con 1043/1043 pruebas (16 de noviembre de 2026).
+
+
+## 24. F2.3.23 — Máquina de estados durable multiobjetivo
+
+La migración v14 agrega triggers para limitar el ledger multiobjetivo a transiciones forward-only: REQUESTED → INVALIDATION_PENDING → SOURCE_PENDING → SOURCE_CONFIRMED → RECONCILING → COMPLETED/ABORTED. Los pasos intermedios requieren el conjunto exacto y completo de claims. Los estados terminales siguen exigiendo el recibo durable y completo implementado en v12; la migración no abre una ruta alternativa de terminalización.
+
+`transition_multi_status(operation_id, expected_status, new_status)` ofrece CAS atómico: rechaza estado esperado obsoleto, acepta reintentos exactos en el estado solicitado y falla cerrado ante claims incompletos. Los triggers protegen incluso escrituras SQL directas. El método solo registra avance del ledger; no demuestra que invalidación, mutación o reconciliación externa hayan sucedido. No autoriza ni ejecuta acciones. La transición a BLOCKED y su recuperación se dejan fuera hasta definir evidencia y semántica de reanudación.
+
+**Estado:** implementación y pruebas publicadas; pendiente de validación local.
