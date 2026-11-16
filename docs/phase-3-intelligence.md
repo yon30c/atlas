@@ -2,7 +2,7 @@
 
 > Estado: **En curso**.
 > Inicio documentado: 16 de noviembre de 2026.
-> Modelo principal seleccionado: **Gemma 4 E2B**.
+> Modelo principal seleccionado: **Gemma 4 E2B**.\n> Tag fijado para P3-PI-002: `gemma4:e2b-it-q4_K_M`.
 > Rama: `feature/terminal-commands`.
 
 ## 1. Propósito
