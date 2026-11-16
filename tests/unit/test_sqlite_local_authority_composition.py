@@ -57,9 +57,11 @@ class SQLiteLocalAuthorityCompositionTests(unittest.TestCase):
         self.assertIn("authority_change_operations", tables)
         self.assertIn("multi_authority_change_operations", tables)
         self.assertIn("multi_authority_change_targets", tables)
-        self.assertIn("multi_authority_change_claims",
-        "multi_authority_change_terminal_evidence",
-        "multi_authority_change_terminal_targets", tables)
+        self.assertTrue({
+            "multi_authority_change_claims",
+            "multi_authority_change_terminal_evidence",
+            "multi_authority_change_terminal_targets",
+        }.issubset(tables))
 
     def test_composition_contract_rejects_mismatched_database(self):
         first = compose_sqlite_local_authority(self.path)
