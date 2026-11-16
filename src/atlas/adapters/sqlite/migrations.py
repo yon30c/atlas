@@ -751,7 +751,7 @@ CORE_SCHEMA_V7 = SQLiteMigration(
 
     CREATE TRIGGER authorization_grants_revocation_terminal
     BEFORE UPDATE OF revoked_at ON authorization_grants
-    WHEN OLD.revoked_at IS NOT NULL AND NEW.revoked_at != OLD.revoked_at
+    WHEN OLD.revoked_at IS NOT NULL AND NEW.revoked_at IS NOT OLD.revoked_at
     BEGIN
         SELECT RAISE(ABORT, 'Grant revocation is terminal');
     END;
