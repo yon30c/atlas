@@ -139,8 +139,7 @@ class SQLiteProjectEnvironmentRepository(
         if not isinstance(environment, EnvironmentMetadata):
             raise ContractError("environment debe ser EnvironmentMetadata")
         try:
-            with self._database.unit_of_work() as unit:
-                connection = unit._connection_for(self._database)
+            with self._write_connection() as connection:
                 connection.execute(
                     """
                     INSERT INTO atlas_environments (environment_id, status, revision)
@@ -164,8 +163,7 @@ class SQLiteProjectEnvironmentRepository(
         if not isinstance(environment, EnvironmentMetadata):
             raise ContractError("environment debe ser EnvironmentMetadata")
         self._expected_next_revision(expected_revision, environment.revision)
-        with self._database.unit_of_work() as unit:
-            connection = unit._connection_for(self._database)
+        with self._write_connection() as connection:
             cursor = connection.execute(
                 """
                 UPDATE atlas_environments SET status = ?, revision = ?
