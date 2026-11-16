@@ -84,6 +84,14 @@ class SQLiteAuthorizationUnitOfWorkTests(unittest.TestCase):
         self.assertIsNone(SQLiteGrantRepository(self.database).get(self.grant.grant_id))
         self.assertIsNone(SQLiteGrantRenewalRepository(self.database).get(self.renewal.renewal_id))
 
+    def test_exception_after_commit_request_still_rolls_back(self):
+        with self.assertRaises(RuntimeError):
+            with self.factory() as uow:
+                uow.grants.create(self.grant)
+                uow.commit()
+                raise RuntimeError("failure after commit request")
+        self.assertIsNone(SQLiteGrantRepository(self.database).get(self.grant.grant_id))
+
     def test_exception_rolls_back_grant_and_renewal_together(self):
         with self.assertRaises(RuntimeError):
             with self.factory() as uow:
