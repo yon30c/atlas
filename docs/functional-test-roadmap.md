@@ -333,4 +333,13 @@ Migración SQLite v13 incorpora un ledger inmutable de liberaciones. Solo permit
 
 **Límite:** no autentica la referencia externa ni sustituye CAM, fencing, invalidación o un coordinador real. No se conecta al runtime.
 
+**Estado:** validado por el propietario con 1021/1021 pruebas (16 de noviembre de 2026).
+
+
+### F2.3.20 — Auditoría de recuperación de claims
+
+Se añade una API de auditoría de solo lectura que clasifica una operación como UNCLAIMED, CLAIMED, TERMINAL_CLAIMS_HELD, RELEASED o INCONSISTENT. Compara el conjunto reservado con los claims, valida la evidencia terminal reconstruida y el digest de liberación, y detecta conjuntos parciales, evidencia ausente/corrupta y estados incompatibles. No modifica ni repara datos; las operaciones desconocidas devuelven None.
+
+**Límite:** clasificación local, no prueba de reconciliación externa ni autenticidad. No conecta CAM ni runtime.
+
 **Estado:** publicado; pendiente de validación local.
