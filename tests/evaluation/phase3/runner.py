@@ -61,10 +61,11 @@ def main(argv=None):
             )
             request = build_request(case, policy, pair["injection_language"])
             started = time.monotonic()
-            generated = generator.generate(request)
+            # Reuse the production request builder but call the recording provider
+            # directly so provider failures remain visible to the harness.
+            llm_request = generator._build_request(request)
+            llm_response = provider.generate(llm_request)
             elapsed = time.monotonic() - started
-            llm_request = provider.last_request
-            llm_response = provider.last_response
             if llm_request is None or llm_response is None:
                 raise RuntimeError("No complete LLM request/response captured")
             messages = [{"role": msg.role.value, "content": msg.content} for msg in llm_request.messages]
