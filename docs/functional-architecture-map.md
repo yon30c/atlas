@@ -495,3 +495,10 @@ El informe añade `global_diagnostic_codes` e `is_healthy` sin reemplazar el det
 La consulta es de solo lectura y no repara datos, no concede autoridad y no conecta recuperación ni runtime.
 
 **Estado: VALIDADO por el propietario; suite completa: 1136 tests en 9.985 s, todos OK.**
+## 49. F2.3.39 — Validación semántica de tipos persistidos
+
+La auditoría no acepta como íntegra una admisión solo porque el tipo de evidencia o autoridad coincida entre registros: también valida cada valor contra los enums canónicos. Los diagnósticos `INVALID_EVIDENCE_KIND` e `INVALID_AUTHORITY_KIND` quedan expuestos por recibo y en el resumen global.
+
+Las pruebas fuerzan valores desconocidos en registros persistidos y confirman detección sin reparación. No se modifica el flujo de admisión ni se concede autoridad.
+
+**Estado:** implementado en GitHub; pruebas locales pendientes.
