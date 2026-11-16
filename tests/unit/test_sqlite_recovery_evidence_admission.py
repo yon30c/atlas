@@ -12,6 +12,7 @@ from atlas.application.recovery_admission import RecoveryEvidenceAdmissionComman
 from atlas.application.recovery_evidence import (
     RecoveryEvidenceVerification,
     RecoveryEvidenceVerificationStatus,
+    recovery_evidence_digest,
 )
 from atlas.authorization.recovery_evidence_issuer_registry import (
     RecoveryEvidenceIssuerRegistration,
@@ -115,6 +116,7 @@ class SQLiteRecoveryEvidenceAdmissionTests(unittest.TestCase):
             RecoveryEvidenceVerificationStatus.VERIFIED,
             evidence_id,
             issuer_revision,
+            recovery_evidence_digest(evidence),
         )
         return RecoveryEvidenceAdmissionCommand.from_verified_evidence(
             admission_id=admission_id,
