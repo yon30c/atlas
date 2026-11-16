@@ -273,3 +273,9 @@ No existe UoW compartida ni coordinador concreto. El adaptador de verificación 
 Se añadió `compose_sqlite_identity_on_database(database)` como seam de composición. Permite que una futura raíz de autoridad local cree una única `SQLiteDatabase` y entregue la misma instancia a Identity. La composición standalone por ruta se mantiene compatible.
 
 Pruebas para reutilización exacta de la instancia y rechazo de tipos inválidos. Pendiente de ejecución local. No implica aún autoridad común ni cambia el runtime.
+
+## 17. F2.3.7 — Persistencia canónica inicial de Grants
+
+Migración SQLite v7 y adaptador `SQLiteGrantRepository`. Grants se almacenan como una unidad de revisión: IDs/scope/acciones inmutables, CAS por revisión, revocación terminal y retención de tombstones. `SQLiteLocalAuthorityFoundation` compone Identity, Grants y el ledger de cambios sobre la misma instancia SQLite.
+
+Pendiente: UoW transaccional para Grant + renovaciones, migración de emisión/renovación a esa UoW, fuentes canónicas Project/Environment y coordinador durable de invalidación/fencing. Sin runtime.
