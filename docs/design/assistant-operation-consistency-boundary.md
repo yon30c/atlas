@@ -432,3 +432,16 @@ Las recomendaciones distinguen: no requerir acción de recuperación para una op
 **Reglas obligatorias:** ninguna decisión permite acción automática; no existe recomendación de retry; la etapa registrada no autentica evidencia externa; la recomendación no cambia el ledger, no transiciona a BLOCKED, no libera claims, no sustituye CAM y no constituye permiso. La evidencia enumerada deberá ser obtenida y verificada independientemente por una futura capa coordinadora.
 
 **Estado: VALIDADA.** Suite completa: 1061 tests en 7.206 s, todos OK.
+
+
+## 27. F2.3.26 — Contrato de evidencia independiente de recuperación
+
+Se añade MultiAuthorityRecoveryEvidence, que representa una afirmación no confiable con evidence_id, operation_id, clase de evidencia, issuer_id, issued_at/expires_at, digest SHA-256, referencia opaca de atestación y el conjunto completo de objetivos con revisiones esperadas/propuestas/observadas. El contrato valida estructura, vigencia formal, digest hexadecimal, ausencia de duplicados y orden canónico. matches exige coincidencia exacta de operación, clase, identidad de cada objetivo y transición de revisión.
+
+Se añade MultiAuthorityRecoveryEvidenceVerifierPort como frontera de confianza. Su implementación debe verificar emisor/clave, firma o atestación, digest contra los bytes reales, semántica de la clase de evidencia, binding exacto, revocación, replay, fuente autoritativa y estado actual de revisiones/fencing con garantías de consistencia apropiadas.
+
+MultiAuthorityRecoveryEvidenceVerificationService realiza prevalidaciones locales y delega autenticidad al verificador. Resultados: VERIFIED, DENIED y UNAVAILABLE. Una excepción del verificador produce UNAVAILABLE; solo el booleano exacto True produce VERIFIED. La expiración, evidencia futura, operación/clase/objetivos no coincidentes producen DENIED sin invocar el verificador.
+
+**Límites:** payload_digest y attestation_ref son claims, no pruebas. No se implementa criptografía, almacenamiento de claves, emisor real, adaptador de fuente, revocation registry ni verificación autoritativa concreta. VERIFIED no autoriza ejecución, retry, transición de estado ni liberación de claims. Runtime permanece desconectado.
+
+**Estado:** implementación y pruebas publicadas; pendiente de validación local.
