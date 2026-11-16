@@ -318,7 +318,7 @@ Migración v11 añade claims con unicidad global por tipo/ID de autoridad. `SQLi
 
 ### F2.3.18 — Persistencia atómica de evidencia terminal
 
-Migración SQLite v12 añade tablas inmutables para el recibo terminal y cada objetivo observado. record_multi_terminal_evidence exige operación conocida en RECONCILING, conjunto completo de claims y coincidencia exacta del recibo con la reserva. Inserta recibo + objetivos + transición a COMPLETED/ABORTED dentro de una única UoW. Replay exacto recupera el recibo original; un recibo diferente se rechaza. Triggers SQL impiden estado terminal sin evidencia y conjunto de objetivos completo, así como cambiar el estado terminal después. Claims permanecen retenidos.
+Migración SQLite v12 añade tablas inmutables para el recibo terminal y cada objetivo observado. record_multi_terminal_evidence exige operación conocida en RECONCILING, conjunto completo de claims y coincidencia exacta del recibo con la reserva. Inserta recibo + objetivos + transición a COMPLETED/ABORTED dentro de una única UoW. Replay exacto recupera el recibo original; un recibo diferente se rechaza. La recuperación recalcula el digest y la canonicalización para detectar corrupción del contenido persistido. Triggers SQL impiden estado terminal sin evidencia y conjunto de objetivos completo, así como cambiar el estado terminal después. Claims permanecen retenidos.
 
 **Límite:** canonicalización/digest dan binding e idempotencia, no autenticidad ni verificación independiente de la evidencia externa. Sin CAM, fencing, invalidación, mutación de fuentes ni runtime.
 
