@@ -519,3 +519,13 @@ Se incorpora la migración v17 con `recovery_evidence_admissions`: recibos inmut
 **Estado:** implementado en la rama; pruebas locales pendientes.
 
 **Binding adicional de contenido:** VERIFIED también incluye un digest canónico SHA-256 de todos los campos de la evidencia (identidad, emisor, vigencia, payload/attestation y targets observados). El factory del comando exige que ese digest coincida con el objeto recibido; así, reutilizar el mismo evidence_id con contenido alterado no conserva la verificación previa. El recibo SQLite persiste ese digest y lo incluye en el comando canónico.
+
+## 45. F2.3.35 — Auditoría de integridad de admisiones persistidas
+
+Se añaden contratos de auditoría de solo lectura y métodos `audit_admission(admission_id)` / `audit_all()` al repositorio SQLite de admisiones. La auditoría comprueba la decodificación y canonicalización del comando almacenado, su digest SHA-256, el binding entre columnas y payload, la forma/conteo/orden del conjunto de objetivos, su correspondencia con los targets inmutables de la operación y la representación UTC canónica de timestamps.
+
+El informe distingue `HEALTHY` y `CORRUPT`, conserva códigos diagnósticos estables y permite auditar todas las filas desde la misma UoW/instantánea de lectura. Una consulta individual para un admission_id desconocido devuelve `None`. La auditoría no modifica ni repara recibos.
+
+**Límites:** la auditoría comprueba integridad estructural e interna del recibo, no vuelve a autenticar la firma externa ni demuestra que la autoridad siga vigente hoy. Una admisión históricamente íntegra no autoriza efectos ni recuperación.
+
+**Estado:** implementado en la rama; pruebas locales pendientes.
