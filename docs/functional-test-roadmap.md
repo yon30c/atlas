@@ -489,3 +489,13 @@ Se añaden dos pruebas de integración con conexiones SQLite independientes sobr
 **Límite:** la garantía es local a la transacción SQLite de admisión. No protege un efecto externo posterior ni equivale a fencing distribuido. No se habilitan acciones ni runtime.
 
 **Estado: VALIDADO por el propietario; suite completa: 1133 tests en 9.225 s, todos OK.**
+
+### F2.3.37 — Consistencia temporal del emisor en auditoría histórica
+
+Ampliar `audit_admission()` para comprobar que la revisión de emisor enlazada al recibo existía y estaba habilitada en el momento de registro, que su `changed_at` no es posterior a `recorded_at`, y que ninguna revisión posterior del mismo emisor tenía una fecha efectiva igual o anterior a la admisión. Las revisiones posteriores efectivas después de `recorded_at` deben conservar el recibo como históricamente sano.
+
+Pruebas añadidas para cambio posterior válido y revisión posterior retrodatada que debe producir corrupción diagnóstica.
+
+**Límite:** no autentica la fuente del timestamp ni el reloj; no modifica recibos, no autoriza efectos y no habilita recuperación/runtime.
+
+**Estado:** implementado en GitHub; pendiente de pruebas locales del propietario.
