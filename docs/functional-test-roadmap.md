@@ -442,4 +442,11 @@ Orden: binding/ventana de evidencia → inventario habilitado → política vige
 
 **Límite:** esta consulta es un gate previo y no cierra por sí sola una carrera de desactivación concurrente entre lectura y efecto. No se declara garantía de revocación/fencing hasta integrar un coordinador con consistencia en el punto de efecto. No se habilitan acciones de recuperación ni runtime.
 
+**Estado: VALIDADO.** El propietario ejecutó 1110 tests en 8.196 s, todos OK.
+## F2.3.32 — Binding de revisión del inventario
+
+El servicio realiza una segunda lectura del inventario después de que el verificador criptográfico devuelve True. Solo mantiene VERIFIED si el registro sigue habilitado y conserva exactamente la revisión inicial. El resultado VERIFIED expone `issuer_registry_revision`. Si la revisión cambió durante la verificación, devuelve DENIED; si el inventario falla en la relectura, devuelve UNAVAILABLE. Se añadieron pruebas de desactivación concurrente, cambio de revisión aunque siga habilitado, fallo de la segunda lectura y validación del contrato de resultado.
+
+**Límite:** esto detecta cambios durante el intervalo de verificación, pero no cierra la ventana posterior al retorno. No es fencing ni una garantía de atomicidad en el punto de efecto. No se habilita recuperación ni runtime.
+
 **Estado:** implementado en la rama; pruebas locales pendientes.
