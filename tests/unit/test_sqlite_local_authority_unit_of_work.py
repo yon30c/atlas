@@ -1,6 +1,7 @@
 """Tests for one transaction spanning canonical local authority repositories."""
 
 from pathlib import Path
+from datetime import datetime, timezone
 import tempfile
 import unittest
 
@@ -13,6 +14,11 @@ from atlas.adapters.sqlite.local_authority_unit_of_work import (
 from atlas.adapters.sqlite.migrations import SQLITE_MIGRATIONS
 from atlas.core.errors import ContractError
 from atlas.core.identity import IdentityStatus
+from atlas.memory.authority_changes import (
+    AuthorityChangeTarget,
+    AuthorityChangeTargetKind,
+    MultiAuthorityChangeIntent,
+)
 from atlas.memory.metadata import EnvironmentMetadata, ProjectMetadata
 from atlas.memory.models import EnvironmentId, ProjectId
 
@@ -31,6 +37,8 @@ class SQLiteLocalAuthorityUnitOfWorkTests(unittest.TestCase):
             self.assertIsNotNone(unit.grants)
             self.assertIsNotNone(unit.renewals)
             self.assertIsNotNone(unit.project_environments)
+            self.assertIsNotNone(unit.authority_changes)
+            self.assertIs(unit.authority_changes._unit_of_work, unit._unit)
             self.assertIs(unit.identity._unit_of_work, unit._unit)
             self.assertIs(unit.project_environments._unit_of_work, unit._unit)
             self.assertIs(unit.grants._unit_of_work, unit._unit)
@@ -99,6 +107,97 @@ class SQLiteLocalAuthorityUnitOfWorkTests(unittest.TestCase):
                 user.user_id,
                 expected_revision=1,
                 status=IdentityStatus.SUSPENDED,
+            )
+
+
+    @staticmethod
+    def _multi_change_intent(key="shared-uow-change"):
+        return MultiAuthorityChangeIntent(
+            idempotency_key=key,
+            consumer_id="atlas-local",
+            action="grant.renewal.approve",
+            actor_identity_id="user-001",
+            owner_id="user-001",
+            project_id="project-001",
+            environment_id="development",
+            targets=(
+                AuthorityChangeTarget(
+                    AuthorityChangeTargetKind.GRANT, "grant-001", 4, 5
+                ),
+                AuthorityChangeTarget(
+                    AuthorityChangeTargetKind.GRANT_RENEWAL, "renewal-001", 2, 3
+                ),
+            ),
+            request_context_ref="request-shared-uow",
+            requested_at=datetime(2026, 11, 16, 12, 0, tzinfo=timezone.utc),
+        )
+
+    def test_authority_change_ledger_commits_with_canonical_authorities(self):
+        with self.factory() as unit:
+            user = unit.identity.create_user()
+            intent = self._multi_change_intent()
+            reservation = unit.authority_changes.reserve_multi_change(intent)
+            unit.project_environments.create_project(
+                ProjectMetadata(ProjectId("shared-project"), "active", 1)
+            )
+            unit.commit()
+
+        from atlas.adapters.sqlite.authority_changes import SQLiteAuthorityChangeStore
+        from atlas.adapters.sqlite.identity_authority import SQLiteIdentityAuthority
+        self.assertEqual(
+            SQLiteIdentityAuthority(self.database).get_user(user.user_id),
+            user,
+        )
+        self.assertIsNotNone(
+            SQLiteAuthorityChangeStore(self.database).get_multi_reservation(
+                reservation.operation_id
+            )
+        )
+
+    def test_authority_change_ledger_rolls_back_with_canonical_authorities(self):
+        operation_id = None
+        with self.assertRaisesRegex(RuntimeError, "force full authority rollback"):
+            with self.factory() as unit:
+                user = unit.identity.create_user()
+                reservation = unit.authority_changes.reserve_multi_change(
+                    self._multi_change_intent("shared-uow-rollback")
+                )
+                operation_id = reservation.operation_id
+                unit.project_environments.create_project(
+                    ProjectMetadata(ProjectId("rollback-shared"), "active", 1)
+                )
+                raise RuntimeError("force full authority rollback")
+
+        from atlas.adapters.sqlite.authority_changes import SQLiteAuthorityChangeStore
+        from atlas.adapters.sqlite.identity_authority import SQLiteIdentityAuthority
+        self.assertIsNone(
+            SQLiteAuthorityChangeStore(self.database).get_multi_reservation(
+                operation_id
+            )
+        )
+        with self.database.connection() as connection:
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM atlas_users"
+                ).fetchone()[0],
+                0,
+            )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM atlas_projects WHERE project_id = 'rollback-shared'"
+                ).fetchone()[0],
+                0,
+            )
+
+    def test_authority_change_store_rejects_use_after_shared_unit_exit(self):
+        with self.factory() as unit:
+            reservation = unit.authority_changes.reserve_multi_change(
+                self._multi_change_intent("shared-uow-expired")
+            )
+            unit.commit()
+        with self.assertRaises(ContractError):
+            unit.authority_changes.get_multi_reservation(
+                reservation.operation_id
             )
 
 
