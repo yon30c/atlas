@@ -184,4 +184,4 @@ No se marcará F1–F5 como completada hasta ejecutar las pruebas en el entorno 
 
 **Pendiente para cerrar F0 con evidencia local:** comprobar que el checkout Debian está en el mismo commit/branch y ejecutar la suite de regresión antes de introducir cambios de código.
 
-**Estado actual:** F1.1–F1.5 están implementadas en la rama. F1.4 fue validada por el propietario con 882/882 pruebas. F1.5 (fábrica de composición `atlas.bootstrap.build_request_planner`) está pendiente de validación local. El planificador sigue aislado de `cli.py` y del runtime conversacional.
+**Estado actual:** F1.1–F1.5 están implementadas y el propietario validó Gemma real más 886/886 pruebas. F2.1 añade el contrato y adaptador local `workspace.list`; la validación local está pendiente. Ninguna de estas capacidades está conectada todavía a `cli.py` ni al runtime conversacional.
