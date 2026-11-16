@@ -461,4 +461,13 @@ La migración SQLite v15 añade `recovery_evidence_issuer_trust_policies`. Cada 
 
 El repositorio puede operar de forma independiente o dentro de `SQLiteLocalAuthorityUnitOfWork`, compartiendo la misma transacción SQLite. Una revisión deshabilitada se conserva como la política actual y bloquea al emisor sin borrar su historia.
 
-Este incremento solo persiste configuración declarativa. No autentica firmas, no gestiona claves criptográficas, no autoriza recuperación y no conecta el flujo al runtime. Implementado; validación local pendiente.
+Este incremento solo persiste configuración declarativa. No autentica firmas, no gestiona claves criptográficas, no autoriza recuperación y no conecta el flujo al runtime. **Estado: VALIDADO por el propietario; suite completa 1088/1088 OK.**
+
+
+## 39. F2.3.29 — Auditoría de integridad de políticas de confianza
+
+Se añaden modelos inmutables de diagnóstico y operaciones de solo lectura `audit_issuer()` y `audit_all()` al repositorio SQLite. La auditoría comprueba continuidad de revisiones, decodificación/validación del contenido, valores canónicos y estado habilitado de la última revisión. Detecta explícitamente emisores consultados sin política (`NO_POLICY_REGISTERED`) y clasifica políticas como `HEALTHY`, `DISABLED`, `CORRUPT` o `MISSING_POLICY`.
+
+`audit_all()` obtiene todas las filas en una única consulta ordenada, para que el informe corresponda a un mismo snapshot de lectura. Los diagnósticos no reparan ni modifican datos, no autentican firmas y no autorizan recuperación.
+
+Límite de inventario: sin un registro separado de emisores esperados, `audit_all()` solo puede auditar emisores que ya aparecen en la tabla; un emisor externo nunca registrado solo puede detectarse mediante `audit_issuer(issuer_id)`. Implementado; validación local pendiente.
