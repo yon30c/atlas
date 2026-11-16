@@ -1,10 +1,12 @@
 """SQLite integration tests for atomic recovery evidence admission."""
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
 import tempfile
 import unittest
+from threading import Barrier
 
 from atlas.adapters.sqlite import SQLiteDatabase, SQLITE_MIGRATIONS
 from atlas.adapters.sqlite.local_authority_unit_of_work import SQLiteLocalAuthorityUnitOfWork
@@ -232,6 +234,96 @@ class SQLiteRecoveryEvidenceAdmissionTests(unittest.TestCase):
             self.assertIn("COMMAND_DIGEST_MISMATCH", audit.diagnostic_codes)
             self.assertEqual(report.healthy_count, 0)
             self.assertEqual(report.corrupt_count, 1)
+
+
+    def test_concurrent_admission_and_issuer_disable_are_serialized(self):
+        operation_id = self._prepare()
+        command = self._command(operation_id)
+        admission_database = SQLiteDatabase(self.database.path)
+        revocation_database = SQLiteDatabase(self.database.path)
+        barrier = Barrier(2)
+
+        def admit():
+            barrier.wait()
+            with SQLiteLocalAuthorityUnitOfWork(admission_database) as uow:
+                result = uow.recovery_evidence_admissions.admit(command)
+                uow.commit()
+                return result.status
+
+        def disable_issuer():
+            barrier.wait()
+            with SQLiteLocalAuthorityUnitOfWork(revocation_database) as uow:
+                uow.recovery_evidence_issuer_registry.append(
+                    RecoveryEvidenceIssuerRegistration(
+                        "issuer-1", 2, False, NOW
+                    ),
+                    expected_revision=1,
+                )
+                uow.commit()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            admission_future = executor.submit(admit)
+            revocation_future = executor.submit(disable_issuer)
+            admission_status = admission_future.result(timeout=10)
+            revocation_future.result(timeout=10)
+
+        current = SQLiteLocalAuthorityUnitOfWork(admission_database)
+        with current as uow:
+            registration = uow.recovery_evidence_issuer_registry.get_registration(
+                "issuer-1"
+            )
+            self.assertEqual(registration.registry_revision, 2)
+            self.assertFalse(registration.enabled)
+        with admission_database.connection() as connection:
+            row = connection.execute(
+                "SELECT issuer_registry_revision FROM recovery_evidence_admissions "
+                "WHERE admission_id = ?",
+                ("admission-1",),
+            ).fetchone()
+
+        if admission_status == RecoveryEvidenceAdmissionStatus.ADMITTED:
+            self.assertIsNotNone(row)
+            self.assertEqual(row["issuer_registry_revision"], 1)
+        else:
+            self.assertEqual(
+                admission_status, RecoveryEvidenceAdmissionStatus.STALE_ISSUER
+            )
+            self.assertIsNone(row)
+
+    def test_concurrent_exact_admissions_are_admitted_once_and_replayed(self):
+        operation_id = self._prepare()
+        command = self._command(operation_id)
+        databases = (
+            SQLiteDatabase(self.database.path),
+            SQLiteDatabase(self.database.path),
+        )
+        barrier = Barrier(2)
+
+        def admit(database):
+            barrier.wait()
+            with SQLiteLocalAuthorityUnitOfWork(database) as uow:
+                result = uow.recovery_evidence_admissions.admit(command)
+                uow.commit()
+                return result.status
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(admit, database) for database in databases]
+            statuses = [future.result(timeout=10) for future in futures]
+
+        self.assertCountEqual(
+            statuses,
+            [
+                RecoveryEvidenceAdmissionStatus.ADMITTED,
+                RecoveryEvidenceAdmissionStatus.REPLAYED,
+            ],
+        )
+        with self.database.connection() as connection:
+            count = connection.execute(
+                "SELECT COUNT(*) FROM recovery_evidence_admissions "
+                "WHERE evidence_id = ?",
+                ("evidence-1",),
+            ).fetchone()[0]
+        self.assertEqual(count, 1)
 
     def test_schema_rejects_non_current_issuer_revision(self):
         operation_id = self._prepare(revision=2)
