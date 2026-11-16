@@ -1,7 +1,7 @@
 # Atlas Terminal
 
-> Estado: implementación inicial de comandos en la rama `feature/terminal-commands`; pendiente de validación local y merge.
-> Registro: 15 de noviembre de 2026.
+> Estado: fases 1 y 2 implementadas parcialmente en `feature/terminal-commands`; fase 2 pendiente de validación automatizada y manual. No iniciar fase 3 hasta su aceptación.
+> Registro: 16 de noviembre de 2026.
 > Alcance: prototipo funcional de la experiencia conversacional local de Atlas.
 
 ## 1. Objetivo
@@ -11,6 +11,8 @@ La prioridad inmediata de Atlas es convertir la consola local existente en una e
 El desarrollo será incremental. Cada fase debe entregar una capacidad observable, pruebas automatizadas y una verificación manual reproducible antes de comenzar la siguiente.
 
 ## 2. Estado actual comprobado en el código
+
+La fase 2 ha avanzado más allá del alcance inicial de esta documentación. Los incrementos 2A–2G están registrados como implementados en la rama de trabajo, pero **la fase completa permanece pendiente de validación**. Consulta `docs/terminal/roadmap.md` para el inventario de incrementos y la lista obligatoria de comprobaciones antes de avanzar.
 
 La revisión de `main` (commit `c2803a931b672cbf5c6843eb77816cb4824dd1c4`) confirma:
 

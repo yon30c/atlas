@@ -50,6 +50,8 @@ Persistencia durable, gestor de conversaciones, ejecución de herramientas, API 
 
 ## Fase 2 — Gestión de conversaciones
 
+> **Estado actual: PENDIENTE DE VALIDACIÓN.** La implementación de las capacidades 2A–2G está en la rama `feature/terminal-commands`. La existencia de código y pruebas no equivale a aceptación: no se han ejecutado las pruebas automatizadas ni la validación manual integral. La fase 3 no comenzará hasta cerrar esta validación.
+
 **Objetivo:** pasar del historial temporal de una sola sesión a conversaciones que el usuario pueda administrar.
 
 ### Trabajo previsto
@@ -62,13 +64,45 @@ Persistencia durable, gestor de conversaciones, ejecución de herramientas, API 
 6. Definir política de eliminación, exportación y respaldo antes de almacenar contenido conversacional de forma permanente.
 7. Añadir pruebas de reinicio del proceso, aislamiento entre conversaciones e integridad de datos.
 
+### Incrementos implementados en la rama `feature/terminal-commands`
+
+| Incremento | Alcance registrado | Estado |
+|---|---|---|
+| 2A | Contratos y modelo de dominio de conversaciones; puertos de repositorio e historial | Implementado; pendiente de validación |
+| 2B | Persistencia SQLite aislada, migración propia, historial íntegro y consistencia temporal de metadatos | Implementado; pendiente de validación |
+| 2C | Proyección acotada al modelo: últimos 8 turnos y máximo 2.000 caracteres por mensaje histórico, sin truncar el almacenamiento | Implementado; pendiente de validación |
+| 2D | Conexión de SQLite al arranque, almacenamiento local privado y recuperación de la conversación activa | Implementado; pendiente de validación |
+| 2E | Gestión desde consola: crear, listar, seleccionar, renombrar, cerrar y eliminar con confirmación explícita | Implementado; pendiente de validación |
+| 2F | Respaldo cifrado, verificación de autenticidad/integridad y restauración a una ruta nueva | Implementado; pendiente de validación |
+| 2G | Exportación JSON individual, versionada, con historial completo y creación privada sin sobrescritura | Implementado; pendiente de validación |
+
+La documentación operativa de comandos y políticas está en [`docs/conversations.md`](../conversations.md).
+
+### Plan obligatorio de validación antes de cerrar la fase
+
+1. Ejecutar las pruebas unitarias focalizadas de dominio, contexto, repositorio SQLite, composición de consola, gestor, backup, restauración y exportación.
+2. Ejecutar la suite completa y resolver cualquier regresión.
+3. Verificar con una base temporal que una conversación y su historial sobreviven al cierre y reinicio del proceso.
+4. Comprobar aislamiento entre conversaciones y que el modelo recibe únicamente la proyección configurada, mientras el almacenamiento conserva el historial íntegro.
+5. Validar permisos del directorio, DB, respaldos, restauraciones y exportaciones; probar destinos existentes, rutas inválidas y enlaces simbólicos donde corresponda.
+6. Verificar operaciones de gestión, incluyendo errores, cierre, selección, eliminación confirmada y recuperación de la conversación activa.
+7. Crear un respaldo cifrado, verificarlo, restaurarlo en una ruta nueva y comprobar el historial restaurado.
+8. Exportar una conversación activa y otra cerrada; comprobar estructura, contenido, permisos y que no se sobrescriben destinos.
+9. Realizar una sesión manual real con Ollama local y otra en modo offline, incluyendo reinicio y recuperación.
+10. Registrar resultados, fallos corregidos y evidencia reproducible en esta hoja de ruta y en el registro de fase.
+
 ### Criterios de salida
 
+- Todos los puntos del plan de validación están ejecutados y documentados.
 - Una conversación puede recuperarse después de cerrar y volver a abrir Atlas.
 - El historial de una conversación no aparece en otra.
 - Las operaciones de gestión tienen comportamiento y errores definidos.
 - Los límites y la política de retención están documentados.
-- Migraciones, integridad y recuperación están probadas con bases temporales.
+- Migraciones, integridad, permisos, exportación, respaldo y recuperación están probados con bases y rutas temporales.
+- La suite relevante y la suite completa pasan.
+- La verificación manual con Ollama y modo offline se completa satisfactoriamente.
+
+**Regla de avance:** hasta cumplir todos los criterios, la fase 2 permanece abierta y la fase 3 no se inicia.
 
 ## Fase 3 — Inteligencia y comportamiento
 

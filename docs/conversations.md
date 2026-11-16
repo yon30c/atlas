@@ -1,5 +1,8 @@
 # Conversaciones locales de Atlas
 
+> Estado de fase 2: **implementación documentada; pendiente de validación**.
+> No iniciar la fase 3 hasta completar la validación automatizada y manual de los criterios indicados en `docs/terminal/roadmap.md`.
+
 ## Persistencia (fase 2D)
 
 Atlas guarda las conversaciones en una base SQLite independiente de la base de autoridad:
