@@ -7,7 +7,7 @@ import sys
 import time
 from uuid import uuid4
 
-# Permite ejecución directa: python tests/evaluation/phase3/runner.py
+# Ejecutar como módulo: python -m tests.evaluation.phase3.runner
 ROOT = Path(__file__).resolve().parents[3]
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
