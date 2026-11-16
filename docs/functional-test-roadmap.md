@@ -371,4 +371,4 @@ Migración v14 restringe los cambios de estado del ledger multiobjetivo a la sec
 
 `SQLiteAuthorityChangeStore.transition_multi_status` aplica compare-and-set con estado esperado, rechazo de reintentos obsoletos cuando el estado ya avanzó y rechazo de llamadas obsoletas. Cada avance intermedio exige el conjunto íntegro de claims exclusivos. La transición registra progreso del ledger únicamente: no acredita que una invalidación externa haya ocurrido, no autoriza mutaciones de fuentes y no ejecuta efectos. No se habilita todavía transición a BLOCKED ni recuperación desde ella; eso requiere un contrato de recuperación separado.
 
-**Estado:** implementación publicada; pendiente de validación local.
+**Estado:** VALIDADA localmente por el propietario; suite completa: 1048 tests en 9.026 s, todos OK.
