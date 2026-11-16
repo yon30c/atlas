@@ -262,3 +262,11 @@ Pruebas añadidas para persistencia, CAS, binding/decisión inmutable, rollback,
 Añadida migración v9 con tablas canónicas para Project y Environment, snapshots tipados reutilizando los puertos existentes de metadatos, repositorio SQLite con altas/lecturas/actualizaciones CAS y retención de tombstones. La composición local expone el repositorio usando la misma instancia SQLite que Identity, Grants, renovaciones y el ledger de cambios. Se añadieron pruebas de persistencia, revisión obsoleta, restricciones SQL y composición.
 
 **Estado:** validado por el propietario con 967/967 pruebas. Migración v9, repositorio Project/Environment, restricciones de revisión y composición SQLite compartida verificadas. Las mutaciones todavía no pasan por un coordinador común de invalidación/fencing; no conectar a la admisión ni al runtime.
+
+### F2.3.10 — Auditoría de rutas de mutación y prerrequisitos del coordinador
+
+Inspeccionadas las rutas actuales de Identity, emisión/revocación/renovación de Grants y mutaciones Project/Environment. Se documentó qué rutas escriben directamente, cuáles usan UoW sin invalidación y cuáles requieren CAM/coordinador. La conclusión es que aún no existe un coordinador concreto: `SQLiteAuthorityChangeStore` persiste reservas/idempotencia, pero no ejecuta fencing, invalidación, CAS coordinado ni reconciliación. No se añadieron cambios de runtime ni se habilitó admisión.
+
+**Siguiente orden obligatorio:** migrar las rutas de mutación a una API coordinada; cerrar bypasses; integrar journal, invalidation, route registry y fencing; probar concurrencia/crash/replay; solo después implementar admisión de operaciones.
+
+**Estado:** auditoría documentada. Sin código nuevo ni pruebas adicionales; no habilitar ejecución.
