@@ -969,10 +969,14 @@ class SQLiteAuthorityChangeStore:
                 for item in reserved
             }
             claimed = tuple(
-                reserved_by_identity[(row["authority_kind"], row["authority_id"])]
+                reserved_by_identity[
+                    (AuthorityChangeTargetKind(row["authority_kind"]), row["authority_id"])
+                ]
                 for row in claims_rows
-                if (row["authority_kind"], row["authority_id"])
-                in reserved_by_identity
+                if (
+                    AuthorityChangeTargetKind(row["authority_kind"]),
+                    row["authority_id"],
+                ) in reserved_by_identity
             )
             exact_claim_set = (
                 len(claims_rows) == len(targets_rows)
