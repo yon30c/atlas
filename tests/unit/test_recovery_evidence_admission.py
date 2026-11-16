@@ -80,6 +80,14 @@ class RecoveryEvidenceAdmissionCommandTests(unittest.TestCase):
         self.assertEqual(command.issuer_registry_revision, 7)
         self.assertEqual(command.targets, targets())
 
+    def test_rejects_direct_construction_bypassing_verified_factory(self):
+        with self.assertRaises(ContractError):
+            RecoveryEvidenceAdmissionCommand(
+                "admission-1", "operation-1", "evidence-1", "issuer-1", 7,
+                MultiAuthorityRecoveryEvidenceKind.SOURCE_OUTCOME_RECEIPT,
+                targets(), NOW,
+            )
+
     def test_rejects_non_verified_result(self):
         with self.assertRaises(ContractError):
             self.build(verification=RecoveryEvidenceVerification(
