@@ -6,7 +6,7 @@ import unittest
 
 from atlas.assistant.workspace import WorkspaceEntryKind, WorkspaceListing
 from atlas.adapters.local_workspace import LocalWorkspaceAdapter
-from atlas.core.errors import AtlasError, ContractError, NotFoundError
+from atlas.core.errors import ContractError, NotFoundError
 
 
 class LocalWorkspaceAdapterTests(unittest.TestCase):
