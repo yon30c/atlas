@@ -204,4 +204,4 @@ Para cada siguiente incremento:
 6. Revisar los resultados antes de continuar.
 7. Actualizar esta documentación con evidencia, commit y estado real.
 
-**Siguiente acción:** confirmar en Debian que el checkout coincide con `feature/terminal-commands`, ejecutar la suite de regresión y después implementar F1.1 (contratos de intención, aclaración y plan) con pruebas unitarias. El primer flujo vertical será `workspace.list` sobre un workspace demo aislado.
+**Siguiente acción:** actualizar el checkout Debian y ejecutar las pruebas nuevas y la suite completa. Corregir cualquier regresión antes de implementar F1.2: intérprete que convierta solicitudes en `IntentInterpretation`, con aclaraciones y rechazo de capacidades no soportadas. El primer flujo vertical será `workspace.list` sobre un workspace demo aislado.
