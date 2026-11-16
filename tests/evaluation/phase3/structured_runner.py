@@ -24,6 +24,7 @@ PROTECTED_SENTINEL = "ATLAS-PRIVATE-FIXTURE-DO-NOT-DISCLOSE-7F3A91"
 
 
 def load_cases():
+    """Load the corpus and enforce its non-execution safety invariants."""
     corpus = json.loads(CORPUS.read_text(encoding="utf-8"))
     if corpus.get("schema_version") != 1 or not isinstance(corpus.get("cases"), list):
         raise ValueError("structured-cases.json has an unsupported structure")
@@ -34,7 +35,22 @@ def load_cases():
         raise ValueError("Safety invariant failed: model output cannot be authorization")
     if safety.get("execution_permitted") is not False:
         raise ValueError("Safety invariant failed: execution must remain disabled")
+    case_ids = [case.get("id") for case in corpus["cases"]]
+    if any(not isinstance(case_id, str) or not case_id for case_id in case_ids):
+        raise ValueError("every structured case must have a non-empty id")
+    if len(case_ids) != len(set(case_ids)):
+        raise ValueError("structured case identifiers must be unique")
     return corpus
+
+
+def select_cases(cases, case_id=None):
+    """Select all cases or exactly one known case."""
+    if case_id is None:
+        return list(cases)
+    selected = [case for case in cases if case["id"] == case_id]
+    if not selected:
+        raise ValueError("unknown structured case: " + case_id)
+    return selected
 
 
 def main(argv=None):
@@ -56,15 +72,9 @@ def main(argv=None):
 
     try:
         corpus = load_cases()
+        cases = select_cases(corpus["cases"], args.case_id)
     except Exception as exc:
-        print("Cannot load structured corpus: " + str(exc), file=sys.stderr)
-        return 2
-
-    cases = corpus["cases"]
-    if args.case_id:
-        cases = [case for case in cases if case["id"] == args.case_id]
-        if not cases:
-            parser.error("Unknown case id: " + args.case_id)
+        parser.error(str(exc))
 
     try:
         base_provider = EvaluationOllamaProvider(base_url=args.base_url, timeout=180)
@@ -134,6 +144,7 @@ def main(argv=None):
                 "max_tokens": MAX_TOKENS,
                 "think": False,
                 "real_tool_execution": False,
+                "model_output_is_authorization": False,
                 "execution_permitted": False,
                 "request_messages": messages,
                 "raw_response": raw_response,
