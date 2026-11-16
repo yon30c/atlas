@@ -5,6 +5,11 @@ from atlas.adapters.sqlite.authority_changes import SQLiteAuthorityChangeStore
 from atlas.adapters.sqlite.grant_repository import SQLiteGrantRepository
 from atlas.adapters.sqlite.grant_renewal_repository import SQLiteGrantRenewalRepository
 from atlas.adapters.sqlite.project_environment_repository import SQLiteProjectEnvironmentRepository
+from atlas.adapters.sqlite.identity_authority import SQLiteIdentityAuthority
+from atlas.adapters.sqlite.local_authority_unit_of_work import (
+    SQLiteLocalAuthorityUnitOfWork,
+    SQLiteLocalAuthorityUnitOfWorkFactory,
+)
 from atlas.adapters.sqlite.authorization_unit_of_work import (
     SQLiteAuthorizationUnitOfWork,
     SQLiteAuthorizationUnitOfWorkFactory,
@@ -24,7 +29,8 @@ from atlas.adapters.sqlite.migrations import (
 __all__ = [
     "SQLiteDatabase", "SQLiteMigration", "SQLiteUnitOfWork",
     "SQLiteAuthorityChangeStore", "SQLiteGrantRepository", "SQLiteGrantRenewalRepository",
-    "SQLiteProjectEnvironmentRepository",
+    "SQLiteProjectEnvironmentRepository", "SQLiteIdentityAuthority",
+    "SQLiteLocalAuthorityUnitOfWork", "SQLiteLocalAuthorityUnitOfWorkFactory",
     "SQLiteAuthorizationUnitOfWork", "SQLiteAuthorizationUnitOfWorkFactory",
     "SQLiteConversationRepository",
     "ConversationBackup", "ConversationExport", "prepare_conversation_database_path",
