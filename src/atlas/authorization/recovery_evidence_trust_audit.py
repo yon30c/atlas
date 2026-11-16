@@ -68,3 +68,83 @@ class RecoveryEvidenceIssuerTrustPolicyAuditReport:
             item.status is RecoveryEvidenceIssuerTrustPolicyAuditStatus.HEALTHY
             for item in self.issuers
         )
+
+class RecoveryEvidenceIssuerInventoryAuditStatus(str, Enum):
+    HEALTHY = "healthy"
+    REGISTRY_DISABLED = "registry_disabled"
+    REGISTRY_CORRUPT = "registry_corrupt"
+    POLICY_MISSING = "policy_missing"
+    POLICY_DISABLED = "policy_disabled"
+    POLICY_CORRUPT = "policy_corrupt"
+    POLICY_ORPHAN = "policy_orphan"
+
+
+@dataclass(frozen=True, slots=True)
+class RecoveryEvidenceIssuerInventoryAudit:
+    """Cross-audit result for one expected or policy-only issuer."""
+
+    issuer_id: str
+    status: RecoveryEvidenceIssuerInventoryAuditStatus
+    registry_revisions: tuple[int, ...]
+    latest_registry_revision: int | None
+    policy_status: RecoveryEvidenceIssuerTrustPolicyAuditStatus | None
+    diagnostic_codes: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.issuer_id, str) or not self.issuer_id.strip():
+            raise ContractError("issuer_id debe ser una cadena no vacía")
+        if not isinstance(self.status, RecoveryEvidenceIssuerInventoryAuditStatus):
+            raise ContractError("status de inventario inválido")
+        if not isinstance(self.registry_revisions, tuple) or any(
+            isinstance(value, bool) or not isinstance(value, int) or value < 1
+            for value in self.registry_revisions
+        ):
+            raise ContractError("registry_revisions debe contener enteros positivos")
+        if self.latest_registry_revision is not None and (
+            isinstance(self.latest_registry_revision, bool)
+            or not isinstance(self.latest_registry_revision, int)
+            or self.latest_registry_revision < 1
+        ):
+            raise ContractError("latest_registry_revision inválida")
+        if self.policy_status is not None and not isinstance(
+            self.policy_status, RecoveryEvidenceIssuerTrustPolicyAuditStatus
+        ):
+            raise ContractError("policy_status inválido")
+        if not isinstance(self.diagnostic_codes, tuple) or any(
+            not isinstance(code, str) or not code.strip()
+            for code in self.diagnostic_codes
+        ):
+            raise ContractError("diagnostic_codes debe contener códigos no vacíos")
+
+
+@dataclass(frozen=True, slots=True)
+class RecoveryEvidenceIssuerInventoryAuditReport:
+    """Read-only cross-audit of expected issuers and persisted trust policies."""
+
+    issuers: tuple[RecoveryEvidenceIssuerInventoryAudit, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.issuers, tuple) or any(
+            not isinstance(item, RecoveryEvidenceIssuerInventoryAudit)
+            for item in self.issuers
+        ):
+            raise ContractError("issuers debe ser una tupla de auditorías válidas")
+        ids = tuple(item.issuer_id for item in self.issuers)
+        if len(ids) != len(set(ids)):
+            raise ContractError("el informe no puede repetir emisores")
+
+    @property
+    def is_healthy(self) -> bool:
+        return bool(self.issuers) and all(
+            item.status is RecoveryEvidenceIssuerInventoryAuditStatus.HEALTHY
+            for item in self.issuers
+        )
+
+    @property
+    def orphan_policy_issuer_ids(self) -> tuple[str, ...]:
+        return tuple(
+            item.issuer_id
+            for item in self.issuers
+            if item.status is RecoveryEvidenceIssuerInventoryAuditStatus.POLICY_ORPHAN
+        )
+
