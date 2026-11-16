@@ -225,3 +225,10 @@ Estos modelos no autentican al issuer, no prueban revocación actual ni sustituy
 - Pruebas en `tests/unit/test_operation_authorization_verification.py`.
 
 No existe adaptador concreto. El resultado VERIFIED no ejecuta ni concede por sí solo una capacidad. Para operaciones con efectos se necesita una garantía contra carreras de revocación, no una lectura puntual eventual. Validación local pendiente.
+
+
+## 12. Binding completo de revisiones de autoridad (F2.3.3a)
+
+`OperationAuthorizationEvidence` ahora exige cuatro revisiones positivas: actor, Grant, proyecto y entorno. El verificador confiable deberá contrastarlas con las fuentes canónicas. Se añadieron pruebas para rechazar cero, negativos y booleanos en project_revision/environment_revision.
+
+Este cambio solo completa los claims; no verifica por sí mismo que las revisiones sigan actuales ni cierra carreras de concurrencia. Validación local pendiente.
