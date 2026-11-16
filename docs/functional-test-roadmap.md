@@ -102,7 +102,7 @@ El conjunto exacto de operaciones se define al inspeccionar los módulos existen
 
 ### F1 — Interpretación y planificación
 
-**Estado:** F1.1 (contratos de intención/plan) integrado. F1.2 incluye parser JSON estricto y adaptador `OllamaIntentInterpreter` separado del flujo conversacional. El propietario validó 866/866 pruebas y confirmó con Gemma `gemma4:e2b-it-q4_K_M` los cuatro resultados esperados usando `OllamaProvider(think=False, response_format="json")`. F1.3 añade `AssistantPlanningService`; el propietario validó 875/875 pruebas. F1.4 añade `AssistantRequestPlanner` y `RequestPlanningResult`: coordina interpretación y planificación, devuelve `planned`, `needs_clarification` o `unsupported`, y no ejecuta capacidades. El propietario validó 882/882 pruebas. F1.5 añade `build_request_planner` en `atlas.bootstrap`, que compone el adaptador Ollama y el orquestador usando un proveedor inyectado; no modifica `cli.py` ni conecta el planificador a la consola. Las pruebas de composición están pendientes de validación local.
+**Estado:** F1.1 (contratos de intención/plan) integrado. F1.2 incluye parser JSON estricto y adaptador `OllamaIntentInterpreter` separado del flujo conversacional. El propietario validó 866/866 pruebas y confirmó con Gemma `gemma4:e2b-it-q4_K_M` los cuatro resultados esperados usando `OllamaProvider(think=False, response_format="json")`. F1.3 añade `AssistantPlanningService`; el propietario validó 875/875 pruebas. F1.4 añade `AssistantRequestPlanner` y `RequestPlanningResult`; el propietario validó 882/882 pruebas. F1.5 añade `build_request_planner` en `atlas.bootstrap`. El propietario validó la composición con Gemma real y 886/886 pruebas. F1 queda completada para el primer catálogo `workspace.list` y `workspace.read`; no hay ejecución de capacidades integrada todavía.
 
 - Clasificar la solicitud en una intención de producto.
 - Extraer parámetros y detectar datos faltantes.
@@ -113,6 +113,8 @@ El conjunto exacto de operaciones se define al inspeccionar los módulos existen
 **Criterio de salida:** casos de prueba de intención, aclaración y planificación pasan con el modelo local y validación de aplicación.
 
 ### F2 — Capacidades y herramientas de prueba
+
+**Estado:** F2.1 implementa el contrato de listado y el adaptador local acotado; validación local pendiente. El adaptador requiere un mapa explícito de IDs a raíces absolutas existentes, reales y canónicas. `workspace.list` enumera solo entradas inmediatas, devuelve tipo y tamaño de archivos, ordena resultados y reporta symlinks sin seguirlos. No hay todavía servicio de aplicación, confirmación, consola ni ejecución integrada.
 
 - Definir un catálogo pequeño de capacidades reales.
 - Implementar adaptadores concretos para el workspace de prueba.
