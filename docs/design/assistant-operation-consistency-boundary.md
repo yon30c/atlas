@@ -529,3 +529,13 @@ El informe distingue `HEALTHY` y `CORRUPT`, conserva códigos diagnósticos esta
 **Límites:** la auditoría comprueba integridad estructural e interna del recibo, no vuelve a autenticar la firma externa ni demuestra que la autoridad siga vigente hoy. Una admisión históricamente íntegra no autoriza efectos ni recuperación.
 
 **Estado: VALIDADO por el propietario; suite completa: 1131 tests en 10.314 s, todos OK.**
+
+## 46. F2.3.36 — Pruebas de concurrencia de admisión SQLite
+
+Se añaden pruebas con dos instancias independientes de `SQLiteDatabase` apuntando al mismo archivo. Una competencia concurrente enfrenta la admisión de evidencia con la desactivación del emisor: el resultado debe corresponder a un orden serial válido. Si la admisión obtiene primero la transacción, queda un recibo ligado a la revisión 1 y la desactivación se registra después como revisión 2; si la desactivación gana, la admisión rechaza la revisión obsoleta y no deja recibo.
+
+Una segunda prueba ejecuta dos admisiones exactas simultáneas desde conexiones independientes. Debe existir exactamente un resultado ADMITTED, uno REPLAYED y una sola fila persistida para la evidencia.
+
+**Límite:** estas pruebas demuestran serialización local SQLite para la admisión y el cambio del inventario. No convierten el recibo en un fence para efectos posteriores, no prueban coordinación distribuida y no habilitan recuperación ni runtime.
+
+**Estado:** implementado en la rama; suite local completa pendiente.
