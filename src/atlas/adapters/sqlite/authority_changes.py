@@ -29,6 +29,8 @@ from atlas.memory.authority_changes import (
     AuthorityChangeTerminalTarget,
     MultiAuthorityClaimAudit,
     MultiAuthorityClaimAuditStatus,
+    MultiAuthorityRecoveryAssessment,
+    MultiAuthorityRecoveryDisposition,
 )
 from atlas.memory.consistency import AuthorityKind
 
@@ -1161,6 +1163,50 @@ class SQLiteAuthorityChangeStore:
                     None if release_row is None else release_row["evidence_digest"]
                 ),
             )
+
+    def assess_multi_recovery(
+        self,
+        operation_id: str,
+    ) -> MultiAuthorityRecoveryAssessment | None:
+        """Classify an interrupted operation without repairing or advancing it.
+
+        The durable lifecycle stage is not proof that an external effect
+        occurred. In particular, SOURCE_PENDING remains outcome-unknown and
+        must not be retried automatically.
+        """
+        audit = self.audit_multi_claims(operation_id)
+        if audit is None:
+            return None
+
+        if audit.audit_status is MultiAuthorityClaimAuditStatus.INCONSISTENT:
+            disposition = MultiAuthorityRecoveryDisposition.INCONSISTENT
+        elif audit.audit_status is MultiAuthorityClaimAuditStatus.RELEASED:
+            disposition = MultiAuthorityRecoveryDisposition.TERMINAL_RELEASED
+        elif audit.audit_status is MultiAuthorityClaimAuditStatus.TERMINAL_CLAIMS_HELD:
+            disposition = MultiAuthorityRecoveryDisposition.TERMINAL_CLAIMS_HELD
+        elif audit.audit_status is MultiAuthorityClaimAuditStatus.UNCLAIMED:
+            disposition = (
+                MultiAuthorityRecoveryDisposition.NOT_STARTED
+                if audit.operation_status is AuthorityChangeStatus.REQUESTED
+                else MultiAuthorityRecoveryDisposition.INCONSISTENT
+            )
+        elif audit.operation_status is AuthorityChangeStatus.REQUESTED:
+            disposition = MultiAuthorityRecoveryDisposition.CLAIMED_BEFORE_INVALIDATION
+        elif audit.operation_status is AuthorityChangeStatus.INVALIDATION_PENDING:
+            disposition = MultiAuthorityRecoveryDisposition.INVALIDATION_OUTCOME_UNKNOWN
+        elif audit.operation_status is AuthorityChangeStatus.SOURCE_PENDING:
+            disposition = MultiAuthorityRecoveryDisposition.SOURCE_OUTCOME_UNKNOWN
+        elif audit.operation_status is AuthorityChangeStatus.SOURCE_CONFIRMED:
+            disposition = MultiAuthorityRecoveryDisposition.SOURCE_CONFIRMATION_RECORDED
+        elif audit.operation_status is AuthorityChangeStatus.RECONCILING:
+            disposition = MultiAuthorityRecoveryDisposition.RECONCILIATION_IN_PROGRESS
+        else:
+            disposition = MultiAuthorityRecoveryDisposition.INCONSISTENT
+
+        return MultiAuthorityRecoveryAssessment(
+            disposition=disposition,
+            claim_audit=audit,
+        )
 
     def get_multi_claims(self, operation_id: str) -> tuple[AuthorityChangeTarget, ...]:
         """Return the immutable target claims currently held by an operation."""
