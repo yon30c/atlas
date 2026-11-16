@@ -43,6 +43,7 @@ class SQLiteRecoveryEvidenceAdmissionRepository(RecoveryEvidenceAdmissionPort):
             "admission_id": command.admission_id,
             "operation_id": command.operation_id,
             "evidence_id": command.evidence_id,
+            "evidence_digest": command.evidence_digest,
             "issuer_id": command.issuer_id,
             "issuer_registry_revision": command.issuer_registry_revision,
             "evidence_kind": command.evidence_kind.value,
@@ -181,14 +182,14 @@ class SQLiteRecoveryEvidenceAdmissionRepository(RecoveryEvidenceAdmissionPort):
             connection.execute(
                 """
                 INSERT INTO recovery_evidence_admissions (
-                    admission_id, evidence_id, operation_id, issuer_id,
+                    admission_id, evidence_id, evidence_digest, operation_id, issuer_id,
                     issuer_registry_revision, evidence_kind, target_count,
                     command_digest, command_canonical, requested_at, recorded_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    command.admission_id, command.evidence_id, command.operation_id,
-                    command.issuer_id, command.issuer_registry_revision,
+                    command.admission_id, command.evidence_id, command.evidence_digest,
+                    command.operation_id, command.issuer_id, command.issuer_registry_revision,
                     command.evidence_kind.value, len(command.targets), digest,
                     sqlite3.Binary(canonical),
                     command.requested_at.isoformat(timespec="microseconds"),
