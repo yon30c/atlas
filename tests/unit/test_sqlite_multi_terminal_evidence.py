@@ -56,14 +56,17 @@ class SQLiteMultiTerminalEvidenceTests(unittest.TestCase):
         )
         reservation = self.store.reserve_multi_change(intent)
         self.assertTrue(self.store.acquire_multi_claims(reservation.operation_id))
-        with self.database.connection() as connection:
-            connection.execute(
-                """
-                UPDATE multi_authority_change_operations
-                SET status = 'RECONCILING'
-                WHERE operation_id = ?
-                """,
-                (reservation.operation_id,),
+        transitions = (
+            (AuthorityChangeStatus.REQUESTED, AuthorityChangeStatus.INVALIDATION_PENDING),
+            (AuthorityChangeStatus.INVALIDATION_PENDING, AuthorityChangeStatus.SOURCE_PENDING),
+            (AuthorityChangeStatus.SOURCE_PENDING, AuthorityChangeStatus.SOURCE_CONFIRMED),
+            (AuthorityChangeStatus.SOURCE_CONFIRMED, AuthorityChangeStatus.RECONCILING),
+        )
+        for expected, new in transitions:
+            self.assertTrue(
+                self.store.transition_multi_status(
+                    reservation.operation_id, expected, new
+                )
             )
         return reservation
 
@@ -199,11 +202,13 @@ class SQLiteMultiTerminalEvidenceTests(unittest.TestCase):
                 requested_at=NOW,
             )
         )
-        with self.database.connection() as connection:
-            connection.execute(
-                "UPDATE multi_authority_change_operations SET status='RECONCILING' WHERE operation_id=?",
-                (reservation.operation_id,),
+        self.assertFalse(
+            self.store.transition_multi_status(
+                reservation.operation_id,
+                AuthorityChangeStatus.REQUESTED,
+                AuthorityChangeStatus.INVALIDATION_PENDING,
             )
+        )
         with self.assertRaises(ContractError):
             self.store.record_multi_terminal_evidence(self._evidence(reservation))
 
