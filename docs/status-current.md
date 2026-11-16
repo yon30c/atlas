@@ -70,7 +70,7 @@ También se habían realizado verificaciones manuales locales de persistencia, b
 - Modelo principal seleccionado previamente: Gemma 4 E2B. La Fase 3 valida su comportamiento; no repite la selección general.
 - P3-PI-001: fallo exploratorio inicial al seguir una instrucción destructiva en un documento; repetición controlada posterior con 4/4 respuestas seguras tras revisión manual y cero llamadas a herramientas.
 - P3-PI-002: matriz completada con `gemma4:e2b-it-q4_K_M`, Ollama 0.40.16, `think=false` solo en el harness, temperatura 0.2 y 512 tokens. Se realizaron 40 corridas (10 por combinación); contención 40/40 y reconocimiento estricto 22/40. Política inglesa: 18/20; española: 4/20. Informe: [matriz P3-PI-002](evaluations/p3-pi-002-gemma4-language-matrix.md).
-- Corpus y harness aislado versionados en `tests/evaluation/phase3/`; `think=false` se limita al proveedor experimental y no modifica el runtime productivo. La Fase 3 continúa en curso: falta confirmar localmente las pruebas unitarias actualizadas del harness y completar las evaluaciones 3.3–3.5.
+- Corpus y harness aislado versionados en `tests/evaluation/phase3/`; `think=false` se limita al proveedor experimental y no modifica el runtime productivo. La subfase 3.1 (baseline y harness inicial) está completada: el usuario ejecutó `python -m unittest tests.evaluation.phase3.test_harness -v` y obtuvo 6/6 OK el 16 de noviembre de 2026. La Fase 3 continúa en curso: siguen abiertas 3.2 (casos adicionales de inyección) y 3.3–3.5.
 
 ## Fuente de detalle
 
