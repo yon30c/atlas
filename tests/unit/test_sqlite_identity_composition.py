@@ -12,6 +12,7 @@ from atlas.adapters.sqlite.identity_authority import SQLiteIdentityAuthority
 from atlas.adapters.sqlite.identity_composition import (
     SQLiteIdentityComposition,
     compose_sqlite_identity,
+    compose_sqlite_identity_on_database,
 )
 from atlas.core.errors import ContractError
 
@@ -78,6 +79,20 @@ class SQLiteIdentityCompositionTests(unittest.TestCase):
 
         user = first.authority.create_user()
         self.assertEqual(second.authority.get_user(user.user_id), user)
+
+    def test_composition_can_reuse_exact_database_from_parent_composition(self):
+        database = SQLiteDatabase(self.database_path)
+
+        composition = compose_sqlite_identity_on_database(database)
+
+        self.assertIs(composition.database, database)
+        self.assertIs(composition.authority._database, database)
+        user = composition.authority.create_user()
+        self.assertEqual(composition.authority.get_user(user.user_id), user)
+
+    def test_shared_database_composition_rejects_non_database_input(self):
+        with self.assertRaises(ContractError):
+            compose_sqlite_identity_on_database(self.database_path)
 
     def test_composition_rejects_a_relative_database_path(self):
         with self.assertRaises(ContractError):
