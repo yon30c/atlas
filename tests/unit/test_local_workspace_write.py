@@ -158,6 +158,15 @@ class LocalWorkspaceWriteAdapterTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             self.adapter.stage_write("demo", "a.txt", "x", "../bad")
 
+    def test_revalidates_root_if_replaced_after_adapter_creation(self):
+        base = Path(self.temp.name)
+        outside = base / "outside"
+        outside.mkdir()
+        self.root.rename(base / "original-workspace")
+        self.root.symlink_to(outside, target_is_directory=True)
+        with self.assertRaises(ContractError):
+            self.adapter.stage_write("demo", "escape.txt", "x", self.operation_id)
+
     def test_rejects_missing_parent_and_unknown_workspace(self):
         with self.assertRaises(NotFoundError):
             self.adapter.stage_write("demo", "missing/file.txt", "x", self.operation_id)
