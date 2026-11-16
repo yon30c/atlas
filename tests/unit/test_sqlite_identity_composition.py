@@ -56,7 +56,7 @@ class SQLiteIdentityCompositionTests(unittest.TestCase):
             versions = connection.execute(
                 "SELECT version FROM schema_migrations ORDER BY version"
             ).fetchall()
-        self.assertEqual([row["version"] for row in versions], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        self.assertEqual([row["version"] for row in versions], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
 
     def test_composed_authority_can_create_and_read_canonical_user(self):
         composition = compose_sqlite_identity(self.database_path)
