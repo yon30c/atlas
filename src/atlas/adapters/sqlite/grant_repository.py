@@ -3,8 +3,10 @@
 from datetime import datetime
 import json
 import sqlite3
+from contextlib import contextmanager
+from typing import Iterator
 
-from atlas.adapters.sqlite.database import SQLiteDatabase
+from atlas.adapters.sqlite.database import SQLiteDatabase, SQLiteUnitOfWork
 from atlas.authorization.models import Grant, GrantResourceScope
 from atlas.core.errors import ConcurrencyError, ContractError, NotFoundError
 from atlas.ports.grants import GrantRepository
@@ -22,10 +24,34 @@ class SQLiteGrantRepository(GrantRepository):
     previous revision to prevent lost updates.
     """
 
-    def __init__(self, database: SQLiteDatabase) -> None:
+    def __init__(
+        self,
+        database: SQLiteDatabase,
+        *,
+        unit_of_work: SQLiteUnitOfWork | None = None,
+    ) -> None:
         if not isinstance(database, SQLiteDatabase):
             raise ContractError("database debe ser SQLiteDatabase")
+        if unit_of_work is not None and not isinstance(unit_of_work, SQLiteUnitOfWork):
+            raise ContractError("unit_of_work debe ser SQLiteUnitOfWork")
         self._database = database
+        self._unit_of_work = unit_of_work
+
+    @contextmanager
+    def _read_connection(self) -> Iterator[sqlite3.Connection]:
+        if self._unit_of_work is not None:
+            yield self._unit_of_work._connection_for(self._database)
+        else:
+            with self._database.connection() as connection:
+                yield connection
+
+    @contextmanager
+    def _write_connection(self) -> Iterator[sqlite3.Connection]:
+        if self._unit_of_work is not None:
+            yield self._unit_of_work._connection_for(self._database)
+        else:
+            with self._database.unit_of_work() as unit:
+                yield unit._connection_for(self._database)
 
     @staticmethod
     def _from_row(row: sqlite3.Row) -> Grant:
@@ -83,8 +109,7 @@ class SQLiteGrantRepository(GrantRepository):
     def create(self, grant: Grant) -> None:
         values = self._values(grant)
         try:
-            with self._database.unit_of_work() as unit:
-                connection = unit._connection_for(self._database)
+            with self._write_connection() as connection:
                 connection.execute(
                     """
                     INSERT INTO authorization_grants (
@@ -101,7 +126,7 @@ class SQLiteGrantRepository(GrantRepository):
     def get(self, grant_id: str) -> Grant | None:
         if not isinstance(grant_id, str) or not grant_id.strip():
             raise ContractError("grant_id debe ser una cadena no vacía")
-        with self._database.connection() as connection:
+        with self._read_connection() as connection:
             row = connection.execute(
                 "SELECT * FROM authorization_grants WHERE grant_id = ?",
                 (grant_id,),
@@ -113,8 +138,7 @@ class SQLiteGrantRepository(GrantRepository):
         if grant.revision < 2:
             raise ContractError("una actualización debe incrementar la revisión")
         try:
-            with self._database.unit_of_work() as unit:
-                connection = unit._connection_for(self._database)
+            with self._write_connection() as connection:
                 cursor = connection.execute(
                     """
                     UPDATE authorization_grants
@@ -140,7 +164,7 @@ class SQLiteGrantRepository(GrantRepository):
     def list_by_owner(self, owner_user_id: str) -> tuple[Grant, ...]:
         if not isinstance(owner_user_id, str) or not owner_user_id.strip():
             raise ContractError("owner_user_id debe ser una cadena no vacía")
-        with self._database.connection() as connection:
+        with self._read_connection() as connection:
             rows = connection.execute(
                 """
                 SELECT * FROM authorization_grants
