@@ -5,6 +5,7 @@ import tempfile
 import sqlite3
 import unittest
 
+from atlas.core.errors import ContractError
 from atlas.adapters.sqlite import (
     SQLITE_MIGRATIONS,
     SQLiteAuthorityChangeStore,
@@ -414,6 +415,94 @@ class SQLiteMultiAuthorityChangeStoreTests(unittest.TestCase):
                     """,
                     (reservation.operation_id,),
                 )
+
+
+    def test_multi_status_advances_only_through_ordered_lifecycle(self):
+        reservation = self.store.reserve_multi_change(self.intent(key="lifecycle-forward"))
+        self.assertFalse(self.store.transition_multi_status(
+            reservation.operation_id,
+            AuthorityChangeStatus.REQUESTED,
+            AuthorityChangeStatus.INVALIDATION_PENDING,
+        ))
+        self.assertTrue(self.store.acquire_multi_claims(reservation.operation_id))
+
+        stages = (
+            (AuthorityChangeStatus.REQUESTED, AuthorityChangeStatus.INVALIDATION_PENDING),
+            (AuthorityChangeStatus.INVALIDATION_PENDING, AuthorityChangeStatus.SOURCE_PENDING),
+            (AuthorityChangeStatus.SOURCE_PENDING, AuthorityChangeStatus.SOURCE_CONFIRMED),
+            (AuthorityChangeStatus.SOURCE_CONFIRMED, AuthorityChangeStatus.RECONCILING),
+        )
+        for expected, target in stages:
+            self.assertTrue(self.store.transition_multi_status(
+                reservation.operation_id, expected, target
+            ))
+            self.assertTrue(self.store.transition_multi_status(
+                reservation.operation_id, expected, target
+            ))
+            self.assertEqual(
+                self.store.get_multi_reservation(reservation.operation_id).status,
+                target,
+            )
+
+    def test_multi_status_compare_and_set_rejects_stale_or_unknown_operation(self):
+        reservation = self.store.reserve_multi_change(self.intent(key="lifecycle-cas"))
+        self.assertFalse(self.store.transition_multi_status(
+            "missing-operation",
+            AuthorityChangeStatus.REQUESTED,
+            AuthorityChangeStatus.INVALIDATION_PENDING,
+        ))
+        self.assertTrue(self.store.acquire_multi_claims(reservation.operation_id))
+        self.assertTrue(self.store.transition_multi_status(
+            reservation.operation_id,
+            AuthorityChangeStatus.REQUESTED,
+            AuthorityChangeStatus.INVALIDATION_PENDING,
+        ))
+        self.assertFalse(self.store.transition_multi_status(
+            reservation.operation_id,
+            AuthorityChangeStatus.REQUESTED,
+            AuthorityChangeStatus.INVALIDATION_PENDING,
+        ))
+
+    def test_multi_status_rejects_skipped_reverse_and_terminal_transitions(self):
+        reservation = self.store.reserve_multi_change(self.intent(key="lifecycle-invalid"))
+        invalid = (
+            (AuthorityChangeStatus.REQUESTED, AuthorityChangeStatus.SOURCE_PENDING),
+            (AuthorityChangeStatus.SOURCE_PENDING, AuthorityChangeStatus.INVALIDATION_PENDING),
+            (AuthorityChangeStatus.RECONCILING, AuthorityChangeStatus.COMPLETED),
+            (AuthorityChangeStatus.REQUESTED, AuthorityChangeStatus.ABORTED),
+        )
+        for expected, target in invalid:
+            with self.assertRaises(ContractError):
+                self.store.transition_multi_status(
+                    reservation.operation_id, expected, target
+                )
+
+    def test_sqlite_trigger_rejects_status_skips_even_without_store_api(self):
+        reservation = self.store.reserve_multi_change(self.intent(key="lifecycle-sql-guard"))
+        with self.database.connection() as connection:
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    """
+                    UPDATE multi_authority_change_operations
+                    SET status = 'SOURCE_PENDING'
+                    WHERE operation_id = ?
+                    """,
+                    (reservation.operation_id,),
+                )
+
+    def test_sqlite_trigger_requires_complete_claims_for_progression(self):
+        reservation = self.store.reserve_multi_change(self.intent(key="lifecycle-no-claims"))
+        with self.database.connection() as connection:
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    """
+                    UPDATE multi_authority_change_operations
+                    SET status = 'INVALIDATION_PENDING'
+                    WHERE operation_id = ?
+                    """,
+                    (reservation.operation_id,),
+                )
+
 
 
 if __name__ == "__main__":
