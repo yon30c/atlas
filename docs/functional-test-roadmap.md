@@ -481,3 +481,11 @@ Se añaden `audit_admission(admission_id)` y `audit_all()` como consultas de sol
 **Límite:** no autentica de nuevo la evidencia externa, no repara registros, no demuestra autoridad vigente ni permite ejecutar recuperación/efectos.
 
 **Estado: VALIDADO por el propietario; suite completa: 1131 tests en 10.314 s, todos OK.**
+
+### F2.3.36 — Concurrencia entre admisión y cambio de autoridad
+
+Se añaden dos pruebas de integración con conexiones SQLite independientes sobre el mismo archivo. La primera enfrenta en paralelo una admisión con la desactivación del emisor y exige un resultado equivalente a uno de los dos órdenes seriales válidos: admisión confirmada antes de la desactivación, o rechazo por revisión obsoleta después de la desactivación. La segunda enfrenta dos admisiones exactas y exige un único ADMITTED, un REPLAYED y una sola fila persistida.
+
+**Límite:** la garantía es local a la transacción SQLite de admisión. No protege un efecto externo posterior ni equivale a fencing distribuido. No se habilitan acciones ni runtime.
+
+**Estado:** implementado en GitHub; pendiente de pruebas locales del propietario.
