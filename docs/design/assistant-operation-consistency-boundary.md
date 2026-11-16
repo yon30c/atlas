@@ -445,3 +445,12 @@ MultiAuthorityRecoveryEvidenceVerificationService realiza prevalidaciones locale
 **Límites:** payload_digest y attestation_ref son claims, no pruebas. No se implementa criptografía, almacenamiento de claves, emisor real, adaptador de fuente, revocation registry ni verificación autoritativa concreta. VERIFIED no autoriza ejecución, retry, transición de estado ni liberación de claims. Runtime permanece desconectado.
 
 **Estado: VALIDADA.** Suite completa ejecutada por el propietario: 1072 tests en 7.828 s, todos OK.
+
+
+## 37. F2.3.27 — Política explícita de confianza de emisores
+
+Se añade `RecoveryEvidenceIssuerTrustPolicy` como contrato inmutable en `atlas.authorization`. Cada política identifica un emisor, revisión de política, estado habilitado, tipos de evidencia permitidos, ventana de vigencia y duración máxima de evidencia. La evaluación exige que emisor, tipo, emisión, expiración y vigencia actual coincidan con esa política.
+
+`RecoveryEvidenceIssuerTrustPolicyPort` proporciona la política actual por emisor. `MultiAuthorityRecoveryEvidenceVerificationService` consulta primero esa fuente y solo delega al verificador criptográfico si la política existe y permite la evidencia. Política inexistente o incompatible produce DENIED; indisponibilidad de la fuente produce UNAVAILABLE. Una política de confianza no autentica firma, digest, payload, revocación de claves ni estado de la fuente: esas verificaciones siguen siendo responsabilidad del verificador.
+
+No se implementa aún almacenamiento concreto de políticas, gestión de claves, firma, adaptadores de fuentes, integración runtime ni autoridad de recuperación. El puerto exige una fuente autoritativa actual; una caché obsoleta no satisface la garantía de revocación.
