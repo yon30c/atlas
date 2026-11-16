@@ -100,6 +100,7 @@ class SQLiteRecoveryEvidenceIssuerRegistryRepositoryTests(unittest.TestCase):
             self.repository.list_registrations(),
             (second,),
         )
+        self.assertEqual(self.repository.list_history(first.issuer_id), (first, second))
 
     def test_append_rejects_stale_revision_and_unknown_issuer(self):
         first = make_registration()
