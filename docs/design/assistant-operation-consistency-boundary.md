@@ -495,7 +495,7 @@ El servicio conserva la revisión del inventario observada antes de consultar la
 
 Esto detecta una desactivación o cualquier cambio de registro ocurrido durante la verificación, incluso si la nueva revisión vuelve a habilitar al emisor. No es una lease, no bloquea futuras revisiones y no crea un fence consumible por un efecto. Sigue existiendo una ventana después de devolver VERIFIED; por ello el resultado continúa siendo evidencia verificada, no autoridad ni admisión. Un futuro coordinador debe validar la revisión dentro de la misma frontera transaccional/fencing que proteja el efecto.
 
-**Estado: implementado; pruebas locales pendientes.**
+**Estado: VALIDADO por el propietario; suite completa: 1131 tests en 10.314 s, todos OK.**
 
 
 ## 43. F2.3.33 — Contrato de admisión ligada a revisión
@@ -528,4 +528,4 @@ El informe distingue `HEALTHY` y `CORRUPT`, conserva códigos diagnósticos esta
 
 **Límites:** la auditoría comprueba integridad estructural e interna del recibo, no vuelve a autenticar la firma externa ni demuestra que la autoridad siga vigente hoy. Una admisión históricamente íntegra no autoriza efectos ni recuperación.
 
-**Estado:** implementado en la rama; pruebas locales pendientes.
+**Estado: VALIDADO por el propietario; suite completa: 1131 tests en 10.314 s, todos OK.**
