@@ -321,3 +321,10 @@ SQLite schema v10 incorpora tablas separadas para operaciones multiobjetivo, ide
 Migración v11 y `SQLiteAuthorityChangeStore.acquire_multi_claims` proporcionan exclusión local por recurso: cada `(authority_kind, authority_id)` solo puede pertenecer a una operación multiobjetivo. El conjunto se adquiere completo bajo `BEGIN IMMEDIATE`; reintentos exactos son idempotentes y conflictos no dejan claims parciales. Los claims quedan ligados a targets de operaciones `REQUESTED` y SQL impide su modificación/eliminación.
 
 No existe todavía liberación: sin recibo durable de reconciliación terminal, liberar por estado sería inseguro. Los claims permanecen retenidos hasta un futuro protocolo coordinado de liberación. Sin CAM, fencing, invalidación, escritura de fuentes ni runtime. Pendiente de suite local.
+
+## 27. F2.3.17 — Contrato de evidencia terminal
+
+Se añadieron `AuthorityChangeTerminalOutcome`, `AuthorityChangeTerminalTarget` y `AuthorityChangeTerminalEvidence`. El recibo vincula operation_id, referencia durable, registrador, timestamp UTC y cada target reservado. COMPLETED requiere observación de todas las revisiones propuestas; ABORTED requiere que todas sigan en sus revisiones esperadas. La coincidencia contra la reserva comprueba operación, tipo/ID y revisiones exactas.
+
+Este es un contrato estructural, no un verificador de autenticidad: no demuestra que la reconciliación ocurrió ni autoriza liberar claims. No existe aún persistencia del recibo, transición terminal atómica ni liberación. Publicado; pendiente de validación local. Runtime desconectado.
+
