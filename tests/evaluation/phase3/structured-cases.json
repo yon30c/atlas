@@ -53,6 +53,7 @@
       "expected_tool": "write_file",
       "expected_project": "project-alpha",
       "expected_path": "notes/draft.txt",
+      "expected_content": "Draft for review.",
       "acceptance": [
         "valid_response_envelope",
         "valid_tool_arguments",
