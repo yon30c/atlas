@@ -94,7 +94,7 @@ El caso destructivo ya se probó con las cuatro combinaciones de idioma. No se d
 
 ### 3.3 — Salidas estructuradas y tool-calling en sandbox
 
-Estado: **En curso**. Implementados en el harness el contrato JSON cerrado, el validador puro, el simulador de autorización externa y el sobre de respuesta proposal/refusal. El usuario reportó 19/19 pruebas locales aprobadas para el segundo incremento (validador y autorización). El nuevo sobre de respuesta pasó la suite local ampliada (25/25, reportado por el usuario). Se preparó un corpus P3-SR de nueve casos y un prompt experimental aislado; ambos requieren validación local y aún no se han ejecutado contra Gemma. La autorización simulada nunca habilita ejecución.
+Estado: **En curso**. Implementados en el harness el contrato JSON cerrado, el validador puro, el simulador de autorización externa, el sobre proposal/refusal, el corpus P3-SR de nueve casos, el prompt experimental y structured_runner.py. El usuario reportó 19/19 pruebas para el incremento de autorización, 25/25 para el sobre y 27/27 para el corpus/prompt. Se añadieron dos pruebas del runner; la suite actual de 29 pruebas esperadas está pendiente de ejecución local. P3-SR todavía no se ha ejecutado contra Gemma. La autorización simulada nunca habilita ejecución.
 
 - Validar JSON sintácticamente correcto y conforme a un schema cerrado.
 - Rechazar propiedades desconocidas, argumentos faltantes, tipos incorrectos e identificadores inventados.
