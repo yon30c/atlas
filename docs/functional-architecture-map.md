@@ -456,6 +456,14 @@ La composición `SQLiteLocalAuthorityUnitOfWork` expone `recovery_evidence_admis
 
 La serialización `BEGIN IMMEDIATE` cierra la carrera entre la consulta de revisión y la inserción de admisión dentro de SQLite. No cierra la ventana entre la admisión y un efecto externo posterior: ese futuro efecto tendrá que compartir una frontera de coordinación/fencing propia. `ADMITTED` solo significa que el recibo quedó registrado.
 
-**Estado:** implementado en la rama; pruebas locales pendientes.
+**Estado: VALIDADO por el propietario; suite completa: 1129 tests en 8.515 s, todos OK.**
 
 El resultado VERIFIED conserva el digest canónico SHA-256 de la evidencia completa. La fábrica de admisión compara el contenido exacto y el recibo persistido conserva ese digest junto con el comando canónico.
+
+## 45. F2.3.35 — Auditoría de integridad de admisiones
+
+`SQLiteRecoveryEvidenceAdmissionRepository` añade `audit_admission()` y `audit_all()` como consultas de solo lectura. La auditoría valida canonicalización y SHA-256 del comando, consistencia entre columnas y payload, estructura y orden de objetivos, correspondencia con los targets inmutables de la operación y timestamps UTC canónicos. Devuelve `HEALTHY` o `CORRUPT` con códigos diagnósticos; no repara registros ni vuelve a autenticar evidencia externa.
+
+**Límite:** la integridad histórica del recibo no demuestra autoridad vigente ni concede permiso para efectos o recuperación.
+
+**Estado:** implementado en la rama; pruebas locales pendientes.
