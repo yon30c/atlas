@@ -158,7 +158,7 @@ class SQLiteIdentityCompositionTests(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertEqual(len(outcomes), 2)
         for outcome in outcomes:
-            self.assertEqual(outcome[1], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
+            self.assertEqual(outcome[1], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])
             self.assertEqual(outcome[2], "ok")
             self.assertEqual(outcome[3], 0)
 
