@@ -114,7 +114,7 @@ El conjunto exacto de operaciones se define al inspeccionar los módulos existen
 
 ### F2 — Capacidades y herramientas de prueba
 
-**Estado:** F2.1 validada con 893/893 pruebas. F2.2 implementada y validada por el propietario con 900/900 pruebas (16 de noviembre de 2026). F2.3 documenta la separación entre revisión del plan, autorización CAM y aprobación humana. F2.3.1 añade los contratos `OperationAuthorizationEvidence`, `OperationAuthorizationResult` y `OperationAuthorizationPort`, además de pruebas unitarias; validación local pendiente. No hay todavía emisor CAM general, verificador de evidencia, Approval Manager integrado ni ejecución desde consola/runtime.
+**Estado:** F2.1 validada con 893/893 pruebas. F2.2 implementada y validada por el propietario con 900/900 pruebas (16 de noviembre de 2026). F2.3 documenta la separación entre revisión del plan, autorización CAM y aprobación humana. F2.3.1 añadió los contratos `OperationAuthorizationEvidence`, `OperationAuthorizationResult` y `OperationAuthorizationPort`, validados por el propietario con 913/913 pruebas. F2.3.2 añade el puerto de verificación confiable y `OperationAuthorizationEvidenceVerificationService`, con pruebas negativas; validación local pendiente. No hay todavía adaptador concreto del verificador, Approval Manager integrado ni ejecución desde consola/runtime.
 
 - Definir un catálogo pequeño de capacidades reales.
 - Implementar adaptadores concretos para el workspace de prueba.
@@ -208,4 +208,4 @@ Para cada siguiente incremento:
 6. Revisar los resultados antes de continuar.
 7. Actualizar esta documentación con evidencia, commit y estado real.
 
-**Siguiente acción:** actualizar el checkout Debian y ejecutar las pruebas focalizadas `tests.unit.test_operation_authorization_contracts`, más `tests.unit.test_authorization` y `tests.unit.test_evaluator`, y después la suite completa. Si pasan, continuar con el verificador confiable de evidencia y la vigencia de autoridad. No integrar consola ni ejecutar capacidades todavía.
+**Siguiente acción:** actualizar el checkout Debian y ejecutar `tests.unit.test_operation_authorization_contracts` y `tests.unit.test_operation_authorization_verification`, además de `tests.unit.test_authorization` y `tests.unit.test_evaluator`; después, la suite completa. Si pasan, diseñar el adaptador de verificación contra autoridad vigente y su garantía ante revocaciones concurrentes. No integrar consola ni ejecutar capacidades todavía.
