@@ -267,3 +267,9 @@ El inventario detallado está en [assistant-operation-consistency-boundary.md](d
 - Journal/authority changes: persistencia SQLite separada; no está compuesta con las cuatro autoridades.
 
 No existe UoW compartida ni coordinador concreto. El adaptador de verificación no debe implementarse hasta decidir si se construyen las fuentes canónicas locales y se migran sus mutaciones, o si CAM se aplaza para el perfil de lectura inicial.
+
+## 16. F2.3.6 — Composición Identity sobre base compartida
+
+Se añadió `compose_sqlite_identity_on_database(database)` como seam de composición. Permite que una futura raíz de autoridad local cree una única `SQLiteDatabase` y entregue la misma instancia a Identity. La composición standalone por ruta se mantiene compatible.
+
+Pruebas para reutilización exacta de la instancia y rechazo de tipos inválidos. Pendiente de ejecución local. No implica aún autoridad común ni cambia el runtime.
