@@ -793,6 +793,7 @@ CORE_SCHEMA_V8 = SQLiteMigration(
             OR
             (status IN ('approved', 'rejected')
              AND decided_at IS NOT NULL
+             AND decided_by_user_id IS NOT NULL
              AND length(trim(decided_by_user_id)) > 0)
         ),
         FOREIGN KEY (grant_id) REFERENCES authorization_grants(grant_id)
@@ -833,6 +834,17 @@ CORE_SCHEMA_V8 = SQLiteMigration(
     WHEN OLD.status != 'pending' AND NEW.status != OLD.status
     BEGIN
         SELECT RAISE(ABORT, 'Grant renewal decision is terminal');
+    END;
+
+    CREATE TRIGGER authorization_grant_renewals_decision_immutable
+    BEFORE UPDATE OF decided_at, decided_by_user_id ON authorization_grant_renewals
+    WHEN OLD.status != 'pending'
+      AND (
+          NEW.decided_at IS NOT OLD.decided_at
+          OR NEW.decided_by_user_id IS NOT OLD.decided_by_user_id
+      )
+    BEGIN
+        SELECT RAISE(ABORT, 'Grant renewal decision evidence is immutable');
     END;
 
     CREATE TRIGGER authorization_grant_renewals_no_delete
