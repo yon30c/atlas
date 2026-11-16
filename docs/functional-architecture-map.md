@@ -409,4 +409,11 @@ La migración v15 conserva snapshots append-only de políticas de confianza de e
 
 El repositorio no valida firmas ni claves y no concede autoridad de recuperación. El servicio de verificación continúa dependiendo del puerto; no se añade integración al runtime.
 
-**Estado:** implementado; validación local pendiente.
+**Estado: VALIDADO.** El propietario confirmó 1088/1088 pruebas correctas.
+
+
+## 39. Auditoría de integridad de políticas de confianza
+
+Se añadieron `RecoveryEvidenceIssuerTrustPolicyAuditStatus`, `RecoveryEvidenceIssuerTrustPolicyAudit` y `RecoveryEvidenceIssuerTrustPolicyAuditReport`, además de `audit_issuer()` y `audit_all()` en el repositorio SQLite. Los diagnósticos distinguen `HEALTHY`, `DISABLED`, `CORRUPT` y `MISSING_POLICY`; detectan saltos de revisión, registros no canónicos y contenido inválido. La auditoría es de solo lectura y no modifica ni repara el estado.
+
+`audit_all()` usa una única consulta ordenada para obtener un snapshot coherente. Sin un registro independiente de emisores esperados, no puede descubrir emisores que nunca se registraron; para ese caso se consulta `audit_issuer(issuer_id)`. **Estado: implementado; validación local pendiente.**
