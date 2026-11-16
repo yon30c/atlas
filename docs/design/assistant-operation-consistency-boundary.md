@@ -412,3 +412,12 @@ La migración v14 agrega triggers para limitar el ledger multiobjetivo a transic
 `transition_multi_status(operation_id, expected_status, new_status)` ofrece CAS atómico: rechaza estado esperado obsoleto, rechaza reintentos con estado esperado obsoleto y falla cerrado ante claims incompletos. Los triggers protegen incluso escrituras SQL directas. El método solo registra avance del ledger; no demuestra que invalidación, mutación o reconciliación externa hayan sucedido. No autoriza ni ejecuta acciones. La transición a BLOCKED y su recuperación se dejan fuera hasta definir evidencia y semántica de reanudación.
 
 **Estado:** VALIDADA localmente por el propietario; suite completa: 1048 tests en 9.026 s, todos OK.
+
+
+## 25. F2.3.24 — Diagnóstico de recuperación multiobjetivo
+
+`MultiAuthorityRecoveryAssessment` es una proyección de solo lectura del ledger y la auditoría de claims. Sus disposiciones distinguen `NOT_STARTED`, `CLAIMED_BEFORE_INVALIDATION`, `INVALIDATION_OUTCOME_UNKNOWN`, `SOURCE_OUTCOME_UNKNOWN`, `SOURCE_CONFIRMATION_RECORDED`, `RECONCILIATION_IN_PROGRESS`, `TERMINAL_CLAIMS_HELD`, `TERMINAL_RELEASED` e `INCONSISTENT`.
+
+`SOURCE_PENDING` siempre significa que el resultado de la mutación de fuente es desconocido. No se puede inferir que la operación no se ejecutó ni repetirla automáticamente. La evaluación no cambia datos, no libera claims y no constituye autorización ni evidencia externa.
+
+**Estado:** implementación y pruebas publicadas; pendiente de validación local.
