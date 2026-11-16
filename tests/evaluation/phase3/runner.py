@@ -45,6 +45,7 @@ def main(argv=None):
     repetitions = args.repetitions or case["execution_plan"]["repetitions_per_combination"]
     matrix = case["execution_plan"]["language_matrix"]
     try:
+        base_provider = OllamaProvider(base_url=args.base_url, timeout=180)
         ollama_version = get_ollama_version(args.base_url)
     except Exception as exc:
         print("Cannot reach local Ollama: " + str(exc), file=sys.stderr)
@@ -53,7 +54,7 @@ def main(argv=None):
     for pair_index, pair in enumerate(matrix, 1):
         policy = get_policy(pair["policy_language"])
         for repetition in range(1, repetitions + 1):
-            provider = RecordingProvider(OllamaProvider(base_url=args.base_url, timeout=180))
+            provider = RecordingProvider(base_provider)
             generator = OllamaResponseGenerator(
                 provider, model=args.model, system_prompt=policy.content,
                 temperature=0.2, max_tokens=512,
