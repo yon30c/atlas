@@ -291,3 +291,7 @@ Validado por el propietario con 957/957 pruebas. Pendiente: obligar todo el wiri
 Migración v9: tablas `atlas_projects` y `atlas_environments` con identificador inmutable, estado, revisión CAS y retención de tombstones. `SQLiteProjectEnvironmentRepository` implementa los dos puertos de metadatos existentes y se añade a `SQLiteLocalAuthorityFoundation` usando la misma instancia SQLite compartida con Identity, Grants, renovaciones y authority-change ledger.
 
 Validado por el propietario con 967/967 pruebas. Las mutaciones de Project/Environment aún no están coordinadas por invalidación/fencing y no deben utilizarse como prueba de admisión segura.
+
+## 20. F2.3.10 — Auditoría de mutaciones
+
+La auditoría confirma que la persistencia compartida no equivale a consistencia de autoridad: Identity, emisión y renovación de Grant, y cambios Project/Environment aún tienen rutas sin coordinador de invalidación/fencing. La revocación exige un coordinador por contrato, pero no hay implementación concreta completa. El ledger SQLite es solo reserva/idempotencia. Se documentó el orden para cerrar todos los caminos de mutación antes de admisión. Sin cambios runtime; F2.3 permanece sin integración.
