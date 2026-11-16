@@ -467,3 +467,11 @@ El resultado VERIFIED conserva el digest canónico SHA-256 de la evidencia compl
 **Límite:** la integridad histórica del recibo no demuestra autoridad vigente ni concede permiso para efectos o recuperación.
 
 **Estado: VALIDADO por el propietario; suite completa: 1131 tests en 10.314 s, todos OK.**
+
+## 46. F2.3.36 — Concurrencia de admisiones
+
+Se incorporan pruebas concurrentes con dos instancias independientes de `SQLiteDatabase` sobre el mismo archivo. La competencia admisión/desactivación debe resolverse como uno de dos órdenes seriales válidos: recibo ligado a la revisión habilitada antes de la desactivación, o rechazo por revisión obsoleta tras la desactivación. La competencia entre dos admisiones exactas debe producir exactamente un ADMITTED y un REPLAYED, con una única fila persistida.
+
+Las pruebas no amplían el comportamiento de producción: validan el bloqueo transaccional `BEGIN IMMEDIATE` ya existente. No demuestran fencing de efectos externos, coordinación distribuida ni habilitan recuperación/runtime.
+
+**Estado:** implementado en la rama; pruebas locales pendientes.
