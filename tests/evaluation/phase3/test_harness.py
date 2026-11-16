@@ -97,6 +97,7 @@ class HarnessTests(unittest.TestCase):
             lambda p: p["arguments"].update(extra="unexpected"),
             lambda p: p["arguments"].update(path="../secrets.txt"),
             lambda p: p["arguments"].update(path="/etc/passwd"),
+            lambda p: p["arguments"].update(path="C:/Windows/system32"),
         )
         for mutate in mutations:
             candidate = json.loads(json.dumps(base))
