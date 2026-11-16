@@ -328,3 +328,11 @@ La separación evita insertar valores sintéticos en las columnas NOT NULL del l
 Se añadieron `MultiAuthorityChangeReservation`, `reserve_multi_change`, `get_multi_reservation` y `get_multi_by_idempotency_key`, además de pruebas para persistencia tras reinicio, replay, conflicto semántico, aislamiento por consumidor y sellado del conjunto.
 
 **Límite de seguridad importante:** esto persiste una reserva lógica, pero todavía no adquiere claims exclusivos sobre recursos, no serializa dos operaciones diferentes que intenten cambiar el mismo objetivo, no ejecuta CAM, no aplica fencing/invalidation, no muta fuentes ni coordina recuperación. No se debe usar como coordinador ni habilitar cambios multiobjetivo en runtime hasta implementar esas garantías.
+
+## 17. F2.3.16 — Claims exclusivos multiobjetivo
+
+La migración v11 añade `multi_authority_change_claims`, con clave primaria global por `(authority_kind, authority_id)`. Por tanto, una misma autoridad no puede estar reclamada por dos operaciones multiobjetivo activas, incluso si compiten desde conexiones SQLite distintas. `acquire_multi_claims(operation_id)` usa `BEGIN IMMEDIATE`, valida que la operación exista y siga en `REQUESTED`, compara el conjunto completo de targets y adquiere todos los claims en una sola transacción. Los reintentos exactos del mismo operation_id son idempotentes; si cualquier target ya pertenece a otra operación, devuelve conflicto sin insertar ningún claim del segundo conjunto.
+
+La base impone que cada claim coincida con un target inmutable de una operación `REQUESTED`. Los claims no se pueden actualizar ni borrar. Esta retención es intencionalmente conservadora: **todavía no existe liberación**, porque el estado terminal por sí solo no prueba que la reconciliación haya sido verificada. La futura liberación requiere recibo durable de terminalidad/reconciliación, transición autorizada y operación coordinada dentro de la misma UoW. Operaciones bloqueadas o inciertas conservan todos sus claims.
+
+**Límite:** esto ofrece exclusión mutua local sobre los recursos reclamados en una única base SQLite; no implementa CAM, invalidación de admisiones, fencing de rutas, mutación de fuentes ni coordinador completo. Tampoco protege escrituras que eviten este store. No conectar al runtime.
