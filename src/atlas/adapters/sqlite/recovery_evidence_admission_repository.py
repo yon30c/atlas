@@ -204,9 +204,6 @@ class SQLiteRecoveryEvidenceAdmissionRepository(RecoveryEvidenceAdmissionPort):
                     "expected_revision", "proposed_revision",
                 }
                 or not isinstance(target.get("authority_kind"), str)
-                or target.get("authority_kind") not in {
-                    item.value for item in AuthorityChangeTargetKind
-                }
                 or not isinstance(target.get("authority_id"), str)
                 or not target.get("authority_id", "").strip()
                 or isinstance(target.get("expected_revision"), bool)
