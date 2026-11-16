@@ -42,7 +42,7 @@ La primera versión utilizable de Atlas Terminal debe cubrir:
 - Interfaz de conversación legible y entrada robusta.
 - Recepción progresiva de respuestas mediante streaming.
 - Indicadores comprensibles de generación, finalización y error, sin presentar una respuesta incompleta como éxito.
-- Comandos de ayuda, limpieza de pantalla/contexto y salida: `/help`, `/clear` y `/exit`.
+- Comandos de ayuda, limpieza de pantalla y salida: `/help`, `/clear` y `/exit`.
 - Manejo controlado de entrada vacía, EOF, interrupciones y errores del proveedor.
 - Pruebas de los comandos y de los caminos de éxito y error.
 
