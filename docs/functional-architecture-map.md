@@ -314,7 +314,7 @@ Contratos inmutables añadidos para cambios que afectan varias autoridades: targ
 
 ## 25. F2.3.15 — Persistencia multiobjetivo
 
-SQLite schema v10 incorpora tablas separadas para operaciones multiobjetivo, idempotencia y targets. El store persiste operación + conjunto completo + clave idempotente en una UoW; replays exactos recuperan la reserva, conflictos semánticos se rechazan y triggers sellan los targets. El ledger de una autoridad permanece intacto. Publicado, pendiente de validación local. No hay claims exclusivos, CAM, fencing, invalidación ni coordinación de fuentes.
+SQLite schema v10 incorpora tablas separadas para operaciones multiobjetivo, idempotencia y targets. El store persiste operación + conjunto completo + clave idempotente en una UoW; replays exactos recuperan la reserva, conflictos semánticos se rechazan y triggers sellan los targets. El ledger de una autoridad permanece intacto. Validado por el propietario con 988/988 pruebas. En ese punto no había claims exclusivos, CAM, fencing, invalidación ni coordinación de fuentes.
 
 ## 26. F2.3.16 — Claims exclusivos multiobjetivo
 
