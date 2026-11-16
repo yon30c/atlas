@@ -374,3 +374,14 @@ Migración SQLite v13 añade `multi_authority_change_claim_releases`, un recibo 
 **Límite:** la integridad/digest no autentica al registrador ni prueba por sí sola la veracidad externa de la referencia. Este mecanismo es persistencia local y no sustituye un coordinador de autoridad completo, CAM, invalidación/fencing ni reconciliación real. Runtime permanece desconectado.
 
 **Estado:** implementación y pruebas publicadas; pendiente de validación local.
+
+
+## 21. F2.3.20 — Auditoría de recuperación de claims
+
+Se añade el contrato inmutable de solo lectura `MultiAuthorityClaimAudit` y `SQLiteAuthorityChangeStore.audit_multi_claims(operation_id)`. La auditoría clasifica la operación como UNCLAIMED, CLAIMED, TERMINAL_CLAIMS_HELD, RELEASED o INCONSISTENT. Contrasta objetivos reservados, claims existentes, estado terminal, recibo reconstruido (incluida verificación de digest/canonicalización) y recibo durable de liberación.
+
+Un recibo corrupto, un conjunto parcial, un estado terminal sin evidencia, una liberación con claims restantes o un recibo de liberación que no coincide producen INCONSISTENT. La lectura no repara datos, no libera claims y no autoriza mutaciones. Operaciones desconocidas devuelven None.
+
+**Límite:** es una clasificación local de persistencia, no prueba de reconciliación externa ni autenticidad del registrador. No reemplaza CAM, fencing, invalidación ni coordinador de fuentes. Runtime permanece desconectado.
+
+**Estado:** implementación y pruebas publicadas; pendiente de validación local.
