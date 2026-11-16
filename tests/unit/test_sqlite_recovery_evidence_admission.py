@@ -139,11 +139,15 @@ class SQLiteRecoveryEvidenceAdmissionTests(unittest.TestCase):
             self.assertFalse(first.effect_permitted)
         with self.database.connection() as connection:
             row = connection.execute(
-                "SELECT admission_id, evidence_id, operation_id, issuer_registry_revision "
+                "SELECT admission_id, evidence_id, evidence_digest, operation_id, issuer_registry_revision "
                 "FROM recovery_evidence_admissions"
             ).fetchone()
         self.assertEqual(
-            tuple(row), ("admission-1", "evidence-1", operation_id, 1)
+            tuple(row),
+            (
+                "admission-1", "evidence-1", command.evidence_digest,
+                operation_id, 1,
+            ),
         )
 
     def test_rejects_stale_issuer_revision(self):
@@ -201,7 +205,7 @@ class SQLiteRecoveryEvidenceAdmissionTests(unittest.TestCase):
                     ) VALUES ('raw-admission', 'raw-evidence', ?, ?, 'issuer-1', 1,
                               'SOURCE_OUTCOME_RECEIPT', 2, ?, X'7B7D', ?, ?)
                     """,
-                    ( "b" * 64, operation_id, "a" * 64, NOW.isoformat(), NOW.isoformat()),
+                    ("b" * 64, operation_id, "a" * 64, NOW.isoformat(), NOW.isoformat()),
                 )
 
 
