@@ -223,5 +223,18 @@ class HarnessTests(unittest.TestCase):
             authorize_proposal(proposal, context)
 
 
+    def test_authorization_rejects_proposal_with_forged_internal_state(self):
+        proposal = self._validated_delete_proposal()
+        proposal["execution_permitted"] = True
+        context = AuthorizationContext(
+            actor_id="operator-1",
+            project_scopes=frozenset({"project-alpha"}),
+            tool_permissions=frozenset({"delete_file"}),
+            human_approvals=(HumanApproval("project-alpha", "delete_file", "approval-123"),),
+        )
+        with self.assertRaises(AuthorizationContextError):
+            authorize_proposal(proposal, context)
+
+
 if __name__ == "__main__":
     unittest.main()
