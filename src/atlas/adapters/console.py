@@ -97,4 +97,5 @@ def run_console(
                 response = runtime.respond(content)
                 output_fn(f"Atlas> {response.content}")
     except KeyboardInterrupt:
+        write_fn("\n")
         output_fn("Atlas: interrupción recibida. Sesión finalizada.")
