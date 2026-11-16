@@ -470,4 +470,12 @@ Se añaden modelos inmutables de diagnóstico y operaciones de solo lectura `aud
 
 `audit_all()` obtiene todas las filas en una única consulta ordenada, para que el informe corresponda a un mismo snapshot de lectura. Los diagnósticos no reparan ni modifican datos, no autentican firmas y no autorizan recuperación.
 
-Límite de inventario: sin un registro separado de emisores esperados, `audit_all()` solo puede auditar emisores que ya aparecen en la tabla; un emisor externo nunca registrado solo puede detectarse mediante `audit_issuer(issuer_id)`. Implementado; validación local pendiente.
+Límite de inventario: sin un registro separado de emisores esperados, `audit_all()` solo puede auditar emisores que ya aparecen en la tabla; un emisor externo nunca registrado solo puede detectarse mediante `audit_issuer(issuer_id)`. **Estado: VALIDADO.** Suite completa: 1094 tests, todos OK.
+
+## 40. F2.3.30 — Inventario autoritativo de emisores
+
+La migración v16 añade `recovery_evidence_issuer_registry`, un historial append-only de snapshots por `issuer_id` y `registry_revision`. `SQLiteRecoveryEvidenceIssuerRegistryRepository` permite registrar revisión inicial, anexar cambios con CAS, consultar el snapshot vigente e historial resumido por emisor. Triggers SQL exigen revisiones consecutivas y bloquean UPDATE/DELETE.
+
+El inventario se compone dentro de `SQLiteLocalAuthorityUnitOfWork`, compartiendo transacción con las políticas de confianza. `audit_inventory()` cruza inventario y políticas en un único snapshot de lectura y distingue emisor saludable, deshabilitado en inventario, sin política, con política deshabilitada, con política corrupta, registro corrupto y política huérfana sin inventario.
+
+Registrar un emisor no lo autentica ni le concede confianza. La auditoría no repara datos, no autentica evidencia y no concede autoridad de recuperación. Implementado; pruebas locales pendientes.
