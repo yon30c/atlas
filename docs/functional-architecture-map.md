@@ -484,4 +484,4 @@ Se incorporan pruebas para ambos lados de esa frontera temporal: una desactivaci
 
 La comprobación es de solo lectura y depende de timestamps almacenados localmente; no autentica el reloj ni la procedencia externa de los cambios. No habilita acciones, efectos ni runtime.
 
-**Estado:** implementado en la rama; pruebas locales pendientes.
+**Estado: VALIDADO por el propietario; suite completa: 1135 tests en 9.444 s, todos OK.**
