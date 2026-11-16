@@ -60,7 +60,7 @@ class SQLiteCoreSchemaTests(unittest.TestCase):
         self.assertTrue({
             "consistency_domains", "journal_entries", "journal_operations",
             "checkpoints", "checkpoint_projections", "schema_migrations",
-            "identity_records", "atlas_users",
+            "identity_records", "atlas_users", "atlas_projects", "atlas_environments",
         }.issubset(tables))
         self.assertIn("journal_operations_idempotency_unique", indexes)
 
