@@ -362,4 +362,15 @@ El recibo, sus objetivos y el cambio de estado a COMPLETED o ABORTED se escriben
 
 **Límite:** el digest/canonicalización protege la identidad del replay, no autentica al registrador ni prueba independientemente la verdad de la referencia externa. No hay verificador de evidencia, CAM, invalidación/fencing, mutación coordinada de fuentes ni runtime. Las operaciones BLOCKED/inciertas retienen claims.
 
+**Estado:** validado por el propietario con 1014/1014 pruebas (16 de noviembre de 2026).
+
+
+## 20. F2.3.19 — Liberación auditable de claims terminales
+
+Migración SQLite v13 añade `multi_authority_change_claim_releases`, un recibo inmutable de liberación vinculado al digest de la evidencia terminal. El trigger de inserción exige una operación COMPLETED/ABORTED, recibo terminal coincidente y conjuntos completos de targets, observaciones y claims. El trigger de borrado de claims solo permite eliminarlos cuando existe ese recibo.
+
+`release_multi_claims(operation_id)` recupera y vuelve a verificar la evidencia terminal (incluyendo digest y canonicalización), compara exactamente los objetivos reservados con los observados y los claims activos, y registra el recibo + elimina todos los claims dentro de una única UoW. Replays exactos son idempotentes; los estados no terminales no liberan; inconsistencias o claims parciales fallan cerrados. El historial de liberación no se puede actualizar ni borrar y los recursos quedan disponibles para una nueva operación después de la liberación confirmada.
+
+**Límite:** la integridad/digest no autentica al registrador ni prueba por sí sola la veracidad externa de la referencia. Este mecanismo es persistencia local y no sustituye un coordinador de autoridad completo, CAM, invalidación/fencing ni reconciliación real. Runtime permanece desconectado.
+
 **Estado:** implementación y pruebas publicadas; pendiente de validación local.
