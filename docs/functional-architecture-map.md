@@ -93,7 +93,7 @@ RequestPlanningResult
 - La configuración del proveedor para Gemma debe incluir `think=False` y `response_format="json"`, según la prueba manual reportada por el propietario.
 - Este flujo todavía no se instancia desde `cli.py`, no recibe solicitudes de la consola y no ejecuta capacidades.
 
-## 4. Límites observados
+## 3.2 Lectura de workspace y catálogo de capacidades (Ciclo 1 F2)\n\nLa rama incorpora contratos y adaptadores de lectura independientes del runtime conversacional:\n\n- `LocalWorkspaceAdapter.list_entries(workspace_id)` enumera solo entradas inmediatas y clasifica symlinks sin seguirlos.\n- `LocalWorkspaceAdapter.read_file(workspace_id, path)` acepta rutas relativas POSIX normalizadas, rechaza traversal, rutas absolutas y symlinks, exige archivo regular UTF-8 y limita la lectura a 1 MiB por defecto.\n- `WorkspaceFileReadingService` valida el tipo y el binding exacto de workspace/ruta del resultado.\n- `CapabilityCatalog` contiene exclusivamente `workspace.list` y `workspace.read`, ambas `READ_ONLY`; `validate_intent` comprueba parámetros exactos. El catálogo no contiene handlers ni concede autorización.\n- Estas capacidades aún no están conectadas a `cli.py`, a la consola ni al runtime. La lectura tampoco sustituye CAM ni el gate de ejecución.\n\n## 4. Límites observados
 
 - `AtlasCore` solo expone `respond` y `respond_streaming`; no tiene un caso de uso de planificación ni ejecución.
 - `AssistantService` solo genera texto informativo.
@@ -130,7 +130,7 @@ Flujo previsto:
 - Permite introducir el catálogo de capacidades y el contrato de ejecución sin construir aún un sistema general de herramientas.
 - El workspace de prueba puede crearse con datos de fixture y mantenerse fuera de los datos personales.
 
-La siguiente operación será `workspace.read`. Las operaciones de escritura se incorporarán después de demostrar el flujo de lectura y la persistencia de tareas.
+`workspace.read` ya dispone ahora de un adaptador de lectura UTF-8 limitado a rutas relativas, un servicio de aplicación y pruebas de confinamiento. Las operaciones de escritura se incorporarán después de integrar la frontera de autorización/consistencia y demostrar el flujo de lectura.
 
 ## 6. Diseño funcional incremental
 
