@@ -3,10 +3,7 @@
 from getpass import getuser
 from uuid import uuid4
 
-from atlas.assistant.models import (
-    AssistantRequest,
-    AssistantResponseKind,
-)
+from atlas.assistant.models import AssistantRequest, AssistantResponseKind
 from atlas.core.context import OperationContext
 from atlas.core.errors import ContractError
 from atlas.core.identity import Identity, IdentityKind, IdentityStatus
@@ -16,17 +13,28 @@ from atlas.ports.clock import Clock
 class LocalConsoleRequestFactory:
     """Construye solicitudes ligadas a la cuenta local del sistema."""
 
-    def __init__(self, clock: Clock, user_id: str | None = None) -> None:
+    def __init__(
+        self,
+        clock: Clock,
+        user_id: str | None = None,
+        conversation_id: str | None = None,
+    ) -> None:
         if not callable(getattr(clock, "now", None)):
             raise ContractError("clock debe implementar now()")
 
         resolved_user = getuser() if user_id is None else user_id
         if not isinstance(resolved_user, str) or not resolved_user.strip():
             raise ContractError("user_id local debe ser una cadena no vacía")
+        if conversation_id is not None and (
+            not isinstance(conversation_id, str) or not conversation_id.strip()
+        ):
+            raise ContractError("conversation_id debe ser una cadena no vacía")
 
         self._clock = clock
         self._user_id = resolved_user.strip()
-        self._conversation_id = str(uuid4())
+        self._conversation_id = (
+            str(uuid4()) if conversation_id is None else conversation_id.strip()
+        )
 
     def create(self, content: str) -> AssistantRequest:
         """Crea una solicitud con identidad y contexto locales explícitos."""
