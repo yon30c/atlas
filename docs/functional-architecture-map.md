@@ -395,3 +395,10 @@ Nuevos contratos en memory, ports y application modelan evidencia de recuperaci�
 El servicio falla cerrado: DENIED para evidencia inválida o no coincidente, UNAVAILABLE ante fallo del verificador y VERIFIED solo ante retorno exacto True. No habilita acciones ni altera el ledger. La implementación concreta de criptografía y adaptadores de fuentes autoritativas queda pendiente.
 
 **Estado: VALIDADA.** Suite completa: 1072 tests en 7.828 s, todos OK.
+
+
+## 37. Política de confianza de emisores de evidencia
+
+`atlas.authorization.recovery_evidence_trust.RecoveryEvidenceIssuerTrustPolicy` contiene el alcance permitido por emisor y su ventana de vigencia. El puerto `RecoveryEvidenceIssuerTrustPolicyPort` resuelve la política actual. La capa application aplica esta política antes de llamar al verificador independiente. La política y el verificador son controles separados: la primera limita quién puede declarar qué; el segundo autentica la atestación y valida el contenido y las fuentes.
+
+No hay todavía un adaptador de almacenamiento de políticas ni una implementación criptográfica concreta. El flujo permanece desconectado del runtime.
