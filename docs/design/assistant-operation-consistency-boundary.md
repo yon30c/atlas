@@ -384,7 +384,7 @@ Un recibo corrupto, un conjunto parcial, un estado terminal sin evidencia, una l
 
 **Límite:** es una clasificación local de persistencia, no prueba de reconciliación externa ni autenticidad del registrador. No reemplaza CAM, fencing, invalidación ni coordinador de fuentes. Runtime permanece desconectado.
 
-**Estado:** implementación y pruebas publicadas; pendiente de validación local.
+**Estado:** validado por el propietario con 1043/1043 pruebas (16 de noviembre de 2026).
 
 
 ## 22. F2.3.21 — Frontera UoW compartida de autoridades
