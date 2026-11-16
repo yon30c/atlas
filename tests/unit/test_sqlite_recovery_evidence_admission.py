@@ -138,6 +138,7 @@ class SQLiteRecoveryEvidenceAdmissionTests(unittest.TestCase):
             self.assertEqual(first.status, RecoveryEvidenceAdmissionStatus.ADMITTED)
             self.assertEqual(second.status, RecoveryEvidenceAdmissionStatus.REPLAYED)
             self.assertFalse(first.effect_permitted)
+            uow.commit()
         with self.database.connection() as connection:
             row = connection.execute(
                 "SELECT admission_id, evidence_id, evidence_digest, operation_id, issuer_registry_revision "
