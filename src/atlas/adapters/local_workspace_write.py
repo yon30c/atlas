@@ -185,8 +185,7 @@ class LocalWorkspaceWriteAdapter:
         finally:
             os.close(directory_fd)
 
-    @staticmethod
-    def _read_manifest(directory: Path) -> dict:
+    def _read_manifest(self, directory: Path) -> dict:
         manifest_path = directory / _MANIFEST_NAME
         metadata = manifest_path.lstat()
         if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
@@ -202,6 +201,27 @@ class LocalWorkspaceWriteAdapter:
             raise ContractError("versión de manifest no soportada")
         if manifest["state"] not in {state.value for state in WorkspaceWriteState}:
             raise ContractError("estado de staging desconocido")
+        if not isinstance(manifest["workspace_id"], str) or not manifest["workspace_id"].strip():
+            raise ContractError("workspace_id inválido en manifest")
+        if self._operation_id(manifest["operation_id"]) != manifest["operation_id"]:
+            raise ContractError("operation_id inválido en manifest")
+        self._path_parts(manifest["path"])
+        if not isinstance(manifest["content_sha256"], str) or not re.fullmatch(
+            r"[0-9a-f]{64}", manifest["content_sha256"]
+        ):
+            raise ContractError("content_sha256 inválido en manifest")
+        expected = manifest["expected_sha256"]
+        if expected is not None and (
+            not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{64}", expected)
+        ):
+            raise ContractError("expected_sha256 inválido en manifest")
+        if (
+            isinstance(manifest["size_bytes"], bool)
+            or not isinstance(manifest["size_bytes"], int)
+            or manifest["size_bytes"] < 0
+            or manifest["size_bytes"] > self._max_write_bytes
+        ):
+            raise ContractError("size_bytes inválido en manifest")
         return manifest
 
     @staticmethod
@@ -323,6 +343,9 @@ class LocalWorkspaceWriteAdapter:
         try:
             current_hash = self._hash_file(target)
             if current_hash == manifest["content_sha256"]:
+                leftover_payload = operation_dir / "payload"
+                if leftover_payload.exists():
+                    leftover_payload.unlink()
                 manifest["state"] = WorkspaceWriteState.COMMITTED.value
                 self._write_manifest(operation_dir, manifest)
                 return WorkspaceWriteCommit(
