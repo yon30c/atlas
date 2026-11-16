@@ -34,7 +34,7 @@ def _unique_object(pairs):
 def _validate_relative_path(value, field_name):
     if not isinstance(value, str) or not value or len(value) > 240:
         raise ProposalValidationError(f"{field_name} must be a non-empty path")
-    if "\\" in value or "\x00" in value or value.startswith("/"):
+    if "\\" in value or "\x00" in value or value.startswith("/") or (len(value) >= 2 and value[1] == ":"):
         raise ProposalValidationError(f"{field_name} must be a relative POSIX path")
     path = PurePosixPath(value)
     if any(part in {"", ".", ".."} for part in value.split("/")) or path.is_absolute():
