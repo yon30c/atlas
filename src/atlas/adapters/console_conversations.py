@@ -4,16 +4,18 @@ from getpass import getpass
 import shlex
 
 from atlas.adapters.sqlite.conversation_backup import ConversationBackup
+from atlas.adapters.sqlite.conversation_export import ConversationExport
 from atlas.application.conversation_manager import ConversationManager
 from atlas.assistant.local_console import LocalConsoleRequestFactory
 from atlas.core.errors import ContractError, NotFoundError
 
 
 class ConversationConsoleCommands:
-    def __init__(self, manager: ConversationManager, request_factory: LocalConsoleRequestFactory, backup: ConversationBackup) -> None:
+    def __init__(self, manager: ConversationManager, request_factory: LocalConsoleRequestFactory, backup: ConversationBackup, export: ConversationExport) -> None:
         self._manager = manager
         self._request_factory = request_factory
         self._backup = backup
+        self._export = export
 
     def handle(self, content: str) -> str | None:
         command, _, argument = content.strip().partition(" ")
@@ -57,6 +59,19 @@ class ConversationConsoleCommands:
                     raise ContractError("no existe conversación activa tras eliminar")
                 self._request_factory.set_conversation_id(active.conversation_id)
                 return "Conversación eliminada permanentemente."
+            if command == "/export":
+                args = shlex.split(argument)
+                if len(args) == 1:
+                    active = self._manager.active()
+                    if active is None:
+                        raise ContractError("no hay una conversación activa")
+                    conversation_id, destination = active.conversation_id, args[0]
+                elif len(args) == 2:
+                    conversation_id, destination = args
+                else:
+                    return 'Uso: /export ["conversation_id"] "<ruta_absoluta.json>"'
+                path = self._export.export(conversation_id, destination)
+                return f"Conversación exportada a JSON: {path} (sin cifrar; protege el archivo)."
             if command == "/backup":
                 args = shlex.split(argument)
                 if len(args) != 1:

@@ -11,6 +11,7 @@ from atlas.adapters.ollama import OllamaProvider
 from atlas.adapters.ollama_assistant import OllamaResponseGenerator
 from atlas.adapters.sqlite import SQLiteConversationRepository, SQLiteDatabase
 from atlas.adapters.sqlite.conversation_backup import ConversationBackup
+from atlas.adapters.sqlite.conversation_export import ConversationExport
 from atlas.adapters.sqlite.conversation_storage import prepare_conversation_database_path
 from atlas.adapters.system_clock import SystemClock
 from atlas.application import AtlasCore, ConversationContextProcessor
@@ -61,7 +62,8 @@ def main(
     request_factory = LocalConsoleRequestFactory(clock, user_id=user_id, conversation_id=active.conversation_id)
     manager = ConversationManager(repository, clock)
     backup = ConversationBackup(database)
-    handler = ConversationConsoleCommands(manager, request_factory, backup)
+    export = ConversationExport(repository)
+    handler = ConversationConsoleCommands(manager, request_factory, backup, export)
 
     if os.environ.get("ATLAS_MODE", "").strip().casefold() == "offline":
         generator = LocalModeResponseGenerator()

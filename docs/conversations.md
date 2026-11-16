@@ -30,6 +30,14 @@ Comandos disponibles:
 
 El gestor de aplicación no depende de la consola ni del proveedor LLM.
 
+## Exportación portable (fase 2G)
+
+- `/export "/ruta/absoluta/conversacion.json"`: exporta la conversación activa.
+- `/export CONVERSATION_ID "/ruta/absoluta/conversacion.json"`: exporta una conversación concreta, incluso si está cerrada.
+- El JSON incluye versión de formato, metadatos y el historial íntegro en orden.
+- El archivo se crea con modo `0600`; el comando no sobrescribe archivos existentes ni sigue enlaces simbólicos.
+- La exportación es texto legible **sin cifrar**. Debe guardarse en un directorio privado y protegerse como información personal. Para conservar una copia cifrada de toda la base, utiliza `/backup`.
+
 ## Protección y recuperación (fase 2F)
 
 - `/backup "/ruta/absoluta/atlas.atlasbackup"`: crea un snapshot SQLite consistente cifrado.
