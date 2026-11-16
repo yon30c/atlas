@@ -501,4 +501,4 @@ La auditoría no acepta como íntegra una admisión solo porque el tipo de evide
 
 Las pruebas fuerzan valores desconocidos en registros persistidos y confirman detección sin reparación. No se modifica el flujo de admisión ni se concede autoridad.
 
-**Estado:** implementado en GitHub; pruebas locales pendientes.
+**Estado: VALIDADO por el propietario; suite completa: 1138 tests en 8.814 s, todos OK.**
