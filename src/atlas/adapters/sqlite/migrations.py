@@ -1496,6 +1496,7 @@ CORE_SCHEMA_V17 = SQLiteMigration(
     CREATE TABLE recovery_evidence_admissions (
         admission_id TEXT PRIMARY KEY CHECK (length(trim(admission_id)) > 0),
         evidence_id TEXT NOT NULL UNIQUE CHECK (length(trim(evidence_id)) > 0),
+        evidence_digest TEXT NOT NULL CHECK (length(evidence_digest) = 64),
         operation_id TEXT NOT NULL,
         issuer_id TEXT NOT NULL CHECK (length(trim(issuer_id)) > 0),
         issuer_registry_revision INTEGER NOT NULL CHECK (issuer_registry_revision > 0),
