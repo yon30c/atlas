@@ -9,6 +9,10 @@ import unittest
 from atlas.adapters.sqlite import SQLiteDatabase, SQLITE_MIGRATIONS
 from atlas.adapters.sqlite.local_authority_unit_of_work import SQLiteLocalAuthorityUnitOfWork
 from atlas.application.recovery_admission import RecoveryEvidenceAdmissionCommand
+from atlas.application.recovery_evidence import (
+    RecoveryEvidenceVerification,
+    RecoveryEvidenceVerificationStatus,
+)
 from atlas.authorization.recovery_evidence_issuer_registry import (
     RecoveryEvidenceIssuerRegistration,
 )
@@ -18,6 +22,8 @@ from atlas.memory.authority_changes import (
     AuthorityChangeStatus,
     MultiAuthorityChangeIntent,
     MultiAuthorityRecoveryEvidenceKind,
+    MultiAuthorityRecoveryEvidence,
+    AuthorityChangeTerminalTarget,
 )
 from atlas.ports.recovery_evidence_admission import RecoveryEvidenceAdmissionStatus
 
@@ -80,18 +86,45 @@ class SQLiteRecoveryEvidenceAdmissionTests(unittest.TestCase):
         return operation_id
 
     def _command(self, operation_id, **overrides):
-        args = dict(
-            admission_id="admission-1",
+        targets = overrides.pop("targets", self.targets())
+        evidence_id = overrides.pop("evidence_id", "evidence-1")
+        admission_id = overrides.pop("admission_id", "admission-1")
+        issuer_revision = overrides.pop("issuer_registry_revision", 1)
+        evidence_kind = MultiAuthorityRecoveryEvidenceKind.SOURCE_OUTCOME_RECEIPT
+        evidence = MultiAuthorityRecoveryEvidence(
+            evidence_id=evidence_id,
             operation_id=operation_id,
-            evidence_id="evidence-1",
+            evidence_kind=evidence_kind,
             issuer_id="issuer-1",
-            issuer_registry_revision=1,
-            evidence_kind=MultiAuthorityRecoveryEvidenceKind.SOURCE_OUTCOME_RECEIPT,
-            targets=self.targets(),
+            issued_at=NOW,
+            expires_at=datetime(2026, 11, 16, 13, 0, tzinfo=timezone.utc),
+            payload_digest="a" * 64,
+            attestation_ref="attestation://test",
+            targets=tuple(
+                AuthorityChangeTerminalTarget(
+                    target.authority_kind,
+                    target.authority_id,
+                    target.expected_revision,
+                    target.proposed_revision,
+                    target.proposed_revision,
+                )
+                for target in targets
+            ),
+        )
+        verification = RecoveryEvidenceVerification(
+            RecoveryEvidenceVerificationStatus.VERIFIED,
+            evidence_id,
+            issuer_revision,
+        )
+        return RecoveryEvidenceAdmissionCommand.from_verified_evidence(
+            admission_id=admission_id,
+            evidence=evidence,
+            verification=verification,
+            operation_id=operation_id,
+            evidence_kind=evidence_kind,
+            targets=targets,
             requested_at=NOW,
         )
-        args.update(overrides)
-        return RecoveryEvidenceAdmissionCommand(**args)
 
     def test_admits_and_persists_exact_command_and_replays_idempotently(self):
         operation_id = self._prepare()
