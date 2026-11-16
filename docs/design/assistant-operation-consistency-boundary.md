@@ -181,4 +181,6 @@ La migración v9 crea `atlas_projects` y `atlas_environments` como fuentes SQLit
 
 `SQLiteProjectEnvironmentRepository` implementa los puertos `ProjectMetadataPort` y `EnvironmentMetadataPort` existentes, devolviendo los snapshots tipados `ProjectMetadata` y `EnvironmentMetadata`. Añade altas y actualizaciones CAS para administrar el ciclo de vida básico. `SQLiteLocalAuthorityFoundation` compone este repositorio sobre la misma instancia `SQLiteDatabase` de Identity, Grants, renovaciones y el ledger de cambios.
 
+**Validación:** 967/967 pruebas locales reportadas por el propietario.
+
 **Límites críticos:** el contrato de metadatos existente continúa ubicado en el paquete Memory; se reutiliza para evitar un segundo modelo de snapshot en esta fase. Los registros Project/Environment no tienen todavía relación de pertenencia entre sí porque el contrato actual no la define. Las escrituras del repositorio aún no pasan por un coordinador común de invalidación/fencing y no son una autorización para ejecutar operaciones. No se integra el runtime.
