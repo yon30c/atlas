@@ -507,3 +507,13 @@ El puerto define la obligación del futuro adaptador: comprobar en una sola tran
 **Límite deliberado:** esta fase incorpora contratos, no una implementación SQLite del puerto. Por tanto, todavía no existe admisión durable real ni protección de efecto. Incluso una admisión futura no autorizará por sí sola la recuperación: el efecto externo tendrá que compartir la misma frontera coordinada/fenced. Runtime y acciones permanecen desconectados.
 
 **Estado:** implementado en la rama; pruebas locales pendientes.
+
+## 44. F2.3.34 — Admisión SQLite transaccional y consumo único
+
+Se incorpora la migración v17 con `recovery_evidence_admissions`: recibos inmutables, `admission_id` único, `evidence_id` globalmente único, binding a operación/emisor/revisión/tipo, digest SHA-256 y representación canónica completa del comando. Triggers impiden UPDATE/DELETE, requieren revisión vigente y habilitada del emisor, operación en estado activo y conjunto completo de claims.
+
+`SQLiteRecoveryEvidenceAdmissionRepository` solo se compone dentro de `SQLiteLocalAuthorityUnitOfWork`. La admisión se realiza usando la conexión de esa UoW, que abre `BEGIN IMMEDIATE`; por tanto, la comprobación del inventario y la escritura compiten bajo el mismo bloqueo transaccional que las actualizaciones del inventario y del ledger. Se cotejan todos los objetivos y revisiones reservados con los claims exactos. Los reintentos idénticos devuelven REPLAYED; reutilizar evidence_id o cambiar el binding se rechaza.
+
+**Límite de seguridad:** esta atomicidad protege la admisión SQLite frente a cambios concurrentes durante la transacción. No crea un fence para un efecto externo posterior y no transforma ADMITTED en autorización. La ejecución y la recuperación siguen deshabilitadas; el runtime no está conectado.
+
+**Estado:** implementado en la rama; pruebas locales pendientes.
