@@ -270,3 +270,9 @@ Inspeccionadas las rutas actuales de Identity, emisión/revocación/renovación 
 **Siguiente orden obligatorio:** migrar las rutas de mutación a una API coordinada; cerrar bypasses; integrar journal, invalidation, route registry y fencing; probar concurrencia/crash/replay; solo después implementar admisión de operaciones.
 
 **Estado:** auditoría documentada. Sin código nuevo ni pruebas adicionales; no habilitar ejecución.
+
+### F2.3.11 — Cierre del bypass de emisión de Grants
+
+`GrantManagementService.issue` ya no permite el fallback de escritura directa cuando falta `unit_of_work_factory`: falla cerrado antes de modificar el repositorio. La comprobación de unicidad y la inserción solo se realizan dentro de la unidad transaccional compartida. Se añadió una prueba que confirma que la ausencia de UoW no crea el Grant, y se adaptó el fixture de servicio a una UoW en memoria.
+
+**Estado:** publicado; pendiente de pruebas locales. Esto cierra únicamente el bypass de emisión; no coordina todavía la mutación con invalidación/fencing.
