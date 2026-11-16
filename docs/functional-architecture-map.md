@@ -105,6 +105,18 @@ La rama incorpora contratos y adaptadores de lectura independientes del runtime 
 - `CapabilityCatalog` contiene exclusivamente `workspace.list` y `workspace.read`, ambas `READ_ONLY`; `validate_intent` comprueba parámetros exactos. El catálogo no contiene handlers ni concede autorización.
 - Estas capacidades aún no están conectadas a `cli.py`, a la consola ni al runtime. La lectura tampoco sustituye CAM ni el gate de ejecución.
 
+## 3.3 Escritura controlada de workspace (Ciclo 2 F2)
+
+**Estado: implementado en GitHub; pendiente de validación local por el propietario.**
+
+- `LocalWorkspaceWriteAdapter` mantiene payload y manifest bajo `.atlas-staging`, reservado y oculto a los servicios de lectura.
+- `stage_write` no modifica el destino. Exige un `operation_id` UUID, contenido UTF-8 limitado a 1 MiB y `expected_sha256` para actualizaciones.
+- `commit_write` verifica que el destino conserve el hash esperado, registra `COMMITTING` antes del efecto y usa link exclusivo para crear o replace atómico para actualizar; sincroniza el directorio antes de registrar `COMMITTED`.
+- `assess_recovery` es una inspección de solo lectura: distingue staging listo, commit confirmado tras crash, commit no aplicado, conflicto y corrupción. No decide ni ejecuta una recuperación automática.
+- `WorkspaceFileWritingService` valida bindings de workspace/operación y solo devuelve éxito si el adaptador confirma el commit.
+- El protocolo serializa escritores cooperativos de Atlas mediante locks locales por destino y usa SHA-256 para detectar cambios previos. No coordina escritores externos ni ofrece atomicidad con SQLite.
+- La escritura no se añadió a `IntentKind` ni a `CapabilityCatalog`, y no se conectó a CLI/runtime. No es una autorización CAM ni un gate de ejecución.
+
 ## 4. Límites observados
 
 - `AtlasCore` solo expone `respond` y `respond_streaming`; no tiene un caso de uso de planificación ni ejecución.
