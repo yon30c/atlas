@@ -95,6 +95,8 @@ RequestPlanningResult
 
 ## 3.2 Lectura de workspace y catálogo de capacidades (Ciclo 1 F2)
 
+**Estado: VALIDADO por el propietario; suite completa: 1,157 tests en 9.853 s, todos OK. `python -m compileall -q src tests` también pasó.**
+
 La rama incorpora contratos y adaptadores de lectura independientes del runtime conversacional:
 
 - `LocalWorkspaceAdapter.list_entries(workspace_id)` enumera solo entradas inmediatas y clasifica symlinks sin seguirlos.
