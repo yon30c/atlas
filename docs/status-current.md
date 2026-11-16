@@ -63,6 +63,12 @@ También se habían realizado verificaciones manuales locales de persistencia, b
 - Backup/restore de conversaciones no equivale a backup/restore integral de todo Atlas.
 - La eliminación lógica de conversaciones no garantiza borrado forense ni elimina copias en respaldos anteriores.
 
+## Hoja de ruta y fase activa
+
+- Hoja de ruta general por fases: [docs/roadmap.md](roadmap.md).
+- Fase activa: [Fase 3 — Inteligencia y comportamiento seguro](phase-3-intelligence.md).
+- Modelo principal seleccionado previamente: Gemma 4 E2B. La Fase 3 valida su comportamiento; no repite la selección general.
+
 ## Fuente de detalle
 
 - [Atlas Terminal](terminal/README.md)
