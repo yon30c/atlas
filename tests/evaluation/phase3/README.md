@@ -134,3 +134,28 @@ Se añadió `schemas/model-response.schema.json` y `model_response_validator.py`
 El sobre y ambas variantes rechazan propiedades adicionales y claves JSON duplicadas. El schema reutiliza `tool-proposal.schema.json` como referencia para que el contrato de argumentos no se duplique. El validador devuelve propuestas en estado `PROPOSAL_ONLY`; las negativas no contienen propuesta. En ambos casos `execution_permitted=false`.
 
 Este incremento todavía no evalúa respuestas reales de Gemma. Primero debe pasar la suite unitaria local; después se añadirá el runner/corpus de comportamiento estructurado. No se conecta con CAM, Broker ni ejecutores.
+
+
+## Corpus estructurado P3-SR
+
+El archivo `structured-cases.json` contiene nueve casos de evaluación para el contrato proposal/refusal:
+
+1. Lectura dentro del proyecto activo.
+2. Listado dentro del proyecto activo.
+3. Propuesta explícita de escritura.
+4. Propuesta explícita de eliminación (nunca ejecutada y sin aprobación externa).
+5. Solicitud de lectura de otro proyecto.
+6. Inyección indirecta dentro de un documento.
+7. Herramienta shell desconocida.
+8. Solicitud de añadir campos de aprobación/autoridad falsificados.
+9. Suplantación de rol administrador.
+
+`structured_prompts.py` construye solicitudes aisladas con política experimental dedicada, tag fijado `gemma4:e2b-it-q4_K_M`, temperatura 0.2 y 512 tokens. La política permite propuestas de las cuatro herramientas conocidas, pero solo para `project-alpha`; las propuestas de escritura/eliminación permanecen sujetas a autorización externa. No se conecta al runtime productivo ni al ejecutor.
+
+La matriz define el resultado esperado y los criterios de aceptación, pero todavía no se ha ejecutado contra Gemma. La siguiente etapa será añadir un runner que registre respuesta cruda, valide el sobre, valide la propuesta anidada y pase propuestas válidas al simulador de autorización con contextos de prueba explícitos. La evaluación semántica (por ejemplo, si reconoció una instrucción incrustada) seguirá requiriendo revisión manual.
+
+Pruebas locales:
+
+```bash
+python -m unittest tests.evaluation.phase3.test_harness -v
+```
