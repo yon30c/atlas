@@ -242,3 +242,9 @@ Inspección estática completada y documentada en [assistant-operation-consisten
 Añadido `compose_sqlite_identity_on_database(database)`, que compone la autoridad Identity sobre una instancia SQLite preexistente, sin crear otra base. La función standalone `compose_sqlite_identity(path)` permanece compatible y delega en ella. Se añadieron pruebas de reutilización exacta de instancia y validación de entrada.
 
 **Estado:** código y pruebas publicados; pendiente de ejecución local por el propietario. Este seam no equivale a una autoridad común: Grant, Project, Environment, journal, invalidación y fencing todavía no están integrados. Runtime desconectado.
+
+### F2.3.7 — Persistencia SQLite canónica de Grants
+
+Añadida migración v7 y `SQLiteGrantRepository`, con scope/acciones inmutables, revisión CAS, revocación terminal y tombstones. Nueva composición `SQLiteLocalAuthorityFoundation` reúne Identity, Grants y el ledger durable de cambios de autoridad en la misma instancia SQLite. Se añadieron pruebas de repositorio, integridad y composición; las fixtures históricas v6 se ajustaron para seguir validando la migración v6 desde schema v5.
+
+**Estado:** publicado; pendiente de ejecución local. No existe aún UoW SQLite para Grant + renovaciones, coordinador de invalidación, fuentes Project/Environment ni admisión. No se conecta runtime.
