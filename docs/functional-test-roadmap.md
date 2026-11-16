@@ -508,4 +508,4 @@ El informe global expone códigos diagnósticos consolidados y `is_healthy`. Se 
 
 **Límite:** solo lectura; sin reparación, autorización, ejecución de efectos ni integración runtime.
 
-**Estado:** implementado en GitHub; pendiente de pruebas locales del propietario.
+**Estado: VALIDADO por el propietario; suite completa: 1136 tests en 9.985 s, todos OK.**
