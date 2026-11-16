@@ -184,3 +184,33 @@ La migración v9 crea `atlas_projects` y `atlas_environments` como fuentes SQLit
 **Validación:** 967/967 pruebas locales reportadas por el propietario.
 
 **Límites críticos:** el contrato de metadatos existente continúa ubicado en el paquete Memory; se reutiliza para evitar un segundo modelo de snapshot en esta fase. Los registros Project/Environment no tienen todavía relación de pertenencia entre sí porque el contrato actual no la define. Las escrituras del repositorio aún no pasan por un coordinador común de invalidación/fencing y no son una autorización para ejecutar operaciones. No se integra el runtime.
+
+
+## 15. F2.3.10 — Auditoría de rutas de mutación y bloqueo de integración
+
+La persistencia canónica compartida ya existe, pero no equivale a una frontera de mutación coordinada. La inspección de los servicios y repositorios encontró rutas que deben migrarse antes de habilitar el coordinador:
+
+| Autoridad | Ruta actual | Estado de coordinación |
+|---|---|---|
+| Identity | `SQLiteIdentityAuthority.update_user_status` / CAS | Mutación directa; no demuestra invalidación común con Grant/Project/Environment |
+| Grant | `GrantManagementService.issue` sin UoW opcional | Permite fallback de escritura directa; el wiring SQLite debe exigir la UoW compartida |
+| Grant | `GrantManagementService.revoke` | Exige puertos CAM/coordinador, pero no existe coordinador concreto completo en la composición local |
+| Grant | `GrantRenewalService.approve_renewal` | Actualiza Grant + renovación atómicamente, pero fuera del coordinador de autoridad |
+| Grant renewal | `request_renewal` / `reject_renewal` | Mutan solicitudes; deben mantenerse dentro del mismo dominio transaccional y tener política explícita de coordinación |
+| Project | `SQLiteProjectEnvironmentRepository.update_project` | CAS directo sin invalidación/fencing |
+| Environment | `SQLiteProjectEnvironmentRepository.update_environment` | CAS directo sin invalidación/fencing |
+
+El coordinador requerido no es una simple función que actualice el registro. Debe asegurar durablemente: reserva idempotente; bloqueo/fencing de admisiones incompatibles; invalidación de admisiones y rutas afectadas; consumo de autorización CAM vinculada a la operación exacta; CAS de la fuente; reconciliación verificable; y recuperación tras fallo/crash. Cualquier incertidumbre debe dejar el recurso bloqueado, nunca reabrir admisiones por timeout.
+
+### Orden de trabajo obligatorio
+
+1. Crear una API de mutación canónica que no exponga métodos directos a las capas de aplicación.
+2. Migrar todos los servicios de mutación de Identity, Grant, renovaciones, Project y Environment a esa API o a comandos coordinados equivalentes.
+3. Inventariar y cerrar accesos alternativos a los repositorios; los adaptadores de persistencia pueden conservar primitivas internas, pero el composition root no debe ofrecerlas como API de mutación libre.
+4. Integrar el coordinador con journal, invalidation, delivery-route registry y fencing concretos; compartir UoW o demostrar una barrera de consistencia equivalente.
+5. Probar concurrencia entre admisión y mutación, revocación concurrente, replay/idempotencia, y crashes después de cada transición durable.
+6. Solo entonces implementar el verificador de evidencia/admisión de operaciones y habilitar workspace.list/read.
+
+### Decisión
+
+No se implementa todavía un `SQLiteAuthorityChangeCoordinator` de producción. `SQLiteAuthorityChangeStore` solo persiste reservas e idempotencia; no debe confundirse con el coordinador. El puerto `AuthorityChangeCoordinatorPort` es un contrato, no una implementación. Tampoco se conecta F2.3 al runtime. Esta pausa es deliberada para evitar una falsa garantía de consistencia.
