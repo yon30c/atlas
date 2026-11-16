@@ -1,6 +1,7 @@
 """Pruebas del catálogo cerrado de capacidades."""
 
 import unittest
+from dataclasses import FrozenInstanceError
 
 from atlas.assistant.capabilities import (
     CapabilityCatalog,
@@ -27,6 +28,8 @@ class CapabilityCatalogTests(unittest.TestCase):
         self.assertEqual(definition.parameter_names, ("workspace_id", "path"))
         self.assertEqual(definition.result_type, "WorkspaceFile")
         self.assertFalse(hasattr(definition, "handler"))
+        with self.assertRaises(FrozenInstanceError):
+            catalog._definitions = ()
 
     def test_validates_exact_intent_parameters(self):
         catalog = build_default_capability_catalog()
