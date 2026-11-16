@@ -272,6 +272,15 @@ Las reglas que deben mantenerse en todas las fases son:
 
 La consola/Assistant actual no tiene acceso directo a archivos, SQL, shell, contenedores ni herramientas privilegiadas. Esta limitación es deliberada.
 
+
+### Atlas Desktop para Windows — primer incremento
+
+La rama `feat/windows-desktop-shell` inicia el cliente con una solución WinUI 3 y una ventana de navegación para Chat, Conversaciones, Conexión y Configuración. El contenido es provisional y usa controles predeterminados; no establece decisiones visuales detalladas ni se conecta a servicios.
+
+El árbol inspeccionado no contiene una API HTTP remota para Desktop ni un proyecto de escritorio previo. El Assistant existente se compone como servicio/consola local y usa Ollama mediante un adaptador interno. Por ello, esta entrega no implementa red, autenticación, vinculación, almacenamiento de conversaciones ni audio. La API seguirá siendo la única frontera de integración cuando exista un contrato disponible.
+
+Ver [documentación Desktop](docs/desktop/README.md) para estado y comandos locales de compilación.
+
 ## Ejecución local
 
 Desde la raíz del repositorio:
