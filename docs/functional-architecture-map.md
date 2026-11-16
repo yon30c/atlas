@@ -362,4 +362,4 @@ No incluye atomicidad con el ledger de operaciones/claims. No es coordinador CAM
 
 `SQLiteAuthorityChangeStore` acepta una `SQLiteUnitOfWork` externa y dirige tanto sus lecturas como sus escrituras por la conexión activa. La composición `SQLiteLocalAuthorityUnitOfWork` expone ahora Identity, Grants, renovaciones, Project, Environment y el ledger de operaciones/claims sobre una única transacción SQLite.
 
-Se cubre commit y rollback conjuntos de cambios canónicos y reserva de operación, además del uso posterior al cierre. La atomicidad se limita a persistencia SQLite. No define política de coordinación, autorización CAM, admisión, invalidación, fencing ni reconciliación externa. Runtime desconectado. Pendiente de validación local.
+Se cubre commit y rollback conjuntos de cambios canónicos y reserva de operación, además del uso posterior al cierre. La atomicidad se limita a persistencia SQLite. No define política de coordinación, autorización CAM, admisión, invalidación, fencing ni reconciliación externa. Runtime desconectado. Validado por el propietario con 1043/1043 pruebas (16 de noviembre de 2026).
