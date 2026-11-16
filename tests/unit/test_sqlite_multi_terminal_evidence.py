@@ -234,6 +234,25 @@ class SQLiteMultiTerminalEvidenceTests(unittest.TestCase):
             reservation.intent.targets,
         )
 
+    def test_recovery_detects_receipt_digest_or_canonical_payload_corruption(self):
+        reservation = self._prepare_reconciling()
+        evidence = self._evidence(reservation)
+        self.store.record_multi_terminal_evidence(evidence)
+        with self.database.connection() as connection:
+            connection.execute(
+                "DROP TRIGGER multi_terminal_evidence_no_update"
+            )
+            connection.execute(
+                """
+                UPDATE multi_authority_change_terminal_evidence
+                SET evidence_canonical = ?
+                WHERE operation_id = ?
+                """,
+                (b"tampered", reservation.operation_id),
+            )
+        with self.assertRaises(sqlite3.DatabaseError):
+            self.store.get_multi_terminal_evidence(reservation.operation_id)
+
     def test_sql_rejects_terminal_status_without_receipt(self):
         reservation = self.store.reserve_multi_change(
             MultiAuthorityChangeIntent(
