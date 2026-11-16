@@ -548,4 +548,4 @@ Una revisión posterior cuya fecha efectiva sea posterior a `recorded_at` no inv
 
 **Límite:** esta comprobación depende de la integridad de los timestamps aportados por el registro local; no autentica externamente el reloj ni la procedencia del cambio. Sigue siendo una auditoría de solo lectura y no concede autoridad ni habilita efectos.
 
-**Estado:** implementado en la rama; pruebas locales pendientes.
+**Estado: VALIDADO por el propietario; suite completa: 1135 tests en 9.444 s, todos OK.**
