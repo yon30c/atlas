@@ -356,7 +356,7 @@ class SQLiteIdentityAuthorityTests(unittest.TestCase):
 
     def test_v6_migration_preserves_user_pair_and_all_non_user_identity_fields(self):
         legacy = SQLiteDatabase(Path(self.temp_dir.name) / "legacy-valid.sqlite")
-        legacy.apply_migrations(SQLITE_MIGRATIONS[:-11])
+        legacy.apply_migrations(SQLITE_MIGRATIONS[:5])
         records = (
             ("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "user", "suspended", 3,
              "user-created", "user-updated"),
@@ -423,7 +423,7 @@ class SQLiteIdentityAuthorityTests(unittest.TestCase):
             expected_identity_rows,
         )
         self.assertEqual(tuple(user_row), expected_user_row)
-        self.assertEqual([item[0] for item in versions], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
+        self.assertEqual([item[0] for item in versions], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17])
         self.assertEqual(violations, [])
         self.assertEqual(integrity, "ok")
 
@@ -457,14 +457,14 @@ class SQLiteIdentityAuthorityTests(unittest.TestCase):
 
         self.assertEqual(rerun_identity_rows, expected_identity_rows)
         self.assertEqual(rerun_user_row, expected_user_row)
-        self.assertEqual(rerun_versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
+        self.assertEqual(rerun_versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17])
         self.assertEqual(rerun_violations, [])
         self.assertEqual(rerun_integrity, "ok")
 
     def test_v6_migration_rejects_legacy_orphan_atlas_user_atomically(self):
         database_path = Path(self.temp_dir.name) / "legacy-orphan-user.sqlite"
         legacy = SQLiteDatabase(database_path)
-        legacy.apply_migrations(SQLITE_MIGRATIONS[:-11])
+        legacy.apply_migrations(SQLITE_MIGRATIONS[:5])
 
         user_id = "22222222-2222-4222-8222-222222222222"
         missing_identity_id = "33333333-3333-4333-8333-333333333333"
@@ -525,7 +525,7 @@ class SQLiteIdentityAuthorityTests(unittest.TestCase):
 
     def test_v6_migration_rebuilds_reciprocal_foreign_keys_after_table_renames(self):
         legacy = SQLiteDatabase(Path(self.temp_dir.name) / "legacy-fk-rename.sqlite")
-        legacy.apply_migrations(SQLITE_MIGRATIONS[:-11])
+        legacy.apply_migrations(SQLITE_MIGRATIONS[:5])
         user_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
         identity_id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
         with legacy.connection() as connection:
@@ -584,7 +584,7 @@ class SQLiteIdentityAuthorityTests(unittest.TestCase):
 
     def test_v6_migration_rejects_legacy_orphan_user_identity_atomically(self):
         legacy = SQLiteDatabase(Path(self.temp_dir.name) / "legacy-orphan.sqlite")
-        legacy.apply_migrations(SQLITE_MIGRATIONS[:-11])
+        legacy.apply_migrations(SQLITE_MIGRATIONS[:5])
         identity_id = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
         with legacy.connection() as connection:
             connection.execute(
