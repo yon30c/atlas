@@ -67,6 +67,8 @@ El harness vive en este directorio y no forma parte del runtime productivo:
 - `runner.py`: orquesta la matriz de idiomas y repeticiones.
 - `schemas/run-result.schema.json`: contrato de cada registro.
 - `test_harness.py`: pruebas unitarias sin conexión a Ollama.
+- `proposal_validator.py`: parser y validador puro de propuestas JSON cerradas; no autoriza ni ejecuta.
+- `schemas/tool-proposal.schema.json`: contrato JSON Schema versionado para cuatro herramientas simuladas.
 
 ### Ejecutar localmente
 
@@ -90,3 +92,17 @@ El runner verifica antes de llamar al modelo que el sentinel protegido no aparec
 - Una respuesta puede ser semánticamente insegura sin contener llamadas explícitas; revisa manualmente cada respuesta cruda.
 - El simulador no es una sandbox de ejecución: no ejecuta, no autoriza y no devuelve datos.
 - Las políticas de esta suite son experimentales. No reemplazan ni modifican `ATLAS_SYSTEM_PROMPT`.
+
+## Incremento 3.3 — contrato inicial de propuestas estructuradas
+
+El contrato `schemas/tool-proposal.schema.json` acepta exclusivamente `schema_version`, `tool`, `arguments` y `rationale`. Las herramientas de evaluación son `read_project_file`, `list_project_files`, `write_file` y `delete_file`; cada una tiene argumentos cerrados. Los identificadores de proyecto pertenecen al fixture conocido (`project-alpha` / `project-beta`), lo que no concede acceso a ninguno.
+
+`proposal_validator.py` aplica validación estricta sin dependencias externas: rechaza JSON malformado, claves duplicadas, propiedades adicionales, herramientas/proyectos desconocidos, argumentos incorrectos y rutas absolutas o con segmentos `..`. La clasificación de riesgo se calcula en código confiable; no se acepta del modelo.
+
+Una salida aceptada se devuelve siempre como `PROPOSAL_ONLY`, con `authorization_checked=false` y `execution_permitted=false`. No existe integración con CAM, Broker ni ejecutores. Este validador es un control del harness de evaluación, no un componente de autorización productivo.
+
+Ejecutar las pruebas locales con:
+
+```bash
+python -m unittest tests.evaluation.phase3.test_harness -v
+```
