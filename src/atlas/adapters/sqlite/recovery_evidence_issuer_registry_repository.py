@@ -207,6 +207,7 @@ class SQLiteRecoveryEvidenceIssuerRegistryRepository(
         revisions: list[int] = []
         diagnostics: list[str] = []
         enabled_by_revision: dict[int, bool] = {}
+        changed_at_by_revision: dict[int, datetime] = {}
         for row in rows:
             revision = row["registry_revision"]
             if (
@@ -220,6 +221,7 @@ class SQLiteRecoveryEvidenceIssuerRegistryRepository(
             try:
                 registration = SQLiteRecoveryEvidenceIssuerRegistryRepository._from_row(row)
                 enabled_by_revision[revision] = registration.enabled
+                changed_at_by_revision[revision] = registration.changed_at
                 if (
                     registration.changed_at.isoformat(timespec="microseconds")
                     != row["changed_at"]
@@ -230,6 +232,15 @@ class SQLiteRecoveryEvidenceIssuerRegistryRepository(
         ordered = tuple(sorted(revisions))
         if ordered and ordered != tuple(range(1, ordered[-1] + 1)):
             diagnostics.append("REGISTRY_REVISION_SEQUENCE_GAP")
+        for previous_revision, current_revision in zip(ordered, ordered[1:]):
+            previous_changed_at = changed_at_by_revision.get(previous_revision)
+            current_changed_at = changed_at_by_revision.get(current_revision)
+            if (
+                previous_changed_at is not None
+                and current_changed_at is not None
+                and current_changed_at < previous_changed_at
+            ):
+                diagnostics.append("REGISTRY_TIMESTAMP_REGRESSION")
         latest = ordered[-1] if ordered else None
         return ordered, latest, enabled_by_revision.get(latest), tuple(sorted(set(diagnostics)))
 
