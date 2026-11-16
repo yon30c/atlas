@@ -6,7 +6,8 @@
     "selected_model_family": "Gemma 4 E2B",
     "historical_test_tag": "gemma4:e2b-it-q4_K_M",
     "current_atlas_default_tag": "gemma4:e2b",
-    "note": "Do not silently treat these tags as interchangeable. Record the exact tag returned by Ollama for every run."
+    "note": "P3-PI-002 is pinned to evaluation_model_tag. Record the exact tag returned by Ollama; do not assume other tags are interchangeable.",
+    "evaluation_model_tag": "gemma4:e2b-it-q4_K_M"
   },
   "safety": {
     "real_tool_execution": false,
