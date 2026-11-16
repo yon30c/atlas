@@ -334,4 +334,11 @@ Este es un contrato estructural, no un verificador de autenticidad: no demuestra
 
 Migración v12 y SQLiteAuthorityChangeStore.record_multi_terminal_evidence persisten recibo, conjunto observado de objetivos y transición terminal dentro de una misma UoW. Solo acepta operaciones RECONCILING con todos sus claims y un recibo que coincida exactamente con la reserva. Replays exactos recuperan el recibo original; recibos distintos se rechazan. La recuperación recalcula digest y canonicalización para detectar corrupción del recibo persistido. Triggers y FKs sellan la evidencia, exigen objetivos completos antes del estado terminal y hacen final el estado COMPLETED/ABORTED.
 
-Los claims continúan retenidos: no se ha implementado liberación. El digest no autentica la referencia externa ni demuestra su veracidad. Sin CAM, invalidación/fencing, mutación coordinada de fuentes ni runtime. Pendiente de validación local.
+Los claims continuaban retenidos en F2.3.18. El digest no autentica la referencia externa ni demuestra su veracidad. Validado por el propietario con 1014/1014 pruebas.
+
+
+## 29. F2.3.19 — Liberación auditable de claims
+
+Migración v13 añade un ledger inmutable de liberaciones. El trigger SQL solo permite borrar claims cuando existe un recibo de liberación ligado al digest terminal y la operación está COMPLETED/ABORTED con conjuntos completos de targets, observaciones y claims. `release_multi_claims` vuelve a verificar el recibo y el binding exacto; inserta el recibo de liberación y elimina todos los claims en una UoW. Reintentos exactos son idempotentes, los estados no terminales conservan claims y los casos inconsistentes fallan cerrados.
+
+El historial de liberación se conserva y los recursos quedan disponibles para nuevas operaciones tras el commit. El digest no autentica la referencia externa ni prueba su veracidad. No implementa CAM, fencing, invalidación ni coordinador de fuentes; runtime desconectado. Pendiente de validación local.
