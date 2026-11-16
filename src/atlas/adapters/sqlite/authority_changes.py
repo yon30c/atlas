@@ -18,6 +18,10 @@ from atlas.memory.authority_changes import (
     AuthorityChangeReservation,
     AuthorityChangeResult,
     AuthorityChangeStatus,
+    AuthorityChangeTarget,
+    AuthorityChangeTargetKind,
+    MultiAuthorityChangeIntent,
+    MultiAuthorityChangeReservation,
 )
 from atlas.memory.consistency import AuthorityKind
 
@@ -56,6 +60,37 @@ def _intent_projection(intent: AuthorityChangeIntent) -> dict[str, object]:
 def _canonical_intent(intent: AuthorityChangeIntent) -> bytes:
     return json.dumps(
         _intent_projection(intent),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
+def _multi_intent_projection(intent: MultiAuthorityChangeIntent) -> dict[str, object]:
+    return {
+        "action": intent.action,
+        "actor_identity_id": intent.actor_identity_id,
+        "consumer_id": intent.consumer_id,
+        "environment_id": intent.environment_id,
+        "idempotency_key": intent.idempotency_key,
+        "owner_id": intent.owner_id,
+        "project_id": intent.project_id,
+        "request_context_ref": intent.request_context_ref,
+        "targets": [
+            {
+                "authority_id": target.authority_id,
+                "authority_kind": target.authority_kind.value,
+                "expected_revision": target.expected_revision,
+                "proposed_revision": target.proposed_revision,
+            }
+            for target in intent.targets
+        ],
+    }
+
+
+def _canonical_multi_intent(intent: MultiAuthorityChangeIntent) -> bytes:
+    return json.dumps(
+        _multi_intent_projection(intent),
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
@@ -214,6 +249,198 @@ class SQLiteAuthorityChangeStore:
                     "la reserva recién creada no pudo recuperarse"
                 )
             return self._reservation(row)
+
+    @staticmethod
+    def _select_multi_operation(connection, operation_id: str):
+        return connection.execute(
+            """
+            SELECT o.*, i.idempotency_key
+            FROM multi_authority_change_operations AS o
+            JOIN multi_authority_change_idempotency AS i
+              ON i.operation_id = o.operation_id
+            WHERE o.operation_id = ?
+            """,
+            (operation_id,),
+        ).fetchone()
+
+    @staticmethod
+    def _multi_reservation(connection, row) -> MultiAuthorityChangeReservation:
+        target_rows = connection.execute(
+            """
+            SELECT authority_kind, authority_id, expected_revision, proposed_revision
+            FROM multi_authority_change_targets
+            WHERE operation_id = ?
+            ORDER BY authority_kind, authority_id
+            """,
+            (row["operation_id"],),
+        ).fetchall()
+        targets = tuple(
+            AuthorityChangeTarget(
+                authority_kind=AuthorityChangeTargetKind(target["authority_kind"]),
+                authority_id=target["authority_id"],
+                expected_revision=target["expected_revision"],
+                proposed_revision=target["proposed_revision"],
+            )
+            for target in target_rows
+        )
+        intent = MultiAuthorityChangeIntent(
+            idempotency_key=row["idempotency_key"],
+            consumer_id=row["consumer_id"],
+            action=row["action"],
+            actor_identity_id=row["actor_identity_id"],
+            owner_id=row["owner_id"],
+            project_id=row["project_id"],
+            environment_id=row["environment_id"],
+            targets=targets,
+            request_context_ref=row["request_context_ref"],
+            requested_at=_parse_utc(row["requested_at"]),
+        )
+        return MultiAuthorityChangeReservation(
+            operation_id=row["operation_id"],
+            intent=intent,
+            status=AuthorityChangeStatus(row["status"]),
+        )
+
+    def reserve_multi_change(
+        self,
+        intent: MultiAuthorityChangeIntent,
+    ) -> MultiAuthorityChangeReservation | None:
+        """Persist an exact multi-target intent and its target set atomically.
+
+        This records durable operation identity and idempotency only. It does
+        not yet acquire admission fences, authorize CAM, or mutate sources.
+        """
+        if not isinstance(intent, MultiAuthorityChangeIntent):
+            raise ContractError("intent debe ser MultiAuthorityChangeIntent")
+        canonical = _canonical_multi_intent(intent)
+        digest = hashlib.sha256(canonical).hexdigest()
+        requested_at = _utc_text(intent.requested_at)
+        now = _utc_text(datetime.now(timezone.utc))
+
+        with self._database.unit_of_work() as unit:
+            connection = unit._connection_for(self._database)
+            existing = connection.execute(
+                """
+                SELECT intent_digest, intent_canonical, operation_id
+                FROM multi_authority_change_idempotency
+                WHERE consumer_id = ? AND idempotency_key = ?
+                """,
+                (intent.consumer_id, intent.idempotency_key),
+            ).fetchone()
+            if existing is not None:
+                if (
+                    existing["intent_digest"] != digest
+                    or bytes(existing["intent_canonical"]) != canonical
+                ):
+                    return None
+                row = self._select_multi_operation(
+                    connection, existing["operation_id"]
+                )
+                return (
+                    None if row is None
+                    else self._multi_reservation(connection, row)
+                )
+
+            operation_id = uuid4().hex
+            connection.execute(
+                """
+                INSERT INTO multi_authority_change_operations (
+                    operation_id, consumer_id, action, actor_identity_id,
+                    owner_id, project_id, environment_id, request_context_ref,
+                    requested_at, status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'REQUESTED', ?, ?)
+                """,
+                (
+                    operation_id,
+                    intent.consumer_id,
+                    intent.action,
+                    intent.actor_identity_id,
+                    intent.owner_id,
+                    intent.project_id,
+                    intent.environment_id,
+                    intent.request_context_ref,
+                    requested_at,
+                    now,
+                    now,
+                ),
+            )
+            for target in intent.targets:
+                connection.execute(
+                    """
+                    INSERT INTO multi_authority_change_targets (
+                        operation_id, authority_kind, authority_id,
+                        expected_revision, proposed_revision
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        operation_id,
+                        target.authority_kind.value,
+                        target.authority_id,
+                        target.expected_revision,
+                        target.proposed_revision,
+                    ),
+                )
+            connection.execute(
+                """
+                INSERT INTO multi_authority_change_idempotency (
+                    consumer_id, idempotency_key, operation_id,
+                    intent_digest, intent_canonical, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    intent.consumer_id,
+                    intent.idempotency_key,
+                    operation_id,
+                    digest,
+                    canonical,
+                    now,
+                ),
+            )
+            row = self._select_multi_operation(connection, operation_id)
+            if row is None:
+                raise sqlite3.DatabaseError(
+                    "la reserva multiobjetivo recién creada no pudo recuperarse"
+                )
+            return self._multi_reservation(connection, row)
+
+    def get_multi_reservation(
+        self,
+        operation_id: str,
+    ) -> MultiAuthorityChangeReservation | None:
+        if not isinstance(operation_id, str) or not operation_id.strip():
+            raise ContractError("operation_id debe ser una cadena no vacía")
+        with self._database.connection() as connection:
+            row = self._select_multi_operation(connection, operation_id)
+            return (
+                None if row is None
+                else self._multi_reservation(connection, row)
+            )
+
+    def get_multi_by_idempotency_key(
+        self,
+        consumer_id: str,
+        idempotency_key: str,
+    ) -> MultiAuthorityChangeReservation | None:
+        if (
+            not isinstance(consumer_id, str) or not consumer_id.strip()
+            or not isinstance(idempotency_key, str) or not idempotency_key.strip()
+        ):
+            raise ContractError("consumer_id e idempotency_key son obligatorios")
+        with self._database.connection() as connection:
+            row = connection.execute(
+                """
+                SELECT o.*, i.idempotency_key
+                FROM multi_authority_change_operations AS o
+                JOIN multi_authority_change_idempotency AS i
+                  ON i.operation_id = o.operation_id
+                WHERE i.consumer_id = ? AND i.idempotency_key = ?
+                """,
+                (consumer_id, idempotency_key),
+            ).fetchone()
+            return (
+                None if row is None
+                else self._multi_reservation(connection, row)
+            )
 
     def get_by_idempotency_key(
         self,
