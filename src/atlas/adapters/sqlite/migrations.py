@@ -1098,8 +1098,146 @@ CORE_SCHEMA_V11 = SQLiteMigration(
 )
 
 
+# v12 persists the complete terminal reconciliation receipt and gates terminal
+# operation status transitions on that receipt. Claims remain retained.
+CORE_SCHEMA_V12 = SQLiteMigration(
+    version=12,
+    name="durable_multi_authority_terminal_evidence",
+    sql="""
+    CREATE TABLE multi_authority_change_terminal_evidence (
+        operation_id TEXT PRIMARY KEY,
+        evidence_id TEXT NOT NULL UNIQUE CHECK (length(trim(evidence_id)) > 0),
+        outcome TEXT NOT NULL CHECK (outcome IN ('COMPLETED', 'ABORTED')),
+        evidence_ref TEXT NOT NULL CHECK (length(trim(evidence_ref)) > 0),
+        recorded_by TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at TEXT NOT NULL,
+        evidence_digest TEXT NOT NULL CHECK (length(evidence_digest) = 64),
+        evidence_canonical BLOB NOT NULL CHECK (length(evidence_canonical) > 0),
+        FOREIGN KEY (operation_id)
+            REFERENCES multi_authority_change_operations(operation_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE TABLE multi_authority_change_terminal_targets (
+        operation_id TEXT NOT NULL,
+        authority_kind TEXT NOT NULL,
+        authority_id TEXT NOT NULL,
+        expected_revision INTEGER NOT NULL CHECK (expected_revision > 0),
+        proposed_revision INTEGER NOT NULL CHECK (
+            proposed_revision = expected_revision + 1
+        ),
+        observed_revision INTEGER NOT NULL CHECK (observed_revision > 0),
+        PRIMARY KEY (operation_id, authority_kind, authority_id),
+        FOREIGN KEY (operation_id)
+            REFERENCES multi_authority_change_terminal_evidence(operation_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+        FOREIGN KEY (operation_id, authority_kind, authority_id)
+            REFERENCES multi_authority_change_targets(
+                operation_id, authority_kind, authority_id
+            )
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE TRIGGER multi_terminal_evidence_requires_reconciling_claimed_operation
+    BEFORE INSERT ON multi_authority_change_terminal_evidence
+    WHEN NOT EXISTS (
+        SELECT 1 FROM multi_authority_change_operations
+        WHERE operation_id = NEW.operation_id AND status = 'RECONCILING'
+    )
+    OR (
+        SELECT COUNT(*) FROM multi_authority_change_claims
+        WHERE operation_id = NEW.operation_id
+    ) != (
+        SELECT COUNT(*) FROM multi_authority_change_targets
+        WHERE operation_id = NEW.operation_id
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'terminal evidence requires a reconciling operation with complete claims');
+    END;
+
+    CREATE TRIGGER multi_terminal_target_requires_matching_reserved_revision
+    BEFORE INSERT ON multi_authority_change_terminal_targets
+    WHEN NOT EXISTS (
+        SELECT 1
+        FROM multi_authority_change_targets AS t
+        JOIN multi_authority_change_terminal_evidence AS e
+          ON e.operation_id = t.operation_id
+        WHERE t.operation_id = NEW.operation_id
+          AND t.authority_kind = NEW.authority_kind
+          AND t.authority_id = NEW.authority_id
+          AND t.expected_revision = NEW.expected_revision
+          AND t.proposed_revision = NEW.proposed_revision
+          AND (
+              (e.outcome = 'COMPLETED'
+               AND NEW.observed_revision = t.proposed_revision)
+              OR
+              (e.outcome = 'ABORTED'
+               AND NEW.observed_revision = t.expected_revision)
+          )
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'terminal target does not match reserved revisions and outcome');
+    END;
+
+    CREATE TRIGGER multi_terminal_evidence_no_update
+    BEFORE UPDATE ON multi_authority_change_terminal_evidence
+    BEGIN
+        SELECT RAISE(ABORT, 'terminal evidence is immutable');
+    END;
+
+    CREATE TRIGGER multi_terminal_evidence_no_delete
+    BEFORE DELETE ON multi_authority_change_terminal_evidence
+    BEGIN
+        SELECT RAISE(ABORT, 'terminal evidence is retained');
+    END;
+
+    CREATE TRIGGER multi_terminal_targets_no_update
+    BEFORE UPDATE ON multi_authority_change_terminal_targets
+    BEGIN
+        SELECT RAISE(ABORT, 'terminal evidence targets are immutable');
+    END;
+
+    CREATE TRIGGER multi_terminal_targets_no_delete
+    BEFORE DELETE ON multi_authority_change_terminal_targets
+    BEGIN
+        SELECT RAISE(ABORT, 'terminal evidence targets are retained');
+    END;
+
+    CREATE TRIGGER multi_operation_terminal_status_requires_evidence
+    BEFORE UPDATE OF status ON multi_authority_change_operations
+    WHEN NEW.status IN ('COMPLETED', 'ABORTED')
+    AND (
+        OLD.status != 'RECONCILING'
+        OR NOT EXISTS (
+            SELECT 1
+            FROM multi_authority_change_terminal_evidence AS e
+            WHERE e.operation_id = NEW.operation_id
+              AND e.outcome = NEW.status
+        )
+        OR (
+            SELECT COUNT(*) FROM multi_authority_change_terminal_targets
+            WHERE operation_id = NEW.operation_id
+        ) != (
+            SELECT COUNT(*) FROM multi_authority_change_targets
+            WHERE operation_id = NEW.operation_id
+        )
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'terminal status requires complete matching terminal evidence');
+    END;
+
+    CREATE TRIGGER multi_operation_terminal_status_is_final
+    BEFORE UPDATE OF status ON multi_authority_change_operations
+    WHEN OLD.status IN ('COMPLETED', 'ABORTED') AND NEW.status != OLD.status
+    BEGIN
+        SELECT RAISE(ABORT, 'terminal operation status is final');
+    END;
+    """,
+)
+
+
 SQLITE_MIGRATIONS = (
     CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
     CORE_SCHEMA_V5, CORE_SCHEMA_V6, CORE_SCHEMA_V7, CORE_SCHEMA_V8,
-    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11,
+    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12,
 )
