@@ -91,8 +91,8 @@ class SQLiteAuthorizationUnitOfWorkTests(unittest.TestCase):
                 uow.renewals.create(self.renewal)
                 raise RuntimeError("injected failure")
 
-        self.assertIsNone(self.factory().grants.get(self.grant.grant_id))
-        self.assertIsNone(self.factory().renewals.get(self.renewal.renewal_id))
+        self.assertIsNone(SQLiteGrantRepository(self.database).get(self.grant.grant_id))
+        self.assertIsNone(SQLiteGrantRenewalRepository(self.database).get(self.renewal.renewal_id))
 
     def test_renewal_decision_cas_and_grant_update_commit_atomically(self):
         with self.factory() as uow:
@@ -117,9 +117,9 @@ class SQLiteAuthorizationUnitOfWorkTests(unittest.TestCase):
             self.assertTrue(uow.renewals.update_if_version(approved_renewal, 1))
             uow.commit()
 
-        self.assertEqual(self.factory().grants.get(self.grant.grant_id), approved_grant)
+        self.assertEqual(SQLiteGrantRepository(self.database).get(self.grant.grant_id), approved_grant)
         self.assertEqual(
-            self.factory().renewals.get(self.renewal.renewal_id),
+            SQLiteGrantRenewalRepository(self.database).get(self.renewal.renewal_id),
             approved_renewal,
         )
 
@@ -146,9 +146,9 @@ class SQLiteAuthorizationUnitOfWorkTests(unittest.TestCase):
             self.assertFalse(uow.renewals.update_if_version(approved_renewal, 9))
             # No commit: the Grant extension must be rolled back.
 
-        self.assertEqual(self.factory().grants.get(self.grant.grant_id), self.grant)
+        self.assertEqual(SQLiteGrantRepository(self.database).get(self.grant.grant_id), self.grant)
         self.assertEqual(
-            self.factory().renewals.get(self.renewal.renewal_id),
+            SQLiteGrantRenewalRepository(self.database).get(self.renewal.renewal_id),
             self.renewal,
         )
 
@@ -178,7 +178,7 @@ class SQLiteAuthorizationUnitOfWorkTests(unittest.TestCase):
         self.assertEqual(service.issue(context, self.grant, NOW), self.grant)
         with self.assertRaises(ContractError):
             service.issue(context, self.grant, NOW)
-        self.assertEqual(self.factory().grants.get(self.grant.grant_id), self.grant)
+        self.assertEqual(SQLiteGrantRepository(self.database).get(self.grant.grant_id), self.grant)
 
     def test_grant_renewal_service_runs_on_sqlite_unit_of_work(self):
         with self.factory() as uow:
