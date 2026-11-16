@@ -391,7 +391,7 @@ Un recibo corrupto, un conjunto parcial, un estado terminal sin evidencia, una l
 
 Identity y Project/Environment ahora pueden participar en una `SQLiteUnitOfWork` externa, verificando que pertenece a la misma instancia de `SQLiteDatabase` y que sigue activa. `SQLiteLocalAuthorityUnitOfWork` extiende la composición transaccional existente para exponer Identity, Grants, renovaciones y Project/Environment sobre la misma conexión y transacción.
 
-La composición puede confirmar o revertir en conjunto estas fuentes canónicas. La siguiente ampliación integra también `SQLiteAuthorityChangeStore` en la misma UoW; véase F2.3.22. La frontera continúa siendo solo de persistencia y no define el protocolo de coordinación. No implementa CAM, invalidación, fencing ni reconciliación real. Runtime desconectado.
+La composición puede confirmar o revertir en conjunto estas fuentes canónicas. La frontera continúa siendo solo de persistencia y no define el protocolo de coordinación. No implementa CAM, invalidación, fencing ni reconciliación real. Runtime desconectado.
 
 **Estado:** validado por el propietario con 1043/1043 pruebas (16 de noviembre de 2026).
 
