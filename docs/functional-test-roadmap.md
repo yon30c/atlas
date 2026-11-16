@@ -299,7 +299,7 @@ Añadidos `AuthorityChangeTargetKind`, `AuthorityChangeTarget` y `MultiAuthority
 
 Migración v10 aditiva y tablas separadas para operación, idempotencia y conjunto de objetivos. Se añadieron persistencia atómica de intención completa, canonicalización, replay idempotente, rechazo de clave reutilizada con intención distinta y triggers de inmutabilidad/sellado. Store con reserva y recuperación por operation_id o clave idempotente. Pruebas añadidas.
 
-**Estado:** publicado; pendiente de validación local. Es registro durable, no exclusión mutua/claim de objetivos ni coordinador. No hay CAM, fencing, invalidación, mutación de fuentes ni runtime.
+**Estado:** validado por el propietario con 988/988 pruebas. Es registro durable, no exclusión mutua/claim de objetivos ni coordinador. No hay CAM, fencing, invalidación, mutación de fuentes ni runtime.
 
 ### F2.3.16 — Claims exclusivos multiobjetivo
 
