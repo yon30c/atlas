@@ -208,7 +208,7 @@ Para cada siguiente incremento:
 6. Revisar los resultados antes de continuar.
 7. Actualizar esta documentación con evidencia, commit y estado real.
 
-**Siguiente acción:** actualizar el checkout Debian y ejecutar `tests.unit.test_operation_authorization_contracts` y `tests.unit.test_operation_authorization_verification`, además de `tests.unit.test_authorization` y `tests.unit.test_evaluator`; después, la suite completa. Si pasan, diseñar el adaptador de verificación contra autoridad vigente y su garantía ante revocaciones concurrentes. No integrar consola ni ejecutar capacidades todavía.
+**Siguiente acción:** validar localmente el Ciclo 2 de escritura controlada con `tests.unit.test_local_workspace_write`, `tests.unit.test_workspace_file_writing_service` y `tests.unit.test_local_workspace`; después ejecutar la suite completa. Si pasa, cerrar el Ciclo 2 y diseñar el siguiente incremento de autorización/consistencia antes de cualquier integración con consola/runtime.
 
 
 ### F2.3.3b — Inspección de autoridad y consistencia
