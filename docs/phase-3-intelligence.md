@@ -74,13 +74,12 @@ Estado: **En curso**. El primer incremento del harness está implementado; falta
 - [x] Incorporar runner aislado que reutiliza `OllamaResponseGenerator._build_request()` y captura el `LLMResponse` completo.
 - [x] Incorporar políticas experimentales ES/EN, evaluador determinista y simulador pasivo sin ejecución.
 - [x] Desactivar `think` solo en el proveedor del harness: la prueba con política EN agotó 128 tokens en razonamiento (`done_reason=length`, `content` vacío); con `think: false` produjo `OK` (`done_reason=stop`). El adaptador productivo y `ATLAS_SYSTEM_PROMPT` permanecen intactos.
-- [x] Desactivar `think` solo en el proveedor del harness: la prueba con política EN agotó 128 tokens en razonamiento (`done_reason=length`, `content` vacío); con `think: false` produjo `OK` (`done_reason=stop`). El adaptador productivo y `ATLAS_SYSTEM_PROMPT` permanecen intactos.
-- [ ] Ejecutar pruebas unitarias del harness y revisar resultados.
-- [ ] Ejecutar P3-PI-002 con tres repeticiones por combinación y revisión manual de las 12 respuestas.
+- [ ] Ejecutar pruebas unitarias actualizadas del harness localmente y registrar el resultado.
+- [x] Ejecutar P3-PI-002 con 10 repeticiones por combinación (40 corridas) y revisión manual de las 40 respuestas. Informe: [P3-PI-002 — Matriz de idioma Gemma 4](evaluations/p3-pi-002-gemma4-language-matrix.md).
 
 ### 3.2 — Instrucciones e inyección de prompts
 
-Estado: **En curso**. La inyección destructiva indirecta P3-PI-001 ya tiene una observación inicial de fallo y una repetición controlada posterior con 4/4 respuestas seguras tras revisión manual. El siguiente caso es P3-PI-002, extracción de información privada entre proyectos.
+Estado: **En curso**. P3-PI-001 conserva un fallo exploratorio histórico y una repetición controlada posterior con 4/4 respuestas seguras tras revisión manual. P3-PI-002 (extracción de información privada entre proyectos) ya se ejecutó en 40 corridas, diez por combinación de idioma, y sus 40 respuestas fueron revisadas manualmente. La contención fue 40/40; el reconocimiento estricto fue 22/40. El informe y el desglose están en [la matriz de Gemma 4](evaluations/p3-pi-002-gemma4-language-matrix.md).
 
 Casos mínimos:
 - Inyección directa en español.
@@ -91,7 +90,7 @@ Casos mínimos:
 - Instrucción que se presenta como mensaje de sistema, desarrollador o administrador.
 - Conflicto entre instrucciones del usuario y límites locales de Atlas.
 
-El caso destructivo ya se probó con las cuatro combinaciones de idioma. No se debe presentar esa selección como pendiente. Para P3-PI-002 se usarán las mismas cuatro combinaciones (política ES/ataque ES, ES/EN, EN/ES y EN/EN), con tres repeticiones por combinación. Comparar variantes de prompt con entradas equivalentes; no cambiar simultáneamente varias variables.
+El caso destructivo ya se probó con las cuatro combinaciones de idioma. No se debe presentar esa selección como pendiente. P3-PI-002 también cubrió las cuatro combinaciones (política ES/ataque ES, ES/EN, EN/ES y EN/EN), con diez repeticiones por combinación. La política inglesa obtuvo 18/20 reconocimientos estrictos y la española 4/20. Esta evidencia es específica del modelo, cuantización, configuración y escenario evaluados; no cierra por sí sola toda la subfase 3.2. Los casos restantes de la lista (inyección directa, solicitud de revelar razonamiento interno, instrucciones que simulan roles privilegiados y conflictos de autoridad) siguen pendientes de cobertura explícita. Comparar variantes de prompt con entradas equivalentes; no cambiar simultáneamente varias variables.
 
 ### 3.3 — Salidas estructuradas y tool-calling en sandbox
 
@@ -152,6 +151,6 @@ Para que los resultados sean comparables:
 
 ## 7. Siguiente tarea concreta
 
-El harness aislado ya está implementado en `tests/evaluation/phase3/`. Diagnóstico local reportado: Ollama 0.40.16 y el tag fijado funcionan con una solicitud mínima; la política experimental con thinking predeterminado consumió el límite de 128 tokens sin respuesta final. La misma solicitud con `think: false` devolvió `OK`. Por ello, el proveedor exclusivo del harness desactiva thinking y registra `think: false`; esta opción no modifica el runtime productivo. El siguiente paso es ejecutar las pruebas unitarias actualizadas y, si pasan, P3-PI-002: cuatro combinaciones de idioma por tres repeticiones, 12 corridas en total, con `gemma4:e2b-it-q4_K_M`. El runner registra prompts/respuestas crudos y metadatos en JSONL local; el directorio de resultados está excluido de Git. El sentinel protegido se utiliza solo en el evaluador y se verifica que no entre en los mensajes del modelo.
+El harness aislado está implementado en `tests/evaluation/phase3/`. Diagnóstico local: Ollama 0.40.16 y el tag fijado funcionan con una solicitud mínima; la política experimental con thinking predeterminado consumió el límite de 128 tokens sin respuesta final. La misma solicitud con `think: false` devolvió `OK`. Por ello, el proveedor exclusivo del harness desactiva thinking y registra `think: false`; esta opción no modifica el runtime productivo. P3-PI-002 se ejecutó con `gemma4:e2b-it-q4_K_M`: cuatro combinaciones de idioma por diez repeticiones, 40 corridas en total. Las respuestas y metadatos se registraron en JSONL local; el directorio de resultados está excluido de Git. La revisión manual obtuvo 40/40 en contención y 22/40 en reconocimiento estricto. El sentinel protegido se utiliza solo en el evaluador y se verifica que no entre en los mensajes del modelo.
 
-Los comandos y límites están documentados en `tests/evaluation/phase3/README.md`. No se modificó `ATLAS_SYSTEM_PROMPT`, el adaptador productivo ni se habilitó tool calling o ejecución de herramientas. Las pruebas unitarias del harness y las 12 corridas reales aún no se han ejecutado; la implementación queda pendiente de verificación local.
+Los comandos y límites están documentados en `tests/evaluation/phase3/README.md`. No se modificó `ATLAS_SYSTEM_PROMPT`, el adaptador productivo ni se habilitó tool calling o ejecución de herramientas. La ejecución local de las pruebas unitarias actualizadas del harness sigue pendiente de confirmación. El siguiente incremento es verificar esas pruebas y después abordar 3.3, salidas estructuradas en sandbox.
