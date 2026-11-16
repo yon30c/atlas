@@ -64,7 +64,7 @@ class RecoveryEvidenceIssuerTrustPolicyAuditReport:
 
     @property
     def is_healthy(self) -> bool:
-        return all(
+        return bool(self.issuers) and all(
             item.status is RecoveryEvidenceIssuerTrustPolicyAuditStatus.HEALTHY
             for item in self.issuers
         )
