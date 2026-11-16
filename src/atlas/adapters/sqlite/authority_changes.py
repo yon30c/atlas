@@ -25,6 +25,8 @@ from atlas.memory.authority_changes import (
     AuthorityChangeTerminalEvidence,
     AuthorityChangeTerminalOutcome,
     AuthorityChangeTerminalTarget,
+    MultiAuthorityClaimAudit,
+    MultiAuthorityClaimAuditStatus,
 )
 from atlas.memory.consistency import AuthorityKind
 
@@ -901,6 +903,148 @@ class SQLiteAuthorityChangeStore:
                     "quedaron claims activos después de la liberación"
                 )
             return True
+
+
+    def audit_multi_claims(
+        self,
+        operation_id: str,
+    ) -> MultiAuthorityClaimAudit | None:
+        """Return a read-only consistency classification for one durable operation.
+
+        This method never repairs state, releases claims, or treats a digest as
+        proof that external reconciliation actually occurred.
+        """
+        if not isinstance(operation_id, str) or not operation_id.strip():
+            raise ContractError("operation_id debe ser una cadena no vacía")
+        with self._database.connection() as connection:
+            operation = self._select_multi_operation(connection, operation_id)
+            if operation is None:
+                return None
+            reservation = self._multi_reservation(connection, operation)
+            targets_rows = connection.execute(
+                """
+                SELECT authority_kind, authority_id, expected_revision,
+                       proposed_revision
+                FROM multi_authority_change_targets
+                WHERE operation_id = ?
+                ORDER BY authority_kind, authority_id
+                """,
+                (operation_id,),
+            ).fetchall()
+            claims_rows = connection.execute(
+                """
+                SELECT authority_kind, authority_id
+                FROM multi_authority_change_claims
+                WHERE operation_id = ?
+                ORDER BY authority_kind, authority_id
+                """,
+                (operation_id,),
+            ).fetchall()
+            evidence_row = connection.execute(
+                """
+                SELECT * FROM multi_authority_change_terminal_evidence
+                WHERE operation_id = ?
+                """,
+                (operation_id,),
+            ).fetchone()
+            release_row = connection.execute(
+                """
+                SELECT evidence_digest FROM multi_authority_change_claim_releases
+                WHERE operation_id = ?
+                """,
+                (operation_id,),
+            ).fetchone()
+
+            reserved = tuple(
+                AuthorityChangeTarget(
+                    authority_kind=AuthorityChangeTargetKind(row["authority_kind"]),
+                    authority_id=row["authority_id"],
+                    expected_revision=row["expected_revision"],
+                    proposed_revision=row["proposed_revision"],
+                )
+                for row in targets_rows
+            )
+            reserved_by_identity = {
+                (item.authority_kind, item.authority_id): item
+                for item in reserved
+            }
+            claimed = tuple(
+                reserved_by_identity[(row["authority_kind"], row["authority_id"])]
+                for row in claims_rows
+                if (row["authority_kind"], row["authority_id"])
+                in reserved_by_identity
+            )
+            exact_claim_set = (
+                len(claims_rows) == len(targets_rows)
+                and len(claimed) == len(reserved)
+                and {
+                    (row["authority_kind"], row["authority_id"])
+                    for row in claims_rows
+                } == {
+                    (item.authority_kind.value, item.authority_id)
+                    for item in reserved
+                }
+            )
+
+            evidence = None
+            evidence_valid = False
+            if evidence_row is not None:
+                try:
+                    evidence = self._terminal_evidence(connection, evidence_row)
+                    evidence_valid = (
+                        evidence.matches(reservation)
+                        and evidence.outcome.value == reservation.status.value
+                    )
+                except (ContractError, sqlite3.DatabaseError, ValueError, KeyError):
+                    evidence = None
+                    evidence_valid = False
+
+            status = reservation.status
+            if len(reserved) < 2:
+                classification = MultiAuthorityClaimAuditStatus.INCONSISTENT
+            elif release_row is not None:
+                if (
+                    evidence_valid
+                    and release_row["evidence_digest"] == evidence_row["evidence_digest"]
+                    and not claims_rows
+                    and status in (
+                        AuthorityChangeStatus.COMPLETED,
+                        AuthorityChangeStatus.ABORTED,
+                    )
+                ):
+                    classification = MultiAuthorityClaimAuditStatus.RELEASED
+                else:
+                    classification = MultiAuthorityClaimAuditStatus.INCONSISTENT
+            elif status in (
+                AuthorityChangeStatus.COMPLETED,
+                AuthorityChangeStatus.ABORTED,
+            ):
+                if evidence_valid and exact_claim_set:
+                    classification = (
+                        MultiAuthorityClaimAuditStatus.TERMINAL_CLAIMS_HELD
+                    )
+                else:
+                    classification = MultiAuthorityClaimAuditStatus.INCONSISTENT
+            elif evidence_row is not None:
+                classification = MultiAuthorityClaimAuditStatus.INCONSISTENT
+            elif not claims_rows:
+                classification = MultiAuthorityClaimAuditStatus.UNCLAIMED
+            elif exact_claim_set:
+                classification = MultiAuthorityClaimAuditStatus.CLAIMED
+            else:
+                classification = MultiAuthorityClaimAuditStatus.INCONSISTENT
+
+            return MultiAuthorityClaimAudit(
+                operation_id=operation_id,
+                operation_status=status,
+                audit_status=classification,
+                reserved_targets=reserved,
+                claimed_targets=claimed,
+                terminal_evidence=evidence,
+                release_digest=(
+                    None if release_row is None else release_row["evidence_digest"]
+                ),
+            )
 
     def get_multi_claims(self, operation_id: str) -> tuple[AuthorityChangeTarget, ...]:
         """Return the immutable target claims currently held by an operation."""
