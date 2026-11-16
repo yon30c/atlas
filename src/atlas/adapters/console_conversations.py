@@ -8,11 +8,7 @@ from atlas.core.errors import ContractError, NotFoundError
 class ConversationConsoleCommands:
     """Traduce comandos de consola a casos de uso del ConversationManager."""
 
-    def __init__(
-        self,
-        manager: ConversationManager,
-        request_factory: LocalConsoleRequestFactory,
-    ) -> None:
+    def __init__(self, manager: ConversationManager, request_factory: LocalConsoleRequestFactory) -> None:
         self._manager = manager
         self._request_factory = request_factory
 
@@ -29,13 +25,11 @@ class ConversationConsoleCommands:
                 conversations = self._manager.list(include_closed=argument == "--all")
                 if not conversations:
                     return "No hay conversaciones."
-                active = self._manager._repository.get_active_conversation()
+                active = self._manager.active()
                 lines = ["Conversaciones:"]
                 for item in conversations:
                     marker = "*" if active and item.conversation_id == active.conversation_id else " "
-                    lines.append(
-                        f"{marker} {item.title} [{item.status.value}] {item.conversation_id}"
-                    )
+                    lines.append(f"{marker} {item.title} [{item.status.value}] {item.conversation_id}")
                 return "\n".join(lines)
             if command == "/use":
                 if not argument:
@@ -50,7 +44,7 @@ class ConversationConsoleCommands:
                 return f"Conversación renombrada: {renamed.title}"
             if command == "/close":
                 closed = self._manager.close_active()
-                active = self._manager._repository.get_active_conversation()
+                active = self._manager.active()
                 if active is None:
                     raise ContractError("no se pudo crear la conversación siguiente")
                 self._request_factory.set_conversation_id(active.conversation_id)

@@ -21,16 +21,16 @@ class ConversationManager:
         self._repository = repository
         self._clock = clock
 
+    def active(self) -> Conversation | None:
+        return self._repository.get_active_conversation()
+
     def create(self, title: str = "Nueva conversación") -> Conversation:
         if not isinstance(title, str) or not title.strip():
             raise ContractError("title debe ser una cadena no vacía")
         now = self._clock.now()
         conversation = Conversation(
-            conversation_id=str(uuid4()),
-            title=title.strip(),
-            status=ConversationStatus.ACTIVE,
-            created_at=now,
-            updated_at=now,
+            conversation_id=str(uuid4()), title=title.strip(),
+            status=ConversationStatus.ACTIVE, created_at=now, updated_at=now,
         )
         created = self._repository.create(conversation)
         self._repository.set_active_conversation(created.conversation_id)
@@ -47,13 +47,13 @@ class ConversationManager:
         return conversation
 
     def rename_active(self, title: str) -> Conversation:
-        active = self._repository.get_active_conversation()
+        active = self.active()
         if active is None:
             raise NotFoundError("no hay una conversación activa")
         return self._repository.rename(active.conversation_id, title, self._clock.now())
 
     def close_active(self) -> Conversation:
-        active = self._repository.get_active_conversation()
+        active = self.active()
         if active is None:
             raise NotFoundError("no hay una conversación activa")
         closed = self._repository.close(active.conversation_id, self._clock.now())
