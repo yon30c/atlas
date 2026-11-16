@@ -8,7 +8,7 @@ from atlas.application.recovery_evidence import (
     MultiAuthorityRecoveryEvidenceVerificationService,
     RecoveryEvidenceVerificationStatus,
 )
-from atlas.application.recovery_evidence_trust import (
+from atlas.authorization.recovery_evidence_trust import (
     RecoveryEvidenceIssuerTrustPolicy,
 )
 from atlas.memory.authority_changes import (
