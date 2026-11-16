@@ -111,6 +111,28 @@ class ConsoleAdapterTests(unittest.TestCase):
             "Atlas: interrupción recibida. Sesión finalizada.",
         )
 
+    def test_finishes_gracefully_when_runtime_is_interrupted(self):
+        class InterruptingRuntime:
+            def respond(self, content):
+                raise KeyboardInterrupt()
+
+        pending = iter(["Hola"])
+        output = []
+        writes = []
+
+        run_console(
+            InterruptingRuntime(),
+            input_fn=lambda prompt: next(pending),
+            output_fn=output.append,
+            write_fn=writes.append,
+        )
+
+        self.assertEqual(writes, ["\\n"])
+        self.assertEqual(
+            output[-1],
+            "Atlas: interrupción recibida. Sesión finalizada.",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
