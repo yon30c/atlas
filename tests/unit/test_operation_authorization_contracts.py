@@ -47,6 +47,8 @@ def make_evidence(request=None, **changes):
         "resource_owner_id": request.resource_owner_id,
         "grant_id": "grant-1",
         "grant_revision": 2,
+        "project_revision": 3,
+        "environment_revision": 4,
         "issued_at": NOW - timedelta(minutes=1),
         "expires_at": NOW + timedelta(minutes=5),
         "issuer_id": "cam-authority",
@@ -98,7 +100,12 @@ class OperationAuthorizationEvidenceTests(unittest.TestCase):
                     replace(self.evidence, **{field: " "})
 
     def test_revisions_must_be_positive_integers_not_booleans(self):
-        for field in ("actor_revision", "grant_revision"):
+        for field in (
+            "actor_revision",
+            "grant_revision",
+            "project_revision",
+            "environment_revision",
+        ):
             for value in (0, -1, True, 1.5):
                 with self.subTest(field=field, value=value):
                     with self.assertRaises(ContractError):
