@@ -421,3 +421,14 @@ La migración v14 agrega triggers para limitar el ledger multiobjetivo a transic
 `SOURCE_PENDING` siempre significa que el resultado de la mutación de fuente es desconocido. No se puede inferir que la operación no se ejecutó ni repetirla automáticamente. La evaluación no cambia datos, no libera claims y no constituye autorización ni evidencia externa.
 
 **Estado: VALIDADA.** Suite completa: 1054 tests OK.
+
+
+## 26. F2.3.25 — Decisión declarativa de recuperación
+
+Se añaden los contratos MultiAuthorityRecoveryDecisionKind, MultiAuthorityRecoveryEvidenceRequirement y MultiAuthorityRecoveryDecision, además de recommend_multi_recovery_decision(assessment). La función es pura: vincula cada decisión al operation_id y disposición evaluada, asigna un código de motivo y enumera la evidencia independiente requerida antes de que una futura persona/coordinador pueda continuar.
+
+Las recomendaciones distinguen: no requerir acción de recuperación para una operación no iniciada o terminal ya liberada; revalidar autoridad antes de cualquier avance desde claims previos a invalidación; verificar por separado los resultados de invalidación y de fuente cuando sean inciertos; verificar revisiones canónicas, invalidación y fencing antes de reconciliar; autenticar la evidencia terminal antes de liberar claims; y exigir revisión humana ante inconsistencias.
+
+**Reglas obligatorias:** ninguna decisión permite acción automática; no existe recomendación de retry; la etapa registrada no autentica evidencia externa; la recomendación no cambia el ledger, no transiciona a BLOCKED, no libera claims, no sustituye CAM y no constituye permiso. La evidencia enumerada deberá ser obtenida y verificada independientemente por una futura capa coordinadora.
+
+**Validación:** pendiente de pruebas locales del propietario.
