@@ -303,3 +303,7 @@ La auditoría confirma que la persistencia compartida no equivale a consistencia
 ## 22. F2.3.12 — Auditoría de renovaciones
 
 La aprobación de renovación actualiza Grant + solicitud atómicamente en UoW, pero no hace fencing/invalidation de admisiones antiguas. Solicitud, aprobación y rechazo requieren semánticas diferenciadas; aprobación humana del propietario no reemplaza CAM. La futura operación debe vincular revisión Grant y versión de renovación, actor/owner/project/environment y pasar por coordinación durable. Sin cambios runtime.
+
+## 23. F2.3.13 — Cambios multiobjetivo
+
+Diseño publicado para operaciones que modifican varias autoridades. Aprobación de renovación requiere objetivos tipados para Grant y solicitud, una reserva/idempotencia común, CAM vinculado a todos los objetivos, fencing conjunto, CAS atómico y reconciliación completa. El contrato y el store actuales de una autoridad no se han cambiado. Diseño solamente; sin runtime ni pruebas.
