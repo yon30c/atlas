@@ -568,3 +568,13 @@ Se añaden diagnósticos `INVALID_EVIDENCE_KIND` e `INVALID_AUTHORITY_KIND`, tam
 **Límites:** no cambia la admisión, no modifica el esquema, no autentica evidencia externa y no habilita efectos ni recuperación/runtime.
 
 **Estado: VALIDADO por el propietario; suite completa: 1138 tests en 8.814 s, todos OK.**
+
+## 50. F2.3.40 — Orden temporal del historial de emisores
+
+La auditoría del inventario compara ahora `changed_at` entre revisiones consecutivas de cada emisor. Si una revisión posterior tiene una fecha anterior a la revisión previa, el emisor se clasifica como `REGISTRY_CORRUPT` con diagnóstico `REGISTRY_TIMESTAMP_REGRESSION`. Las fechas iguales se permiten; solo se rechaza una regresión estricta.
+
+Se añade una prueba de corrupción controlada que inserta una revisión posterior retrodatada tras retirar el trigger secuencial. La auditoría debe detectar la anomalía sin reparar el historial.
+
+**Límites:** no se impide reactivar un emisor mediante una nueva revisión; no se modifica el esquema ni el flujo de admisión. La auditoría no autentica la fuente del reloj y permanece en solo lectura.
+
+**Estado:** implementado en GitHub; pruebas locales pendientes.
