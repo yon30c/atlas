@@ -110,15 +110,18 @@ class FakeTrustPolicyPort:
 
 
 class FakeVerifier:
-    def __init__(self, result=True, error=None):
+    def __init__(self, result=True, error=None, on_verify=None):
         self.result = result
         self.error = error
+        self.on_verify = on_verify
         self.calls = 0
 
     def verify(self, evidence, now):
         self.calls += 1
         if self.error is not None:
             raise self.error
+        if self.on_verify is not None:
+            self.on_verify()
         return self.result
 
 
@@ -215,6 +218,7 @@ class MultiAuthorityRecoveryEvidenceVerificationTests(unittest.TestCase):
         result = self.verify(self.service(verifier))
         self.assertEqual(result.status, RecoveryEvidenceVerificationStatus.VERIFIED)
         self.assertEqual(result.evidence_id, "evidence-1")
+        self.assertEqual(result.issuer_registry_revision, 1)
         self.assertEqual(verifier.calls, 1)
 
     def test_trusted_verifier_false_returns_denied(self):
@@ -390,6 +394,62 @@ class MultiAuthorityRecoveryEvidenceVerificationTests(unittest.TestCase):
         )
         self.assertEqual(result.status, RecoveryEvidenceVerificationStatus.DENIED)
         self.assertEqual(verifier.calls, 0)
+
+
+    def test_registry_revision_change_during_verification_denies_result(self):
+        registry = FakeIssuerRegistryPort()
+        registry_changed = RecoveryEvidenceIssuerRegistration(
+            issuer_id="trusted-source-1",
+            registry_revision=2,
+            enabled=False,
+            changed_at=NOW,
+        )
+        verifier = FakeVerifier(
+            on_verify=lambda: setattr(registry, "registration", registry_changed)
+        )
+        result = self.verify(self.service(verifier, issuer_registry_port=registry))
+        self.assertEqual(result.status, RecoveryEvidenceVerificationStatus.DENIED)
+        self.assertIsNone(result.issuer_registry_revision)
+        self.assertEqual(registry.calls, 2)
+
+    def test_registry_revision_change_while_still_enabled_denies_stale_result(self):
+        registry = FakeIssuerRegistryPort()
+        registry_changed = RecoveryEvidenceIssuerRegistration(
+            issuer_id="trusted-source-1",
+            registry_revision=2,
+            enabled=True,
+            changed_at=NOW,
+        )
+        verifier = FakeVerifier(
+            on_verify=lambda: setattr(registry, "registration", registry_changed)
+        )
+        result = self.verify(self.service(verifier, issuer_registry_port=registry))
+        self.assertEqual(result.status, RecoveryEvidenceVerificationStatus.DENIED)
+        self.assertEqual(registry.calls, 2)
+
+    def test_registry_unavailable_on_post_verification_check_is_unavailable(self):
+        class FailsOnSecondRead(FakeIssuerRegistryPort):
+            def get_registration(self, issuer_id):
+                self.calls += 1
+                if self.calls == 2:
+                    raise RuntimeError("registry lost during verification")
+                return self.registration
+
+        registry = FailsOnSecondRead()
+        verifier = FakeVerifier()
+        result = self.verify(self.service(verifier, issuer_registry_port=registry))
+        self.assertEqual(result.status, RecoveryEvidenceVerificationStatus.UNAVAILABLE)
+        self.assertEqual(registry.calls, 2)
+        self.assertIsNone(result.issuer_registry_revision)
+
+    def test_verified_result_requires_registry_revision(self):
+        from atlas.application.recovery_evidence import RecoveryEvidenceVerification
+
+        with self.assertRaises(ContractError):
+            RecoveryEvidenceVerification(
+                RecoveryEvidenceVerificationStatus.VERIFIED,
+                "evidence-1",
+            )
 
     def test_trust_policy_source_failure_is_unavailable(self):
         verifier = FakeVerifier()
