@@ -20,6 +20,92 @@ class AuthorityChangeStatus(str, Enum):
     BLOCKED = "BLOCKED"
 
 
+class AuthorityChangeTargetKind(str, Enum):
+    """Canonical resource kinds supported by multi-authority operations."""
+
+    MEMORY = "memory"
+    MEMORY_VERSION = "memory_version"
+    IDENTITY = "identity"
+    PROJECT = "project"
+    ENVIRONMENT = "environment"
+    GRANT = "grant"
+    GRANT_RENEWAL = "grant_renewal"
+    CONSISTENCY = "consistency"
+
+
+@dataclass(frozen=True, slots=True)
+class AuthorityChangeTarget:
+    """One exact authority revision transition within a larger operation."""
+
+    authority_kind: AuthorityChangeTargetKind
+    authority_id: str
+    expected_revision: int
+    proposed_revision: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.authority_kind, AuthorityChangeTargetKind):
+            raise ContractError("authority_kind debe ser AuthorityChangeTargetKind")
+        _required(self.authority_id, "authority_id")
+        _positive(self.expected_revision, "expected_revision")
+        _positive(self.proposed_revision, "proposed_revision")
+        if self.proposed_revision != self.expected_revision + 1:
+            raise ContractError(
+                "proposed_revision debe ser expected_revision + 1"
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class MultiAuthorityChangeIntent:
+    """Immutable semantic intent that atomically claims multiple authorities."""
+
+    idempotency_key: str
+    consumer_id: str
+    action: str
+    actor_identity_id: str
+    owner_id: str
+    project_id: str | None
+    environment_id: str | None
+    targets: tuple[AuthorityChangeTarget, ...]
+    request_context_ref: str
+    requested_at: datetime
+
+    def __post_init__(self) -> None:
+        for field in (
+            "idempotency_key",
+            "consumer_id",
+            "action",
+            "actor_identity_id",
+            "owner_id",
+            "request_context_ref",
+        ):
+            _required(getattr(self, field), field)
+        if self.project_id is not None:
+            _required(self.project_id, "project_id")
+        if self.environment_id is not None:
+            _required(self.environment_id, "environment_id")
+        if not isinstance(self.targets, tuple) or len(self.targets) < 2:
+            raise ContractError("targets debe contener al menos dos objetivos")
+        if any(not isinstance(target, AuthorityChangeTarget) for target in self.targets):
+            raise ContractError("todos los targets deben ser AuthorityChangeTarget")
+        identities = [
+            (target.authority_kind.value, target.authority_id)
+            for target in self.targets
+        ]
+        if len(set(identities)) != len(identities):
+            raise ContractError("la intención no puede repetir objetivos")
+        canonical = tuple(
+            sorted(
+                self.targets,
+                key=lambda target: (
+                    target.authority_kind.value,
+                    target.authority_id,
+                ),
+            )
+        )
+        object.__setattr__(self, "targets", canonical)
+        _utc(self.requested_at, "requested_at")
+
+
 def _required(value: object, field: str) -> None:
     if not isinstance(value, str) or not value.strip():
         raise ContractError(f"{field} debe ser una cadena no vacía")
