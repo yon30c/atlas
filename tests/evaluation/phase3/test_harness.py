@@ -4,10 +4,24 @@ from .evaluator import evaluate
 from .policies import get_policy
 from .tool_simulator import record_proposals
 from .prompts import build_request
+from .ollama_client import EvaluationOllamaProvider
+from atlas.ports.llm import LLMMessage, LLMMessageRole, LLMRequest
 import json
 from pathlib import Path
 
 class HarnessTests(unittest.TestCase):
+    def test_evaluation_provider_disables_thinking_without_changing_runtime(self):
+        request = LLMRequest(
+            model="gemma4:e2b-it-q4_K_M",
+            messages=(LLMMessage(LLMMessageRole.USER, "Responde OK"),),
+            temperature=0.2,
+            max_tokens=512,
+        )
+        payload = EvaluationOllamaProvider._payload(request, stream=False)
+        self.assertIs(payload["think"], False)
+        self.assertEqual(payload["options"]["num_predict"], 512)
+        self.assertIs(payload["stream"], False)
+
     def test_policy_languages_are_distinct_and_hashed(self):
         es, en = get_policy("es"), get_policy("en")
         self.assertNotEqual(es.sha256, en.sha256)
