@@ -538,4 +538,4 @@ Una segunda prueba ejecuta dos admisiones exactas simultáneas desde conexiones 
 
 **Límite:** estas pruebas demuestran serialización local SQLite para la admisión y el cambio del inventario. No convierten el recibo en un fence para efectos posteriores, no prueban coordinación distribuida y no habilitan recuperación ni runtime.
 
-**Estado:** implementado en la rama; suite local completa pendiente.
+**Estado: VALIDADO por el propietario; suite completa: 1133 tests en 9.225 s, todos OK.**
