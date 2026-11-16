@@ -1439,8 +1439,54 @@ CORE_SCHEMA_V15 = SQLiteMigration(
     """,
 )
 
+
+
+# v16 stores the authoritative inventory of recovery-evidence issuers as
+# append-only revisioned snapshots. Registration is separate from trust policy:
+# an inventory entry never authenticates an issuer or grants evidence trust.
+CORE_SCHEMA_V16 = SQLiteMigration(
+    version=16,
+    name="immutable_recovery_evidence_issuer_registry",
+    sql="""
+    CREATE TABLE recovery_evidence_issuer_registry (
+        issuer_id TEXT NOT NULL CHECK (length(trim(issuer_id)) > 0),
+        registry_revision INTEGER NOT NULL CHECK (registry_revision > 0),
+        enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+        changed_at TEXT NOT NULL CHECK (length(trim(changed_at)) > 0),
+        PRIMARY KEY (issuer_id, registry_revision)
+    );
+
+    CREATE INDEX recovery_evidence_issuer_registry_current
+        ON recovery_evidence_issuer_registry(issuer_id, registry_revision DESC);
+
+    CREATE TRIGGER recovery_evidence_issuer_registry_revision_sequential
+    BEFORE INSERT ON recovery_evidence_issuer_registry
+    WHEN NEW.registry_revision != COALESCE(
+        (SELECT MAX(registry_revision) + 1
+         FROM recovery_evidence_issuer_registry
+         WHERE issuer_id = NEW.issuer_id),
+        1
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'issuer registry revision must increase by exactly one');
+    END;
+
+    CREATE TRIGGER recovery_evidence_issuer_registry_no_update
+    BEFORE UPDATE ON recovery_evidence_issuer_registry
+    BEGIN
+        SELECT RAISE(ABORT, 'issuer registry history is immutable');
+    END;
+
+    CREATE TRIGGER recovery_evidence_issuer_registry_no_delete
+    BEFORE DELETE ON recovery_evidence_issuer_registry
+    BEGIN
+        SELECT RAISE(ABORT, 'issuer registry history is retained');
+    END;
+    """,
+)
+
 SQLITE_MIGRATIONS = (
     CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
     CORE_SCHEMA_V5, CORE_SCHEMA_V6, CORE_SCHEMA_V7, CORE_SCHEMA_V8,
-    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13, CORE_SCHEMA_V14, CORE_SCHEMA_V15,
+    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13, CORE_SCHEMA_V14, CORE_SCHEMA_V15, CORE_SCHEMA_V16,
 )
