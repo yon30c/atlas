@@ -1,5 +1,7 @@
 # Atlas Terminal
 
+> Estado consolidado del proyecto: [Estado vigente de Atlas](../status-current.md).
+
 > Estado: **Atlas Terminal funcional en la rama `feature/terminal-commands`**. Fases 1 y 2 implementadas en el alcance documentado; la suite local completa está aprobada.
 > Última validación automatizada: 16 de noviembre de 2026, commit `610f027f1fe91933278e431d8a9ec29dd291b96e`.
 > Alcance: experiencia conversacional local, con persistencia y administración de conversaciones. No equivale todavía al runtime autónomo completo de Atlas.
