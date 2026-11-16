@@ -18,6 +18,12 @@ from atlas.memory.authority_changes import (
     AuthorityChangeTargetKind,
     MultiAuthorityChangeIntent,
     MultiAuthorityRecoveryDisposition,
+    MultiAuthorityRecoveryAssessment,
+    MultiAuthorityRecoveryDecisionKind,
+    MultiAuthorityRecoveryEvidenceRequirement,
+    MultiAuthorityClaimAudit,
+    MultiAuthorityClaimAuditStatus,
+    recommend_multi_recovery_decision,
 )
 from atlas.memory.consistency import AuthorityKind
 
@@ -624,6 +630,140 @@ class SQLiteMultiAuthorityChangeStoreTests(unittest.TestCase):
         )
 
 
+
+
+
+
+class MultiAuthorityRecoveryDecisionContractTests(unittest.TestCase):
+    @staticmethod
+    def assessment(disposition):
+        status_by_disposition = {
+            MultiAuthorityRecoveryDisposition.NOT_STARTED: AuthorityChangeStatus.REQUESTED,
+            MultiAuthorityRecoveryDisposition.CLAIMED_BEFORE_INVALIDATION: AuthorityChangeStatus.REQUESTED,
+            MultiAuthorityRecoveryDisposition.INVALIDATION_OUTCOME_UNKNOWN: AuthorityChangeStatus.INVALIDATION_PENDING,
+            MultiAuthorityRecoveryDisposition.SOURCE_OUTCOME_UNKNOWN: AuthorityChangeStatus.SOURCE_PENDING,
+            MultiAuthorityRecoveryDisposition.SOURCE_CONFIRMATION_RECORDED: AuthorityChangeStatus.SOURCE_CONFIRMED,
+            MultiAuthorityRecoveryDisposition.RECONCILIATION_IN_PROGRESS: AuthorityChangeStatus.RECONCILING,
+            MultiAuthorityRecoveryDisposition.TERMINAL_CLAIMS_HELD: AuthorityChangeStatus.COMPLETED,
+            MultiAuthorityRecoveryDisposition.TERMINAL_RELEASED: AuthorityChangeStatus.COMPLETED,
+            MultiAuthorityRecoveryDisposition.INCONSISTENT: AuthorityChangeStatus.BLOCKED,
+        }
+        audit_status = (
+            MultiAuthorityClaimAuditStatus.INCONSISTENT
+            if disposition is MultiAuthorityRecoveryDisposition.INCONSISTENT
+            else MultiAuthorityClaimAuditStatus.UNCLAIMED
+        )
+        audit = MultiAuthorityClaimAudit(
+            operation_id="operation-recovery-contract",
+            operation_status=status_by_disposition[disposition],
+            audit_status=audit_status,
+            reserved_targets=(),
+            claimed_targets=(),
+        )
+        return MultiAuthorityRecoveryAssessment(
+            disposition=disposition,
+            claim_audit=audit,
+        )
+
+    def test_every_recovery_disposition_has_an_explicit_decision(self):
+        expected = {
+            MultiAuthorityRecoveryDisposition.NOT_STARTED:
+                MultiAuthorityRecoveryDecisionKind.NO_RECOVERY_ACTION,
+            MultiAuthorityRecoveryDisposition.CLAIMED_BEFORE_INVALIDATION:
+                MultiAuthorityRecoveryDecisionKind.REVALIDATE_AUTHORITY,
+            MultiAuthorityRecoveryDisposition.INVALIDATION_OUTCOME_UNKNOWN:
+                MultiAuthorityRecoveryDecisionKind.VERIFY_INVALIDATION_OUTCOME,
+            MultiAuthorityRecoveryDisposition.SOURCE_OUTCOME_UNKNOWN:
+                MultiAuthorityRecoveryDecisionKind.VERIFY_SOURCE_OUTCOME,
+            MultiAuthorityRecoveryDisposition.SOURCE_CONFIRMATION_RECORDED:
+                MultiAuthorityRecoveryDecisionKind.VERIFY_SOURCE_BEFORE_RECONCILIATION,
+            MultiAuthorityRecoveryDisposition.RECONCILIATION_IN_PROGRESS:
+                MultiAuthorityRecoveryDecisionKind.VERIFY_RECONCILIATION_STATE,
+            MultiAuthorityRecoveryDisposition.TERMINAL_CLAIMS_HELD:
+                MultiAuthorityRecoveryDecisionKind.VERIFY_TERMINAL_EVIDENCE_BEFORE_RELEASE,
+            MultiAuthorityRecoveryDisposition.TERMINAL_RELEASED:
+                MultiAuthorityRecoveryDecisionKind.NO_RECOVERY_ACTION,
+            MultiAuthorityRecoveryDisposition.INCONSISTENT:
+                MultiAuthorityRecoveryDecisionKind.MANUAL_INTERVENTION_REQUIRED,
+        }
+        for disposition, expected_decision in expected.items():
+            with self.subTest(disposition=disposition):
+                decision = recommend_multi_recovery_decision(
+                    self.assessment(disposition)
+                )
+                self.assertEqual(decision.disposition, disposition)
+                self.assertEqual(decision.decision, expected_decision)
+                self.assertEqual(decision.operation_id, "operation-recovery-contract")
+
+    def test_no_decision_permits_automatic_action(self):
+        for disposition in MultiAuthorityRecoveryDisposition:
+            with self.subTest(disposition=disposition):
+                decision = recommend_multi_recovery_decision(
+                    self.assessment(disposition)
+                )
+                self.assertFalse(decision.automatic_action_permitted)
+
+    def test_unknown_source_requires_independent_source_and_fencing_evidence(self):
+        decision = recommend_multi_recovery_decision(
+            self.assessment(MultiAuthorityRecoveryDisposition.SOURCE_OUTCOME_UNKNOWN)
+        )
+        self.assertIn(
+            MultiAuthorityRecoveryEvidenceRequirement.SOURCE_OUTCOME_RECEIPT,
+            decision.required_evidence,
+        )
+        self.assertIn(
+            MultiAuthorityRecoveryEvidenceRequirement.FENCING_STATE,
+            decision.required_evidence,
+        )
+        self.assertNotEqual(
+            decision.decision,
+            MultiAuthorityRecoveryDecisionKind.RETRY_SOURCE,
+        )
+
+    def test_terminal_claim_release_requires_authenticated_evidence(self):
+        decision = recommend_multi_recovery_decision(
+            self.assessment(MultiAuthorityRecoveryDisposition.TERMINAL_CLAIMS_HELD)
+        )
+        self.assertIn(
+            MultiAuthorityRecoveryEvidenceRequirement.AUTHENTICATED_TERMINAL_EVIDENCE,
+            decision.required_evidence,
+        )
+
+    def test_inconsistent_state_requires_human_review(self):
+        decision = recommend_multi_recovery_decision(
+            self.assessment(MultiAuthorityRecoveryDisposition.INCONSISTENT)
+        )
+        self.assertIn(
+            MultiAuthorityRecoveryEvidenceRequirement.HUMAN_REVIEW,
+            decision.required_evidence,
+        )
+
+    def test_decision_contract_rejects_duplicate_or_untyped_evidence(self):
+        from atlas.memory.authority_changes import MultiAuthorityRecoveryDecision
+
+        with self.assertRaises(ContractError):
+            MultiAuthorityRecoveryDecision(
+                operation_id="operation-1",
+                disposition=MultiAuthorityRecoveryDisposition.SOURCE_OUTCOME_UNKNOWN,
+                decision=MultiAuthorityRecoveryDecisionKind.VERIFY_SOURCE_OUTCOME,
+                required_evidence=(
+                    MultiAuthorityRecoveryEvidenceRequirement.FENCING_STATE,
+                    MultiAuthorityRecoveryEvidenceRequirement.FENCING_STATE,
+                ),
+                reason_code="VERIFY_SOURCE",
+            )
+        with self.assertRaises(ContractError):
+            MultiAuthorityRecoveryDecision(
+                operation_id="operation-1",
+                disposition=MultiAuthorityRecoveryDisposition.SOURCE_OUTCOME_UNKNOWN,
+                decision=MultiAuthorityRecoveryDecisionKind.VERIFY_SOURCE_OUTCOME,
+                required_evidence=("SOURCE_OUTCOME_RECEIPT",),
+                reason_code="VERIFY_SOURCE",
+            )
+
+    def test_recommendation_rejects_untyped_assessment(self):
+        with self.assertRaises(ContractError):
+            recommend_multi_recovery_decision(object())
 
 
 if __name__ == "__main__":
