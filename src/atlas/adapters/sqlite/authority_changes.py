@@ -9,9 +9,11 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import sqlite3
+from contextlib import contextmanager
+from typing import Iterator
 from uuid import uuid4
 
-from atlas.adapters.sqlite.database import SQLiteDatabase
+from atlas.adapters.sqlite.database import SQLiteDatabase, SQLiteUnitOfWork
 from atlas.core.errors import ContractError
 from atlas.memory.authority_changes import (
     AuthorityChangeIntent,
@@ -137,10 +139,34 @@ class SQLiteAuthorityChangeStore:
     generic control-plane metadata and does not import consumer authority models.
     """
 
-    def __init__(self, database: SQLiteDatabase) -> None:
+    def __init__(
+        self,
+        database: SQLiteDatabase,
+        *,
+        unit_of_work: SQLiteUnitOfWork | None = None,
+    ) -> None:
         if not isinstance(database, SQLiteDatabase):
             raise ContractError("database debe ser SQLiteDatabase")
+        if unit_of_work is not None and not isinstance(unit_of_work, SQLiteUnitOfWork):
+            raise ContractError("unit_of_work debe ser SQLiteUnitOfWork")
         self._database = database
+        self._unit_of_work = unit_of_work
+
+    @contextmanager
+    def _read_connection(self) -> Iterator[sqlite3.Connection]:
+        if self._unit_of_work is not None:
+            yield self._unit_of_work._connection_for(self._database)
+        else:
+            with self._read_connection() as connection:
+                yield connection
+
+    @contextmanager
+    def _write_connection(self) -> Iterator[sqlite3.Connection]:
+        if self._unit_of_work is not None:
+            yield self._unit_of_work._connection_for(self._database)
+        else:
+            with self._database.unit_of_work() as unit:
+                yield unit._connection_for(self._database)
 
     @staticmethod
     def _reservation(row: sqlite3.Row) -> AuthorityChangeReservation:
@@ -215,8 +241,7 @@ class SQLiteAuthorityChangeStore:
         requested_at = _utc_text(intent.requested_at)
         now = _utc_text(datetime.now(timezone.utc))
 
-        with self._database.unit_of_work() as unit:
-            connection = unit._connection_for(self._database)
+        with self._write_connection() as connection:
             existing = connection.execute(
                 """
                 SELECT i.intent_digest, i.intent_canonical, i.operation_id
