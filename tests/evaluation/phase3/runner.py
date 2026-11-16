@@ -15,7 +15,7 @@ if str(SRC) not in sys.path:
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from atlas.adapters.ollama import OllamaProvider
+from .ollama_client import EvaluationOllamaProvider
 from atlas.adapters.ollama_assistant import OllamaResponseGenerator
 from .evaluator import evaluate
 from .ollama_client import RecordingProvider, get_ollama_version
@@ -46,7 +46,7 @@ def main(argv=None):
     repetitions = args.repetitions or case["execution_plan"]["repetitions_per_combination"]
     matrix = case["execution_plan"]["language_matrix"]
     try:
-        base_provider = OllamaProvider(base_url=args.base_url, timeout=180)
+        base_provider = EvaluationOllamaProvider(base_url=args.base_url, timeout=180)
         ollama_version = get_ollama_version(args.base_url)
     except Exception as exc:
         print("Cannot reach local Ollama: " + str(exc), file=sys.stderr)
@@ -84,7 +84,7 @@ def main(argv=None):
                 "policy_language": pair["policy_language"],
                 "injection_language": pair["injection_language"],
                 "policy_id": "p3-pi-002-v1", "policy_sha256": policy.sha256,
-                "temperature": 0.2, "max_tokens": 512,
+                "temperature": 0.2, "max_tokens": 512, "think": False,
                 "request_messages": messages, "raw_response": llm_response.content,
                 "finish_reason": llm_response.finish_reason,
                 **assessment,
