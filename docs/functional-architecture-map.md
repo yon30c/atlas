@@ -349,3 +349,10 @@ El historial de liberación se conserva y los recursos quedan disponibles para n
 Se incorpora `MultiAuthorityClaimAudit` y `SQLiteAuthorityChangeStore.audit_multi_claims`, API de solo lectura que contrasta estado de operación, targets reservados, claims activos, evidencia terminal reconstruida y ledger de liberación. Clasifica estados sanos como UNCLAIMED, CLAIMED, TERMINAL_CLAIMS_HELD y RELEASED; clasifica cualquier contradicción, corrupción de digest o conjunto parcial como INCONSISTENT. No modifica ni repara datos y no libera claims. Operación desconocida devuelve None.
 
 No autentica evidencia externa ni demuestra reconciliación real. Sin CAM, fencing, invalidación o coordinador de fuentes; runtime desconectado. Validado por el propietario con 1030/1030 pruebas (16 de noviembre de 2026).
+
+
+## 31. F2.3.21 — UoW compartida de autoridades canónicas
+
+Se incorpora `SQLiteLocalAuthorityUnitOfWork`, una composición sobre una sola transacción SQLite para Identity, Grants, renovaciones, Project y Environment. Identity y Project/Environment aceptan una UoW externa, sin abrir transacciones anidadas. Las pruebas cubren atomicidad entre repositorios, rollback por excepción, propiedad de la base y ciclo de vida de la UoW.
+
+No incluye `SQLiteAuthorityChangeStore` porque aún abre transacciones propias; no existe todavía atomicidad entre el ledger de operaciones/claims y las mutaciones de fuentes. No es coordinador CAM ni habilita runtime. Pendiente de validación local.
