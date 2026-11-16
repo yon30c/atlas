@@ -343,3 +343,12 @@ Se añade una API de auditoría de solo lectura que clasifica una operación com
 **Límite:** clasificación local, no prueba de reconciliación externa ni autenticidad. No conecta CAM ni runtime.
 
 **Estado:** validado por el propietario con 1030/1030 pruebas (16 de noviembre de 2026).
+
+
+### F2.3.21 — Frontera UoW compartida para autoridades canónicas
+
+Se habilita que Identity y Project/Environment acepten una `SQLiteUnitOfWork` externa exacta. Se añade `SQLiteLocalAuthorityUnitOfWork`, que compone sobre la misma transacción Identity, Grants, solicitudes de renovación, Project y Environment. La fábrica exige una única `SQLiteDatabase`; los repositorios verifican propiedad/actividad de la UoW al usarla. La suite nueva prueba commit conjunto, rollback cruzado, rechazo de UoW de otra base y rechazo de uso después de cerrar la transacción.
+
+**Límite:** esto es composición transaccional de persistencia, no coordinador de consistencia. `SQLiteAuthorityChangeStore` todavía opera sus propias UoW y no está incluido. No se han añadido CAM, invalidación, fencing, admisión ni mutaciones coordinadas. Runtime desconectado.
+
+**Estado:** implementación publicada; pendiente de validación local.
