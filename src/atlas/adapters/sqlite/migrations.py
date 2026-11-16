@@ -910,8 +910,117 @@ CORE_SCHEMA_V9 = SQLiteMigration(
     """,
 )
 
+
+# v10 stores multi-authority operation identity and its complete target set.
+# It is separate from the legacy single-authority ledger to preserve its
+# NOT NULL contract and historical rows without synthetic placeholder targets.
+CORE_SCHEMA_V10 = SQLiteMigration(
+    version=10,
+    name="durable_multi_authority_change_reservations",
+    sql="""
+    CREATE TABLE multi_authority_change_operations (
+        operation_id TEXT PRIMARY KEY CHECK (length(trim(operation_id)) > 0),
+        consumer_id TEXT NOT NULL CHECK (length(trim(consumer_id)) > 0),
+        action TEXT NOT NULL CHECK (length(trim(action)) > 0),
+        actor_identity_id TEXT NOT NULL CHECK (length(trim(actor_identity_id)) > 0),
+        owner_id TEXT NOT NULL CHECK (length(trim(owner_id)) > 0),
+        project_id TEXT,
+        environment_id TEXT,
+        request_context_ref TEXT NOT NULL CHECK (length(trim(request_context_ref)) > 0),
+        requested_at TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (
+            status IN (
+                'REQUESTED', 'INVALIDATION_PENDING', 'SOURCE_PENDING',
+                'SOURCE_CONFIRMED', 'RECONCILING', 'COMPLETED',
+                'ABORTED', 'BLOCKED'
+            )
+        ),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE multi_authority_change_idempotency (
+        consumer_id TEXT NOT NULL CHECK (length(trim(consumer_id)) > 0),
+        idempotency_key TEXT NOT NULL CHECK (length(trim(idempotency_key)) > 0),
+        operation_id TEXT NOT NULL UNIQUE,
+        intent_digest TEXT NOT NULL CHECK (length(intent_digest) = 64),
+        intent_canonical BLOB NOT NULL CHECK (length(intent_canonical) > 0),
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (consumer_id, idempotency_key),
+        FOREIGN KEY (operation_id)
+            REFERENCES multi_authority_change_operations(operation_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE TABLE multi_authority_change_targets (
+        operation_id TEXT NOT NULL,
+        authority_kind TEXT NOT NULL CHECK (
+            authority_kind IN (
+                'memory', 'memory_version', 'identity', 'project',
+                'environment', 'grant', 'grant_renewal', 'consistency'
+            )
+        ),
+        authority_id TEXT NOT NULL CHECK (length(trim(authority_id)) > 0),
+        expected_revision INTEGER NOT NULL CHECK (expected_revision > 0),
+        proposed_revision INTEGER NOT NULL CHECK (
+            proposed_revision = expected_revision + 1
+        ),
+        PRIMARY KEY (operation_id, authority_kind, authority_id),
+        FOREIGN KEY (operation_id)
+            REFERENCES multi_authority_change_operations(operation_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE INDEX multi_authority_change_targets_resource
+        ON multi_authority_change_targets(authority_kind, authority_id);
+
+    CREATE TRIGGER multi_authority_change_operation_identity_immutable
+    BEFORE UPDATE OF operation_id, consumer_id, action, actor_identity_id,
+                     owner_id, project_id, environment_id, request_context_ref,
+                     requested_at
+    ON multi_authority_change_operations
+    WHEN NEW.operation_id != OLD.operation_id
+      OR NEW.consumer_id != OLD.consumer_id
+      OR NEW.action != OLD.action
+      OR NEW.actor_identity_id != OLD.actor_identity_id
+      OR NEW.owner_id != OLD.owner_id
+      OR NEW.project_id IS NOT OLD.project_id
+      OR NEW.environment_id IS NOT OLD.environment_id
+      OR NEW.request_context_ref != OLD.request_context_ref
+      OR NEW.requested_at != OLD.requested_at
+    BEGIN
+        SELECT RAISE(ABORT, 'Multi-authority operation identity is immutable');
+    END;
+
+    CREATE TRIGGER multi_authority_change_targets_no_update
+    BEFORE UPDATE ON multi_authority_change_targets
+    BEGIN
+        SELECT RAISE(ABORT, 'Multi-authority targets are immutable');
+    END;
+
+    CREATE TRIGGER multi_authority_change_targets_no_delete
+    BEFORE DELETE ON multi_authority_change_targets
+    BEGIN
+        SELECT RAISE(ABORT, 'Multi-authority targets are retained');
+    END;
+
+    CREATE TRIGGER multi_authority_change_idempotency_no_update
+    BEFORE UPDATE ON multi_authority_change_idempotency
+    BEGIN
+        SELECT RAISE(ABORT, 'Multi-authority idempotency binding is immutable');
+    END;
+
+    CREATE TRIGGER multi_authority_change_idempotency_no_delete
+    BEFORE DELETE ON multi_authority_change_idempotency
+    BEGIN
+        SELECT RAISE(ABORT, 'Multi-authority idempotency is retained');
+    END;
+    """,
+)
+
+
 SQLITE_MIGRATIONS = (
     CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
     CORE_SCHEMA_V5, CORE_SCHEMA_V6, CORE_SCHEMA_V7, CORE_SCHEMA_V8,
-    CORE_SCHEMA_V9,
+    CORE_SCHEMA_V9, CORE_SCHEMA_V10,
 )
