@@ -450,3 +450,14 @@ El servicio realiza una segunda lectura del inventario después de que el verifi
 **Límite:** esto detecta cambios durante el intervalo de verificación, pero no cierra la ventana posterior al retorno. No es fencing ni una garantía de atomicidad en el punto de efecto. No se habilita recuperación ni runtime.
 
 **Estado:** implementado en la rama; pruebas locales pendientes.
+
+
+## F2.3.33 — Contrato de admisión de evidencia verificada
+
+Se incorporan un comando inmutable de admisión y un puerto transaccional. El comando se deriva exclusivamente de un resultado VERIFIED y liga admission_id, operation_id, evidence_id, issuer_id, issuer_registry_revision, evidence_kind y todos los targets/revisiones. Se prueban la procedencia VERIFIED, la identidad exacta de la evidencia, la coincidencia de operación/objetivos, la revisión positiva, UTC y canonicalización.
+
+El contrato del puerto exige que el futuro adaptador haga en una única frontera transaccional/fencing la comprobación de revisión vigente y emisor habilitado, el binding contra la operación/claims durables y la prevención de replay/reutilización. Una lectura puntual seguida de escritura separada no será conforme.
+
+**Fuera de alcance:** no se implementa todavía el adaptador SQLite, no hay registro durable de admisiones y el resultado nunca permite efectos. No se conecta runtime ni recuperación automática.
+
+**Estado:** implementado en la rama; pruebas locales pendientes.
