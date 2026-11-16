@@ -185,3 +185,20 @@ No se marcará F1–F5 como completada hasta ejecutar las pruebas en el entorno 
 **Pendiente para cerrar F0 con evidencia local:** comprobar que el checkout Debian está en el mismo commit/branch y ejecutar la suite de regresión antes de introducir cambios de código.
 
 **Estado actual:** F1.1–F1.5 están implementadas y el propietario validó Gemma real más 886/886 pruebas. F2.1 añade el contrato y adaptador local `workspace.list`; la validación local está pendiente. Ninguna de estas capacidades está conectada todavía a `cli.py` ni al runtime conversacional.
+
+
+## 9. Frontera de autorización y revisión (F2.3)
+
+Documento de diseño: [F2.3 — Frontera de autorización, revisión y ejecución](design/assistant-workspace-execution-boundary.md).
+
+La inspección de los contratos existentes identificó que:
+
+- `AuthorizationEvaluator` evalúa Grants y produce `AuthorizationEvaluation`, que es interno y no constituye autorización pública.
+- `AuthorizationPort` devuelve `AuthorizationResult`, cuyo `ALLOW` exige un `AuthorizationSnapshot` específico de Memory.
+- `MemoryAuthorizationService` no es un autorizador de operaciones workspace.
+- No existe un Approval Manager general conectado al flujo funcional.
+- `OperationContext` permite proyecto y entorno ausentes; una operación protegida debe resolverlos confiablemente y fallar cerrado si son obligatorios.
+
+Por tanto, la composición futura debe separar revisión de intención, autorización CAM y aprobación humana. La confirmación de revisión no concede permisos; una aprobación no convierte DENY en ALLOW; la autorización se revalida antes de ejecutar. El siguiente incremento diseñará el contrato genérico de evidencia CAM sin conectar aún consola ni runtime.
+
+**Estado:** F2.1 validada (893 pruebas en ese punto); F2.2 validada por el propietario con 900/900 pruebas; F2.3 diseño documentado, sin implementación de autorización, aprobación o ejecución.
