@@ -59,12 +59,14 @@ class ConversationDeletionTests(unittest.TestCase):
             "respuesta conservada",
         )
 
+        persisted = self.repository.get(conversation.conversation_id)
+
         with self.assertRaises(NotFoundError):
             self.repository.delete("conversation-does-not-exist")
 
         self.assertEqual(
             self.repository.get(conversation.conversation_id),
-            conversation,
+            persisted,
         )
         self.assertEqual(
             [message.content for message in self.repository.get_history(conversation.conversation_id)],
@@ -93,12 +95,14 @@ class ConversationDeletionTests(unittest.TestCase):
                 """
             )
 
+        persisted = self.repository.get(conversation.conversation_id)
+
         with self.assertRaisesRegex(sqlite3.IntegrityError, "injected conversation delete failure"):
             self.repository.delete(conversation.conversation_id)
 
         self.assertEqual(
             self.repository.get(conversation.conversation_id),
-            conversation,
+            persisted,
         )
         self.assertEqual(
             [message.content for message in self.repository.get_history(conversation.conversation_id)],
