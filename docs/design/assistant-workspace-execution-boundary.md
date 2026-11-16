@@ -156,3 +156,23 @@ Ahora los claims declaran las revisiones de:
 Las pruebas comprueban que las dos revisiones nuevas sean positivas, enteras y no booleanas. Los verificadores confiables deberán comparar estos valores con las fuentes canónicas actuales.
 
 **Límite:** esta ampliación no demuestra que las revisiones estén actuales ni elimina carreras concurrentes. El adaptador de verificación y la garantía de fencing siguen pendientes.
+
+
+## 13. F2.3.3b — Inspección de consistencia y decisión de integración
+
+La suite local reportada por el propietario valida F2.3.3a con 925/925 pruebas.
+
+La inspección de la rama confirma que existen piezas reutilizables, pero todavía no una autoridad única operativa que permita implementar de forma honesta un verificador genérico de operaciones:
+
+- `RevisionValidationPort` y `RevisionValidationResult` están ligados a `AuthorizationSnapshot` de Memory, `AuthorizationRevisionSet` y `ConsistencyPosition`. Su contrato exige invalidation-first y revalidación del head dentro de la misma `SQLiteUnitOfWork`, pero no existe adaptador que demuestre esa garantía. No se reutilizarán como si fueran un verificador genérico de workspace.
+- `GrantRepository` ofrece `get/create/update/list_by_owner`; no impone por sí mismo invalidación durable ni fencing alrededor de cambios.
+- `SQLiteIdentityAuthority` proporciona CAS de revisión para estado de identidad en SQLite, pero declara explícitamente que no implementa autorización, recuperación ni coordinación de invalidación.
+- `AuthorityChangeCoordinatorPort` define la coordinación de invalidación/fencing/cambio/reconciliación, pero no se encontró implementación concreta en esta rama.
+- `SQLiteAuthorityChangeStore` persiste reservas e idempotencia. Su propio contrato excluye calcular admisiones, aplicar fencing, mutar fuentes y reconciliar; no implementa el coordinador.
+- `GrantRevocation` ya define una orquestación de revocación con prueba one-shot y coordinador inyectado, pero no demuestra que la composición durable completa esté disponible para validar toda operación de lectura.
+
+**Decisión:** no crear un adaptador que combine lecturas puntuales de identidad, Grant, proyecto y entorno y las presente como autorización segura. Tampoco reutilizar el Recovery Gate o la autoridad de Memory por conveniencia: sus contratos actuales son específicos y la implementación durable está incompleta.
+
+**Siguiente incremento recomendado:** definir una frontera común de admisión/validación de operaciones que esté ligada a una posición de consistencia y que se ejecute dentro de la misma UoW que el coordinador autoritativo. Antes de implementar ese adaptador, debe cerrarse la implementación real del coordinador de invalidación/fencing o limitar explícitamente la prueba a un perfil local sin efectos y sin afirmar garantías de revocación concurrente.
+
+No se ha creado adaptador, no se ha conectado el verificador a SQLite y no se ha habilitado ejecución.
