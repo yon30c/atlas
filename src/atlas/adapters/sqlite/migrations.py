@@ -1485,6 +1485,98 @@ CORE_SCHEMA_V16 = SQLiteMigration(
     """,
 )
 
+
+# v17 stores one-time admission receipts bound to exact evidence, issuer
+# inventory revision, operation and complete claimed target set. Admissions are
+# immutable evidence records and never grant permission to perform an effect.
+CORE_SCHEMA_V17 = SQLiteMigration(
+    version=17,
+    name="immutable_recovery_evidence_admissions",
+    sql="""
+    CREATE TABLE recovery_evidence_admissions (
+        admission_id TEXT PRIMARY KEY CHECK (length(trim(admission_id)) > 0),
+        evidence_id TEXT NOT NULL UNIQUE CHECK (length(trim(evidence_id)) > 0),
+        operation_id TEXT NOT NULL,
+        issuer_id TEXT NOT NULL CHECK (length(trim(issuer_id)) > 0),
+        issuer_registry_revision INTEGER NOT NULL CHECK (issuer_registry_revision > 0),
+        evidence_kind TEXT NOT NULL CHECK (length(trim(evidence_kind)) > 0),
+        target_count INTEGER NOT NULL CHECK (target_count >= 2),
+        command_digest TEXT NOT NULL CHECK (length(command_digest) = 64),
+        command_canonical BLOB NOT NULL CHECK (length(command_canonical) > 0),
+        requested_at TEXT NOT NULL CHECK (length(trim(requested_at)) > 0),
+        recorded_at TEXT NOT NULL CHECK (length(trim(recorded_at)) > 0),
+        FOREIGN KEY (operation_id)
+            REFERENCES multi_authority_change_operations(operation_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE INDEX recovery_evidence_admissions_operation
+        ON recovery_evidence_admissions(operation_id);
+
+    CREATE TRIGGER recovery_admission_requires_current_enabled_issuer
+    BEFORE INSERT ON recovery_evidence_admissions
+    WHEN NOT EXISTS (
+        SELECT 1 FROM recovery_evidence_issuer_registry AS r
+        WHERE r.issuer_id = NEW.issuer_id
+          AND r.registry_revision = NEW.issuer_registry_revision
+          AND r.enabled = 1
+          AND r.registry_revision = (
+              SELECT MAX(latest.registry_revision)
+              FROM recovery_evidence_issuer_registry AS latest
+              WHERE latest.issuer_id = NEW.issuer_id
+          )
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'recovery admission requires current enabled issuer revision');
+    END;
+
+    CREATE TRIGGER recovery_admission_requires_active_claimed_operation
+    BEFORE INSERT ON recovery_evidence_admissions
+    WHEN NOT EXISTS (
+        SELECT 1 FROM multi_authority_change_operations AS o
+        WHERE o.operation_id = NEW.operation_id
+          AND o.status IN (
+              'INVALIDATION_PENDING', 'SOURCE_PENDING',
+              'SOURCE_CONFIRMED', 'RECONCILING'
+          )
+    )
+    OR NEW.target_count != (
+        SELECT COUNT(*) FROM multi_authority_change_targets
+        WHERE operation_id = NEW.operation_id
+    )
+    OR NEW.target_count != (
+        SELECT COUNT(*) FROM multi_authority_change_claims
+        WHERE operation_id = NEW.operation_id
+    )
+    OR EXISTS (
+        SELECT 1
+        FROM multi_authority_change_targets AS t
+        LEFT JOIN multi_authority_change_claims AS c
+          ON c.operation_id = t.operation_id
+         AND c.authority_kind = t.authority_kind
+         AND c.authority_id = t.authority_id
+        WHERE t.operation_id = NEW.operation_id
+          AND c.operation_id IS NULL
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'recovery admission requires complete active operation claims');
+    END;
+
+    CREATE TRIGGER recovery_evidence_admissions_no_update
+    BEFORE UPDATE ON recovery_evidence_admissions
+    BEGIN
+        SELECT RAISE(ABORT, 'recovery evidence admissions are immutable');
+    END;
+
+    CREATE TRIGGER recovery_evidence_admissions_no_delete
+    BEFORE DELETE ON recovery_evidence_admissions
+    BEGIN
+        SELECT RAISE(ABORT, 'recovery evidence admissions are retained');
+    END;
+    """,
+)
+
+
 SQLITE_MIGRATIONS = (
     CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
     CORE_SCHEMA_V5, CORE_SCHEMA_V6, CORE_SCHEMA_V7, CORE_SCHEMA_V8,
