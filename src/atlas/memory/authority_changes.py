@@ -385,3 +385,58 @@ class AuthorityChangeTerminalEvidence:
         )
         return observed == expected
 
+
+
+class MultiAuthorityClaimAuditStatus(str, Enum):
+    """Read-only classification of durable multi-authority claim state."""
+
+    UNCLAIMED = "UNCLAIMED"
+    CLAIMED = "CLAIMED"
+    TERMINAL_CLAIMS_HELD = "TERMINAL_CLAIMS_HELD"
+    RELEASED = "RELEASED"
+    INCONSISTENT = "INCONSISTENT"
+
+
+@dataclass(frozen=True, slots=True)
+class MultiAuthorityClaimAudit:
+    """Read-only recovery snapshot; never authorizes mutation or claim release."""
+
+    operation_id: str
+    operation_status: AuthorityChangeStatus
+    audit_status: MultiAuthorityClaimAuditStatus
+    reserved_targets: tuple[AuthorityChangeTarget, ...]
+    claimed_targets: tuple[AuthorityChangeTarget, ...]
+    terminal_evidence: AuthorityChangeTerminalEvidence | None = None
+    release_digest: str | None = None
+
+    def __post_init__(self) -> None:
+        _required(self.operation_id, "operation_id")
+        if not isinstance(self.operation_status, AuthorityChangeStatus):
+            raise ContractError("operation_status debe ser AuthorityChangeStatus")
+        if not isinstance(self.audit_status, MultiAuthorityClaimAuditStatus):
+            raise ContractError(
+                "audit_status debe ser MultiAuthorityClaimAuditStatus"
+            )
+        if not isinstance(self.reserved_targets, tuple) or any(
+            not isinstance(item, AuthorityChangeTarget)
+            for item in self.reserved_targets
+        ):
+            raise ContractError("reserved_targets debe ser tuple de AuthorityChangeTarget")
+        if not isinstance(self.claimed_targets, tuple) or any(
+            not isinstance(item, AuthorityChangeTarget)
+            for item in self.claimed_targets
+        ):
+            raise ContractError("claimed_targets debe ser tuple de AuthorityChangeTarget")
+        if self.terminal_evidence is not None and not isinstance(
+            self.terminal_evidence, AuthorityChangeTerminalEvidence
+        ):
+            raise ContractError(
+                "terminal_evidence debe ser AuthorityChangeTerminalEvidence o None"
+            )
+        if self.release_digest is not None:
+            if (
+                not isinstance(self.release_digest, str)
+                or len(self.release_digest) != 64
+                or any(ch not in "0123456789abcdef" for ch in self.release_digest)
+            ):
+                raise ContractError("release_digest debe ser SHA-256 hexadecimal")
