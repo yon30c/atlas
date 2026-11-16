@@ -176,3 +176,12 @@ La inspección de la rama confirma que existen piezas reutilizables, pero todav�
 **Siguiente incremento recomendado:** definir una frontera común de admisión/validación de operaciones que esté ligada a una posición de consistencia y que se ejecute dentro de la misma UoW que el coordinador autoritativo. Antes de implementar ese adaptador, debe cerrarse la implementación real del coordinador de invalidación/fencing o limitar explícitamente la prueba a un perfil local sin efectos y sin afirmar garantías de revocación concurrente.
 
 No se ha creado adaptador, no se ha conectado el verificador a SQLite y no se ha habilitado ejecución.
+
+
+## 14. F2.3.4 — Frontera de consistencia común
+
+La decisión completa se registra en [assistant-operation-consistency-boundary.md](assistant-operation-consistency-boundary.md). La evidencia verificada no basta: hace falta una admisión exacta, ligada a una posición de consistencia y coordinada con invalidación/fencing.
+
+No se reutilizará `RevisionValidationPort` como verificador genérico: pertenece a Memory y su snapshot/posición tienen semántica específica. `SQLiteUnitOfWork` solo ofrece serialización suficiente si todas las fuentes relevantes participan en la misma base y transacción, sin caminos de mutación alternativos.
+
+El primer perfil propuesto es read-only (`workspace.list` y `workspace.read`). Escrituras y runtime siguen desconectados. F2.3.5 inspeccionará la persistencia y composición real de Identity, Grant, Project y Environment antes de implementar el coordinador.
