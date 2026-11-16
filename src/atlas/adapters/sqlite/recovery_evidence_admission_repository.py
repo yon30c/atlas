@@ -101,13 +101,50 @@ class SQLiteRecoveryEvidenceAdmissionRepository(RecoveryEvidenceAdmissionPort):
 
         issuer_revision = connection.execute(
             """
-            SELECT 1 FROM recovery_evidence_issuer_registry
+            SELECT enabled, changed_at
+            FROM recovery_evidence_issuer_registry
             WHERE issuer_id = ? AND registry_revision = ?
             """,
             (row["issuer_id"], row["issuer_registry_revision"]),
         ).fetchone()
         if issuer_revision is None:
             diagnostics.append("ISSUER_REVISION_NOT_FOUND")
+        else:
+            if issuer_revision["enabled"] != 1:
+                diagnostics.append("ISSUER_REVISION_DISABLED")
+            try:
+                admitted_at = datetime.fromisoformat(row["recorded_at"])
+                issuer_changed_at = datetime.fromisoformat(issuer_revision["changed_at"])
+                if (
+                    admitted_at.tzinfo is None
+                    or admitted_at.utcoffset() is None
+                    or issuer_changed_at.tzinfo is None
+                    or issuer_changed_at.utcoffset() is None
+                    or admitted_at.utcoffset().total_seconds() != 0
+                    or issuer_changed_at.utcoffset().total_seconds() != 0
+                ):
+                    diagnostics.append("INVALID_ISSUER_REVISION_TIMESTAMP")
+                elif issuer_changed_at > admitted_at:
+                    diagnostics.append("ISSUER_REVISION_AFTER_ADMISSION")
+                else:
+                    later_revision = connection.execute(
+                        """
+                        SELECT 1 FROM recovery_evidence_issuer_registry
+                        WHERE issuer_id = ?
+                          AND registry_revision > ?
+                          AND changed_at <= ?
+                        LIMIT 1
+                        """,
+                        (
+                            row["issuer_id"],
+                            row["issuer_registry_revision"],
+                            row["recorded_at"],
+                        ),
+                    ).fetchone()
+                    if later_revision is not None:
+                        diagnostics.append("ISSUER_REVISION_NOT_LATEST_AT_ADMISSION")
+            except (TypeError, ValueError, OverflowError):
+                diagnostics.append("INVALID_ISSUER_REVISION_TIMESTAMP")
 
         if payload is not None:
             expected = {
