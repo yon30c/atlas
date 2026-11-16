@@ -75,7 +75,7 @@ class SQLiteIdentityCompositionTests(unittest.TestCase):
             count = connection.execute(
                 "SELECT COUNT(*) AS count FROM schema_migrations"
             ).fetchone()["count"]
-        self.assertEqual(count, 6)
+        self.assertEqual(count, 7)
 
         user = first.authority.create_user()
         self.assertEqual(second.authority.get_user(user.user_id), user)
