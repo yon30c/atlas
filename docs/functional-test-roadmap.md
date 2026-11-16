@@ -293,7 +293,7 @@ Se documentó un contrato multiobjetivo para operaciones que mutan más de una f
 
 Añadidos `AuthorityChangeTargetKind`, `AuthorityChangeTarget` y `MultiAuthorityChangeIntent`. Distinguen Grant y Grant renewal, fijan cada transición de revisión en +1, exigen dos o más objetivos, canonicalizan el orden, rechazan duplicados y validan actor/owner/action/idempotency/context/UTC. Se añadieron pruebas unitarias de contratos.
 
-**Estado:** publicado; pendiente de validación local. Los modelos aún no están conectados al store, al CAM ni al coordinador.
+**Estado:** validado por el propietario con 1003/1003 pruebas. Los modelos aún no están conectados al CAM ni a un coordinador de fuentes.
 
 ### F2.3.15 — Persistencia SQLite de reservas multiobjetivo
 
@@ -313,4 +313,13 @@ Añadidos contratos inmutables para resultados terminales `COMPLETED` y `ABORTED
 
 Migración v11 añade claims con unicidad global por tipo/ID de autoridad. `SQLiteAuthorityChangeStore.acquire_multi_claims` reclama el conjunto completo dentro de `BEGIN IMMEDIATE`, rechaza operaciones ausentes/no solicitables, permite retry exacto y devuelve conflicto sin adquisición parcial si cualquier target ya está reclamado. Se añade lectura de claims y triggers de binding a targets `REQUESTED`, inmutabilidad y no eliminación. Pruebas cubren adquisición completa, retry, conflicto sin parcialidad, competición entre conexiones y restricciones SQL.
 
-**Límite deliberado:** los claims no se liberan todavía. Permanecen retenidos indefinidamente hasta que exista evidencia durable de reconciliación terminal y un protocolo de liberación del coordinador. Los estados inciertos/blocked conservan el bloqueo. Esto no equivale a CAM, invalidación/fencing, mutación coordinada de fuentes ni admisión. Pendiente de validación local.
+**Límite deliberado:** los claims no se liberan todavía. Permanecen retenidos hasta que exista evidencia durable y un protocolo de liberación verificada. Los estados inciertos/blocked conservan el bloqueo. Esto no equivale a CAM, invalidación/fencing, mutación coordinada de fuentes ni admisión. Validado por el propietario con 993/993 pruebas.
+
+
+### F2.3.18 — Persistencia atómica de evidencia terminal
+
+Migración SQLite v12 añade tablas inmutables para el recibo terminal y cada objetivo observado. record_multi_terminal_evidence exige operación conocida en RECONCILING, conjunto completo de claims y coincidencia exacta del recibo con la reserva. Inserta recibo + objetivos + transición a COMPLETED/ABORTED dentro de una única UoW. Replay exacto recupera el recibo original; un recibo diferente se rechaza. Triggers SQL impiden estado terminal sin evidencia y conjunto de objetivos completo, así como cambiar el estado terminal después. Claims permanecen retenidos.
+
+**Límite:** canonicalización/digest dan binding e idempotencia, no autenticidad ni verificación independiente de la evidencia externa. Sin CAM, fencing, invalidación, mutación de fuentes ni runtime.
+
+**Estado:** publicado; pendiente de validación local.
