@@ -1,7 +1,7 @@
 """SQLite integration tests for atomic recovery evidence admission."""
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -235,6 +235,64 @@ class SQLiteRecoveryEvidenceAdmissionTests(unittest.TestCase):
             self.assertEqual(report.healthy_count, 0)
             self.assertEqual(report.corrupt_count, 1)
 
+
+
+    def test_audit_accepts_issuer_change_effective_after_admission(self):
+        operation_id = self._prepare()
+        command = self._command(operation_id)
+        with SQLiteLocalAuthorityUnitOfWork(self.database) as uow:
+            uow.recovery_evidence_admissions.admit(command)
+            uow.commit()
+        with self.database.connection() as connection:
+            recorded_at = datetime.fromisoformat(
+                connection.execute(
+                    "SELECT recorded_at FROM recovery_evidence_admissions "
+                    "WHERE admission_id = ?",
+                    ("admission-1",),
+                ).fetchone()["recorded_at"]
+            )
+        with SQLiteLocalAuthorityUnitOfWork(self.database) as uow:
+            uow.recovery_evidence_issuer_registry.append(
+                RecoveryEvidenceIssuerRegistration(
+                    "issuer-1", 2, False, recorded_at + timedelta(seconds=1)
+                ),
+                expected_revision=1,
+            )
+            uow.commit()
+        with SQLiteLocalAuthorityUnitOfWork(self.database) as uow:
+            audit = uow.recovery_evidence_admissions.audit_admission("admission-1")
+        self.assertEqual(audit.status.value, "HEALTHY")
+        self.assertEqual(audit.diagnostic_codes, ())
+
+    def test_audit_detects_issuer_revision_backdated_before_admission(self):
+        operation_id = self._prepare()
+        command = self._command(operation_id)
+        with SQLiteLocalAuthorityUnitOfWork(self.database) as uow:
+            uow.recovery_evidence_admissions.admit(command)
+            uow.commit()
+        with self.database.connection() as connection:
+            recorded_at = datetime.fromisoformat(
+                connection.execute(
+                    "SELECT recorded_at FROM recovery_evidence_admissions "
+                    "WHERE admission_id = ?",
+                    ("admission-1",),
+                ).fetchone()["recorded_at"]
+            )
+        with SQLiteLocalAuthorityUnitOfWork(self.database) as uow:
+            uow.recovery_evidence_issuer_registry.append(
+                RecoveryEvidenceIssuerRegistration(
+                    "issuer-1", 2, False, recorded_at - timedelta(seconds=1)
+                ),
+                expected_revision=1,
+            )
+            uow.commit()
+        with SQLiteLocalAuthorityUnitOfWork(self.database) as uow:
+            audit = uow.recovery_evidence_admissions.audit_admission("admission-1")
+        self.assertEqual(audit.status.value, "CORRUPT")
+        self.assertIn(
+            "ISSUER_REVISION_NOT_LATEST_AT_ADMISSION",
+            audit.diagnostic_codes,
+        )
 
     def test_concurrent_admission_and_issuer_disable_are_serialized(self):
         operation_id = self._prepare()
