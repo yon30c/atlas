@@ -313,5 +313,108 @@ class SQLiteMultiAuthorityChangeStoreTests(unittest.TestCase):
                 )
 
 
+    def test_multi_claims_acquire_complete_target_set_and_exact_retry(self):
+        reservation = self.store.reserve_multi_change(self.intent())
+        self.assertTrue(self.store.acquire_multi_claims(reservation.operation_id))
+        self.assertEqual(
+            self.store.get_multi_claims(reservation.operation_id),
+            reservation.intent.targets,
+        )
+        self.assertTrue(self.store.acquire_multi_claims(reservation.operation_id))
+
+    def test_multi_claim_conflict_does_not_acquire_any_part_of_second_set(self):
+        first = self.store.reserve_multi_change(self.intent(key="claim-first"))
+        second_intent = MultiAuthorityChangeIntent(
+            idempotency_key="claim-second",
+            consumer_id="atlas-consumer",
+            action="grant.renewal.approve",
+            actor_identity_id="user-001",
+            owner_id="user-001",
+            project_id="project-001",
+            environment_id="development",
+            targets=(
+                AuthorityChangeTarget(AuthorityChangeTargetKind.GRANT, "grant-001", 4, 5),
+                AuthorityChangeTarget(AuthorityChangeTargetKind.GRANT_RENEWAL, "renewal-002", 2, 3),
+            ),
+            request_context_ref="request-002",
+            requested_at=NOW,
+        )
+        second = self.store.reserve_multi_change(second_intent)
+        self.assertTrue(self.store.acquire_multi_claims(first.operation_id))
+        self.assertFalse(self.store.acquire_multi_claims(second.operation_id))
+        self.assertEqual(
+            self.store.get_multi_claims(first.operation_id),
+            first.intent.targets,
+        )
+        self.assertEqual(self.store.get_multi_claims(second.operation_id), ())
+
+    def test_multi_claims_are_exclusive_under_competing_connections(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+
+        first = self.store.reserve_multi_change(self.intent(key="race-first"))
+        second_intent = MultiAuthorityChangeIntent(
+            idempotency_key="race-second",
+            consumer_id="atlas-consumer",
+            action="grant.renewal.approve",
+            actor_identity_id="user-001",
+            owner_id="user-001",
+            project_id="project-001",
+            environment_id="development",
+            targets=(
+                AuthorityChangeTarget(AuthorityChangeTargetKind.GRANT, "grant-001", 4, 5),
+                AuthorityChangeTarget(AuthorityChangeTargetKind.GRANT_RENEWAL, "renewal-003", 2, 3),
+            ),
+            request_context_ref="request-003",
+            requested_at=NOW,
+        )
+        second = self.store.reserve_multi_change(second_intent)
+        barrier = Barrier(2)
+
+        def acquire(operation_id):
+            barrier.wait(timeout=5)
+            return self.store.acquire_multi_claims(operation_id)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(
+                acquire, (first.operation_id, second.operation_id)
+            ))
+        self.assertEqual(sum(results), 1)
+        self.assertEqual(
+            sum(bool(self.store.get_multi_claims(item.operation_id))
+                for item in (first, second)),
+            1,
+        )
+
+    def test_multi_claims_cannot_be_updated_or_deleted(self):
+        reservation = self.store.reserve_multi_change(self.intent())
+        self.assertTrue(self.store.acquire_multi_claims(reservation.operation_id))
+        with self.database.connection() as connection:
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    """UPDATE multi_authority_change_claims
+                       SET acquired_at = 'changed' WHERE operation_id = ?""",
+                    (reservation.operation_id,),
+                )
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    "DELETE FROM multi_authority_change_claims WHERE operation_id = ?",
+                    (reservation.operation_id,),
+                )
+
+    def test_multi_claims_require_a_matching_requested_target(self):
+        reservation = self.store.reserve_multi_change(self.intent())
+        with self.assertRaises(sqlite3.IntegrityError):
+            with self.database.connection() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO multi_authority_change_claims (
+                        authority_kind, authority_id, operation_id, acquired_at
+                    ) VALUES ('grant', 'not-a-target', ?, '2026-11-16T00:00:00+00:00')
+                    """,
+                    (reservation.operation_id,),
+                )
+
+
 if __name__ == "__main__":
     unittest.main()
