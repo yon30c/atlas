@@ -157,7 +157,7 @@ class SQLiteAuthorityChangeStore:
         if self._unit_of_work is not None:
             yield self._unit_of_work._connection_for(self._database)
         else:
-            with self._database.connection() as connection:
+            with self._read_connection() as connection:
                 yield connection
 
     @contextmanager
@@ -375,8 +375,7 @@ class SQLiteAuthorityChangeStore:
         requested_at = _utc_text(intent.requested_at)
         now = _utc_text(datetime.now(timezone.utc))
 
-        with self._database.unit_of_work() as unit:
-            connection = unit._connection_for(self._database)
+        with self._write_connection() as connection:
             existing = connection.execute(
                 """
                 SELECT intent_digest, intent_canonical, operation_id
@@ -476,8 +475,7 @@ class SQLiteAuthorityChangeStore:
         if not isinstance(operation_id, str) or not operation_id.strip():
             raise ContractError("operation_id debe ser una cadena no vacía")
 
-        with self._database.unit_of_work() as unit:
-            connection = unit._connection_for(self._database)
+        with self._write_connection() as connection:
             operation = connection.execute(
                 """
                 SELECT status FROM multi_authority_change_operations
@@ -618,8 +616,7 @@ class SQLiteAuthorityChangeStore:
             )
         canonical = _canonical_terminal_evidence(evidence)
         digest = hashlib.sha256(canonical).hexdigest()
-        with self._database.unit_of_work() as unit:
-            connection = unit._connection_for(self._database)
+        with self._write_connection() as connection:
             existing = connection.execute(
                 """
                 SELECT * FROM multi_authority_change_terminal_evidence
@@ -749,7 +746,7 @@ class SQLiteAuthorityChangeStore:
     ) -> AuthorityChangeTerminalEvidence | None:
         if not isinstance(operation_id, str) or not operation_id.strip():
             raise ContractError("operation_id debe ser una cadena no vacía")
-        with self._database.connection() as connection:
+        with self._read_connection() as connection:
             row = connection.execute(
                 """
                 SELECT * FROM multi_authority_change_terminal_evidence
@@ -773,8 +770,7 @@ class SQLiteAuthorityChangeStore:
         if not isinstance(operation_id, str) or not operation_id.strip():
             raise ContractError("operation_id debe ser una cadena no vacía")
 
-        with self._database.unit_of_work() as unit:
-            connection = unit._connection_for(self._database)
+        with self._write_connection() as connection:
             operation = self._select_multi_operation(connection, operation_id)
             if operation is None:
                 return False
@@ -941,7 +937,7 @@ class SQLiteAuthorityChangeStore:
         """
         if not isinstance(operation_id, str) or not operation_id.strip():
             raise ContractError("operation_id debe ser una cadena no vacía")
-        with self._database.connection() as connection:
+        with self._read_connection() as connection:
             operation = self._select_multi_operation(connection, operation_id)
             if operation is None:
                 return None
@@ -1079,7 +1075,7 @@ class SQLiteAuthorityChangeStore:
         """Return the immutable target claims currently held by an operation."""
         if not isinstance(operation_id, str) or not operation_id.strip():
             raise ContractError("operation_id debe ser una cadena no vacía")
-        with self._database.connection() as connection:
+        with self._read_connection() as connection:
             rows = connection.execute(
                 """
                 SELECT t.authority_kind, t.authority_id,
@@ -1110,7 +1106,7 @@ class SQLiteAuthorityChangeStore:
     ) -> MultiAuthorityChangeReservation | None:
         if not isinstance(operation_id, str) or not operation_id.strip():
             raise ContractError("operation_id debe ser una cadena no vacía")
-        with self._database.connection() as connection:
+        with self._read_connection() as connection:
             row = self._select_multi_operation(connection, operation_id)
             return (
                 None if row is None
@@ -1127,7 +1123,7 @@ class SQLiteAuthorityChangeStore:
             or not isinstance(idempotency_key, str) or not idempotency_key.strip()
         ):
             raise ContractError("consumer_id e idempotency_key son obligatorios")
-        with self._database.connection() as connection:
+        with self._read_connection() as connection:
             row = connection.execute(
                 """
                 SELECT o.*, i.idempotency_key
@@ -1153,7 +1149,7 @@ class SQLiteAuthorityChangeStore:
             or not isinstance(idempotency_key, str) or not idempotency_key.strip()
         ):
             raise ContractError("consumer_id e idempotency_key son obligatorios")
-        with self._database.connection() as connection:
+        with self._read_connection() as connection:
             row = connection.execute(
                 """
                 SELECT o.*
@@ -1169,7 +1165,7 @@ class SQLiteAuthorityChangeStore:
     def get_result(self, operation_id: str) -> AuthorityChangeResult | None:
         if not isinstance(operation_id, str) or not operation_id.strip():
             raise ContractError("operation_id debe ser una cadena no vacía")
-        with self._database.connection() as connection:
+        with self._read_connection() as connection:
             row = connection.execute(
                 "SELECT * FROM authority_change_operations WHERE operation_id = ?",
                 (operation_id,),
@@ -1182,6 +1178,6 @@ class SQLiteAuthorityChangeStore:
     ) -> AuthorityChangeReservation | None:
         if not isinstance(operation_id, str) or not operation_id.strip():
             raise ContractError("operation_id debe ser una cadena no vacía")
-        with self._database.connection() as connection:
+        with self._read_connection() as connection:
             row = self._select_operation(connection, operation_id)
             return None if row is None else self._reservation(row)
