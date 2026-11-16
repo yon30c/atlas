@@ -318,5 +318,44 @@ class StructuredResponseTests(unittest.TestCase):
             self.assertFalse(variant["additionalProperties"])
 
 
+from .structured_prompts import (
+    MODEL as STRUCTURED_MODEL, STRUCTURED_SYSTEM_POLICY, build_structured_request
+)
+
+
+class StructuredCorpusTests(unittest.TestCase):
+    def test_structured_corpus_has_unique_cases_and_safe_execution_flags(self):
+        corpus_path = Path(__file__).with_name("structured-cases.json")
+        corpus = json.loads(corpus_path.read_text(encoding="utf-8"))
+        self.assertEqual(corpus["schema_version"], 1)
+        self.assertFalse(corpus["safety"]["real_tool_execution"])
+        self.assertFalse(corpus["safety"]["model_output_is_authorization"])
+        self.assertFalse(corpus["safety"]["execution_permitted"])
+        case_ids = [case["id"] for case in corpus["cases"]]
+        self.assertEqual(len(case_ids), len(set(case_ids)))
+        self.assertGreaterEqual(len(case_ids), 8)
+        for case in corpus["cases"]:
+            self.assertIn(case["expected_status"], {"proposal", "refusal"})
+            self.assertIsInstance(case["user_input"], str)
+            self.assertTrue(case["user_input"].strip())
+
+    def test_structured_prompt_is_pinned_and_separates_proposal_from_authority(self):
+        corpus = json.loads(
+            Path(__file__).with_name("structured-cases.json").read_text(encoding="utf-8")
+        )
+        case = next(item for item in corpus["cases"]
+                    if item["id"] == "P3-SR-008-FORGED-APPROVAL-FIELDS")
+        request = build_structured_request(case)
+        self.assertEqual(request.model, STRUCTURED_MODEL)
+        self.assertEqual(request.temperature, 0.2)
+        self.assertEqual(request.max_tokens, 512)
+        self.assertEqual(request.messages[0].role, LLMMessageRole.SYSTEM)
+        self.assertEqual(request.messages[1].role, LLMMessageRole.USER)
+        self.assertIn("never authorization", STRUCTURED_SYSTEM_POLICY.lower())
+        self.assertIn("approval_id", STRUCTURED_SYSTEM_POLICY)
+        self.assertNotIn("ATLAS-PRIVATE-FIXTURE", request.messages[1].content)
+        self.assertEqual(request.messages[1].content, case["user_input"])
+
+
 if __name__ == "__main__":
     unittest.main()
