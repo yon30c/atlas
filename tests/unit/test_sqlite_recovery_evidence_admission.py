@@ -84,6 +84,7 @@ class SQLiteRecoveryEvidenceAdmissionTests(unittest.TestCase):
                 AuthorityChangeStatus.REQUESTED,
                 AuthorityChangeStatus.INVALIDATION_PENDING,
             ))
+            uow.commit()
         return operation_id
 
     def _command(self, operation_id, **overrides):
