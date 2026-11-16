@@ -125,9 +125,11 @@ Se añadieron, sin modificar el contrato histórico de Memory:
 
 **Limitación deliberada:** los claims son datos estructurados, no una firma ni prueba de autenticidad. `matches()` y `is_current_at()` no comprueban emisor, revocación actual del Grant, revisión vigente de proyecto/entorno ni consumo de aprobación. El puerto todavía no tiene un adaptador de producción. No se ha conectado al runtime.
 
-## 10. Próximo paso
+## 10. Estado del Ciclo 1 y próximo paso
 
-Validar localmente los contratos de lectura y el catálogo. La implementación actual de `workspace.list` y `workspace.read` permanece desconectada del runtime. Antes de conectarla, completar la verificación de evidencia y su vinculación con el estado actual de Grant/identidad/proyecto/entorno, definir la interfaz de aprobación humana y el gate de aplicación con pruebas negativas suficientes.
+**Ciclo 1 de lectura validado por el propietario:** suite completa de 1,157 tests en 9.853 s, todos OK; `python -m compileall -q src tests` también pasó. `workspace.list` y `workspace.read` tienen adaptadores/servicios de lectura y catálogo declarativo, pero permanecen desconectados del runtime.
+
+El siguiente incremento funcional es el Ciclo 2: escritura controlada mediante staging, validación de destino, commit explícito y recuperación comprobable. La escritura no se conectará al runtime hasta que exista un gate de aplicación con autorización/consistencia adecuadas. La implementación de staging no debe interpretar una revisión del plan como permiso ni afirmar atomicidad entre SQLite y el sistema de archivos.
 
 
 ## 11. F2.3.2 — Servicio de verificación de evidencia
