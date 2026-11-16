@@ -377,3 +377,12 @@ La migración v14 y `transition_multi_status` imponen una máquina de estados fo
 El método `SQLiteAuthorityChangeStore.assess_multi_recovery` combina el estado del ledger con `audit_multi_claims` y devuelve una clasificación de solo lectura. Los estados intermedios ambiguos permanecen explícitamente desconocidos; no se interpretan como permiso para reintentar. La evaluación no altera el ledger ni los claims.
 
 **Estado: F2.3.24 VALIDADA.** Suite completa: 1054 tests OK.
+
+
+## 35. F2.3.25 — Contrato de decisión de recuperación
+
+recommend_multi_recovery_decision convierte una evaluación de recuperación en una recomendación declarativa vinculada al operation_id. El resultado incluye tipo de decisión, código de motivo y requisitos de evidencia independiente. Se separan explícitamente la revalidación de autoridad, la verificación de invalidación, la verificación del efecto en la fuente, la reconciliación, la revisión terminal y la intervención humana.
+
+La decisión expone automatic_action_permitted = False para todas las disposiciones. No ofrece acciones de retry, no cambia estado, no libera claims y no autentica evidencia. La implementación permanece fuera del runtime.
+
+**Estado:** implementación y pruebas publicadas; pendiente de validación local.
