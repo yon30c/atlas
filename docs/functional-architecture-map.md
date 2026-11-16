@@ -255,3 +255,15 @@ La evidencia CAM, incluso verificada, no es admisión ni permiso de ejecución. 
 El primer perfil posible es de solo lectura (`workspace.list`, `workspace.read`). Las escrituras quedan fuera hasta tener un protocolo durable que cubra staging, commit del filesystem y recuperación de resultados inciertos. No se ha creado adaptador ni conectado runtime.
 
 **Siguiente inspección:** matriz de Identity/Grant/Project/Environment → repositorio → base de datos → UoW → caminos de mutación.
+
+
+## 15. F2.3.5 — Inventario de persistencia CAM
+
+El inventario detallado está en [assistant-operation-consistency-boundary.md](design/assistant-operation-consistency-boundary.md). Hallazgos:
+
+- Identity: `compose_sqlite_identity(path)` crea su propia instancia SQLite; CAS directo de estado, sin invalidación común.
+- Grant: solo Protocol y UoW para Grant/renovaciones; no se encontró adaptador SQLite concreto. `issue` escribe directo; revoke depende de un coordinador inyectado no implementado.
+- Project/Environment: contratos de metadatos de Memory sin repositorios canónicos de producto encontrados.
+- Journal/authority changes: persistencia SQLite separada; no está compuesta con las cuatro autoridades.
+
+No existe UoW compartida ni coordinador concreto. El adaptador de verificación no debe implementarse hasta decidir si se construyen las fuentes canónicas locales y se migran sus mutaciones, o si CAM se aplaza para el perfil de lectura inicial.
