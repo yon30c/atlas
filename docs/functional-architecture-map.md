@@ -107,7 +107,7 @@ La rama incorpora contratos y adaptadores de lectura independientes del runtime 
 
 ## 3.3 Escritura controlada de workspace (Ciclo 2 F2)
 
-**Estado: implementado en GitHub; pendiente de validación local por el propietario.**
+**Estado: VALIDADO por el propietario; suite completa: 1,182 tests en 9.769 s, todos OK.**
 
 - `LocalWorkspaceWriteAdapter` mantiene payload y manifest bajo `.atlas-staging`, reservado y oculto a los servicios de lectura.
 - `stage_write` no modifica el destino. Exige un `operation_id` UUID, contenido UTF-8 limitado a 1 MiB y `expected_sha256` para actualizaciones.
