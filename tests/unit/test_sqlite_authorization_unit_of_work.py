@@ -7,6 +7,8 @@ import tempfile
 import unittest
 
 from atlas.adapters.sqlite.database import SQLiteDatabase
+from atlas.adapters.sqlite.grant_repository import SQLiteGrantRepository
+from atlas.adapters.sqlite.grant_renewal_repository import SQLiteGrantRenewalRepository
 from atlas.adapters.sqlite.authorization_unit_of_work import (
     SQLiteAuthorizationUnitOfWorkFactory,
 )
