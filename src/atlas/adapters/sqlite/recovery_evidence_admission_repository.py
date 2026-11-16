@@ -146,6 +146,27 @@ class SQLiteRecoveryEvidenceAdmissionRepository(RecoveryEvidenceAdmissionPort):
             except (TypeError, ValueError, OverflowError):
                 diagnostics.append("INVALID_ISSUER_REVISION_TIMESTAMP")
 
+        duplicate_evidence = connection.execute(
+            """
+            SELECT COUNT(*) AS total
+            FROM recovery_evidence_admissions
+            WHERE evidence_id = ?
+            """,
+            (row["evidence_id"],),
+        ).fetchone()
+        if duplicate_evidence["total"] > 1:
+            diagnostics.append("DUPLICATE_EVIDENCE_ID")
+
+        operation = connection.execute(
+            """
+            SELECT status FROM multi_authority_change_operations
+            WHERE operation_id = ?
+            """,
+            (row["operation_id"],),
+        ).fetchone()
+        if operation is None:
+            diagnostics.append("OPERATION_NOT_FOUND")
+
         if payload is not None:
             expected = {
                 "admission_id": row["admission_id"],
@@ -214,6 +235,51 @@ class SQLiteRecoveryEvidenceAdmissionRepository(RecoveryEvidenceAdmissionPort):
                 if supplied_targets != reserved_targets:
                     diagnostics.append("OPERATION_TARGET_MISMATCH")
 
+                claims = connection.execute(
+                    """
+                    SELECT authority_kind, authority_id
+                    FROM multi_authority_change_claims
+                    WHERE operation_id = ?
+                    ORDER BY authority_kind, authority_id
+                    """,
+                    (row["operation_id"],),
+                ).fetchall()
+                claimed_identities = tuple(
+                    (item["authority_kind"], item["authority_id"])
+                    for item in claims
+                )
+                reserved_identities = tuple(
+                    (item["authority_kind"], item["authority_id"])
+                    for item in reserved
+                )
+                if claimed_identities != reserved_identities:
+                    release = connection.execute(
+                        """
+                        SELECT 1 FROM multi_authority_change_claim_releases
+                        WHERE operation_id = ?
+                        """,
+                        (row["operation_id"],),
+                    ).fetchone()
+                    terminal_targets = connection.execute(
+                        """
+                        SELECT authority_kind, authority_id,
+                               expected_revision, proposed_revision
+                        FROM multi_authority_change_terminal_targets
+                        WHERE operation_id = ?
+                        ORDER BY authority_kind, authority_id
+                        """,
+                        (row["operation_id"],),
+                    ).fetchall()
+                    released_targets = tuple(
+                        (
+                            item["authority_kind"], item["authority_id"],
+                            item["expected_revision"], item["proposed_revision"],
+                        )
+                        for item in terminal_targets
+                    )
+                    if release is None or released_targets != reserved_targets:
+                        diagnostics.append("OPERATION_CLAIMS_MISMATCH")
+
         for field in ("requested_at", "recorded_at"):
             try:
                 parsed = datetime.fromisoformat(row[field])
@@ -259,7 +325,21 @@ class SQLiteRecoveryEvidenceAdmissionRepository(RecoveryEvidenceAdmissionPort):
             "SELECT * FROM recovery_evidence_admissions ORDER BY admission_id"
         ).fetchall()
         audits = tuple(self._audit_row(connection, row) for row in rows)
-        return RecoveryEvidenceAdmissionAuditReport(audits)
+        global_codes = tuple(sorted({
+            code
+            for audit in audits
+            for code in audit.diagnostic_codes
+            if code in {
+                "DUPLICATE_EVIDENCE_ID",
+                "OPERATION_NOT_FOUND",
+                "ISSUER_REVISION_NOT_FOUND",
+                "OPERATION_CLAIMS_MISMATCH",
+            }
+        }))
+        return RecoveryEvidenceAdmissionAuditReport(
+            audits,
+            global_diagnostic_codes=global_codes,
+        )
 
     def admit(
         self,
