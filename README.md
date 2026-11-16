@@ -342,19 +342,33 @@ Estos resultados corresponden a ejecuciones locales informadas para ese commit; 
 - [ME-D4O-I C.3 — coordinación de revocación de Grants](docs/design/me-d4o-i-c3-grant-revocation-coordination.md)
 - [ME-D4O-I C.4 — almacenamiento durable SQLite de cambios de autoridad](docs/design/me-d4o-i-c4-sqlite-durable-authority-store.md)
 - [README de Memory Engine: configuración local y estado](docs/memory-engine/README.md)
+- [Atlas Terminal: alcance y estado](docs/terminal/README.md)
+- [Roadmap de desarrollo Terminal-first](docs/terminal/roadmap.md)
 
-## Próximas fases recomendadas
+## Prioridad vigente: Atlas Terminal-first
 
-El orden recomendado evita conectar el Assistant a capacidades que aún no tienen persistencia y autoridad completas:
+A partir del 15 de noviembre de 2026, la prioridad inmediata es completar un prototipo funcional de **Atlas Terminal**. El trabajo se centrará primero en una experiencia conversacional local que pueda utilizarse y probarse de extremo a extremo, antes de ampliar la superficie de capacidades de Atlas.
 
-1. **Cerrar el núcleo durable de Memory Engine:** persistencia de dominio, repositorios, UoW y contratos de contenido.
-2. **Completar la autoridad protegida:** admisión, invalidación, fencing, egress y recuperación dentro de una única composición durable.
-3. **Completar Forget:** autorización directa del propietario, inventario exhaustivo, adaptadores de eliminación y verificación de todos los destinos.
-4. **Cerrar bootstrap y recuperación:** evidencia autenticada, reconciliación y anti-rollback para el perfil que lo requiera; mantener el Gate cerrado hasta entonces.
-5. **Demostrar independencia de Memory Engine:** contrato público, composición mínima y pruebas desde un consumidor externo a Atlas.
-6. **Integrar MemoryGateway con AtlasCore:** solo después de superar las fases anteriores.
-7. **Desarrollar Project/Environment Manager, Skills Manager, agentes y Scheduler.**
-8. **Completar aprobaciones, eventos, notificaciones, runtime de herramientas y recuperación integral de Atlas.**
+- **En curso como prioridad:** experiencia Terminal, gestión de conversaciones, evaluación del comportamiento del modelo y capacidades graduales del Assistant.
+- **Temporalmente pausado:** desarrollo de Atlas Desktop para Windows y API remota. Las decisiones aprobadas de Desktop se conservan; la pausa no las cancela ni autoriza a borrar sus ramas.
+- **No cancelado:** Memory Engine, Identity/CAM, Project/Environment Manager, Skills Manager, agentes, Scheduler, aprobaciones, eventos, notificaciones y recuperación. Se reordenará su continuidad después de validar Terminal.
+- **Protecciones mínimas vigentes:** Ollama continúa limitado a loopback; la consola no es un shell; no se concede acceso directo privilegiado a archivos, SQL, Docker o al host; el modelo no obtiene autoridad por generar texto o planes.
+
+La hoja de ruta detallada y los criterios de aceptación están en [Atlas Terminal](docs/terminal/README.md) y [Roadmap Terminal-first](docs/terminal/roadmap.md).
+
+### Próximas fases de desarrollo
+
+1. **Fase 1 — Experiencia Terminal:** comandos `/help`, `/clear` y `/exit`, streaming legible, estados de generación/error, manejo de EOF e interrupciones y pruebas de uso real.
+2. **Fase 2 — Gestión de conversaciones:** crear, listar y seleccionar conversaciones; persistencia local, límites, retención, eliminación y recuperación.
+3. **Fase 3 — Inteligencia y comportamiento:** evaluación reproducible de modelos, pruebas A/B de instrucciones en inglés y español, contexto, ambigüedad, incertidumbre y prompt injection.
+4. **Fase 4 — Capacidades del Assistant:** comprensión de intenciones, preparación de planes e integración gradual de herramientas bajo contratos y autorización externos al modelo.
+5. **Fase 5 — Consolidación:** pruebas de integración, recuperación, identidad, autorización, aislamiento, auditoría y revisión del siguiente alcance.
+
+Cada fase se trabaja de forma incremental: inspeccionar, definir un único cambio, implementar, probar, verificar manualmente, revisar regresiones y actualizar la documentación. No se declara una fase terminada por la existencia aislada de contratos o clases: se requiere comportamiento ejecutable y evidencia.
+
+### Secuencia posterior de la hoja de ruta general
+
+Una vez validada la prioridad Terminal, se revaluará y retomará el trabajo pendiente de Atlas. La secuencia arquitectónica de Memory Engine y los demás dominios no se elimina: queda subordinada a la nueva prioridad inmediata y a la disponibilidad real de sus fronteras durables y autorizadas.
 
 ## Alcance de este repositorio
 
