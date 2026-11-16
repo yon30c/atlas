@@ -559,3 +559,12 @@ La auditoría global amplía el control individual de cada recibo. Comprueba la 
 **Límites:** no repara datos, no vuelve a autenticar evidencia externa, no trata el estado actual de una operación como autorización y no concede autoridad para efectos ni recuperación. Los duplicados están normalmente bloqueados por las restricciones SQL; la auditoría sirve como detección adicional ante corrupción o manipulación de la base.
 
 **Estado: VALIDADO por el propietario; suite completa: 1136 tests en 9.985 s, todos OK.**
+## 49. F2.3.39 — Validación semántica de tipos persistidos
+
+La auditoría de admisiones valida de forma independiente que `evidence_kind` pertenezca a `MultiAuthorityRecoveryEvidenceKind` y que cada `authority_kind` de los objetivos pertenezca a `AuthorityChangeTargetKind`. Esta comprobación complementa la coincidencia entre columnas, payload canónico y reservas: una coincidencia entre valores desconocidos no se considera íntegra.
+
+Se añaden diagnósticos `INVALID_EVIDENCE_KIND` e `INVALID_AUTHORITY_KIND`, también agregados al informe global. Las pruebas fuerzan corrupción controlada ignorando restricciones SQLite y retirando triggers de inmutabilidad; la auditoría debe detectarla sin reparar los registros.
+
+**Límites:** no cambia la admisión, no modifica el esquema, no autentica evidencia externa y no habilita efectos ni recuperación/runtime.
+
+**Estado:** implementado en GitHub; pruebas locales pendientes.
