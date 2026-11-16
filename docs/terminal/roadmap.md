@@ -1,210 +1,139 @@
 # Hoja de ruta — Atlas Terminal-first
 
-> Prioridad aprobada para la siguiente etapa de desarrollo.
-> Registro: 15 de noviembre de 2026.
-> Las fases describen objetivos futuros; no implican que estén implementados.
+> Prioridad aprobada para la etapa actual de Atlas.
+> Última actualización: 16 de noviembre de 2026.
+> La hoja de ruta describe la evolución de un Atlas funcional; no reduce el producto a un prototipo ni afirma que todos los subsistemas de la visión estén terminados.
 
 ## Orden de trabajo
 
-| Fase | Objetivo | Resultado esperado |
+| Fase | Objetivo | Estado |
 |---|---|---|
-| 1 | Experiencia Terminal | Consola conversacional estable y utilizable |
-| 2 | Conversaciones | Contexto administrable y persistencia local |
-| 3 | Inteligencia | Comportamiento del modelo evaluado de forma reproducible |
+| 1 | Experiencia Terminal | Implementada y validada en el alcance actual |
+| 2 | Conversaciones | Implementada; suite local completa aprobada |
+| 3 | Inteligencia | Siguiente etapa: evaluación reproducible de modelos |
 | 4 | Capacidades del Assistant | Planificación y herramientas integradas gradualmente |
 | 5 | Consolidación | Integración, pruebas y preparación para ampliar el sistema |
 
-Las fases se ejecutan secuencialmente. No se inicia una fase nueva hasta validar los criterios de salida de la anterior, salvo que una corrección necesaria de la fase anterior lo requiera.
+Las fases 1 y 2 entregan una experiencia Terminal utilizable: Atlas inicia, conversa con Ollama cuando está disponible, conserva conversaciones en SQLite, administra su ciclo de vida y ofrece backup/restore/exportación. La aprobación de estas fases no significa que Atlas ya disponga de ejecución autónoma general.
 
 ## Fase 1 — Experiencia Terminal
 
-**Objetivo:** convertir la consola actual en una interfaz conversacional consistente.
+**Estado: implementada y validada en el alcance actual.**
 
-### Trabajo previsto
-
-1. Revisar el ciclo de vida de `run_console` y la composición de `cli.main`.
-2. Mejorar el formato de entrada/salida y la legibilidad de respuestas progresivas.
-3. Incorporar estados visibles de generación, finalización y error.
-4. Implementar `/help`, `/clear` y `/exit`, manteniendo compatibilidad razonable con los comandos de salida actuales. En la primera implementación, `/clear` limpia solo la pantalla y conserva el historial.
-5. Manejar entrada vacía, EOF, `Ctrl+C` e interrupciones sin dejar la interfaz en un estado confuso.
-6. Mantener el streaming existente y verificar que el texto parcial no se presente como respuesta exitosa si el proveedor falla.
-7. Actualizar documentación de uso y ejemplos.
-
-### Estado del primer incremento
-
-La rama `feature/terminal-commands` contiene una primera implementación de `/help`, `/clear`, `/exit` y manejo de `Ctrl+C`, con pruebas unitarias añadidas. La fase no se considera cerrada hasta ejecutar las pruebas en el entorno local, validar una sesión manual y revisar la regresión completa.
-
-### Criterios de salida
-
-- Inicio y salida funcionan de forma predecible.
-- Los tres comandos están documentados y probados.
-- Las respuestas se muestran progresivamente cuando el proveedor lo permite.
-- Los errores del proveedor se distinguen de las respuestas normales.
-- EOF e interrupciones tienen un comportamiento definido.
-- Las pruebas focalizadas y la suite completa pasan.
-- Se completa una sesión manual real con Ollama local y una sesión en modo offline.
-
-### No incluido
-
-Persistencia durable, gestor de conversaciones, ejecución de herramientas, API remota o interfaz gráfica.
+Incluye ciclo de consola, streaming cuando el proveedor lo permite, estados de respuesta, `/help`, `/clear`, `/exit`, alias de salida y manejo de EOF/interrupciones. `/clear` limpia únicamente la pantalla y conserva la conversación.
 
 ## Fase 2 — Gestión de conversaciones
 
-> **Estado actual: PENDIENTE DE VALIDACIÓN.** La implementación de las capacidades 2A–2G está en la rama `feature/terminal-commands`. La existencia de código y pruebas no equivale a aceptación: no se han ejecutado las pruebas automatizadas ni la validación manual integral. La fase 3 no comenzará hasta cerrar esta validación.
+**Estado: implementada; validación automatizada local aprobada el 16 de noviembre de 2026.**
 
-**Objetivo:** pasar del historial temporal de una sola sesión a conversaciones que el usuario pueda administrar.
+### Capacidades incluidas
 
-### Trabajo previsto
-
-1. Definir operaciones de crear, listar, seleccionar, renombrar y cerrar conversaciones.
-2. Definir el comportamiento exacto de limpiar pantalla frente a iniciar una conversación nueva.
-3. Diseñar persistencia local y versionado del esquema antes de implementarlos.
-4. Sustituir `InMemoryConversationHistory` por un adaptador durable detrás de `ConversationHistoryStore`.
-5. Mantener límites explícitos de tamaño, número de turnos y recuperación.
-6. Definir política de eliminación, exportación y respaldo antes de almacenar contenido conversacional de forma permanente.
-7. Añadir pruebas de reinicio del proceso, aislamiento entre conversaciones e integridad de datos.
-
-### Incrementos implementados en la rama `feature/terminal-commands`
-
-| Incremento | Alcance registrado | Estado |
+| Incremento | Alcance | Estado |
 |---|---|---|
-| 2A | Contratos y modelo de dominio de conversaciones; puertos de repositorio e historial | Implementado; pendiente de validación |
-| 2B | Persistencia SQLite aislada, migración propia, historial íntegro y consistencia temporal de metadatos | Implementado; pendiente de validación |
-| 2C | Proyección acotada al modelo: últimos 8 turnos y máximo 2.000 caracteres por mensaje histórico, sin truncar el almacenamiento | Implementado; pendiente de validación |
-| 2D | Conexión de SQLite al arranque, almacenamiento local privado y recuperación de la conversación activa | Implementado; pendiente de validación |
-| 2E | Gestión desde consola: crear, listar, seleccionar, renombrar, cerrar y eliminar con confirmación explícita | Implementado; pendiente de validación |
-| 2F | Respaldo cifrado, verificación de autenticidad/integridad y restauración a una ruta nueva | Implementado; pendiente de validación |
-| 2G | Exportación JSON individual, versionada, con historial completo y creación privada sin sobrescritura | Implementado; pendiente de validación |
+| 2A | Contratos, modelo de dominio y puertos de conversación | Implementado |
+| 2B | Persistencia SQLite aislada, migraciones e historial íntegro | Implementado |
+| 2C | Proyección acotada al modelo: 8 turnos y 2.000 caracteres por mensaje | Implementado |
+| 2D | Integración SQLite en el arranque y recuperación de conversación activa | Implementado |
+| 2E | Crear, listar, seleccionar, renombrar, cerrar y eliminar con confirmación | Implementado |
+| 2F | Backup cifrado, verificación y restauración a ruta nueva | Implementado |
+| 2G | Exportación JSON versionada, íntegra y sin sobrescritura | Implementado |
 
-La documentación operativa de comandos y políticas está en [`docs/conversations.md`](../conversations.md).
+### Evidencia automatizada
 
-### Plan obligatorio de validación antes de cerrar la fase
+En Debian, dentro del entorno virtual del proyecto:
 
-1. Ejecutar las pruebas unitarias focalizadas de dominio, contexto, repositorio SQLite, composición de consola, gestor, backup, restauración y exportación.
-2. Ejecutar la suite completa y resolver cualquier regresión.
-3. Verificar con una base temporal que una conversación y su historial sobreviven al cierre y reinicio del proceso.
-4. Comprobar aislamiento entre conversaciones y que el modelo recibe únicamente la proyección configurada, mientras el almacenamiento conserva el historial íntegro.
-5. Validar permisos del directorio, DB, respaldos, restauraciones y exportaciones; probar destinos existentes, rutas inválidas y enlaces simbólicos donde corresponda.
-6. Verificar operaciones de gestión, incluyendo errores, cierre, selección, eliminación confirmada y recuperación de la conversación activa.
-7. Crear un respaldo cifrado, verificarlo, restaurarlo en una ruta nueva y comprobar el historial restaurado.
-8. Exportar una conversación activa y otra cerrada; comprobar estructura, contenido, permisos y que no se sobrescriben destinos.
-9. Realizar una sesión manual real con Ollama local y otra en modo offline, incluyendo reinicio y recuperación.
-10. Registrar resultados, fallos corregidos y evidencia reproducible en esta hoja de ruta y en el registro de fase.
+- `python -m unittest tests.unit.test_conversation_deletion -v`: **6 pruebas aprobadas**.
+- `python -m unittest discover -s tests -v`: **844 pruebas aprobadas**, 0 fallos y 0 errores.
+- Las pruebas de eliminación usan bases SQLite temporales.
+- No se ejecutaron pruebas en GitHub Actions ni se usó CI como evidencia de aprobación.
 
-### Criterios de salida
+La suite completa fue ejecutada localmente por el usuario sobre el commit `610f027f1fe91933278e431d8a9ec29dd291b96e`.
 
-- Todos los puntos del plan de validación están ejecutados y documentados.
-- Una conversación puede recuperarse después de cerrar y volver a abrir Atlas.
-- El historial de una conversación no aparece en otra.
-- Las operaciones de gestión tienen comportamiento y errores definidos.
-- Los límites y la política de retención están documentados.
-- Migraciones, integridad, permisos, exportación, respaldo y recuperación están probados con bases y rutas temporales.
-- La suite relevante y la suite completa pasan.
-- La verificación manual con Ollama y modo offline se completa satisfactoriamente.
+### Evidencia manual ya reportada
 
-**Regla de avance:** hasta cumplir todos los criterios, la fase 2 permanece abierta y la fase 3 no se inicia.
+Se realizaron comprobaciones locales de persistencia y operaciones de backup, verificación, restauración, exportación y eliminación con bases y rutas temporales. La evidencia no implica borrado forense ni eliminación de copias en respaldos antiguos.
+
+Antes de ampliar el alcance, cualquier nueva integración debe conservar los controles de permisos, rutas, cifrado y no sobrescritura ya establecidos.
+
+### Criterio de avance
+
+La fase 2 queda cerrada para el alcance implementado y probado en esta rama. Las validaciones manuales adicionales de experiencia con Ollama y modo offline pueden repetirse como smoke tests de operación, pero no invalidan la evidencia automatizada ya aprobada.
 
 ## Fase 3 — Inteligencia y comportamiento
+
+**Estado: siguiente fase; todavía no declarada implementada.**
 
 **Objetivo:** evaluar y mejorar la calidad del Assistant sin confundir fluidez con fiabilidad.
 
 ### Trabajo previsto
 
-1. Crear un conjunto reproducible de casos de prueba conversacionales.
-2. Comparar Gemma 4 E2B y otros modelos candidatos con las mismas entradas y parámetros documentados.
+1. Crear un conjunto versionado y reproducible de casos conversacionales.
+2. Comparar Gemma 4 E2B y otros modelos candidatos con entradas y parámetros equivalentes.
 3. Ejecutar pruebas A/B de instrucciones equivalentes en inglés y español.
-4. Incluir casos de seguimiento de instrucciones, contexto, ambigüedad, incertidumbre, errores y prompt injection.
-5. Evaluar por separado la calidad de respuesta, cumplimiento de límites y honestidad sobre capacidades.
-6. Registrar modelo, versión/tag, parámetros, prompt, entradas y resultados para poder repetir las pruebas.
-7. Ajustar instrucciones del sistema solo a partir de resultados comparables.
+4. Incluir seguimiento de instrucciones, contexto, ambigüedad, incertidumbre, errores y prompt injection.
+5. Evaluar por separado calidad, cumplimiento de límites y honestidad sobre capacidades.
+6. Registrar modelo/tag, parámetros, prompt, entradas y resultados.
+7. Ajustar instrucciones únicamente a partir de resultados comparables.
 
 ### Criterios de salida
 
-- Existe un conjunto de evaluación versionado.
-- Las comparaciones usan condiciones equivalentes.
-- Los resultados y fallos son reproducibles y documentados.
-- Ningún modelo se considera seguro por una prueba aislada o por responder bien en conversación ordinaria.
+- Conjunto de evaluación versionado.
+- Comparaciones bajo condiciones equivalentes.
+- Resultados y fallos reproducibles.
+- Ningún modelo se considera seguro por una prueba aislada.
 - El Assistant conserva la distinción entre sugerir, planificar y ejecutar.
 
 ## Fase 4 — Capacidades del Assistant
 
 **Objetivo:** evolucionar de conversación a coordinación controlada, sin otorgar autoridad directa al modelo.
 
-### Trabajo previsto
-
-1. Mejorar la clasificación de intenciones y la identificación de información faltante.
-2. Permitir que el Assistant estructure planes y explique sus pasos y supuestos.
+1. Mejorar clasificación de intenciones e identificación de datos faltantes.
+2. Permitir planes estructurados con pasos y supuestos.
 3. Definir contratos de herramientas y capacidades antes de conectar adaptadores.
-4. Integrar una herramienta de bajo riesgo por vez, con pruebas de autorización y resultados.
-5. Enrutar solicitudes protegidas a los componentes responsables y sus fronteras de autorización.
+4. Integrar una herramienta de bajo riesgo por vez, con pruebas de autorización y resultado.
+5. Enrutar solicitudes protegidas a los componentes responsables.
 6. Mantener aprobación humana para operaciones sensibles o no delegables.
-7. Registrar correlación entre solicitud, plan, decisión, autorización, ejecución y resultado cuando corresponda.
+7. Correlacionar solicitud, plan, autorización, ejecución y resultado.
 
-### Criterios de salida
-
-- Cada herramienta tiene contrato, alcance y errores definidos.
-- La autorización se decide fuera del modelo y se aplica en el componente responsable.
-- Una instrucción del usuario o del modelo no puede ampliar permisos por sí misma.
-- Los resultados inciertos no se comunican como éxitos.
-- Las pruebas cubren denegaciones, fallos, reintentos y resultados desconocidos.
-
-### No incluido por defecto
-
-Acceso general al shell, ejecución arbitraria de comandos, acceso irrestricto a archivos, SQL o Docker. Cualquier capacidad de ese tipo requiere diseño, autorización y controles específicos; no forma parte automática del prototipo Terminal.
+No se incluye por defecto acceso general al shell, ejecución arbitraria de comandos, acceso irrestricto a archivos, SQL o Docker.
 
 ## Fase 5 — Consolidación
 
-**Objetivo:** demostrar que el prototipo y sus integraciones funcionan de manera coherente y están preparados para ampliar su alcance.
+**Objetivo:** demostrar que el producto y sus integraciones funcionan coherentemente y están preparados para ampliar su alcance.
 
-### Trabajo previsto
+- Ejecutar pruebas unitarias, contractuales, de integración, regresión y seguridad.
+- Validar persistencia, recuperación, límites y manejo de fallos.
+- Integrar Identity/CAM y componentes protegidos únicamente cuando sus fronteras estén completas.
+- Reforzar autenticación, autorización, aislamiento, auditoría y credenciales.
+- Revisar dependencias, configuración y datos sensibles.
+- Documentar instalación, operación, diagnóstico y recuperación.
+- Decidir cuándo reanudar Desktop/API y los demás subsistemas.
 
-1. Ejecutar pruebas unitarias, de integración y de regresión.
-2. Validar persistencia, recuperación, límites de conversación y manejo de fallos.
-3. Completar la integración con Identity/CAM y los componentes protegidos que estén realmente listos.
-4. Reforzar autenticación, autorización, aislamiento, auditoría y ciclo de vida de credenciales según el alcance aprobado.
-5. Revisar dependencias, configuración, registros y manejo de datos sensibles.
-6. Documentar instalación, configuración, operación, diagnóstico y recuperación.
-7. Revaluar el orden para reanudar Desktop/API y el resto de los subsistemas de Atlas.
+## Cadencia para cada incremento
 
-### Criterios de salida
-
-- Flujos principales y fallos están cubiertos por pruebas repetibles.
-- No hay capacidades declaradas que no estén demostradas.
-- Las fronteras de identidad, autorización y ejecución son verificables.
-- La recuperación y el comportamiento ante resultados inciertos están documentados y probados.
-- Se aprueba explícitamente el siguiente alcance de producto.
-
-## Cadencia obligatoria para cada incremento
-
-1. Inspeccionar el código y las pruebas actuales.
-2. Identificar un único cambio pequeño y su criterio de aceptación.
-3. Implementar sin reescribir componentes que ya funcionan.
+1. Inspeccionar código y pruebas existentes.
+2. Definir un cambio pequeño y su criterio de aceptación.
+3. Implementar sin reescribir componentes funcionales.
 4. Ejecutar pruebas focalizadas.
-5. Ejecutar la suite relevante y, cuando corresponda, la suite completa.
-6. Probar el comportamiento real desde la terminal.
-7. Revisar errores, regresiones y límites.
-8. Actualizar README y documentación de fase.
-9. Registrar qué quedó implementado, qué sigue pendiente y la evidencia obtenida.
-
-No declarar una fase terminada por haber creado interfaces, contratos, clases o pruebas aisladas: se requiere una composición ejecutable y evidencia del comportamiento real.
+5. Ejecutar suite relevante y completa cuando corresponda.
+6. Verificar comportamiento real desde la terminal.
+7. Revisar fallos, regresiones y límites.
+8. Actualizar documentación y registrar evidencia.
 
 ## Prioridades en pausa
 
 ### Desktop para Windows
 
-Se conserva la dirección previamente aprobada (C#/.NET/WinUI 3, conexión futura mediante API remota, Tailscale y HTTPS/TLS, vinculación explícita de dispositivos y permisos limitados). El desarrollo queda pausado hasta que la prioridad Terminal alcance una versión funcional y se decida reanudarlo.
+Se conserva la dirección previamente aprobada (C#/.NET/WinUI 3, conexión futura mediante API remota, Tailscale y HTTPS/TLS, vinculación explícita de dispositivos y permisos limitados). El desarrollo queda pausado hasta decidir su reanudación.
 
 ### API remota
 
-La API remota para Desktop también queda pausada. No se construirá como requisito previo de las fases 1–3; cualquier necesidad de API se evaluará cuando se retome el cliente remoto.
+La API remota para Desktop también queda pausada. No es requisito para la experiencia local actual.
 
 ### Seguridad avanzada
 
-Se posterga la expansión de seguridad avanzada para una fase posterior, pero no se eliminan las protecciones mínimas existentes. Se mantienen loopback para Ollama, separación entre conversación y ejecución, ausencia de acceso privilegiado directo y control humano sobre acciones sensibles. No se habilitarán herramientas privilegiadas como atajo para demostrar funcionalidad.
+Se posterga la expansión de seguridad avanzada, pero no se eliminan las protecciones mínimas existentes: Ollama en loopback, separación entre conversación y ejecución, ausencia de acceso privilegiado directo y control humano sobre acciones sensibles.
 
-## Relación con la hoja de ruta general de Atlas
+## Relación con la visión general de Atlas
 
-Esta hoja de ruta cambia el **orden de prioridad inmediata**, no cancela los dominios de Atlas ni modifica sus contratos. El trabajo de Memory Engine, Identity/CAM, Project/Environment Manager, Skills Manager, agentes, Scheduler, aprobaciones, eventos, notificaciones, Backup/Restore y recuperación continúa como trabajo pendiente o parcialmente implementado según el README raíz.
-
-La integración del Assistant con memoria protegida y herramientas debe respetar CT-06 y esperar a que las fronteras de autorización, persistencia y recuperación correspondientes estén listas. Cuando Terminal esté validado, se revisará la secuencia global y se decidirá qué subsistema retomar.
-
+Esta hoja de ruta ordena el trabajo inmediato; no cancela los dominios de Atlas ni modifica sus contratos. Memory Engine, Identity/CAM, Broker, Project/Environment Manager, Skills Manager, agentes, Scheduler, aprobaciones, eventos, notificaciones y runtime de herramientas conservan sus propios estados de implementación. La integración de memoria protegida y herramientas debe respetar sus contratos y esperar a que sus fronteras durables y autorizadas estén listas.
