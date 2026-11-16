@@ -410,3 +410,11 @@ Implementados los contratos `RecoveryEvidenceIssuerTrustPolicy` y `RecoveryEvide
 La política es un filtro de confianza, no una prueba criptográfica. La autenticidad de la atestación, digest/payload, revocación de claves, replay y estado autoritativo permanecen en el verificador. No existe almacenamiento concreto ni conexión al runtime.
 
 **Estado:** IMPLEMENTADO; pendiente de validación local del propietario.
+
+## F2.3.28 — Repositorio durable de políticas de confianza
+
+Implementar snapshots inmutables por emisor y revisión en SQLite, con migración, CAS de revisión, historial consultable, retención sin UPDATE/DELETE y composición en la UoW local compartida. El puerto de lectura debe devolver siempre la última revisión canónica.
+
+**Límites:** no implementar criptografía, gestión de claves, acciones de recuperación ni integración runtime en este incremento.
+
+**Estado:** implementado en la rama; pendiente de validación local por el propietario.
