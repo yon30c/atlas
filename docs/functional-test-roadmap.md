@@ -382,4 +382,4 @@ Distingue solicitudes no iniciadas, claims adquiridos antes de invalidación, in
 
 **Límite de seguridad:** `SOURCE_PENDING` se clasifica como resultado desconocido; nunca como no ejecutado. La clasificación no demuestra que un efecto externo haya ocurrido, no autoriza reintentos, no reanuda operaciones, no cambia estados y no libera claims. No se añade transición a `BLOCKED`.
 
-**Estado:** implementación y pruebas publicadas; pendiente de validación local.
+**Estado: VALIDADA.** Suite completa: 1054 tests OK. La evaluación es de solo lectura y no autoriza reintentos ni mutaciones.
