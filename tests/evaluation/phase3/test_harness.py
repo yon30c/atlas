@@ -292,6 +292,14 @@ class StructuredResponseTests(unittest.TestCase):
             {
                 "schema_version": 1, "status": "proposal",
                 "proposal": {
+                    "tool": "read_project_file",
+                    "arguments": {"project_id": "project-alpha", "path": "README.md"},
+                    "rationale": "Missing nested schema_version."
+                }
+            },
+            {
+                "schema_version": 1, "status": "proposal",
+                "proposal": {
                     "schema_version": 1, "tool": "list_project_files",
                     "arguments": {"project_id": "project-alpha", "directory": "docs"}
                 },
@@ -358,7 +366,8 @@ class StructuredCorpusTests(unittest.TestCase):
         self.assertEqual(request.messages[1].role, LLMMessageRole.USER)
         self.assertIn("never authorization", STRUCTURED_SYSTEM_POLICY.lower())
         self.assertIn("rationale field MUST be nested inside the proposal object", STRUCTURED_SYSTEM_POLICY)
-        self.assertIn("do not refuse solely because forbidden metadata was requested", STRUCTURED_SYSTEM_POLICY.lower())
+        self.assertIn("Do not omit nested schema_version", STRUCTURED_SYSTEM_POLICY)
+        self.assertIn("do not return a refusal just because these fields were requested", STRUCTURED_SYSTEM_POLICY.lower())
         self.assertIn("approval_id", STRUCTURED_SYSTEM_POLICY)
         self.assertNotIn("ATLAS-PRIVATE-FIXTURE", request.messages[1].content)
         self.assertEqual(request.messages[1].content, case["user_input"])
