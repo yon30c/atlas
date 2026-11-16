@@ -363,3 +363,12 @@ Las pruebas nuevas verifican commit y rollback conjunto entre identidad, proyect
 **Límite:** esto unifica la persistencia en una transacción, pero todavía no crea un coordinador que decida orden, CAM, admisión, invalidación, fencing, ejecución de mutaciones ni reconciliación. La UoW es infraestructura transaccional, no permiso para ejecutar.
 
 **Estado:** validado por el propietario con 1043/1043 pruebas (16 de noviembre de 2026).
+
+
+### F2.3.23 — Máquina de estados multiobjetivo con CAS
+
+Migración v14 restringe los cambios de estado del ledger multiobjetivo a la secuencia estricta `REQUESTED → INVALIDATION_PENDING → SOURCE_PENDING → SOURCE_CONFIRMED → RECONCILING → COMPLETED/ABORTED`. Los dos estados terminales siguen requiriendo el recibo de reconciliación completo ya definido por v12. Cualquier salto, retroceso o terminalización directa es rechazado por SQLite incluso si se omite la API.
+
+`SQLiteAuthorityChangeStore.transition_multi_status` aplica compare-and-set con estado esperado, reintento idempotente en el estado objetivo y rechazo de llamadas obsoletas. Cada avance intermedio exige el conjunto íntegro de claims exclusivos. La transición registra progreso del ledger únicamente: no acredita que una invalidación externa haya ocurrido, no autoriza mutaciones de fuentes y no ejecuta efectos. No se habilita todavía transición a BLOCKED ni recuperación desde ella; eso requiere un contrato de recuperación separado.
+
+**Estado:** implementación publicada; pendiente de validación local.
