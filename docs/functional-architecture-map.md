@@ -295,3 +295,7 @@ Validado por el propietario con 967/967 pruebas. Las mutaciones de Project/Envir
 ## 20. F2.3.10 — Auditoría de mutaciones
 
 La auditoría confirma que la persistencia compartida no equivale a consistencia de autoridad: Identity, emisión y renovación de Grant, y cambios Project/Environment aún tienen rutas sin coordinador de invalidación/fencing. La revocación exige un coordinador por contrato, pero no hay implementación concreta completa. El ledger SQLite es solo reserva/idempotencia. Se documentó el orden para cerrar todos los caminos de mutación antes de admisión. Sin cambios runtime; F2.3 permanece sin integración.
+
+## 21. F2.3.11 — Emisión de Grant fail-closed
+
+`GrantManagementService.issue` exige ahora `unit_of_work_factory` y rechaza emitir si falta, eliminando su fallback de escritura directa. La unicidad y creación siguen dentro de una UoW. Prueba nueva cubre ausencia de UoW. Publicado, pendiente de validación local; no equivale a coordinación de invalidación/fencing.
