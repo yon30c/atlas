@@ -146,3 +146,21 @@ Se añadió `compose_sqlite_identity_on_database(database)` en `atlas.adapters.s
 Pruebas añadidas para verificar identidad de objeto de la base compartida, lectura/escritura canónica y rechazo de entradas que no sean `SQLiteDatabase`.
 
 **Límite explícito:** este incremento solo abre el seam de composición para Identity. No crea todavía repositorios de Grant/Project/Environment, ni coordinador, invalidación, admisiones o fencing. El CAS de Identity sigue sin integrarse al protocolo común. No habilita operaciones del Assistant.
+
+
+## 12. F2.3.7 — Persistencia canónica inicial de Grants
+
+Se añadió la migración SQLite v7 `canonical_sqlite_grants` y `SQLiteGrantRepository`. El Grant completo (scope, IDs concretos, acciones, fechas y revisión) se conserva en una fila, con colecciones serializadas canónicamente. La escritura de actualización exige revisión siguiente y usa compare-and-swap (`WHERE revision = new_revision - 1`).
+
+La base impone:
+- unicidad de `grant_id`;
+- revisión estrictamente incremental;
+- identidad, propietario, sujeto, proyecto, entorno, tipo de recurso, scope y acciones inmutables;
+- revocación terminal;
+- retención del Grant como tombstone (sin DELETE).
+
+Se añadió `SQLiteLocalAuthorityFoundation` como composición compartida inicial. Identity, GrantRepository y `SQLiteAuthorityChangeStore` verifican que usan exactamente la misma instancia `SQLiteDatabase`. La composición standalone de Identity se mantiene compatible.
+
+Pruebas nuevas cubren round-trip, duplicados, aislamiento por propietario, orden estable, CAS obsoleto, tombstones, inmutabilidad de scope/acciones, revocación terminal, reapertura de DB y composición común. Las pruebas históricas de migración v6 se ajustaron para seguir partiendo de schema v5, sin alterar las migraciones anteriores.
+
+**Límites:** Grant issue y renewal todavía no están compuestos por un UoW SQLite compartido; los cambios de Identity/Grant aún no pasan por un coordinador de invalidación común. Project y Environment no tienen fuentes canónicas. No hay admisión de operaciones ni ejecución del Assistant. Requiere suite local completa antes de considerarse validado.
