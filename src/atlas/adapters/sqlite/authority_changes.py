@@ -22,6 +22,9 @@ from atlas.memory.authority_changes import (
     AuthorityChangeTargetKind,
     MultiAuthorityChangeIntent,
     MultiAuthorityChangeReservation,
+    AuthorityChangeTerminalEvidence,
+    AuthorityChangeTerminalOutcome,
+    AuthorityChangeTerminalTarget,
 )
 from atlas.memory.consistency import AuthorityKind
 
@@ -95,6 +98,34 @@ def _canonical_multi_intent(intent: MultiAuthorityChangeIntent) -> bytes:
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")
+
+
+def _canonical_terminal_evidence(evidence: AuthorityChangeTerminalEvidence) -> bytes:
+    projection = {
+        "evidence_id": evidence.evidence_id,
+        "operation_id": evidence.operation_id,
+        "outcome": evidence.outcome.value,
+        "evidence_ref": evidence.evidence_ref,
+        "recorded_by": evidence.recorded_by,
+        "recorded_at": _utc_text(evidence.recorded_at),
+        "targets": [
+            {
+                "authority_kind": target.authority_kind.value,
+                "authority_id": target.authority_id,
+                "expected_revision": target.expected_revision,
+                "proposed_revision": target.proposed_revision,
+                "observed_revision": target.observed_revision,
+            }
+            for target in evidence.targets
+        ],
+    }
+    return json.dumps(
+        projection,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
 
 
 class SQLiteAuthorityChangeStore:
@@ -501,6 +532,199 @@ class SQLiteAuthorityChangeStore:
                     "adquisición de claims no produjo el conjunto completo"
                 )
             return True
+
+
+    @staticmethod
+    def _terminal_evidence(connection, row) -> AuthorityChangeTerminalEvidence:
+        target_rows = connection.execute(
+            """
+            SELECT authority_kind, authority_id, expected_revision,
+                   proposed_revision, observed_revision
+            FROM multi_authority_change_terminal_targets
+            WHERE operation_id = ?
+            ORDER BY authority_kind, authority_id
+            """,
+            (row["operation_id"],),
+        ).fetchall()
+        targets = tuple(
+            AuthorityChangeTerminalTarget(
+                authority_kind=AuthorityChangeTargetKind(target["authority_kind"]),
+                authority_id=target["authority_id"],
+                expected_revision=target["expected_revision"],
+                proposed_revision=target["proposed_revision"],
+                observed_revision=target["observed_revision"],
+            )
+            for target in target_rows
+        )
+        return AuthorityChangeTerminalEvidence(
+            evidence_id=row["evidence_id"],
+            operation_id=row["operation_id"],
+            outcome=AuthorityChangeTerminalOutcome(row["outcome"]),
+            targets=targets,
+            evidence_ref=row["evidence_ref"],
+            recorded_by=row["recorded_by"],
+            recorded_at=_parse_utc(row["recorded_at"]),
+        )
+
+    def record_multi_terminal_evidence(
+        self,
+        evidence: AuthorityChangeTerminalEvidence,
+    ) -> AuthorityChangeTerminalEvidence:
+        """Persist a complete terminal receipt and status transition atomically.
+
+        Only a RECONCILING operation with its complete exclusive claim set may
+        be finalized. Exact retries recover the original receipt; a different
+        receipt for the same operation is rejected. Claims are not released.
+        """
+        if not isinstance(evidence, AuthorityChangeTerminalEvidence):
+            raise ContractError(
+                "evidence debe ser AuthorityChangeTerminalEvidence"
+            )
+        canonical = _canonical_terminal_evidence(evidence)
+        digest = hashlib.sha256(canonical).hexdigest()
+        with self._database.unit_of_work() as unit:
+            connection = unit._connection_for(self._database)
+            existing = connection.execute(
+                """
+                SELECT * FROM multi_authority_change_terminal_evidence
+                WHERE operation_id = ?
+                """,
+                (evidence.operation_id,),
+            ).fetchone()
+            if existing is not None:
+                if (
+                    existing["evidence_digest"] != digest
+                    or bytes(existing["evidence_canonical"]) != canonical
+                ):
+                    raise ContractError(
+                        "la operación ya tiene otra evidencia terminal inmutable"
+                    )
+                return self._terminal_evidence(connection, existing)
+
+            operation = self._select_multi_operation(
+                connection, evidence.operation_id
+            )
+            if operation is None:
+                raise ContractError("operación multiobjetivo desconocida")
+            reservation = self._multi_reservation(connection, operation)
+            if reservation.status is not AuthorityChangeStatus.RECONCILING:
+                raise ContractError(
+                    "solo una operación RECONCILING puede finalizarse"
+                )
+            if not evidence.matches(reservation):
+                raise ContractError(
+                    "la evidencia no coincide exactamente con la reserva"
+                )
+
+            target_rows = connection.execute(
+                """
+                SELECT authority_kind, authority_id
+                FROM multi_authority_change_targets
+                WHERE operation_id = ?
+                """,
+                (evidence.operation_id,),
+            ).fetchall()
+            claimed_rows = connection.execute(
+                """
+                SELECT authority_kind, authority_id
+                FROM multi_authority_change_claims
+                WHERE operation_id = ?
+                """,
+                (evidence.operation_id,),
+            ).fetchall()
+            reserved_set = {
+                (row["authority_kind"], row["authority_id"])
+                for row in target_rows
+            }
+            claimed_set = {
+                (row["authority_kind"], row["authority_id"])
+                for row in claimed_rows
+            }
+            if len(reserved_set) < 2 or claimed_set != reserved_set:
+                raise ContractError(
+                    "la operación no conserva el conjunto completo de claims"
+                )
+
+            connection.execute(
+                """
+                INSERT INTO multi_authority_change_terminal_evidence (
+                    operation_id, evidence_id, outcome, evidence_ref,
+                    recorded_by, recorded_at, evidence_digest,
+                    evidence_canonical
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    evidence.operation_id,
+                    evidence.evidence_id,
+                    evidence.outcome.value,
+                    evidence.evidence_ref,
+                    evidence.recorded_by,
+                    _utc_text(evidence.recorded_at),
+                    digest,
+                    canonical,
+                ),
+            )
+            for target in evidence.targets:
+                connection.execute(
+                    """
+                    INSERT INTO multi_authority_change_terminal_targets (
+                        operation_id, authority_kind, authority_id,
+                        expected_revision, proposed_revision, observed_revision
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        evidence.operation_id,
+                        target.authority_kind.value,
+                        target.authority_id,
+                        target.expected_revision,
+                        target.proposed_revision,
+                        target.observed_revision,
+                    ),
+                )
+            now = _utc_text(datetime.now(timezone.utc))
+            updated = connection.execute(
+                """
+                UPDATE multi_authority_change_operations
+                SET status = ?, updated_at = ?
+                WHERE operation_id = ? AND status = 'RECONCILING'
+                """,
+                (evidence.outcome.value, now, evidence.operation_id),
+            )
+            if updated.rowcount != 1:
+                raise sqlite3.DatabaseError(
+                    "la transición terminal no pudo confirmarse"
+                )
+            stored = connection.execute(
+                """
+                SELECT * FROM multi_authority_change_terminal_evidence
+                WHERE operation_id = ?
+                """,
+                (evidence.operation_id,),
+            ).fetchone()
+            if stored is None:
+                raise sqlite3.DatabaseError(
+                    "el recibo terminal recién persistido no pudo recuperarse"
+                )
+            return self._terminal_evidence(connection, stored)
+
+    def get_multi_terminal_evidence(
+        self,
+        operation_id: str,
+    ) -> AuthorityChangeTerminalEvidence | None:
+        if not isinstance(operation_id, str) or not operation_id.strip():
+            raise ContractError("operation_id debe ser una cadena no vacía")
+        with self._database.connection() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM multi_authority_change_terminal_evidence
+                WHERE operation_id = ?
+                """,
+                (operation_id,),
+            ).fetchone()
+            return (
+                None if row is None
+                else self._terminal_evidence(connection, row)
+            )
 
     def get_multi_claims(self, operation_id: str) -> tuple[AuthorityChangeTarget, ...]:
         """Return the immutable target claims currently held by an operation."""
