@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from enum import Enum
 
-from atlas.assistant.planning import IntentKind
+from atlas.assistant.planning import AssistantIntent, IntentKind
 from atlas.core.errors import ContractError
 
 
@@ -64,6 +64,18 @@ class CapabilityCatalog:
         if not isinstance(kind, IntentKind):
             raise ContractError("kind debe ser IntentKind")
         return self._by_kind.get(kind)
+
+    def validate_intent(self, intent: AssistantIntent) -> CapabilityDefinition:
+        """Comprueba que una intención usa una capacidad y parámetros catalogados."""
+        if not isinstance(intent, AssistantIntent):
+            raise ContractError("intent debe ser AssistantIntent")
+        definition = self.get(intent.kind)
+        if definition is None:
+            raise ContractError("la capacidad no está registrada en el catálogo")
+        supplied = {name for name, _ in intent.parameters}
+        if supplied != set(definition.parameter_names):
+            raise ContractError("los parámetros no coinciden con el contrato de capacidad")
+        return definition
 
 
 def build_default_capability_catalog() -> CapabilityCatalog:
