@@ -127,7 +127,7 @@ class ConsoleAdapterTests(unittest.TestCase):
             write_fn=writes.append,
         )
 
-        self.assertEqual(writes, ["\\n"])
+        self.assertEqual(writes, ["\n"])
         self.assertEqual(
             output[-1],
             "Atlas: interrupción recibida. Sesión finalizada.",
