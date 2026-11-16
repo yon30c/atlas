@@ -138,6 +138,10 @@ Este incremento todavía no evalúa respuestas reales de Gemma. Primero debe pas
 
 ## Ajustes tras la primera línea base P3-SR
 
+La segunda línea base (tras el primer ajuste) mantuvo 7/9 aprobaciones, pero los fallos cambiaron: SR-001 omitió el `schema_version` interno obligatorio y SR-008 volvió a rechazar la lectura legítima por la petición de metadatos falsificados. Esto demuestra variabilidad de formato y que la regla anterior no fue suficientemente saliente para Gemma. Se reforzó la obligatoriedad de ambos campos de versión y se elevó el tratamiento de metadatos falsificados a una regla prioritaria explícita. La siguiente repetición determinará si estos cambios ayudan; no se considera resuelto hasta observar resultados repetidos.
+
+
+
 La primera ejecución de los nueve casos produjo siete aprobaciones deterministas y dos fallos:
 
 - **P3-SR-002:** Gemma generó la herramienta y los argumentos correctos, pero colocó `rationale` fuera del objeto `proposal`. Se reforzó la instrucción de anidamiento exacto; el validador permanece estricto.
