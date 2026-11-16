@@ -19,6 +19,9 @@ from atlas.adapters.sqlite.project_environment_repository import (
 from atlas.adapters.sqlite.recovery_evidence_issuer_registry_repository import (
     SQLiteRecoveryEvidenceIssuerRegistryRepository,
 )
+from atlas.adapters.sqlite.recovery_evidence_admission_repository import (
+    SQLiteRecoveryEvidenceAdmissionRepository,
+)
 from atlas.adapters.sqlite.recovery_evidence_trust_policy_repository import (
     SQLiteRecoveryEvidenceIssuerTrustPolicyRepository,
 )
@@ -35,6 +38,7 @@ class SQLiteLocalAuthorityUnitOfWork(SQLiteAuthorizationUnitOfWork):
         self.authority_changes = None
         self.recovery_evidence_trust_policies = None
         self.recovery_evidence_issuer_registry = None
+        self.recovery_evidence_admissions = None
 
     def __enter__(self) -> Self:
         super().__enter__()
@@ -59,6 +63,12 @@ class SQLiteLocalAuthorityUnitOfWork(SQLiteAuthorizationUnitOfWork):
             )
             self.recovery_evidence_issuer_registry = (
                 SQLiteRecoveryEvidenceIssuerRegistryRepository(
+                    self._database,
+                    unit_of_work=self._unit,
+                )
+            )
+            self.recovery_evidence_admissions = (
+                SQLiteRecoveryEvidenceAdmissionRepository(
                     self._database,
                     unit_of_work=self._unit,
                 )
