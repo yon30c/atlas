@@ -370,3 +370,10 @@ Se cubre commit y rollback conjuntos de cambios canónicos y reserva de operaci�
 La migración v14 y `transition_multi_status` imponen una máquina de estados forward-only con compare-and-set y claims completos en cada avance. SQLite protege también las transiciones directas que evadan el repositorio. COMPLETED/ABORTED continúan protegidos por la evidencia terminal durable. Los estados intermedios son marcadores de flujo, no pruebas de efectos externos ni autorización. BLOCKED/recovery y runtime siguen desconectados.
 
 **Estado:** VALIDADA localmente por el propietario; suite completa: 1048 tests en 9.026 s, todos OK.
+
+
+### 34. Diagnóstico de recuperación multiobjetivo
+
+El método `SQLiteAuthorityChangeStore.assess_multi_recovery` combina el estado del ledger con `audit_multi_claims` y devuelve una clasificación de solo lectura. Los estados intermedios ambiguos permanecen explícitamente desconocidos; no se interpretan como permiso para reintentar. La evaluación no altera el ledger ni los claims.
+
+**Estado:** F2.3.24 implementada; validación local pendiente.
