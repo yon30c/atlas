@@ -376,4 +376,4 @@ La migración v14 y `transition_multi_status` imponen una máquina de estados fo
 
 El método `SQLiteAuthorityChangeStore.assess_multi_recovery` combina el estado del ledger con `audit_multi_claims` y devuelve una clasificación de solo lectura. Los estados intermedios ambiguos permanecen explícitamente desconocidos; no se interpretan como permiso para reintentar. La evaluación no altera el ledger ni los claims.
 
-**Estado:** F2.3.24 implementada; validación local pendiente.
+**Estado: F2.3.24 VALIDADA.** Suite completa: 1054 tests OK.
