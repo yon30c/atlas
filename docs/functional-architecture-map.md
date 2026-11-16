@@ -394,4 +394,4 @@ Nuevos contratos en memory, ports y application modelan evidencia de recuperaci�
 
 El servicio falla cerrado: DENIED para evidencia inválida o no coincidente, UNAVAILABLE ante fallo del verificador y VERIFIED solo ante retorno exacto True. No habilita acciones ni altera el ledger. La implementación concreta de criptografía y adaptadores de fuentes autoritativas queda pendiente.
 
-**Estado:** implementación y pruebas publicadas; pendiente de validación local.
+**Estado: VALIDADA.** Suite completa: 1072 tests en 7.828 s, todos OK.
