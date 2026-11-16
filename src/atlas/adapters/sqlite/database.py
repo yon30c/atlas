@@ -140,16 +140,23 @@ class SQLiteDatabase:
                 return
             except sqlite3.OperationalError as exc:
                 error_code = getattr(exc, "sqlite_errorcode", None)
-                is_busy = (
-                    error_code is not None
-                    and error_code & 0xFF == sqlite3.SQLITE_BUSY
+                primary_code = (
+                    None if error_code is None else error_code & 0xFF
+                )
+                is_retryable_lock = primary_code in (
+                    sqlite3.SQLITE_BUSY,
+                    sqlite3.SQLITE_LOCKED,
                 )
                 if error_code is None:
-                    # Python runtimes without sqlite_errorcode still expose the
-                    # canonical SQLITE_BUSY message for this operation.
-                    is_busy = str(exc).lower() == "database is locked"
+                    # Some Python/SQLite combinations omit sqlite_errorcode
+                    # for PRAGMA journal_mode lock contention.
+                    message = str(exc).strip().lower()
+                    is_retryable_lock = message in {
+                        "database is locked",
+                        "database table is locked",
+                    }
                 remaining = deadline - monotonic()
-                if not is_busy or remaining <= 0:
+                if not is_retryable_lock or remaining <= 0:
                     raise
                 sleep(min(delay, remaining))
                 delay = min(delay * 2, 0.05)
