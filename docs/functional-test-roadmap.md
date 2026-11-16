@@ -523,4 +523,4 @@ Comprobar que `changed_at` no retroceda entre revisiones consecutivas del invent
 
 **Límite:** solo lectura; no autentica el reloj, no modifica el esquema, no bloquea reactivaciones legítimas ni habilita efectos o runtime.
 
-**Estado:** implementado en GitHub; pruebas locales pendientes.
+**Estado: VALIDADO por el propietario; suite completa: 1139 tests en 8.811 s, todos OK.**
