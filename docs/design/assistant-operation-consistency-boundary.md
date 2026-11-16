@@ -350,5 +350,16 @@ Se añadieron los contratos inmutables `AuthorityChangeTerminalOutcome`,
 
 **Límite esencial:** este contrato valida forma y consistencia interna, no autentica la referencia, no demuestra por sí solo que la reconciliación ocurrió y no autoriza liberar claims. Todavía no hay persistencia del recibo, transición atómica del estado ni protocolo de liberación. Los claims siguen retenidos. El siguiente incremento debe persistir el recibo junto con la transición terminal en una misma UoW y validar su binding contra el conjunto reservado antes de considerar cualquier liberación.
 
-**Estado:** contratos y pruebas focalizadas publicados; pendiente de validación local. Runtime desconectado.
+**Estado:** validado por el propietario con 1003/1003 pruebas. Runtime desconectado.
 
+
+
+## 19. F2.3.18 — Persistencia atómica de evidencia terminal
+
+Migración SQLite v12 añade multi_authority_change_terminal_evidence y multi_authority_change_terminal_targets. El store record_multi_terminal_evidence valida que la operación exista, esté en RECONCILING, conserve el conjunto completo de claims y que el recibo coincida exactamente con todos los objetivos/revisiones reservados.
+
+El recibo, sus objetivos y el cambio de estado a COMPLETED o ABORTED se escriben en una única SQLiteUnitOfWork. Un replay byte-semántico exacto recupera el recibo original; cualquier recibo distinto para la misma operación se rechaza. Las tablas y filas son inmutables, los objetivos están ligados por FK al conjunto reservado y triggers impiden marcar terminal sin recibo y objetivos completos o cambiar después el estado terminal. Las claims no se liberan.
+
+**Límite:** el digest/canonicalización protege la identidad del replay, no autentica al registrador ni prueba independientemente la verdad de la referencia externa. No hay verificador de evidencia, CAM, invalidación/fencing, mutación coordinada de fuentes ni runtime. Las operaciones BLOCKED/inciertas retienen claims.
+
+**Estado:** implementación y pruebas publicadas; pendiente de validación local.
