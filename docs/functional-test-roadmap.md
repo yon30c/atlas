@@ -362,4 +362,4 @@ Las pruebas nuevas verifican commit y rollback conjunto entre identidad, proyect
 
 **Límite:** esto unifica la persistencia en una transacción, pero todavía no crea un coordinador que decida orden, CAM, admisión, invalidación, fencing, ejecución de mutaciones ni reconciliación. La UoW es infraestructura transaccional, no permiso para ejecutar.
 
-**Estado:** implementación publicada; pendiente de validación local.
+**Estado:** validado por el propietario con 1043/1043 pruebas (16 de noviembre de 2026).
