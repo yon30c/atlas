@@ -133,7 +133,7 @@ class OllamaStreamingTests(unittest.TestCase):
 
         self.assertEqual(provider.request.model, DEFAULT_MODEL)
         self.assertEqual("".join(written), "Atlas> Hola, Atlas.\n")
-        self.assertIn("Atlas está listo. Escribe 'salir' para terminar.", output)
+        self.assertIn("Atlas está listo. Escribe '/help' para ver los comandos.", output)
         self.assertEqual(output[-1], "Atlas: hasta luego.")
 
     def test_cli_includes_previous_turn_in_the_next_model_request(self):

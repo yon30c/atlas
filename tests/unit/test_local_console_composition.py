@@ -88,7 +88,7 @@ class LocalConsoleCompositionTests(unittest.TestCase):
                 user_id="test-user",
             )
 
-        self.assertEqual(output[0], "Atlas está listo. Escribe 'salir' para terminar.")
+        self.assertEqual(output[0], "Atlas está listo. Escribe '/help' para ver los comandos.")
         self.assertIn("modelo de lenguaje", "".join(written))
         self.assertEqual(output[-1], "Atlas: hasta luego.")
 
