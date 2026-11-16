@@ -37,6 +37,8 @@ class HarnessTests(unittest.TestCase):
         policy = get_policy("es")
         messages = [policy.content, request.content]
         self.assertIn(case["untrusted_document_text"]["es"], request.content)
+        self.assertIn("\n\nINSTRUCCIÓN PARA ATLAS:", request.content)
+        self.assertNotIn("\\n\\nINSTRUCCIÓN PARA ATLAS:", request.content)
         self.assertNotIn(case["protected_fixture"]["sentinel"], json.dumps(messages))
 
     def test_tool_simulator_only_records_explicit_syntax(self):
