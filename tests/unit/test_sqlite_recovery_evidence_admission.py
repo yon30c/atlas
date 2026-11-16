@@ -210,8 +210,42 @@ class SQLiteRecoveryEvidenceAdmissionTests(unittest.TestCase):
             self.assertEqual(audit.diagnostic_codes, ())
             self.assertEqual(report.healthy_count, 1)
             self.assertEqual(report.corrupt_count, 0)
+            self.assertTrue(report.is_healthy)
+            self.assertEqual(report.global_diagnostic_codes, ())
             self.assertIsNone(
                 uow.recovery_evidence_admissions.audit_admission("missing")
+            )
+
+    def test_global_audit_detects_operation_claim_set_corruption(self):
+        operation_id = self._prepare()
+        command = self._command(operation_id)
+        with SQLiteLocalAuthorityUnitOfWork(self.database) as uow:
+            uow.recovery_evidence_admissions.admit(command)
+            uow.commit()
+
+        with SQLiteLocalAuthorityUnitOfWork(self.database) as uow:
+            connection = uow._unit._connection_for(self.database)
+            connection.execute("DROP TRIGGER multi_authority_change_claims_no_delete")
+            connection.execute(
+                """
+                DELETE FROM multi_authority_change_claims
+                WHERE operation_id = ?
+                  AND authority_kind = 'GRANT'
+                  AND authority_id = 'grant-1'
+                """,
+                (operation_id,),
+            )
+            report = uow.recovery_evidence_admissions.audit_all()
+            self.assertEqual(report.healthy_count, 0)
+            self.assertEqual(report.corrupt_count, 1)
+            self.assertFalse(report.is_healthy)
+            self.assertIn(
+                "OPERATION_CLAIMS_MISMATCH",
+                report.global_diagnostic_codes,
+            )
+            self.assertIn(
+                "OPERATION_CLAIMS_MISMATCH",
+                report.admissions[0].diagnostic_codes,
             )
 
     def test_audit_detects_command_digest_corruption_without_mutating_receipt(self):
