@@ -76,6 +76,20 @@ class LocalWorkspaceAdapterTests(unittest.TestCase):
             with self.assertRaises(ContractError):
                 LocalWorkspaceAdapter({})
 
+    def test_rejects_symlink_as_workspace_root(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            real_root = base / "real"
+            real_root.mkdir()
+            alias = base / "alias"
+            try:
+                alias.symlink_to(real_root, target_is_directory=True)
+            except (OSError, NotImplementedError):
+                self.skipTest("el entorno no permite crear symlinks")
+
+            with self.assertRaises(ContractError):
+                LocalWorkspaceAdapter({"demo": alias})
+
     def test_rejects_invalid_workspace_id(self):
         with tempfile.TemporaryDirectory() as temporary:
             adapter = LocalWorkspaceAdapter({"demo": temporary})
