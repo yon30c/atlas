@@ -474,6 +474,107 @@ class MultiAuthorityRecoveryAssessment:
             )
 
 
+class MultiAuthorityRecoveryEvidenceKind(str, Enum):
+    """Independent evidence classes accepted by the recovery boundary."""
+
+    INVALIDATION_RECEIPT = "INVALIDATION_RECEIPT"
+    SOURCE_OUTCOME_RECEIPT = "SOURCE_OUTCOME_RECEIPT"
+    CANONICAL_REVISION_SNAPSHOT = "CANONICAL_REVISION_SNAPSHOT"
+    FENCING_STATE = "FENCING_STATE"
+    TERMINAL_RECONCILIATION_RECEIPT = "TERMINAL_RECONCILIATION_RECEIPT"
+
+
+@dataclass(frozen=True, slots=True)
+class MultiAuthorityRecoveryEvidence:
+    """Untrusted evidence claim; authenticity is established only by a verifier.
+
+    payload_digest and attestation_ref are claims, not proof. A trusted verifier
+    must authenticate the issuer, attestation, payload bytes and authoritative
+    source, and must check replay/revocation/currentness before returning True.
+    """
+
+    evidence_id: str
+    operation_id: str
+    evidence_kind: MultiAuthorityRecoveryEvidenceKind
+    issuer_id: str
+    issued_at: datetime
+    expires_at: datetime
+    payload_digest: str
+    attestation_ref: str
+    targets: tuple[AuthorityChangeTerminalTarget, ...]
+
+    def __post_init__(self) -> None:
+        for field in (
+            "evidence_id", "operation_id", "issuer_id",
+            "payload_digest", "attestation_ref",
+        ):
+            _required(getattr(self, field), field)
+        if not isinstance(self.evidence_kind, MultiAuthorityRecoveryEvidenceKind):
+            raise ContractError("evidence_kind debe ser MultiAuthorityRecoveryEvidenceKind")
+        _utc(self.issued_at, "issued_at")
+        _utc(self.expires_at, "expires_at")
+        if self.expires_at <= self.issued_at:
+            raise ContractError("expires_at debe ser posterior a issued_at")
+        if (
+            len(self.payload_digest) != 64
+            or any(char not in "0123456789abcdef" for char in self.payload_digest)
+        ):
+            raise ContractError("payload_digest debe ser SHA-256 hexadecimal lowercase")
+        if not isinstance(self.targets, tuple) or len(self.targets) < 2:
+            raise ContractError("targets debe contener al menos dos objetivos")
+        if any(
+            not isinstance(target, AuthorityChangeTerminalTarget)
+            for target in self.targets
+        ):
+            raise ContractError("targets contiene un tipo no permitido")
+        identities = tuple(
+            (target.authority_kind.value, target.authority_id)
+            for target in self.targets
+        )
+        if len(set(identities)) != len(identities):
+            raise ContractError("targets no puede contener identidades duplicadas")
+        canonical = tuple(sorted(
+            self.targets,
+            key=lambda target: (target.authority_kind.value, target.authority_id),
+        ))
+        object.__setattr__(self, "targets", canonical)
+
+    def matches(
+        self,
+        operation_id: str,
+        evidence_kind: MultiAuthorityRecoveryEvidenceKind,
+        targets: tuple[AuthorityChangeTarget, ...],
+    ) -> bool:
+        if (
+            self.operation_id != operation_id
+            or self.evidence_kind is not evidence_kind
+            or not isinstance(targets, tuple)
+        ):
+            return False
+        expected = tuple(sorted(
+            (
+                target.authority_kind.value,
+                target.authority_id,
+                target.expected_revision,
+                target.proposed_revision,
+            )
+            for target in targets
+            if isinstance(target, AuthorityChangeTarget)
+        ))
+        if len(expected) != len(targets):
+            return False
+        actual = tuple(
+            (
+                target.authority_kind.value,
+                target.authority_id,
+                target.expected_revision,
+                target.proposed_revision,
+            )
+            for target in self.targets
+        )
+        return actual == expected
+
+
 class MultiAuthorityRecoveryDecisionKind(str, Enum):
     """Non-executable recommendation for handling an assessed operation."""
 
