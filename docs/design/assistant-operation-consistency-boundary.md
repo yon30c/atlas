@@ -488,4 +488,11 @@ El orden de comprobación queda: binding/ventana local → registro vigente habi
 
 **Límite de consistencia:** la lectura del registro es un gate fail-closed, pero una lectura puntual separada no garantiza por sí sola que una desactivación concurrente no ocurra entre la consulta y el efecto del verificador. El verificador confiable y la futura coordinación de admisión deben aportar la garantía de revocación/fencing en el punto de efecto. No se afirma atomicidad ni se habilita recuperación, retry o runtime.
 
+**Estado: VALIDADO por el propietario; suite completa: 1110 tests en 8.196 s, todos OK.**
+## 42. F2.3.32 — Binding de revisión y revalidación post-verificación
+
+El servicio conserva la revisión del inventario observada antes de consultar la política y ejecutar el verificador independiente. Si el verificador devuelve exactamente True, el servicio vuelve a consultar el registro y solo devuelve VERIFIED si el emisor sigue habilitado, el issuer_id coincide y la revisión es idéntica. Una revisión modificada durante la verificación produce DENIED; una indisponibilidad de la segunda lectura produce UNAVAILABLE. El resultado VERIFIED incluye `issuer_registry_revision`, como binding explícito del snapshot que se comprobó estable durante el intervalo de verificación.
+
+Esto detecta una desactivación o cualquier cambio de registro ocurrido durante la verificación, incluso si la nueva revisión vuelve a habilitar al emisor. No es una lease, no bloquea futuras revisiones y no crea un fence consumible por un efecto. Sigue existiendo una ventana después de devolver VERIFIED; por ello el resultado continúa siendo evidencia verificada, no autoridad ni admisión. Un futuro coordinador debe validar la revisión dentro de la misma frontera transaccional/fencing que proteja el efecto.
+
 **Estado: implementado; pruebas locales pendientes.**
