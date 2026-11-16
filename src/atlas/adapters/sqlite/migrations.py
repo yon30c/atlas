@@ -1388,8 +1388,59 @@ CORE_SCHEMA_V14 = SQLiteMigration(
     """,
 )
 
+
+
+# v15 stores immutable, revisioned issuer trust-policy snapshots. A policy
+# change appends a new revision; historical policy rows are never overwritten.
+CORE_SCHEMA_V15 = SQLiteMigration(
+    version=15,
+    name="immutable_recovery_evidence_issuer_trust_policies",
+    sql="""
+    CREATE TABLE recovery_evidence_issuer_trust_policies (
+        issuer_id TEXT NOT NULL CHECK (length(trim(issuer_id)) > 0),
+        policy_revision INTEGER NOT NULL CHECK (policy_revision > 0),
+        enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+        allowed_evidence_kinds_json TEXT NOT NULL
+            CHECK (length(trim(allowed_evidence_kinds_json)) > 0),
+        valid_from TEXT NOT NULL CHECK (length(trim(valid_from)) > 0),
+        valid_until TEXT,
+        max_evidence_lifetime_seconds INTEGER NOT NULL
+            CHECK (max_evidence_lifetime_seconds > 0),
+        PRIMARY KEY (issuer_id, policy_revision),
+        CHECK (valid_until IS NULL OR valid_until > valid_from)
+    );
+
+    CREATE INDEX recovery_evidence_trust_policy_current
+        ON recovery_evidence_issuer_trust_policies(issuer_id, policy_revision DESC);
+
+    CREATE TRIGGER recovery_evidence_trust_policy_revision_sequential
+    BEFORE INSERT ON recovery_evidence_issuer_trust_policies
+    WHEN NEW.policy_revision != COALESCE(
+        (SELECT MAX(policy_revision) + 1
+         FROM recovery_evidence_issuer_trust_policies
+         WHERE issuer_id = NEW.issuer_id),
+        1
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'issuer trust policy revision must increase by exactly one');
+    END;
+
+    CREATE TRIGGER recovery_evidence_trust_policy_no_update
+    BEFORE UPDATE ON recovery_evidence_issuer_trust_policies
+    BEGIN
+        SELECT RAISE(ABORT, 'issuer trust policy history is immutable');
+    END;
+
+    CREATE TRIGGER recovery_evidence_trust_policy_no_delete
+    BEFORE DELETE ON recovery_evidence_issuer_trust_policies
+    BEGIN
+        SELECT RAISE(ABORT, 'issuer trust policy history is retained');
+    END;
+    """,
+)
+
 SQLITE_MIGRATIONS = (
     CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
     CORE_SCHEMA_V5, CORE_SCHEMA_V6, CORE_SCHEMA_V7, CORE_SCHEMA_V8,
-    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13, CORE_SCHEMA_V14,
+    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13, CORE_SCHEMA_V14, CORE_SCHEMA_V15,
 )
