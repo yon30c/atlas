@@ -236,3 +236,9 @@ Inspección estática completada y documentada en [assistant-operation-consisten
 **Conclusión:** no es posible implementar honestamente el adaptador CAM compartido añadiendo solo un verificador. Requiere una composición canónica nueva y migrar los caminos de mutación existentes, o aplazar CAM integrado para el perfil read-only de prueba.
 
 **Estado:** inspección documentada; sin cambios de código. Se requiere decidir el alcance antes de construir las cuatro fuentes canónicas mínimas.
+
+### F2.3.6 — Composición Identity sobre base compartida
+
+Añadido `compose_sqlite_identity_on_database(database)`, que compone la autoridad Identity sobre una instancia SQLite preexistente, sin crear otra base. La función standalone `compose_sqlite_identity(path)` permanece compatible y delega en ella. Se añadieron pruebas de reutilización exacta de instancia y validación de entrada.
+
+**Estado:** código y pruebas publicados; pendiente de ejecución local por el propietario. Este seam no equivale a una autoridad común: Grant, Project, Environment, journal, invalidación y fencing todavía no están integrados. Runtime desconectado.
