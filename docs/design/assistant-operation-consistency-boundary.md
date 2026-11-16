@@ -336,3 +336,19 @@ La migración v11 añade `multi_authority_change_claims`, con clave primaria glo
 La base impone que cada claim coincida con un target inmutable de una operación `REQUESTED`. Los claims no se pueden actualizar ni borrar. Esta retención es intencionalmente conservadora: **todavía no existe liberación**, porque el estado terminal por sí solo no prueba que la reconciliación haya sido verificada. La futura liberación requiere recibo durable de terminalidad/reconciliación, transición autorizada y operación coordinada dentro de la misma UoW. Operaciones bloqueadas o inciertas conservan todos sus claims.
 
 **Límite:** esto ofrece exclusión mutua local sobre los recursos reclamados en una única base SQLite; no implementa CAM, invalidación de admisiones, fencing de rutas, mutación de fuentes ni coordinador completo. Tampoco protege escrituras que eviten este store. No conectar al runtime.
+
+## 18. F2.3.17 — Contrato de evidencia terminal multiobjetivo
+
+Se añadieron los contratos inmutables `AuthorityChangeTerminalOutcome`,
+`AuthorityChangeTerminalTarget` y `AuthorityChangeTerminalEvidence`.
+
+- El recibo se vincula a un `operation_id`, identificador propio, referencia durable de evidencia, registrador y timestamp UTC.
+- Debe incluir al menos dos objetivos tipados, sin duplicados, con las revisiones esperada/propuesta reservadas y la revisión final observada.
+- `COMPLETED` exige que cada fuente observe su revisión propuesta.
+- `ABORTED` exige que cada fuente permanezca en su revisión esperada.
+- Los objetivos se canonicalizan y `matches(reservation)` exige coincidencia exacta de operación, recursos y transiciones de revisión.
+
+**Límite esencial:** este contrato valida forma y consistencia interna, no autentica la referencia, no demuestra por sí solo que la reconciliación ocurrió y no autoriza liberar claims. Todavía no hay persistencia del recibo, transición atómica del estado ni protocolo de liberación. Los claims siguen retenidos. El siguiente incremento debe persistir el recibo junto con la transición terminal en una misma UoW y validar su binding contra el conjunto reservado antes de considerar cualquier liberación.
+
+**Estado:** contratos y pruebas focalizadas publicados; pendiente de validación local. Runtime desconectado.
+
