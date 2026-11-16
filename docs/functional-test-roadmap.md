@@ -432,4 +432,14 @@ Implementar un inventario persistente y versionado de emisores esperados, separa
 
 La auditoría debe detectar registros sin política, políticas huérfanas, emisor deshabilitado, política deshabilitada y corrupción de ambos historiales. Registrar un emisor nunca constituye autenticación ni confianza.
 
-**Estado:** implementado en la rama; pendiente de pruebas locales del propietario.
+**Estado: VALIDADO.** El propietario ejecutó la suite completa: 1106 tests en 9.086 s, todos OK.
+
+## F2.3.31 — Integración del inventario en la verificación de evidencia
+
+El servicio `MultiAuthorityRecoveryEvidenceVerificationService` exige ahora tres dependencias separadas: registro autoritativo de emisores, política de confianza y verificador independiente. Antes de consultar la política, obtiene el snapshot vigente del emisor. Si no existe, está deshabilitado o no coincide con el issuer_id de la evidencia, devuelve DENIED sin invocar política ni verificador. Si el inventario no está disponible, devuelve UNAVAILABLE y falla cerrado.
+
+Orden: binding/ventana de evidencia → inventario habilitado → política vigente compatible → autenticación independiente. El registro no autentica la firma; la política no autentica el payload; solo el verificador puede devolver VERIFIED.
+
+**Límite:** esta consulta es un gate previo y no cierra por sí sola una carrera de desactivación concurrente entre lectura y efecto. No se declara garantía de revocación/fencing hasta integrar un coordinador con consistencia en el punto de efecto. No se habilitan acciones de recuperación ni runtime.
+
+**Estado:** implementado en la rama; pruebas locales pendientes.
