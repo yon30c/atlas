@@ -7,17 +7,8 @@ from atlas.assistant.models import AssistantResponse, AssistantResponseKind
 
 
 class AssistantRuntime(Protocol):
-    """Fachada de aplicación requerida por la interfaz de consola."""
-
-    def respond(self, content: str) -> AssistantResponse:
-        """Procesa el texto introducido y devuelve una respuesta."""
-
-    def respond_streaming(
-        self,
-        content: str,
-        on_token: Callable[[str], None],
-    ) -> AssistantResponse:
-        """Procesa el texto y emite fragmentos conforme llegan."""
+    def respond(self, content: str) -> AssistantResponse: ...
+    def respond_streaming(self, content: str, on_token: Callable[[str], None]) -> AssistantResponse: ...
 
 
 def _write_stdout(content: str) -> None:
@@ -28,10 +19,14 @@ def _write_stdout(content: str) -> None:
 def _show_help(output_fn: Callable[[str], None]) -> None:
     output_fn(
         "Comandos de Atlas:\n"
-        "  /help   Muestra esta ayuda.\n"
-        "  /clear  Limpia la pantalla; conserva el historial de la sesión.\n"
-        "  /exit   Finaliza Atlas.\n"
-        "También puedes usar 'salir', 'exit' o 'quit' para terminar."
+        "  /help                 Muestra esta ayuda.\n"
+        "  /clear                Limpia la pantalla.\n"
+        "  /new [título]         Crea y selecciona una conversación.\n"
+        "  /conversations [--all] Lista conversaciones.\n"
+        "  /use <id>             Selecciona una conversación existente.\n"
+        "  /rename <título>      Renombra la conversación activa.\n"
+        "  /close                Cierra la activa y crea otra.\n"
+        "  /exit                 Finaliza Atlas."
     )
 
 
@@ -41,10 +36,9 @@ def run_console(
     input_fn: Callable[[str], str] = input,
     output_fn: Callable[[str], None] = print,
     write_fn: Callable[[str], None] = _write_stdout,
+    command_handler: Callable[[str], str | None] | None = None,
 ) -> None:
-    """Ejecuta la conversación delegando la coordinación en AtlasCore."""
     output_fn("Atlas está listo. Escribe '/help' para ver los comandos.")
-
     try:
         while True:
             try:
@@ -52,39 +46,35 @@ def run_console(
             except EOFError:
                 output_fn("Atlas: sesión finalizada.")
                 return
-
             if not isinstance(content, str):
                 raise TypeError("input_fn debe devolver texto")
-
             normalized = content.strip()
             if not normalized:
                 continue
-
             command = normalized.casefold()
             if command == "/help":
                 _show_help(output_fn)
                 continue
             if command == "/clear":
-                # Limpiar la terminal no debe alterar el contexto conversacional.
                 write_fn("\033[2J\033[H")
                 continue
             if command == "/exit" or command in {"salir", "exit", "quit"}:
                 output_fn("Atlas: hasta luego.")
                 return
-
+            if command_handler is not None and normalized.startswith("/"):
+                result = command_handler(normalized)
+                if result is not None:
+                    output_fn(result)
+                    continue
             streaming_responder = getattr(runtime, "respond_streaming", None)
             if callable(streaming_responder):
                 write_fn("Atlas> ")
                 streamed: list[str] = []
-
                 def emit(token: str) -> None:
                     if not isinstance(token, str):
-                        raise TypeError(
-                            "el streaming debe emitir fragmentos de texto"
-                        )
+                        raise TypeError("el streaming debe emitir fragmentos de texto")
                     streamed.append(token)
                     write_fn(token)
-
                 response = streaming_responder(content, emit)
                 if response.kind is AssistantResponseKind.ERROR:
                     if streamed:
