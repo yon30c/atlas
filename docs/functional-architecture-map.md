@@ -202,3 +202,16 @@ La inspección de los contratos existentes identificó que:
 Por tanto, la composición futura debe separar revisión de intención, autorización CAM y aprobación humana. La confirmación de revisión no concede permisos; una aprobación no convierte DENY en ALLOW; la autorización se revalida antes de ejecutar. El siguiente incremento diseñará el contrato genérico de evidencia CAM sin conectar aún consola ni runtime.
 
 **Estado:** F2.1 validada (893 pruebas en ese punto); F2.2 validada por el propietario con 900/900 pruebas; F2.3 diseño documentado, sin implementación de autorización, aprobación o ejecución.
+
+
+## 10. Contrato de autorización de operaciones (F2.3.1)
+
+Se añadieron contratos separados del resultado de autorización de Memory:
+
+- `atlas.authorization.operation_models.OperationAuthorizationEvidence`: claims ligados al request, actor/revisión, proyecto, entorno, acción, recurso/owner exactos, Grant/revisión y vigencia.
+- `OperationAuthorizationEvidence.matches(request)` valida correspondencia de claims; `is_current_at(now)` valida solo la ventana temporal.
+- `OperationAuthorizationResult`: exige evidencia para ALLOW y la prohíbe para DENY/REQUIRE_APPROVAL.
+- `atlas.ports.operation_authorization.OperationAuthorizationPort`: puerto de evaluación sin ejecución.
+- Pruebas en `tests/unit/test_operation_authorization_contracts.py`.
+
+Estos modelos no autentican al issuer, no prueban revocación actual ni sustituyen un servicio CAM confiable. No existe todavía adaptador productivo ni integración al Assistant/CLI. La validación local de este incremento está pendiente.
