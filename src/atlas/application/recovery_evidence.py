@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
+import hashlib
+import json
 
 from atlas.core.errors import ContractError
 from atlas.memory.authority_changes import (
@@ -40,6 +42,7 @@ class RecoveryEvidenceVerification:
     status: RecoveryEvidenceVerificationStatus
     evidence_id: str
     issuer_registry_revision: int | None = None
+    evidence_digest: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.status, RecoveryEvidenceVerificationStatus):
@@ -54,14 +57,51 @@ class RecoveryEvidenceVerification:
             raise ContractError("issuer_registry_revision debe ser un entero positivo")
         if (
             self.status is RecoveryEvidenceVerificationStatus.VERIFIED
-            and self.issuer_registry_revision is None
+            and (self.issuer_registry_revision is None or self.evidence_digest is None)
         ):
-            raise ContractError("VERIFIED requiere la revisión del inventario")
-        if (
-            self.status is not RecoveryEvidenceVerificationStatus.VERIFIED
-            and self.issuer_registry_revision is not None
+            raise ContractError("VERIFIED requiere revisión del inventario y digest de evidencia")
+        if self.evidence_digest is not None and (
+            not isinstance(self.evidence_digest, str)
+            or len(self.evidence_digest) != 64
+            or any(char not in "0123456789abcdef" for char in self.evidence_digest)
         ):
-            raise ContractError("solo VERIFIED puede incluir revisión del inventario")
+            raise ContractError("evidence_digest debe ser SHA-256 hexadecimal lowercase")
+        if self.status is not RecoveryEvidenceVerificationStatus.VERIFIED and (
+            self.issuer_registry_revision is not None or self.evidence_digest is not None
+        ):
+            raise ContractError("solo VERIFIED puede incluir revisión y digest de evidencia")
+
+
+
+def recovery_evidence_digest(evidence: MultiAuthorityRecoveryEvidence) -> str:
+    """Hash every field of the immutable evidence claim in canonical form."""
+    if not isinstance(evidence, MultiAuthorityRecoveryEvidence):
+        raise ContractError("evidence debe ser MultiAuthorityRecoveryEvidence")
+    payload = {
+        "evidence_id": evidence.evidence_id,
+        "operation_id": evidence.operation_id,
+        "evidence_kind": evidence.evidence_kind.value,
+        "issuer_id": evidence.issuer_id,
+        "issued_at": evidence.issued_at.isoformat(timespec="microseconds"),
+        "expires_at": evidence.expires_at.isoformat(timespec="microseconds"),
+        "payload_digest": evidence.payload_digest,
+        "attestation_ref": evidence.attestation_ref,
+        "targets": [
+            {
+                "authority_kind": target.authority_kind.value,
+                "authority_id": target.authority_id,
+                "expected_revision": target.expected_revision,
+                "proposed_revision": target.proposed_revision,
+                "observed_revision": target.observed_revision,
+            }
+            for target in evidence.targets
+        ],
+    }
+    canonical = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
 
 
 def _validate_utc(value: datetime, field: str) -> None:
@@ -215,4 +255,5 @@ class MultiAuthorityRecoveryEvidenceVerificationService:
             RecoveryEvidenceVerificationStatus.VERIFIED,
             evidence.evidence_id,
             registration.registry_revision,
+            recovery_evidence_digest(evidence),
         )
