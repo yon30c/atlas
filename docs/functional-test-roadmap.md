@@ -114,7 +114,7 @@ El conjunto exacto de operaciones se define al inspeccionar los módulos existen
 
 ### F2 — Capacidades y herramientas de prueba
 
-**Estado:** F2.1 implementa el contrato de listado y el adaptador local acotado; validación local pendiente. El adaptador requiere un mapa explícito de IDs a raíces absolutas existentes, reales y canónicas. `workspace.list` enumera solo entradas inmediatas, devuelve tipo y tamaño de archivos, ordena resultados y reporta symlinks sin seguirlos. No hay todavía servicio de aplicación, confirmación, consola ni ejecución integrada.
+**Estado:** F2.1 fue validada por el propietario con 893/893 pruebas. F2.2 añade `WorkspaceListingService`, que consume `WorkspaceReader`, valida el ID y verifica el tipo y la correspondencia del resultado. El servicio no conoce rutas ni detalles del sistema de archivos. La validación local de F2.2 está pendiente. No hay todavía confirmación, consola ni ejecución integrada.
 
 - Definir un catálogo pequeño de capacidades reales.
 - Implementar adaptadores concretos para el workspace de prueba.
@@ -208,4 +208,4 @@ Para cada siguiente incremento:
 6. Revisar los resultados antes de continuar.
 7. Actualizar esta documentación con evidencia, commit y estado real.
 
-**Siguiente acción:** actualizar el checkout Debian y ejecutar `tests.unit.test_local_workspace` y después la suite completa. Si pasan, F2.1 quedará validado a nivel unitario. A continuación se añadirá el servicio de aplicación que consume `WorkspaceReader`; todavía sin conectar la capacidad a la consola ni al runtime conversacional.
+**Siguiente acción:** actualizar el checkout Debian y ejecutar `tests.unit.test_workspace_listing_service`, `tests.unit.test_local_workspace` y después la suite completa. Si pasan, F2.2 quedará validado a nivel unitario. El siguiente incremento será definir el límite de aprobación/ejecución para el plan `workspace.list`, antes de integrar la consola.
