@@ -61,6 +61,9 @@ class SQLiteCoreSchemaTests(unittest.TestCase):
             "consistency_domains", "journal_entries", "journal_operations",
             "checkpoints", "checkpoint_projections", "schema_migrations",
             "identity_records", "atlas_users", "atlas_projects", "atlas_environments",
+            "multi_authority_change_operations",
+            "multi_authority_change_idempotency",
+            "multi_authority_change_targets",
         }.issubset(tables))
         self.assertIn("journal_operations_idempotency_unique", indexes)
 
