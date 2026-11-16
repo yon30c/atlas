@@ -100,7 +100,7 @@ class MultiAuthorityRecoveryEvidenceContractTests(unittest.TestCase):
                 AuthorityChangeTargetKind.GRANT, "grant-1", 4, 5
             ),
             AuthorityChangeTarget(
-                AuthorityChangeTargetKind.GRANT_RENEWAL, "renewal-1", 2, 4
+                AuthorityChangeTargetKind.GRANT_RENEWAL, "renewal-1", 3, 4
             ),
         )
         self.assertFalse(
