@@ -174,3 +174,11 @@ La migración v8 añade `authorization_grant_renewals`, con vínculo FK al Grant
 `GrantRenewalService` ya consume el puerto `AuthorizationUnitOfWork`, por lo que puede operar con esta fábrica SQLite para crear solicitudes, aprobar/rechazar y actualizar Grant + decisión de renovación atómicamente. `GrantManagementService.issue` acepta ahora una fábrica opcional y, cuando se configura, hace la comprobación de unicidad y el INSERT dentro de la misma unidad.
 
 **Límites:** el servicio de emisión conserva modo legacy si no se inyecta UoW; la composición aún no fuerza que toda instancia de GrantManagementService use la fábrica. Revocación sigue dependiendo del coordinador CAM y no se cambia aquí. Esto no implementa aún invalidación/fencing común ni admisión de operaciones.
+
+## 14. F2.3.9 — Fuentes canónicas iniciales de Project y Environment
+
+La migración v9 crea `atlas_projects` y `atlas_environments` como fuentes SQLite canónicas mínimas. Cada registro contiene identificador opaco, estado y revisión positiva. Los identificadores son inmutables, cada actualización debe incrementar exactamente una revisión y los registros no se pueden borrar: los cierres/desactivaciones se representan como cambios de estado.
+
+`SQLiteProjectEnvironmentRepository` implementa los puertos `ProjectMetadataPort` y `EnvironmentMetadataPort` existentes, devolviendo los snapshots tipados `ProjectMetadata` y `EnvironmentMetadata`. Añade altas y actualizaciones CAS para administrar el ciclo de vida básico. `SQLiteLocalAuthorityFoundation` compone este repositorio sobre la misma instancia `SQLiteDatabase` de Identity, Grants, renovaciones y el ledger de cambios.
+
+**Límites críticos:** el contrato de metadatos existente continúa ubicado en el paquete Memory; se reutiliza para evitar un segundo modelo de snapshot en esta fase. Los registros Project/Environment no tienen todavía relación de pertenencia entre sí porque el contrato actual no la define. Las escrituras del repositorio aún no pasan por un coordinador común de invalidación/fencing y no son una autorización para ejecutar operaciones. No se integra el runtime.
