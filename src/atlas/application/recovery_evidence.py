@@ -19,6 +19,12 @@ from atlas.authorization.recovery_evidence_trust import (
 from atlas.ports.recovery_evidence_issuer_trust import (
     RecoveryEvidenceIssuerTrustPolicyPort,
 )
+from atlas.authorization.recovery_evidence_issuer_registry import (
+    RecoveryEvidenceIssuerRegistration,
+)
+from atlas.ports.recovery_evidence_issuer_registry import (
+    RecoveryEvidenceIssuerRegistryPort,
+)
 
 
 class RecoveryEvidenceVerificationStatus(str, Enum):
@@ -57,6 +63,7 @@ class MultiAuthorityRecoveryEvidenceVerificationService:
         self,
         verifier: MultiAuthorityRecoveryEvidenceVerifierPort,
         trust_policy_port: RecoveryEvidenceIssuerTrustPolicyPort,
+        issuer_registry_port: RecoveryEvidenceIssuerRegistryPort,
     ) -> None:
         if verifier is None or not callable(getattr(verifier, "verify", None)):
             raise ContractError("verifier debe implementar verify(evidence, now)")
@@ -64,8 +71,15 @@ class MultiAuthorityRecoveryEvidenceVerificationService:
             getattr(trust_policy_port, "get_policy", None)
         ):
             raise ContractError("trust_policy_port debe implementar get_policy(issuer_id)")
+        if issuer_registry_port is None or not callable(
+            getattr(issuer_registry_port, "get_registration", None)
+        ):
+            raise ContractError(
+                "issuer_registry_port debe implementar get_registration(issuer_id)"
+            )
         self._verifier = verifier
         self._trust_policy_port = trust_policy_port
+        self._issuer_registry_port = issuer_registry_port
 
     def verify(
         self,
@@ -92,6 +106,27 @@ class MultiAuthorityRecoveryEvidenceVerificationService:
             not evidence.matches(operation_id, evidence_kind, targets)
             or now < evidence.issued_at
             or now >= evidence.expires_at
+        ):
+            return RecoveryEvidenceVerification(
+                RecoveryEvidenceVerificationStatus.DENIED,
+                evidence.evidence_id,
+            )
+
+        try:
+            registration = self._issuer_registry_port.get_registration(
+                evidence.issuer_id
+            )
+        except Exception:
+            return RecoveryEvidenceVerification(
+                RecoveryEvidenceVerificationStatus.UNAVAILABLE,
+                evidence.evidence_id,
+            )
+
+        if (
+            registration is None
+            or not isinstance(registration, RecoveryEvidenceIssuerRegistration)
+            or registration.enabled is not True
+            or registration.issuer_id != evidence.issuer_id
         ):
             return RecoveryEvidenceVerification(
                 RecoveryEvidenceVerificationStatus.DENIED,
