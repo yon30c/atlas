@@ -1,8 +1,10 @@
 """Canonical SQLite sources for Project and Environment metadata."""
 
 import sqlite3
+from contextlib import contextmanager
+from typing import Iterator
 
-from atlas.adapters.sqlite.database import SQLiteDatabase
+from atlas.adapters.sqlite.database import SQLiteDatabase, SQLiteUnitOfWork
 from atlas.core.errors import ConcurrencyError, ContractError, NotFoundError
 from atlas.memory.metadata import EnvironmentMetadata, ProjectMetadata
 from atlas.memory.models import EnvironmentId, ProjectId
@@ -20,10 +22,34 @@ class SQLiteProjectEnvironmentRepository(
     revisions and records remain available as authority tombstones.
     """
 
-    def __init__(self, database: SQLiteDatabase) -> None:
+    def __init__(
+        self,
+        database: SQLiteDatabase,
+        *,
+        unit_of_work: SQLiteUnitOfWork | None = None,
+    ) -> None:
         if not isinstance(database, SQLiteDatabase):
             raise ContractError("database debe ser SQLiteDatabase")
+        if unit_of_work is not None and not isinstance(unit_of_work, SQLiteUnitOfWork):
+            raise ContractError("unit_of_work debe ser SQLiteUnitOfWork")
         self._database = database
+        self._unit_of_work = unit_of_work
+
+    @contextmanager
+    def _read_connection(self) -> Iterator[sqlite3.Connection]:
+        if self._unit_of_work is not None:
+            yield self._unit_of_work._connection_for(self._database)
+        else:
+            with self._read_connection() as connection:
+                yield connection
+
+    @contextmanager
+    def _write_connection(self) -> Iterator[sqlite3.Connection]:
+        if self._unit_of_work is not None:
+            yield self._unit_of_work._connection_for(self._database)
+        else:
+            with self._database.unit_of_work() as unit:
+                yield unit._connection_for(self._database)
 
     @staticmethod
     def _required_id(value: object, field: str) -> str:
@@ -50,8 +76,7 @@ class SQLiteProjectEnvironmentRepository(
         if not isinstance(project, ProjectMetadata):
             raise ContractError("project debe ser ProjectMetadata")
         try:
-            with self._database.unit_of_work() as unit:
-                connection = unit._connection_for(self._database)
+            with self._write_connection() as connection:
                 connection.execute(
                     """
                     INSERT INTO atlas_projects (project_id, status, revision)
@@ -71,8 +96,7 @@ class SQLiteProjectEnvironmentRepository(
         if not isinstance(project, ProjectMetadata):
             raise ContractError("project debe ser ProjectMetadata")
         self._expected_next_revision(expected_revision, project.revision)
-        with self._database.unit_of_work() as unit:
-            connection = unit._connection_for(self._database)
+        with self._write_connection() as connection:
             cursor = connection.execute(
                 """
                 UPDATE atlas_projects SET status = ?, revision = ?
