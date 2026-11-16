@@ -65,7 +65,35 @@ El modo offline sustituye el generador Ollama por `LocalModeResponseGenerator`. 
 | `run_console` | Bucle de entrada, streaming y despacho de comandos | Mantenerlo como adaptador de presentación |
 | `cli.main` | Composición concreta de dependencias | Añadir aquí los nuevos servicios/adaptadores cuando estén probados |
 
-## 3. Límites observados
+## 3.1 Planificación funcional aislada (F1)
+
+La rama incorpora un flujo independiente del runtime conversacional:
+
+```text
+Proveedor LLM inyectado
+        |
+        v
+OllamaIntentInterpreter
+        |
+        v
+parse_intent_interpretation
+        |
+        v
+AssistantRequestPlanner
+        |
+        v
+AssistantPlanningService
+        |
+        v
+RequestPlanningResult
+```
+
+- `atlas.bootstrap.build_request_planner(provider, model)` compone el flujo.
+- El proveedor se inyecta; la fábrica no crea conexiones ni inicia servicios.
+- La configuración del proveedor para Gemma debe incluir `think=False` y `response_format="json"`, según la prueba manual reportada por el propietario.
+- Este flujo todavía no se instancia desde `cli.py`, no recibe solicitudes de la consola y no ejecuta capacidades.
+
+## 4. Límites observados
 
 - `AtlasCore` solo expone `respond` y `respond_streaming`; no tiene un caso de uso de planificación ni ejecución.
 - `AssistantService` solo genera texto informativo.
