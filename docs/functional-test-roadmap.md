@@ -460,7 +460,7 @@ El contrato del puerto exige que el futuro adaptador haga en una única frontera
 
 **Fuera de alcance:** no se implementa todavía el adaptador SQLite, no hay registro durable de admisiones y el resultado nunca permite efectos. No se conecta runtime ni recuperación automática.
 
-**Estado:** implementado en la rama; pruebas locales pendientes.
+**Estado: VALIDADO por el propietario; suite completa: 1131 tests en 10.314 s, todos OK.**
 
 ## F2.3.34 — Persistencia atómica de admisión de evidencia
 
@@ -470,7 +470,7 @@ Pruebas añadidas para persistencia, replay, revisión obsoleta, emisor deshabil
 
 **Límite:** la transacción solo hace atómica la admisión local. No protege un efecto posterior ni habilita recuperación/runtime. ADMITTED no es autoridad de ejecución.
 
-**Estado:** implementado en la rama; pruebas locales pendientes.
+**Estado: VALIDADO por el propietario; suite completa: 1131 tests en 10.314 s, todos OK.**
 
 La verificación VERIFIED queda ligada también a un digest canónico SHA-256 de la evidencia completa. El comando de admisión exige coincidencia de ese digest, no solo de evidence_id, evitando reutilizar una verificación con un objeto alterado que conserve el mismo identificador.
 
