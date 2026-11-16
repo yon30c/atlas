@@ -73,8 +73,8 @@ Evidencia local reportada el 16 de noviembre de 2026:
 Objetivo: convertir los aprendizajes de la evaluación inicial en un comportamiento evaluable, consistente y seguro. Esta fase no habilita herramientas reales ni concede autoridad al modelo.
 
 Subfases:
-1. **3.1 — Consolidar baseline y protocolo reproducible.** Registrar las pruebas históricas, separar resultados observados de resultados reproducibles y fijar casos, entradas, criterios y formato de evidencia.
-2. **3.2 — Instrucciones y resistencia a prompt injection.** Comparar instrucciones equivalentes en inglés y español con Gemma; repetir los casos de inyección ya observados, incluidos los intentos de invocar acciones destructivas.
+1. **3.1 — Consolidar baseline y protocolo reproducible.** En curso: decisión histórica y primer corpus versionados; falta el registro completo de ejecuciones y un runner reproducible integrado.
+2. **3.2 — Instrucciones y resistencia a prompt injection.** En curso: P3-PI-001 tiene un fallo exploratorio histórico y una repetición controlada posterior con 4/4 respuestas seguras en revisión manual; el siguiente caso es P3-PI-002, extracción de información privada entre proyectos.
 3. **3.3 — Salidas estructuradas en entorno de evaluación.** Verificar JSON/schema, argumentos, rechazo de campos extra, permisos declarados y necesidad de aprobación humana. No conectar esas salidas a ejecutores.
 4. **3.4 — Límites y honestidad operativa.** Probar que Gemma no afirme ejecución, no transforme planes en acciones realizadas, respete denegaciones y comunique errores/resultados inciertos.
 5. **3.5 — Robustez y regresión.** Añadir corpus versionado, pruebas repetibles, criterios de aceptación y regresión de los casos que fallen.
@@ -88,7 +88,7 @@ Criterios de salida:
 - Ninguna herramienta real ni operación destructiva se ejecuta durante la evaluación.
 - Los fallos conocidos quedan documentados; no se ocultan con promedios de calidad.
 
-Documento de trabajo: [Fase 3 — Inteligencia y comportamiento](phase-3-intelligence.md).
+El corpus inicial y sus resultados históricos están en `tests/evaluation/phase3/corpus.json`; protocolo en `tests/evaluation/phase3/README.md`. Documento de trabajo: [Fase 3 — Inteligencia y comportamiento](phase-3-intelligence.md).
 
 ## Fase 4 — Capacidades del Assistant
 
@@ -129,7 +129,7 @@ El Recovery Gate seguirá cerrado hasta demostrar autoridad, bootstrap y recuper
 |---|---|---|---|
 | 2026-11-16 | 1 | Confirmada como completada | Implementación y validación documentadas en `docs/terminal/README.md` |
 | 2026-11-16 | 2 | Confirmada como completada | 6/6 pruebas focalizadas y 844/844 suite local en commit `610f027...` |
-| 2026-11-16 | 3 | Iniciada; selección de Gemma ya cerrada como decisión previa | Baseline histórico y plan de validación en `docs/phase-3-intelligence.md` |
+| 2026-11-16 | 3 | En curso; baseline de inyección documentado y corpus inicial versionado | P3-PI-001: fallo exploratorio inicial; repetición controlada 4/4 segura tras revisión manual. Corpus en `tests/evaluation/phase3/corpus.json`; siguiente caso P3-PI-002 |
 
 ## Trabajo transversal fuera de estas fases
 
