@@ -114,7 +114,7 @@ El conjunto exacto de operaciones se define al inspeccionar los módulos existen
 
 ### F2 — Capacidades y herramientas de prueba
 
-**Estado:** F2.1 validada con 893/893 pruebas. F2.2 implementada y validada por el propietario con 900/900 pruebas (16 de noviembre de 2026). F2.3 documenta la separación entre revisión del plan, autorización CAM y aprobación humana. F2.3.1 añadió los contratos `OperationAuthorizationEvidence`, `OperationAuthorizationResult` y `OperationAuthorizationPort`, validados por el propietario con 913/913 pruebas. F2.3.2 añade el puerto de verificación confiable y `OperationAuthorizationEvidenceVerificationService`, con pruebas negativas; validación local pendiente. No hay todavía adaptador concreto del verificador, Approval Manager integrado ni ejecución desde consola/runtime.
+**Estado:** F2.1 validada con 893/893 pruebas. F2.2 implementada y validada por el propietario con 900/900 pruebas (16 de noviembre de 2026). F2.3 documenta la separación entre revisión del plan, autorización CAM y aprobación humana. F2.3.1 añadió los contratos `OperationAuthorizationEvidence`, `OperationAuthorizationResult` y `OperationAuthorizationPort`, validados por el propietario con 913/913 pruebas. F2.3.2 añade el puerto de verificación confiable y `OperationAuthorizationEvidenceVerificationService`, validado por el propietario con 922/922 pruebas. F2.3.3a amplía la evidencia para incluir revisiones explícitas de proyecto y entorno; validación local pendiente. No hay todavía adaptador concreto del verificador, Approval Manager integrado ni ejecución desde consola/runtime.
 
 - Definir un catálogo pequeño de capacidades reales.
 - Implementar adaptadores concretos para el workspace de prueba.
