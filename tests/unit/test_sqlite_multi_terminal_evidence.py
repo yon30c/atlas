@@ -300,5 +300,142 @@ class SQLiteMultiTerminalEvidenceTests(unittest.TestCase):
                 )
 
 
+    def test_completed_operation_releases_all_claims_with_durable_receipt(self):
+        reservation = self._prepare_reconciling(key="release-completed")
+        self.store.record_multi_terminal_evidence(self._evidence(reservation))
+        self.assertTrue(self.store.release_multi_claims(reservation.operation_id))
+        self.assertEqual(self.store.get_multi_claims(reservation.operation_id), ())
+        with self.database.connection() as connection:
+            receipt = connection.execute(
+                """
+                SELECT evidence_digest FROM multi_authority_change_claim_releases
+                WHERE operation_id = ?
+                """,
+                (reservation.operation_id,),
+            ).fetchone()
+        self.assertIsNotNone(receipt)
+        self.assertEqual(
+            receipt["evidence_digest"],
+            self.store.get_multi_terminal_evidence(reservation.operation_id) and
+            connection.execute(
+                "SELECT evidence_digest FROM multi_authority_change_terminal_evidence WHERE operation_id = ?",
+                (reservation.operation_id,),
+            ).fetchone()["evidence_digest"],
+        )
+
+    def test_aborted_operation_can_release_only_after_terminal_receipt(self):
+        reservation = self._prepare_reconciling(key="release-aborted")
+        self.store.record_multi_terminal_evidence(
+            self._evidence(
+                reservation, outcome=AuthorityChangeTerminalOutcome.ABORTED
+            )
+        )
+        self.assertTrue(self.store.release_multi_claims(reservation.operation_id))
+        self.assertEqual(self.store.get_multi_claims(reservation.operation_id), ())
+
+    def test_nonterminal_operation_cannot_release_claims(self):
+        reservation = self.store.reserve_multi_change(
+            MultiAuthorityChangeIntent(
+                idempotency_key="release-not-terminal",
+                consumer_id="atlas-consumer",
+                action="grant.renewal.approve",
+                actor_identity_id="user-001",
+                owner_id="user-001",
+                project_id="project-001",
+                environment_id="development",
+                targets=(
+                    AuthorityChangeTarget(AuthorityChangeTargetKind.GRANT, "grant-001", 4, 5),
+                    AuthorityChangeTarget(AuthorityChangeTargetKind.GRANT_RENEWAL, "renewal-001", 2, 3),
+                ),
+                request_context_ref="request-001",
+                requested_at=NOW,
+            )
+        )
+        self.assertTrue(self.store.acquire_multi_claims(reservation.operation_id))
+        self.assertFalse(self.store.release_multi_claims(reservation.operation_id))
+        self.assertEqual(
+            self.store.get_multi_claims(reservation.operation_id),
+            reservation.intent.targets,
+        )
+
+    def test_release_is_idempotent_after_store_restart(self):
+        reservation = self._prepare_reconciling(key="release-retry")
+        self.store.record_multi_terminal_evidence(self._evidence(reservation))
+        self.assertTrue(self.store.release_multi_claims(reservation.operation_id))
+        restarted = SQLiteAuthorityChangeStore(SQLiteDatabase(self.database_path))
+        self.assertTrue(restarted.release_multi_claims(reservation.operation_id))
+        self.assertEqual(restarted.get_multi_claims(reservation.operation_id), ())
+
+    def test_release_fails_closed_when_claim_set_is_incomplete(self):
+        reservation = self._prepare_reconciling(key="release-incomplete")
+        self.store.record_multi_terminal_evidence(self._evidence(reservation))
+        with self.database.connection() as connection:
+            connection.execute("DROP TRIGGER multi_authority_change_claims_no_delete")
+            connection.execute(
+                """
+                DELETE FROM multi_authority_change_claims
+                WHERE operation_id = ? AND authority_kind = 'grant_renewal'
+                """,
+                (reservation.operation_id,),
+            )
+        with self.assertRaises(sqlite3.DatabaseError):
+            self.store.release_multi_claims(reservation.operation_id)
+        with self.database.connection() as connection:
+            release = connection.execute(
+                "SELECT 1 FROM multi_authority_change_claim_releases WHERE operation_id = ?",
+                (reservation.operation_id,),
+            ).fetchone()
+        self.assertIsNone(release)
+
+    def test_claim_delete_requires_release_receipt_and_release_receipt_is_immutable(self):
+        reservation = self._prepare_reconciling(key="release-sql-guard")
+        self.store.record_multi_terminal_evidence(self._evidence(reservation))
+        with self.assertRaises(sqlite3.IntegrityError):
+            with self.database.connection() as connection:
+                connection.execute(
+                    "DELETE FROM multi_authority_change_claims WHERE operation_id = ?",
+                    (reservation.operation_id,),
+                )
+        self.assertTrue(self.store.release_multi_claims(reservation.operation_id))
+        with self.assertRaises(sqlite3.IntegrityError):
+            with self.database.connection() as connection:
+                connection.execute(
+                    "UPDATE multi_authority_change_claim_releases SET released_at = 'tampered' WHERE operation_id = ?",
+                    (reservation.operation_id,),
+                )
+        with self.assertRaises(sqlite3.IntegrityError):
+            with self.database.connection() as connection:
+                connection.execute(
+                    "DELETE FROM multi_authority_change_claim_releases WHERE operation_id = ?",
+                    (reservation.operation_id,),
+                )
+
+    def test_released_resource_can_be_claimed_by_a_new_operation(self):
+        first = self._prepare_reconciling(key="release-reuse-first")
+        self.store.record_multi_terminal_evidence(self._evidence(first))
+        self.assertTrue(self.store.release_multi_claims(first.operation_id))
+        second_intent = MultiAuthorityChangeIntent(
+            idempotency_key="release-reuse-second",
+            consumer_id="atlas-consumer",
+            action="grant.renewal.approve",
+            actor_identity_id="user-001",
+            owner_id="user-001",
+            project_id="project-001",
+            environment_id="development",
+            targets=(
+                AuthorityChangeTarget(AuthorityChangeTargetKind.GRANT, "grant-001", 5, 6),
+                AuthorityChangeTarget(AuthorityChangeTargetKind.GRANT_RENEWAL, "renewal-002", 1, 2),
+            ),
+            request_context_ref="request-002",
+            requested_at=NOW,
+        )
+        second = self.store.reserve_multi_change(second_intent)
+        self.assertTrue(self.store.acquire_multi_claims(second.operation_id))
+        self.assertEqual(
+            self.store.get_multi_claims(second.operation_id),
+            second_intent.targets,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
