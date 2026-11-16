@@ -7,6 +7,7 @@ from atlas.application.recovery_admission import RecoveryEvidenceAdmissionComman
 from atlas.application.recovery_evidence import (
     RecoveryEvidenceVerification,
     RecoveryEvidenceVerificationStatus,
+    recovery_evidence_digest,
 )
 from atlas.core.errors import ContractError
 from atlas.memory.authority_changes import (
@@ -53,7 +54,10 @@ def evidence():
 
 def verified():
     return RecoveryEvidenceVerification(
-        RecoveryEvidenceVerificationStatus.VERIFIED, "evidence-1", 7
+        RecoveryEvidenceVerificationStatus.VERIFIED,
+        "evidence-1",
+        7,
+        recovery_evidence_digest(evidence()),
     )
 
 
@@ -97,8 +101,24 @@ class RecoveryEvidenceAdmissionCommandTests(unittest.TestCase):
     def test_rejects_verification_for_different_evidence(self):
         with self.assertRaises(ContractError):
             self.build(verification=RecoveryEvidenceVerification(
-                RecoveryEvidenceVerificationStatus.VERIFIED, "other-evidence", 7
+                RecoveryEvidenceVerificationStatus.VERIFIED, "other-evidence", 7, "b" * 64
             ))
+
+    def test_rejects_same_evidence_id_with_changed_content(self):
+        changed = evidence()
+        changed = MultiAuthorityRecoveryEvidence(
+            evidence_id=changed.evidence_id,
+            operation_id=changed.operation_id,
+            evidence_kind=changed.evidence_kind,
+            issuer_id=changed.issuer_id,
+            issued_at=changed.issued_at,
+            expires_at=changed.expires_at,
+            payload_digest="b" * 64,
+            attestation_ref=changed.attestation_ref,
+            targets=changed.targets,
+        )
+        with self.assertRaises(ContractError):
+            self.build(evidence=changed)
 
     def test_rejects_operation_or_target_mismatch(self):
         with self.assertRaises(ContractError):
@@ -117,7 +137,7 @@ class RecoveryEvidenceAdmissionCommandTests(unittest.TestCase):
             self.build(requested_at=datetime(2026, 11, 16, 12, 0))
         with self.assertRaises(ContractError):
             self.build(verification=RecoveryEvidenceVerification(
-                RecoveryEvidenceVerificationStatus.VERIFIED, "evidence-1", 0
+                RecoveryEvidenceVerificationStatus.VERIFIED, "evidence-1", 0, "a" * 64
             ))
 
     def test_canonicalizes_target_order(self):
