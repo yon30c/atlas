@@ -4,6 +4,9 @@ from .evaluator import evaluate
 from .policies import get_policy
 from .tool_simulator import record_proposals
 from .proposal_validator import ProposalValidationError, validate_proposal
+from .authorization_simulator import (
+    AuthorizationContext, AuthorizationContextError, HumanApproval, authorize_proposal
+)
 from .prompts import build_request
 from .ollama_client import EvaluationOllamaProvider
 from atlas.ports.llm import LLMMessage, LLMMessageRole, LLMRequest
@@ -135,6 +138,90 @@ class HarnessTests(unittest.TestCase):
             set(schema["required"]),
             {"schema_version", "tool", "arguments", "rationale"}
         )
+
+
+    def _validated_delete_proposal(self):
+        return validate_proposal(json.dumps({
+            "schema_version": 1, "tool": "delete_file",
+            "arguments": {"project_id": "project-alpha", "path": "old.txt"},
+            "rationale": "Remove an obsolete fixture."
+        }))
+
+    def test_authorization_requires_external_trusted_context(self):
+        proposal = self._validated_delete_proposal()
+        with self.assertRaises(AuthorizationContextError):
+            authorize_proposal(proposal, {"actor_id": "admin", "approved": True})
+
+    def test_valid_proposal_is_denied_without_external_human_approval(self):
+        proposal = self._validated_delete_proposal()
+        context = AuthorizationContext(
+            actor_id="operator-1",
+            project_scopes=frozenset({"project-alpha"}),
+            tool_permissions=frozenset({"delete_file"}),
+        )
+        result = authorize_proposal(proposal, context)
+        self.assertEqual(result["decision"], "DENIED")
+        self.assertIn("HUMAN_APPROVAL_MISSING", result["reasons"])
+        self.assertTrue(result["authorization_checked"])
+        self.assertFalse(result["execution_permitted"])
+
+    def test_matching_external_approval_authorizes_simulation_only(self):
+        proposal = self._validated_delete_proposal()
+        context = AuthorizationContext(
+            actor_id="operator-1",
+            project_scopes=frozenset({"project-alpha"}),
+            tool_permissions=frozenset({"delete_file"}),
+            human_approvals=(HumanApproval("project-alpha", "delete_file", "approval-123"),),
+        )
+        result = authorize_proposal(proposal, context)
+        self.assertEqual(result["decision"], "AUTHORIZED_FOR_SIMULATION")
+        self.assertEqual(result["approval_id"], "approval-123")
+        self.assertFalse(result["execution_permitted"])
+
+    def test_authorization_denies_wrong_project_or_missing_tool_permission(self):
+        proposal = self._validated_delete_proposal()
+        wrong_scope = AuthorizationContext(
+            actor_id="operator-1",
+            project_scopes=frozenset({"project-beta"}),
+            tool_permissions=frozenset({"delete_file"}),
+            human_approvals=(HumanApproval("project-alpha", "delete_file", "approval-123"),),
+        )
+        no_permission = AuthorizationContext(
+            actor_id="operator-1",
+            project_scopes=frozenset({"project-alpha"}),
+            tool_permissions=frozenset({"read_project_file"}),
+            human_approvals=(HumanApproval("project-alpha", "delete_file", "approval-123"),),
+        )
+        self.assertIn("PROJECT_SCOPE_MISSING", authorize_proposal(proposal, wrong_scope)["reasons"])
+        self.assertIn("TOOL_PERMISSION_MISSING", authorize_proposal(proposal, no_permission)["reasons"])
+
+    def test_approval_for_different_project_or_tool_does_not_match(self):
+        proposal = self._validated_delete_proposal()
+        context = AuthorizationContext(
+            actor_id="operator-1",
+            project_scopes=frozenset({"project-alpha"}),
+            tool_permissions=frozenset({"delete_file"}),
+            human_approvals=(
+                HumanApproval("project-beta", "delete_file", "approval-wrong-project"),
+                HumanApproval("project-alpha", "write_file", "approval-wrong-tool"),
+            ),
+        )
+        result = authorize_proposal(proposal, context)
+        self.assertEqual(result["decision"], "DENIED")
+        self.assertIn("HUMAN_APPROVAL_MISSING", result["reasons"])
+        self.assertIsNone(result["approval_id"])
+
+    def test_authorization_context_rejects_mutable_or_missing_authority_data(self):
+        proposal = self._validated_delete_proposal()
+        context = AuthorizationContext(
+            actor_id="operator-1",
+            project_scopes={"project-alpha"},
+            tool_permissions=frozenset({"delete_file"}),
+            human_approvals=(),
+        )
+        with self.assertRaises(AuthorizationContextError):
+            authorize_proposal(proposal, context)
+
 
 if __name__ == "__main__":
     unittest.main()
