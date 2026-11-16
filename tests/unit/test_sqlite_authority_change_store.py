@@ -17,6 +17,7 @@ from atlas.memory.authority_changes import (
     AuthorityChangeTarget,
     AuthorityChangeTargetKind,
     MultiAuthorityChangeIntent,
+    MultiAuthorityRecoveryDisposition,
 )
 from atlas.memory.consistency import AuthorityKind
 
@@ -174,6 +175,28 @@ class SQLiteMultiAuthorityChangeStoreTests(unittest.TestCase):
             request_context_ref="request-001",
             requested_at=requested_at,
         )
+
+    def _operation_at(self, status, key):
+        reservation = self.store.reserve_multi_change(self.intent(key=key))
+        self.assertTrue(self.store.acquire_multi_claims(reservation.operation_id))
+        stages = (
+            (AuthorityChangeStatus.REQUESTED, AuthorityChangeStatus.INVALIDATION_PENDING),
+            (AuthorityChangeStatus.INVALIDATION_PENDING, AuthorityChangeStatus.SOURCE_PENDING),
+            (AuthorityChangeStatus.SOURCE_PENDING, AuthorityChangeStatus.SOURCE_CONFIRMED),
+            (AuthorityChangeStatus.SOURCE_CONFIRMED, AuthorityChangeStatus.RECONCILING),
+        )
+        for expected, target in stages:
+            if target.value == status.value:
+                self.assertTrue(self.store.transition_multi_status(
+                    reservation.operation_id, expected, target
+                ))
+                break
+            if expected.value == status.value:
+                break
+            self.assertTrue(self.store.transition_multi_status(
+                reservation.operation_id, expected, target
+            ))
+        return reservation
 
     def test_multi_reservation_persists_complete_target_set(self):
         first = self.store.reserve_multi_change(self.intent())
@@ -502,6 +525,78 @@ class SQLiteMultiAuthorityChangeStoreTests(unittest.TestCase):
                     """,
                     (reservation.operation_id,),
                 )
+
+
+    def test_recovery_assessment_classifies_unclaimed_request_as_not_started(self):
+        reservation = self.store.reserve_multi_change(self.intent(key="recovery-new"))
+        assessment = self.store.assess_multi_recovery(reservation.operation_id)
+        self.assertEqual(
+            assessment.disposition,
+            MultiAuthorityRecoveryDisposition.NOT_STARTED,
+        )
+        self.assertEqual(
+            assessment.claim_audit.operation_status,
+            AuthorityChangeStatus.REQUESTED,
+        )
+        self.assertEqual(self.store.get_multi_claims(reservation.operation_id), ())
+
+    def test_recovery_assessment_marks_invalidation_as_outcome_unknown(self):
+        reservation = self._operation_at(
+            AuthorityChangeStatus.INVALIDATION_PENDING, "recovery-invalidation"
+        )
+        assessment = self.store.assess_multi_recovery(reservation.operation_id)
+        self.assertEqual(
+            assessment.disposition,
+            MultiAuthorityRecoveryDisposition.INVALIDATION_OUTCOME_UNKNOWN,
+        )
+
+    def test_recovery_assessment_never_assumes_source_pending_was_not_applied(self):
+        reservation = self._operation_at(
+            AuthorityChangeStatus.SOURCE_PENDING, "recovery-source-pending"
+        )
+        assessment = self.store.assess_multi_recovery(reservation.operation_id)
+        self.assertEqual(
+            assessment.disposition,
+            MultiAuthorityRecoveryDisposition.SOURCE_OUTCOME_UNKNOWN,
+        )
+        self.assertEqual(
+            len(assessment.claim_audit.claimed_targets),
+            len(reservation.intent.targets),
+        )
+
+    def test_recovery_assessment_distinguishes_confirmed_source_and_reconciling(self):
+        confirmed = self._operation_at(
+            AuthorityChangeStatus.SOURCE_CONFIRMED, "recovery-confirmed"
+        )
+        reconciling = self._operation_at(
+            AuthorityChangeStatus.RECONCILING, "recovery-reconciling"
+        )
+        self.assertEqual(
+            self.store.assess_multi_recovery(confirmed.operation_id).disposition,
+            MultiAuthorityRecoveryDisposition.SOURCE_CONFIRMATION_RECORDED,
+        )
+        self.assertEqual(
+            self.store.assess_multi_recovery(reconciling.operation_id).disposition,
+            MultiAuthorityRecoveryDisposition.RECONCILIATION_IN_PROGRESS,
+        )
+
+    def test_recovery_assessment_unknown_operation_returns_none(self):
+        self.assertIsNone(self.store.assess_multi_recovery("missing-operation"))
+
+    def test_recovery_assessment_is_read_only(self):
+        reservation = self._operation_at(
+            AuthorityChangeStatus.SOURCE_PENDING, "recovery-read-only"
+        )
+        before = self.store.get_multi_reservation(reservation.operation_id)
+        claims_before = self.store.get_multi_claims(reservation.operation_id)
+        self.store.assess_multi_recovery(reservation.operation_id)
+        after = self.store.get_multi_reservation(reservation.operation_id)
+        self.assertEqual(after, before)
+        self.assertEqual(
+            self.store.get_multi_claims(reservation.operation_id),
+            claims_before,
+        )
+
 
 
 
