@@ -449,3 +449,11 @@ La capa application construye `RecoveryEvidenceAdmissionCommand` únicamente des
 Actualmente solo existen el contrato y sus pruebas. No hay adaptador persistente ni admisión efectiva; el contrato tampoco es autoridad para un efecto. La futura implementación deberá integrar el ledger y el inventario en la misma UoW y, posteriormente, coordinar el efecto bajo esa frontera.
 
 **Estado:** implementado en la rama; pruebas locales pendientes.
+
+## 44. F2.3.34 — Adaptador SQLite de admisión
+
+La composición `SQLiteLocalAuthorityUnitOfWork` expone `recovery_evidence_admissions`, un adaptador que comparte la conexión transaccional con el registro de emisores y el ledger multiobjetivo. La migración v17 conserva recibos inmutables y evita duplicar evidence_id. El adaptador comprueba revisión actual/habilitada, estado no terminal admitido, objetivos y claims completos antes de insertar el binding canónico.
+
+La serialización `BEGIN IMMEDIATE` cierra la carrera entre la consulta de revisión y la inserción de admisión dentro de SQLite. No cierra la ventana entre la admisión y un efecto externo posterior: ese futuro efecto tendrá que compartir una frontera de coordinación/fencing propia. `ADMITTED` solo significa que el recibo quedó registrado.
+
+**Estado:** implementado en la rama; pruebas locales pendientes.
