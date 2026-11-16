@@ -472,3 +472,158 @@ class MultiAuthorityRecoveryAssessment:
             raise ContractError(
                 "claim_audit debe ser MultiAuthorityClaimAudit"
             )
+
+
+class MultiAuthorityRecoveryDecisionKind(str, Enum):
+    """Non-executable recommendation for handling an assessed operation."""
+
+    NO_RECOVERY_ACTION = "NO_RECOVERY_ACTION"
+    REVALIDATE_AUTHORITY = "REVALIDATE_AUTHORITY"
+    VERIFY_INVALIDATION_OUTCOME = "VERIFY_INVALIDATION_OUTCOME"
+    VERIFY_SOURCE_OUTCOME = "VERIFY_SOURCE_OUTCOME"
+    VERIFY_SOURCE_BEFORE_RECONCILIATION = "VERIFY_SOURCE_BEFORE_RECONCILIATION"
+    VERIFY_RECONCILIATION_STATE = "VERIFY_RECONCILIATION_STATE"
+    VERIFY_TERMINAL_EVIDENCE_BEFORE_RELEASE = "VERIFY_TERMINAL_EVIDENCE_BEFORE_RELEASE"
+    MANUAL_INTERVENTION_REQUIRED = "MANUAL_INTERVENTION_REQUIRED"
+
+
+class MultiAuthorityRecoveryEvidenceRequirement(str, Enum):
+    """Independent evidence required before a human/coordinator may proceed."""
+
+    FRESH_AUTHORIZATION = "FRESH_AUTHORIZATION"
+    CANONICAL_REVISION_SNAPSHOT = "CANONICAL_REVISION_SNAPSHOT"
+    INVALIDATION_OUTCOME_RECEIPT = "INVALIDATION_OUTCOME_RECEIPT"
+    SOURCE_OUTCOME_RECEIPT = "SOURCE_OUTCOME_RECEIPT"
+    FENCING_STATE = "FENCING_STATE"
+    AUTHENTICATED_TERMINAL_EVIDENCE = "AUTHENTICATED_TERMINAL_EVIDENCE"
+    HUMAN_REVIEW = "HUMAN_REVIEW"
+
+
+@dataclass(frozen=True, slots=True)
+class MultiAuthorityRecoveryDecision:
+    """Auditable recommendation; never grants permission or triggers an action.
+
+    The recommendation is bound to one operation and one read-only assessment.
+    Required evidence must be independently obtained and verified by a future
+    coordinator. No decision in this contract permits automatic execution.
+    """
+
+    operation_id: str
+    disposition: MultiAuthorityRecoveryDisposition
+    decision: MultiAuthorityRecoveryDecisionKind
+    required_evidence: tuple[MultiAuthorityRecoveryEvidenceRequirement, ...]
+    reason_code: str
+
+    def __post_init__(self) -> None:
+        _required(self.operation_id, "operation_id")
+        if not isinstance(self.disposition, MultiAuthorityRecoveryDisposition):
+            raise ContractError("disposition debe ser MultiAuthorityRecoveryDisposition")
+        if not isinstance(self.decision, MultiAuthorityRecoveryDecisionKind):
+            raise ContractError("decision debe ser MultiAuthorityRecoveryDecisionKind")
+        if not isinstance(self.required_evidence, tuple):
+            raise ContractError("required_evidence debe ser tuple")
+        if any(
+            not isinstance(item, MultiAuthorityRecoveryEvidenceRequirement)
+            for item in self.required_evidence
+        ):
+            raise ContractError("required_evidence contiene un tipo no permitido")
+        if len(set(self.required_evidence)) != len(self.required_evidence):
+            raise ContractError("required_evidence no puede contener duplicados")
+        canonical = tuple(sorted(self.required_evidence, key=lambda item: item.value))
+        object.__setattr__(self, "required_evidence", canonical)
+        _required(self.reason_code, "reason_code")
+
+    @property
+    def automatic_action_permitted(self) -> bool:
+        """Recovery decisions are advisory only; automation is never authorized."""
+        return False
+
+
+def recommend_multi_recovery_decision(
+    assessment: MultiAuthorityRecoveryAssessment,
+) -> MultiAuthorityRecoveryDecision:
+    """Return a pure, non-authorizing recommendation for one recovery assessment."""
+    if not isinstance(assessment, MultiAuthorityRecoveryAssessment):
+        raise ContractError("assessment debe ser MultiAuthorityRecoveryAssessment")
+
+    plans = {
+        MultiAuthorityRecoveryDisposition.NOT_STARTED: (
+            MultiAuthorityRecoveryDecisionKind.NO_RECOVERY_ACTION,
+            (),
+            "OPERATION_NOT_STARTED",
+        ),
+        MultiAuthorityRecoveryDisposition.CLAIMED_BEFORE_INVALIDATION: (
+            MultiAuthorityRecoveryDecisionKind.REVALIDATE_AUTHORITY,
+            (
+                MultiAuthorityRecoveryEvidenceRequirement.FRESH_AUTHORIZATION,
+                MultiAuthorityRecoveryEvidenceRequirement.CANONICAL_REVISION_SNAPSHOT,
+            ),
+            "CLAIMS_HELD_BEFORE_INVALIDATION",
+        ),
+        MultiAuthorityRecoveryDisposition.INVALIDATION_OUTCOME_UNKNOWN: (
+            MultiAuthorityRecoveryDecisionKind.VERIFY_INVALIDATION_OUTCOME,
+            (
+                MultiAuthorityRecoveryEvidenceRequirement.INVALIDATION_OUTCOME_RECEIPT,
+                MultiAuthorityRecoveryEvidenceRequirement.FENCING_STATE,
+            ),
+            "INVALIDATION_RESULT_MUST_BE_VERIFIED",
+        ),
+        MultiAuthorityRecoveryDisposition.SOURCE_OUTCOME_UNKNOWN: (
+            MultiAuthorityRecoveryDecisionKind.VERIFY_SOURCE_OUTCOME,
+            (
+                MultiAuthorityRecoveryEvidenceRequirement.CANONICAL_REVISION_SNAPSHOT,
+                MultiAuthorityRecoveryEvidenceRequirement.SOURCE_OUTCOME_RECEIPT,
+                MultiAuthorityRecoveryEvidenceRequirement.FENCING_STATE,
+            ),
+            "SOURCE_RESULT_MUST_BE_VERIFIED_WITHOUT_RETRY",
+        ),
+        MultiAuthorityRecoveryDisposition.SOURCE_CONFIRMATION_RECORDED: (
+            MultiAuthorityRecoveryDecisionKind.VERIFY_SOURCE_BEFORE_RECONCILIATION,
+            (
+                MultiAuthorityRecoveryEvidenceRequirement.CANONICAL_REVISION_SNAPSHOT,
+                MultiAuthorityRecoveryEvidenceRequirement.INVALIDATION_OUTCOME_RECEIPT,
+                MultiAuthorityRecoveryEvidenceRequirement.FENCING_STATE,
+            ),
+            "RECORDED_SOURCE_CONFIRMATION_REQUIRES_INDEPENDENT_VERIFICATION",
+        ),
+        MultiAuthorityRecoveryDisposition.RECONCILIATION_IN_PROGRESS: (
+            MultiAuthorityRecoveryDecisionKind.VERIFY_RECONCILIATION_STATE,
+            (
+                MultiAuthorityRecoveryEvidenceRequirement.CANONICAL_REVISION_SNAPSHOT,
+                MultiAuthorityRecoveryEvidenceRequirement.INVALIDATION_OUTCOME_RECEIPT,
+                MultiAuthorityRecoveryEvidenceRequirement.FENCING_STATE,
+            ),
+            "RECONCILIATION_MUST_BE_VERIFIED_FOR_ALL_TARGETS",
+        ),
+        MultiAuthorityRecoveryDisposition.TERMINAL_CLAIMS_HELD: (
+            MultiAuthorityRecoveryDecisionKind.VERIFY_TERMINAL_EVIDENCE_BEFORE_RELEASE,
+            (
+                MultiAuthorityRecoveryEvidenceRequirement.AUTHENTICATED_TERMINAL_EVIDENCE,
+                MultiAuthorityRecoveryEvidenceRequirement.CANONICAL_REVISION_SNAPSHOT,
+                MultiAuthorityRecoveryEvidenceRequirement.FENCING_STATE,
+            ),
+            "TERMINAL_CLAIMS_REQUIRE_AUTHENTICATED_EVIDENCE",
+        ),
+        MultiAuthorityRecoveryDisposition.TERMINAL_RELEASED: (
+            MultiAuthorityRecoveryDecisionKind.NO_RECOVERY_ACTION,
+            (),
+            "TERMINAL_OPERATION_ALREADY_RELEASED",
+        ),
+        MultiAuthorityRecoveryDisposition.INCONSISTENT: (
+            MultiAuthorityRecoveryDecisionKind.MANUAL_INTERVENTION_REQUIRED,
+            (
+                MultiAuthorityRecoveryEvidenceRequirement.CANONICAL_REVISION_SNAPSHOT,
+                MultiAuthorityRecoveryEvidenceRequirement.FENCING_STATE,
+                MultiAuthorityRecoveryEvidenceRequirement.HUMAN_REVIEW,
+            ),
+            "PERSISTED_STATE_IS_INCONSISTENT",
+        ),
+    }
+    decision, evidence, reason = plans[assessment.disposition]
+    return MultiAuthorityRecoveryDecision(
+        operation_id=assessment.claim_audit.operation_id,
+        disposition=assessment.disposition,
+        decision=decision,
+        required_evidence=evidence,
+        reason_code=reason,
+    )
