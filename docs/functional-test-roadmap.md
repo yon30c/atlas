@@ -516,3 +516,11 @@ Comprobar que los valores persistidos de `evidence_kind` y `authority_kind` pert
 **Límite:** auditoría de solo lectura; sin cambios de esquema, reparación, autoridad, ejecución de efectos ni integración runtime.
 
 **Estado: VALIDADO por el propietario; suite completa: 1138 tests en 8.814 s, todos OK.**
+
+### F2.3.40 — Orden temporal del historial de emisores
+
+Comprobar que `changed_at` no retroceda entre revisiones consecutivas del inventario de un emisor. Fechas iguales son válidas; una fecha estrictamente anterior en una revisión posterior produce `REGISTRY_TIMESTAMP_REGRESSION` y clasificación corrupta. Añadir una prueba de corrupción controlada.
+
+**Límite:** solo lectura; no autentica el reloj, no modifica el esquema, no bloquea reactivaciones legítimas ni habilita efectos o runtime.
+
+**Estado:** implementado en GitHub; pruebas locales pendientes.
