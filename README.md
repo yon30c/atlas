@@ -42,6 +42,10 @@ Atlas tiene una base real de código para la experiencia conversacional local, i
 | Runtime integrado de extremo a extremo | **Pendiente** |
 | Memory Engine como producto/paquete independiente | **Diseño parcialmente desacoplado; independencia ejecutable no demostrada** |
 
+## Desarrollo actual: Atlas Terminal
+
+La prioridad inmediata es validar la experiencia conversacional local antes de ampliar las capacidades del Assistant. El estado de implementación, los comandos disponibles y la hoja de ruta incremental se mantienen en la [documentación de Atlas Terminal](docs/terminal/README.md) y su [hoja de ruta](docs/terminal/roadmap.md). Los cambios de comandos actualmente están en una rama de trabajo y no se consideran integrados en `main` hasta su validación y merge.
+
 ## Arquitectura y componentes
 
 ### 1. Atlas Assistant y AtlasCore
