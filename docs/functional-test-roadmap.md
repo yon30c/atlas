@@ -449,7 +449,7 @@ El servicio realiza una segunda lectura del inventario después de que el verifi
 
 **Límite:** esto detecta cambios durante el intervalo de verificación, pero no cierra la ventana posterior al retorno. No es fencing ni una garantía de atomicidad en el punto de efecto. No se habilita recuperación ni runtime.
 
-**Estado:** implementado en la rama; pruebas locales pendientes.
+**Estado: VALIDADO por el propietario; suite completa: 1131 tests en 10.314 s, todos OK.**
 
 
 ## F2.3.33 — Contrato de admisión de evidencia verificada
@@ -480,4 +480,4 @@ Se añaden `audit_admission(admission_id)` y `audit_all()` como consultas de sol
 
 **Límite:** no autentica de nuevo la evidencia externa, no repara registros, no demuestra autoridad vigente ni permite ejecutar recuperación/efectos.
 
-**Estado:** implementado en GitHub; pendiente de pruebas locales del propietario.
+**Estado: VALIDADO por el propietario; suite completa: 1131 tests en 10.314 s, todos OK.**
