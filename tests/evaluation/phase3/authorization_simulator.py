@@ -42,6 +42,9 @@ def authorize_proposal(proposal, context):
     }:
         raise AuthorizationContextError("validated proposal object required")
 
+    if proposal["decision"] != "PROPOSAL_ONLY" or proposal["authorization_checked"] is not False or proposal["execution_permitted"] is not False:
+        raise AuthorizationContextError("proposal state is not an untouched validated proposal")
+
     tool = proposal["tool"]
     arguments = proposal["arguments"]
     project_id = arguments.get("project_id") if isinstance(arguments, dict) else None
