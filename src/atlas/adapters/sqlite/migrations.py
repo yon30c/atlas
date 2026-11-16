@@ -992,6 +992,16 @@ CORE_SCHEMA_V10 = SQLiteMigration(
         SELECT RAISE(ABORT, 'Multi-authority operation identity is immutable');
     END;
 
+    CREATE TRIGGER multi_authority_change_targets_no_late_insert
+    BEFORE INSERT ON multi_authority_change_targets
+    WHEN EXISTS (
+        SELECT 1 FROM multi_authority_change_idempotency
+        WHERE operation_id = NEW.operation_id
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'Multi-authority target set is already sealed');
+    END;
+
     CREATE TRIGGER multi_authority_change_targets_no_update
     BEFORE UPDATE ON multi_authority_change_targets
     BEGIN
