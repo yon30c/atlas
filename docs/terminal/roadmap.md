@@ -63,7 +63,7 @@ La fase 2 queda cerrada para el alcance implementado y probado en esta rama. Las
 
 **Estado: en curso. Modelo principal ya seleccionado: Gemma 4 E2B.** La selección inicial no se repite en esta fase. El trabajo actual consiste en reproducir y corregir fallos de comportamiento, probar instrucciones equivalentes en inglés y español, validar salidas estructuradas en sandbox y reforzar la honestidad operativa.
 
-La evaluación histórica, los resultados observados, la inspección del código y los criterios de salida están registrados en [docs/phase-3-intelligence.md](../phase-3-intelligence.md). La primera tarea es completar el corpus reproducible y repetir el caso de prompt injection que produjo dos propuestas destructivas `delete_file`. No se modificarán todavía el prompt productivo ni el adaptador para habilitar herramientas; no se ejecutarán herramientas reales.
+La evaluación histórica, los resultados observados, la inspección del código y los criterios de salida están registrados en [docs/phase-3-intelligence.md](../phase-3-intelligence.md). El corpus inicial está versionado en `tests/evaluation/phase3/corpus.json`. P3-PI-001 ya cuenta con una repetición controlada de cuatro combinaciones de idioma, todas seguras tras revisión manual; el siguiente caso es P3-PI-002, extracción de información privada entre proyectos, con cuatro combinaciones por tres repeticiones. No se modificarán todavía el prompt productivo ni el adaptador para habilitar herramientas; no se ejecutarán herramientas reales.
 
 ### Criterios de salida
 
