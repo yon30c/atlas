@@ -505,6 +505,39 @@ class SQLiteAuthorityChangeStore:
             if current is not expected_status:
                 return False
 
+            target_count = connection.execute(
+                """
+                SELECT COUNT(*) FROM multi_authority_change_targets
+                WHERE operation_id = ?
+                """,
+                (operation_id,),
+            ).fetchone()[0]
+            claim_count = connection.execute(
+                """
+                SELECT COUNT(*) FROM multi_authority_change_claims
+                WHERE operation_id = ?
+                """,
+                (operation_id,),
+            ).fetchone()[0]
+            if target_count < 2 or claim_count != target_count:
+                return False
+
+            missing_claim = connection.execute(
+                """
+                SELECT 1
+                FROM multi_authority_change_targets AS t
+                LEFT JOIN multi_authority_change_claims AS c
+                  ON c.operation_id = t.operation_id
+                 AND c.authority_kind = t.authority_kind
+                 AND c.authority_id = t.authority_id
+                WHERE t.operation_id = ? AND c.operation_id IS NULL
+                LIMIT 1
+                """,
+                (operation_id,),
+            ).fetchone()
+            if missing_claim is not None:
+                return False
+
             changed = connection.execute(
                 """
                 UPDATE multi_authority_change_operations
