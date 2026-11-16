@@ -37,6 +37,7 @@ class RecoveryEvidenceAdmissionResult:
         """Admission records evidence; it never authorizes a recovery effect."""
         return False
 
+
 class RecoveryEvidenceAdmissionPort(Protocol):
     """Atomically persist admission against the current local authority snapshot.
 
