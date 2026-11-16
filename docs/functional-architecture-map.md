@@ -326,5 +326,12 @@ No existe todavía liberación: sin recibo durable de reconciliación terminal, 
 
 Se añadieron `AuthorityChangeTerminalOutcome`, `AuthorityChangeTerminalTarget` y `AuthorityChangeTerminalEvidence`. El recibo vincula operation_id, referencia durable, registrador, timestamp UTC y cada target reservado. COMPLETED requiere observación de todas las revisiones propuestas; ABORTED requiere que todas sigan en sus revisiones esperadas. La coincidencia contra la reserva comprueba operación, tipo/ID y revisiones exactas.
 
-Este es un contrato estructural, no un verificador de autenticidad: no demuestra que la reconciliación ocurrió ni autoriza liberar claims. No existe aún persistencia del recibo, transición terminal atómica ni liberación. Publicado; pendiente de validación local. Runtime desconectado.
+Este es un contrato estructural, no un verificador de autenticidad: no demuestra que la reconciliación ocurrió ni autoriza liberar claims. No existe aún persistencia del recibo, transición terminal atómica ni liberación. Validado por el propietario con 1003/1003 pruebas. Runtime desconectado.
 
+
+
+## 28. F2.3.18 — Persistencia atómica de recibo terminal
+
+Migración v12 y SQLiteAuthorityChangeStore.record_multi_terminal_evidence persisten recibo, conjunto observado de objetivos y transición terminal dentro de una misma UoW. Solo acepta operaciones RECONCILING con todos sus claims y un recibo que coincida exactamente con la reserva. Replays exactos recuperan el recibo original; recibos distintos se rechazan. Triggers y FKs sellan la evidencia, exigen objetivos completos antes del estado terminal y hacen final el estado COMPLETED/ABORTED.
+
+Los claims continúan retenidos: no se ha implementado liberación. El digest no autentica la referencia externa ni demuestra su veracidad. Sin CAM, invalidación/fencing, mutación coordinada de fuentes ni runtime. Pendiente de validación local.
