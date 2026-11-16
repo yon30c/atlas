@@ -26,7 +26,7 @@ from atlas.core.errors import ContractError
 
 
 class SQLiteLocalAuthorityUnitOfWork(SQLiteAuthorizationUnitOfWork):
-    """One transaction shared by canonical authorities, ledger and trust policies."""
+    """One transaction shared by canonical authorities, ledger, trust policies and issuer inventory."""
 
     def __init__(self, database: SQLiteDatabase) -> None:
         super().__init__(database)
