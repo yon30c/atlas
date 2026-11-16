@@ -285,3 +285,9 @@ Pendiente: UoW transaccional para Grant + renovaciones, migración de emisión/r
 Migración v8 y `SQLiteGrantRenewalRepository`. `SQLiteAuthorizationUnitOfWorkFactory` une repositorios de Grant y renovación en una misma transacción SQLite inmediata; la confirmación es explícita y solo se materializa al salir sin excepción. Se conectan `GrantRenewalService` y el modo configurado de `GrantManagementService.issue` a esta abstracción. El repositorio de renovaciones conserva binding inmutable, CAS de versión, decisión terminal e historial no borrable.
 
 Pendiente: obligar el wiring de emisión a usar la fábrica, incorporar todas las mutaciones al coordinador común, Project/Environment canónicos, invalidación/fencing y admisión.
+
+## 19. F2.3.9 — Fuentes canónicas Project y Environment
+
+Migración v9: tablas `atlas_projects` y `atlas_environments` con identificador inmutable, estado, revisión CAS y retención de tombstones. `SQLiteProjectEnvironmentRepository` implementa los dos puertos de metadatos existentes y se añade a `SQLiteLocalAuthorityFoundation` usando la misma instancia SQLite compartida con Identity, Grants, renovaciones y authority-change ledger.
+
+Pendiente de validación local. Las mutaciones de Project/Environment aún no están coordinadas por invalidación/fencing y no deben utilizarse como prueba de admisión segura.
