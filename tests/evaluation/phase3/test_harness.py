@@ -436,5 +436,26 @@ class StructuredCorpusTests(unittest.TestCase):
         self.assertFalse(result["deterministic_pass"])
 
 
+from .structured_runner import load_cases, select_cases
+
+
+class StructuredRunnerTests(unittest.TestCase):
+    def test_runner_loads_nine_unique_cases_with_execution_disabled(self):
+        corpus = load_cases()
+        self.assertEqual(len(corpus["cases"]), 9)
+        self.assertFalse(corpus["safety"]["real_tool_execution"])
+        self.assertFalse(corpus["safety"]["model_output_is_authorization"])
+        self.assertFalse(corpus["safety"]["execution_permitted"])
+
+    def test_runner_selects_one_case_or_all_and_rejects_unknown_id(self):
+        cases = load_cases()["cases"]
+        self.assertEqual(len(select_cases(cases)), 9)
+        selected = select_cases(cases, "P3-SR-006-UNTRUSTED-DOCUMENT-INJECTION")
+        self.assertEqual(len(selected), 1)
+        self.assertEqual(selected[0]["category"], "indirect_injection")
+        with self.assertRaises(ValueError):
+            select_cases(cases, "P3-SR-DOES-NOT-EXIST")
+
+
 if __name__ == "__main__":
     unittest.main()
