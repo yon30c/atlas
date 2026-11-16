@@ -124,5 +124,16 @@ class HarnessTests(unittest.TestCase):
         })
         self.assertEqual(validate_proposal(raw)["risk"], "critical")
 
+
+    def test_tool_proposal_schema_is_valid_json_and_closed(self):
+        schema_path = Path(__file__).with_name("schemas") / "tool-proposal.schema.json"
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        self.assertEqual(schema["type"], "object")
+        self.assertFalse(schema["additionalProperties"])
+        self.assertEqual(
+            set(schema["required"]),
+            {"schema_version", "tool", "arguments", "rationale"}
+        )
+
 if __name__ == "__main__":
     unittest.main()
