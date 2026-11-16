@@ -1,6 +1,6 @@
 # Hoja de ruta — Atlas Terminal-first
 
-> Prioridad aprobada para la etapa actual de Atlas.
+> Prioridad aprobada para la etapa actual de Atlas: construir un Atlas funcional de prueba.
 > Última actualización: 16 de noviembre de 2026.
 > La hoja de ruta describe la evolución de un Atlas funcional; no reduce el producto a un prototipo ni afirma que todos los subsistemas de la visión estén terminados.
 
@@ -10,8 +10,8 @@
 |---|---|---|
 | 1 | Experiencia Terminal | Implementada y validada en el alcance actual |
 | 2 | Conversaciones | Implementada; suite local completa aprobada |
-| 3 | Inteligencia y comportamiento seguro | En curso: Gemma 4 E2B ya seleccionado; validación de instrucciones, inyección y salidas estructuradas |
-| 4 | Capacidades del Assistant | Planificación y herramientas integradas gradualmente |
+| 3 | Inteligencia y comportamiento seguro | Pausada por decisión del propietario; resultados preservados para retomarla después |
+| 4 | Atlas funcional de prueba / capacidades del Assistant | Prioridad actual: completar flujos locales de principio a fin |
 | 5 | Consolidación | Integración, pruebas y preparación para ampliar el sistema |
 
 Las fases 1 y 2 entregan una experiencia Terminal utilizable: Atlas inicia, conversa con Ollama cuando está disponible, conserva conversaciones en SQLite, administra su ciclo de vida y ofrece backup/restore/exportación. La aprobación de estas fases no significa que Atlas ya disponga de ejecución autónoma general.
@@ -61,7 +61,7 @@ La fase 2 queda cerrada para el alcance implementado y probado en esta rama. Las
 
 ## Fase 3 — Inteligencia y comportamiento seguro
 
-**Estado: en curso. Modelo principal ya seleccionado: Gemma 4 E2B.** La selección inicial no se repite en esta fase. El trabajo actual consiste en reproducir y corregir fallos de comportamiento, probar instrucciones equivalentes en inglés y español, validar salidas estructuradas en sandbox y reforzar la honestidad operativa.
+**Estado: pausada por decisión del propietario el 16 de noviembre de 2026.** Los resultados, corpus y pendientes se conservan en [docs/phase-3-intelligence.md](../phase-3-intelligence.md). No continuar el endurecimiento avanzado hasta que el propietario lo retome. La selección inicial no se repite en esta fase. El trabajo actual consiste en reproducir y corregir fallos de comportamiento, probar instrucciones equivalentes en inglés y español, validar salidas estructuradas en sandbox y reforzar la honestidad operativa.
 
 La evaluación histórica, los resultados observados, la inspección del código y los criterios de salida están registrados en [docs/phase-3-intelligence.md](../phase-3-intelligence.md). El corpus inicial está versionado en `tests/evaluation/phase3/corpus.json`. P3-PI-001 ya cuenta con una repetición controlada de cuatro combinaciones de idioma, todas seguras tras revisión manual; el siguiente caso es P3-PI-002, extracción de información privada entre proyectos, con cuatro combinaciones por tres repeticiones. No se modificarán todavía el prompt productivo ni el adaptador para habilitar herramientas; no se ejecutarán herramientas reales.
 
@@ -77,9 +77,9 @@ La evaluación histórica, los resultados observados, la inspección del código
 
 La hoja de ruta central, los criterios para declarar una fase completada y el registro de cambios están en [docs/roadmap.md](../roadmap.md). La Fase 3 tiene un expediente de trabajo específico en [docs/phase-3-intelligence.md](../phase-3-intelligence.md).
 
-## Fase 4 — Capacidades del Assistant
+## Fase 4 — Atlas funcional de prueba / capacidades del Assistant
 
-**Objetivo:** evolucionar de conversación a coordinación controlada, sin otorgar autoridad directa al modelo.
+**Prioridad actual.** El objetivo es evolucionar de conversación a flujos de trabajo locales completos y verificables. El alcance y los criterios de aceptación están en [docs/functional-test-roadmap.md](../functional-test-roadmap.md).
 
 1. Mejorar clasificación de intenciones e identificación de datos faltantes.
 2. Permitir planes estructurados con pasos y supuestos.
