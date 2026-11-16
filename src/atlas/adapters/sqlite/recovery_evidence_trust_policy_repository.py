@@ -297,23 +297,17 @@ class SQLiteRecoveryEvidenceIssuerTrustPolicyRepository(
     ) -> RecoveryEvidenceIssuerTrustPolicyAuditReport:
         """Audit every registered issuer without changing any database state."""
         with self._read_connection() as connection:
-            issuer_rows = connection.execute(
+            rows = connection.execute(
                 """
-                SELECT DISTINCT issuer_id
-                FROM recovery_evidence_issuer_trust_policies
-                ORDER BY issuer_id
+                SELECT * FROM recovery_evidence_issuer_trust_policies
+                ORDER BY issuer_id, policy_revision
                 """
             ).fetchall()
-            audits = []
-            for issuer_row in issuer_rows:
-                issuer_id = issuer_row["issuer_id"]
-                rows = connection.execute(
-                    """
-                    SELECT * FROM recovery_evidence_issuer_trust_policies
-                    WHERE issuer_id = ?
-                    ORDER BY policy_revision
-                    """,
-                    (issuer_id,),
-                ).fetchall()
-                audits.append(self._audit_issuer_rows(issuer_id, rows))
-        return RecoveryEvidenceIssuerTrustPolicyAuditReport(tuple(audits))
+        grouped: dict[str, list[sqlite3.Row]] = {}
+        for row in rows:
+            grouped.setdefault(row["issuer_id"], []).append(row)
+        audits = tuple(
+            self._audit_issuer_rows(issuer_id, issuer_rows)
+            for issuer_id, issuer_rows in grouped.items()
+        )
+        return RecoveryEvidenceIssuerTrustPolicyAuditReport(audits)
