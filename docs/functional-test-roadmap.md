@@ -255,7 +255,7 @@ Migración v8 para solicitudes de renovación, repositorio SQLite con CAS y deci
 
 Pruebas añadidas para persistencia, CAS, binding/decisión inmutable, rollback, commit explícito, excepción después de solicitar commit, y servicios de emisión/renovación.
 
-**Estado:** publicado, pendiente de validación local. La composición local expone la fábrica, pero el wiring de servicios de aplicación y el coordinador común siguen pendientes.
+**Estado:** validado por el propietario con 957/957 pruebas. La unidad transaccional compartida y los servicios de emisión/renovación están verificados. La composición todavía no obliga a todo el wiring de emisión a usar la fábrica; el coordinador común sigue pendiente.
 
 ### F2.3.9 — Fuentes canónicas Project y Environment
 
