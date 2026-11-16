@@ -86,10 +86,11 @@ class SQLiteRecoveryEvidenceAdmissionRepository(RecoveryEvidenceAdmissionPort):
             if recanonical != canonical_bytes:
                 diagnostics.append("NON_CANONICAL_COMMAND")
         except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+            canonical_bytes = b""
             payload = None
             diagnostics.append("INVALID_CANONICAL_COMMAND")
 
-        if hashlib.sha256(bytes(row["command_canonical"])).hexdigest() != row["command_digest"]:
+        if hashlib.sha256(canonical_bytes).hexdigest() != row["command_digest"]:
             diagnostics.append("COMMAND_DIGEST_MISMATCH")
 
         if not isinstance(row["evidence_digest"], str) or (
@@ -109,8 +110,10 @@ class SQLiteRecoveryEvidenceAdmissionRepository(RecoveryEvidenceAdmissionPort):
                 "evidence_kind": row["evidence_kind"],
                 "requested_at": row["requested_at"],
             }
+            if set(payload) != set(expected) | {"targets"}:
+                diagnostics.append("INVALID_CANONICAL_COMMAND")
             for field, value in expected.items():
-                if payload.get(field) != value:
+                if type(payload.get(field)) is not type(value) or payload.get(field) != value:
                     diagnostics.append("COLUMN_BINDING_MISMATCH")
                     break
 
