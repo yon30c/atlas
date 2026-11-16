@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from enum import Enum
+from types import MappingProxyType
 
 from atlas.assistant.planning import AssistantIntent, IntentKind
 from atlas.core.errors import ContractError
@@ -44,6 +45,8 @@ class CapabilityDefinition:
 class CapabilityCatalog:
     """Registro inmutable y cerrado; listar una capacidad no la autoriza."""
 
+    __slots__ = ("_definitions", "_by_kind")
+
     def __init__(self, definitions: tuple[CapabilityDefinition, ...]) -> None:
         if not isinstance(definitions, tuple) or any(
             not isinstance(item, CapabilityDefinition) for item in definitions
@@ -53,7 +56,7 @@ class CapabilityCatalog:
         if len(kinds) != len(set(kinds)):
             raise ContractError("el catálogo no admite capacidades duplicadas")
         self._definitions = definitions
-        self._by_kind = {item.kind: item for item in definitions}
+        self._by_kind = MappingProxyType({item.kind: item for item in definitions})
 
     def list_all(self) -> tuple[CapabilityDefinition, ...]:
         """Devuelve el snapshot inmutable del catálogo."""
