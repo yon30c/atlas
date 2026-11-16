@@ -164,3 +164,13 @@ Se añadió `SQLiteLocalAuthorityFoundation` como composición compartida inicia
 Pruebas nuevas cubren round-trip, duplicados, aislamiento por propietario, orden estable, CAS obsoleto, tombstones, inmutabilidad de scope/acciones, revocación terminal, reapertura de DB y composición común. Las pruebas históricas de migración v6 se ajustaron para seguir partiendo de schema v5, sin alterar las migraciones anteriores.
 
 **Límites:** Grant issue y renewal todavía no están compuestos por un UoW SQLite compartido; los cambios de Identity/Grant aún no pasan por un coordinador de invalidación común. Project y Environment no tienen fuentes canónicas. No hay admisión de operaciones ni ejecución del Assistant. Requiere suite local completa antes de considerarse validado.
+
+## 13. F2.3.8 — UoW SQLite para Grant y renovaciones
+
+La migración v8 añade `authorization_grant_renewals`, con vínculo FK al Grant, versión CAS, binding inmutable, decisión terminal, evidencia de decisión inmutable y retención como tombstone.
+
+`SQLiteAuthorizationUnitOfWorkFactory` crea una unidad sobre el `SQLiteDatabase` canónico. Dentro de una unidad, `SQLiteGrantRepository` y `SQLiteGrantRenewalRepository` reciben el mismo `SQLiteUnitOfWork` y ejecutan sus consultas/escrituras sobre la misma conexión `BEGIN IMMEDIATE`. La unidad confirma únicamente al salir sin excepción y después de una llamada explícita a `commit()`; sin esa llamada, o ante cualquier excepción incluso posterior a la solicitud de commit, revierte la transacción.
+
+`GrantRenewalService` ya consume el puerto `AuthorizationUnitOfWork`, por lo que puede operar con esta fábrica SQLite para crear solicitudes, aprobar/rechazar y actualizar Grant + decisión de renovación atómicamente. `GrantManagementService.issue` acepta ahora una fábrica opcional y, cuando se configura, hace la comprobación de unicidad y el INSERT dentro de la misma unidad.
+
+**Límites:** el servicio de emisión conserva modo legacy si no se inyecta UoW; la composición aún no fuerza que toda instancia de GrantManagementService use la fábrica. Revocación sigue dependiendo del coordinador CAM y no se cambia aquí. Esto no implementa aún invalidación/fencing común ni admisión de operaciones.
