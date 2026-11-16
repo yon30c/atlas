@@ -248,3 +248,11 @@ Añadido `compose_sqlite_identity_on_database(database)`, que compone la autorid
 Añadida migración v7 y `SQLiteGrantRepository`, con scope/acciones inmutables, revisión CAS, revocación terminal y tombstones. Nueva composición `SQLiteLocalAuthorityFoundation` reúne Identity, Grants y el ledger durable de cambios de autoridad en la misma instancia SQLite. Se añadieron pruebas de repositorio, integridad y composición; las fixtures históricas v6 se ajustaron para seguir validando la migración v6 desde schema v5.
 
 **Estado:** publicado; pendiente de ejecución local. No existe aún UoW SQLite para Grant + renovaciones, coordinador de invalidación, fuentes Project/Environment ni admisión. No se conecta runtime.
+
+### F2.3.8 — Unidad de trabajo SQLite para Grant y renovaciones
+
+Migración v8 para solicitudes de renovación, repositorio SQLite con CAS y decisión terminal, y `SQLiteAuthorizationUnitOfWorkFactory` que comparte una conexión transaccional entre Grant y renovaciones. `GrantRenewalService` puede usarla directamente; `GrantManagementService.issue` usa la fábrica cuando se inyecta para hacer unicidad + alta atómicas.
+
+Pruebas añadidas para persistencia, CAS, binding/decisión inmutable, rollback, commit explícito, excepción después de solicitar commit, y servicios de emisión/renovación.
+
+**Estado:** publicado, pendiente de validación local. La composición local expone la fábrica, pero el wiring de servicios de aplicación y el coordinador común siguen pendientes.
