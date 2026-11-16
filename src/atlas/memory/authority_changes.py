@@ -126,6 +126,22 @@ def _utc(value: object, field: str) -> None:
 
 
 @dataclass(frozen=True, slots=True)
+class MultiAuthorityChangeReservation:
+    """Durable operation identity and exact multi-authority intent."""
+
+    operation_id: str
+    intent: MultiAuthorityChangeIntent
+    status: AuthorityChangeStatus
+
+    def __post_init__(self) -> None:
+        _required(self.operation_id, "operation_id")
+        if not isinstance(self.intent, MultiAuthorityChangeIntent):
+            raise ContractError("intent debe ser MultiAuthorityChangeIntent")
+        if not isinstance(self.status, AuthorityChangeStatus):
+            raise ContractError("status debe ser AuthorityChangeStatus")
+
+
+@dataclass(frozen=True, slots=True)
 class AuthorityChangeIntent:
     """Intención sin operation_id; la autoridad coordinadora asigna ese ID."""
 
