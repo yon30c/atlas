@@ -282,3 +282,9 @@ Inspeccionadas las rutas actuales de Identity, emisión/revocación/renovación 
 Se verificó que la UoW hace atómica la actualización de Grant + solicitud al aprobar una renovación, pero no coordina invalidación/fencing de admisiones basadas en la revisión anterior. La solicitud y el rechazo tienen semánticas distintas y requieren política explícita de auditoría/autorización. Se documentó la vinculación futura entre operación, Grant, versión de renovación, actor, owner, proyecto y entorno. No se reutilizará el autorizador CAM específico de revocación ni se añadirá un coordinador ficticio.
 
 **Estado:** auditoría documentada; sin cambios de runtime ni pruebas nuevas.
+
+### F2.3.13 — Diseño multiobjetivo para cambios de autoridad
+
+Se documentó un contrato multiobjetivo para operaciones que mutan más de una fuente canónica. Es necesario para aprobación de renovación, que cambia Grant y solicitud en una única decisión lógica: un operation_id, una clave idempotente, todos los objetivos/revisiones tipados, reserva atómica, CAM sobre el conjunto exacto, fencing conjunto, CAS en una UoW y reconciliación completa. Se especificaron también semánticas separadas para solicitar, aprobar y rechazar renovaciones, migración aditiva y pruebas de concurrencia/crash.
+
+**Estado:** diseño publicado; sin código runtime ni pruebas. El contrato actual de una sola autoridad permanece sin cambios. No habilitar aprobación de renovación coordinada ni admisión.
