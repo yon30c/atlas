@@ -726,7 +726,8 @@ CORE_SCHEMA_V7 = SQLiteMigration(
 
     CREATE TRIGGER authorization_grants_identity_immutable
     BEFORE UPDATE OF grant_id, owner_user_id, subject_identity_id,
-                     project_id, environment, resource_type, issued_at
+                     project_id, environment, resource_type, resource_ids_json,
+                     actions_json, issued_at
     ON authorization_grants
     WHEN NEW.grant_id != OLD.grant_id
       OR NEW.owner_user_id != OLD.owner_user_id
@@ -734,6 +735,8 @@ CORE_SCHEMA_V7 = SQLiteMigration(
       OR NEW.project_id != OLD.project_id
       OR NEW.environment != OLD.environment
       OR NEW.resource_type != OLD.resource_type
+      OR NEW.resource_ids_json != OLD.resource_ids_json
+      OR NEW.actions_json != OLD.actions_json
       OR NEW.issued_at != OLD.issued_at
     BEGIN
         SELECT RAISE(ABORT, 'Grant identity and authority scope are immutable');
@@ -744,6 +747,13 @@ CORE_SCHEMA_V7 = SQLiteMigration(
     WHEN NEW.revision != OLD.revision + 1
     BEGIN
         SELECT RAISE(ABORT, 'Grant revision must increase by exactly one');
+    END;
+
+    CREATE TRIGGER authorization_grants_revocation_terminal
+    BEFORE UPDATE OF revoked_at ON authorization_grants
+    WHEN OLD.revoked_at IS NOT NULL AND NEW.revoked_at != OLD.revoked_at
+    BEGIN
+        SELECT RAISE(ABORT, 'Grant revocation is terminal');
     END;
 
     CREATE TRIGGER authorization_grants_no_delete
