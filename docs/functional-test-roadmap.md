@@ -401,3 +401,12 @@ Se incorpora un modelo inmutable de evidencia no confiable, ligado a operation_i
 El servicio diferencia VERIFIED, DENIED y UNAVAILABLE. Solo True exacto del verificador produce VERIFIED; excepciones producen UNAVAILABLE. No se confunde digest/referencia con autenticidad. La implementación concreta de criptografía, claves y fuentes autoritativas queda fuera de esta fase.
 
 **Estado: VALIDADA.** Suite completa: 1072 tests en 7.828 s, todos OK.
+
+
+## F2.3.27 — Política de confianza de emisores
+
+Implementados los contratos `RecoveryEvidenceIssuerTrustPolicy` y `RecoveryEvidenceIssuerTrustPolicyPort`. La política limita por emisor, revisión, habilitación, tipos de evidencia, vigencia y duración máxima. El servicio consulta la política antes de invocar el verificador; rechaza emisores ausentes o políticas incompatibles y devuelve UNAVAILABLE si la fuente de políticas falla.
+
+La política es un filtro de confianza, no una prueba criptográfica. La autenticidad de la atestación, digest/payload, revocación de claves, replay y estado autoritativo permanecen en el verificador. No existe almacenamiento concreto ni conexión al runtime.
+
+**Estado:** IMPLEMENTADO; pendiente de validación local del propietario.
