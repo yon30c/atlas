@@ -400,4 +400,4 @@ Se incorpora un modelo inmutable de evidencia no confiable, ligado a operation_i
 
 El servicio diferencia VERIFIED, DENIED y UNAVAILABLE. Solo True exacto del verificador produce VERIFIED; excepciones producen UNAVAILABLE. No se confunde digest/referencia con autenticidad. La implementación concreta de criptografía, claves y fuentes autoritativas queda fuera de esta fase.
 
-**Estado:** implementación y pruebas publicadas; pendiente de validación local.
+**Estado: VALIDADA.** Suite completa: 1072 tests en 7.828 s, todos OK.
