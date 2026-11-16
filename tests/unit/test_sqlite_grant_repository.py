@@ -116,6 +116,49 @@ class SQLiteGrantRepositoryTests(unittest.TestCase):
                 )
         self.assertEqual(self.repository.get("grant-001"), self.grant)
 
+    def test_database_rejects_scope_or_action_changes(self):
+        self.repository.create(self.grant)
+        with self.database.connection() as connection:
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    """
+                    UPDATE authorization_grants
+                    SET resource_ids_json = '["other"]', revision = 2
+                    WHERE grant_id = ?
+                    """,
+                    ("grant-001",),
+                )
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    """
+                    UPDATE authorization_grants
+                    SET actions_json = '["write"]', revision = 2
+                    WHERE grant_id = ?
+                    """,
+                    ("grant-001",),
+                )
+        self.assertEqual(self.repository.get("grant-001"), self.grant)
+
+    def test_grant_revocation_is_terminal(self):
+        self.repository.create(self.grant)
+        revoked = replace(
+            self.grant,
+            revoked_at=NOW + timedelta(seconds=1),
+            revision=2,
+        )
+        self.repository.update(revoked)
+        with self.database.connection() as connection:
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    """
+                    UPDATE authorization_grants
+                    SET revoked_at = NULL, revision = 3
+                    WHERE grant_id = ?
+                    """,
+                    ("grant-001",),
+                )
+        self.assertEqual(self.repository.get("grant-001"), revoked)
+
     def test_reopen_database_preserves_grant(self):
         self.repository.create(self.grant)
         reopened = SQLiteDatabase(self.database.path)
