@@ -227,3 +227,12 @@ Se establece que `BEGIN IMMEDIATE` solo serializa de forma útil si Identity, Gr
 El alcance inicial queda limitado a lecturas `workspace.list` y `workspace.read`; las escrituras quedan desconectadas porque SQLite no puede confirmar atómicamente efectos del sistema de archivos. Se definieron ocho criterios previos a implementar un adaptador.
 
 **Estado:** decisión de arquitectura publicada; sin código de ejecución, coordinador durable ni adaptador CAM. Próximo paso F2.3.5: inventario de persistencia/composición de Identity, Grant, Project y Environment (repositorio, base, UoW y caminos de mutación).
+
+
+### F2.3.5 — Inventario de persistencia y composición
+
+Inspección estática completada y documentada en [assistant-operation-consistency-boundary.md](design/assistant-operation-consistency-boundary.md). La composición actual no tiene una UoW común: Identity crea su propia SQLiteDatabase; Grant solo tiene Protocol/UoW para Grants + renovaciones y no hay adaptador SQLite concreto; Project/Environment solo tienen contratos de metadatos bajo Memory; el journal y authority-change store pueden usar SQLite, pero no están compuestos con esas fuentes. Los cambios de estado de Identity usan CAS directo y Grant issue escribe directo al repositorio; no existe coordinador concreto de invalidación/fencing.
+
+**Conclusión:** no es posible implementar honestamente el adaptador CAM compartido añadiendo solo un verificador. Requiere una composición canónica nueva y migrar los caminos de mutación existentes, o aplazar CAM integrado para el perfil read-only de prueba.
+
+**Estado:** inspección documentada; sin cambios de código. Se requiere decidir el alcance antes de construir las cuatro fuentes canónicas mínimas.
