@@ -351,4 +351,15 @@ Se habilita que Identity y Project/Environment acepten una `SQLiteUnitOfWork` ex
 
 **Límite:** esto es composición transaccional de persistencia, no coordinador de consistencia. `SQLiteAuthorityChangeStore` todavía opera sus propias UoW y no está incluido. No se han añadido CAM, invalidación, fencing, admisión ni mutaciones coordinadas. Runtime desconectado.
 
+**Estado:** validado por el propietario con 1040/1040 pruebas (16 de noviembre de 2026).
+
+
+### F2.3.22 — Ledger de operaciones dentro de la UoW compartida
+
+Se modifica `SQLiteAuthorityChangeStore` para aceptar la misma `SQLiteUnitOfWork` externa usada por Identity, Grants, renovaciones, Project y Environment. Sus operaciones de reserva, claims, evidencia terminal, liberación y consultas pueden participar en esa transacción, sin abrir conexiones o transacciones anidadas. `SQLiteLocalAuthorityUnitOfWork` expone ahora `authority_changes`.
+
+Las pruebas nuevas verifican commit y rollback conjunto entre identidad, proyecto y reserva de operación, además del rechazo de uso después de cerrar la UoW.
+
+**Límite:** esto unifica la persistencia en una transacción, pero todavía no crea un coordinador que decida orden, CAM, admisión, invalidación, fencing, ejecución de mutaciones ni reconciliación. La UoW es infraestructura transaccional, no permiso para ejecutar.
+
 **Estado:** implementación publicada; pendiente de validación local.
