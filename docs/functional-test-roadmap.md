@@ -114,7 +114,7 @@ El conjunto exacto de operaciones se define al inspeccionar los módulos existen
 
 ### F2 — Capacidades y herramientas de prueba
 
-**Estado:** F2.1 fue validada por el propietario con 893/893 pruebas. F2.2 añade `WorkspaceListingService`, que consume `WorkspaceReader`, valida el ID y verifica el tipo y la correspondencia del resultado. El servicio no conoce rutas ni detalles del sistema de archivos. La validación local de F2.2 está pendiente. No hay todavía confirmación, consola ni ejecución integrada.
+**Estado:** F2.1 fue validada con 893/893 pruebas. F2.2 añade `WorkspaceListingService`, que consume `WorkspaceReader`, valida el ID y verifica el tipo y la correspondencia del resultado. El propietario validó F2.2 y la regresión completa con 900/900 pruebas (16 de noviembre de 2026). F2.3 documenta la frontera entre revisión del plan, autorización CAM y aprobación humana en [F2.3 — Frontera de autorización, revisión y ejecución](design/assistant-workspace-execution-boundary.md). Es un diseño, no una implementación: no hay todavía autorización genérica pública, Approval Manager integrado ni ejecución desde consola/runtime.
 
 - Definir un catálogo pequeño de capacidades reales.
 - Implementar adaptadores concretos para el workspace de prueba.
@@ -208,4 +208,4 @@ Para cada siguiente incremento:
 6. Revisar los resultados antes de continuar.
 7. Actualizar esta documentación con evidencia, commit y estado real.
 
-**Siguiente acción:** actualizar el checkout Debian y ejecutar `tests.unit.test_workspace_listing_service`, `tests.unit.test_local_workspace` y después la suite completa. Si pasan, F2.2 quedará validado a nivel unitario. El siguiente incremento será definir el límite de aprobación/ejecución para el plan `workspace.list`, antes de integrar la consola.
+**Siguiente acción:** diseñar el contrato genérico de evidencia de autorización de operación en CAM, con pruebas negativas y sin modificar el runtime. Después definir la interfaz de aprobación humana y el gate de aplicación para `workspace.list`. No integrar consola ni ejecutar capacidades hasta validar esos contratos.
