@@ -299,3 +299,7 @@ La auditoría confirma que la persistencia compartida no equivale a consistencia
 ## 21. F2.3.11 — Emisión de Grant fail-closed
 
 `GrantManagementService.issue` exige ahora `unit_of_work_factory` y rechaza emitir si falta, eliminando su fallback de escritura directa. La unicidad y creación siguen dentro de una UoW. Prueba nueva cubre ausencia de UoW. Validado por el propietario con 968/968 pruebas; no equivale a coordinación de invalidación/fencing.
+
+## 22. F2.3.12 — Auditoría de renovaciones
+
+La aprobación de renovación actualiza Grant + solicitud atómicamente en UoW, pero no hace fencing/invalidation de admisiones antiguas. Solicitud, aprobación y rechazo requieren semánticas diferenciadas; aprobación humana del propietario no reemplaza CAM. La futura operación debe vincular revisión Grant y versión de renovación, actor/owner/project/environment y pasar por coordinación durable. Sin cambios runtime.
