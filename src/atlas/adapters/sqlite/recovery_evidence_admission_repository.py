@@ -99,6 +99,16 @@ class SQLiteRecoveryEvidenceAdmissionRepository(RecoveryEvidenceAdmissionPort):
         ):
             diagnostics.append("INVALID_EVIDENCE_DIGEST")
 
+        issuer_revision = connection.execute(
+            """
+            SELECT 1 FROM recovery_evidence_issuer_registry
+            WHERE issuer_id = ? AND registry_revision = ?
+            """,
+            (row["issuer_id"], row["issuer_registry_revision"]),
+        ).fetchone()
+        if issuer_revision is None:
+            diagnostics.append("ISSUER_REVISION_NOT_FOUND")
+
         if payload is not None:
             expected = {
                 "admission_id": row["admission_id"],
