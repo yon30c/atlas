@@ -462,7 +462,7 @@ El resultado VERIFIED conserva el digest canónico SHA-256 de la evidencia compl
 
 ## 45. F2.3.35 — Auditoría de integridad de admisiones
 
-`SQLiteRecoveryEvidenceAdmissionRepository` añade `audit_admission()` y `audit_all()` como consultas de solo lectura. La auditoría valida canonicalización y SHA-256 del comando, consistencia entre columnas y payload, estructura y orden de objetivos, correspondencia con los targets inmutables de la operación y timestamps UTC canónicos. Devuelve `HEALTHY` o `CORRUPT` con códigos diagnósticos; no repara registros ni vuelve a autenticar evidencia externa.
+`SQLiteRecoveryEvidenceAdmissionRepository` añade `audit_admission()` y `audit_all()` como consultas de solo lectura. La auditoría valida canonicalización y SHA-256 del comando, consistencia entre columnas y payload, estructura y orden de objetivos, existencia histórica de la revisión del emisor, correspondencia con los targets inmutables de la operación y timestamps UTC canónicos. Devuelve `HEALTHY` o `CORRUPT` con códigos diagnósticos; no repara registros ni vuelve a autenticar evidencia externa.
 
 **Límite:** la integridad histórica del recibo no demuestra autoridad vigente ni concede permiso para efectos o recuperación.
 
