@@ -342,4 +342,4 @@ Se añade una API de auditoría de solo lectura que clasifica una operación com
 
 **Límite:** clasificación local, no prueba de reconciliación externa ni autenticidad. No conecta CAM ni runtime.
 
-**Estado:** publicado; pendiente de validación local.
+**Estado:** validado por el propietario con 1030/1030 pruebas (16 de noviembre de 2026).
