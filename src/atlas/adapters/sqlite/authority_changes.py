@@ -825,8 +825,6 @@ class SQLiteAuthorityChangeStore:
             if (
                 len(reserved_set) < 2
                 or evidence_set != reserved_set
-                or claim_set != expected_claims
-                or len(claims) != len(targets)
                 or evidence.targets != tuple(
                     AuthorityChangeTerminalTarget(
                         authority_kind=AuthorityChangeTargetKind(row["authority_kind"]),
@@ -839,7 +837,7 @@ class SQLiteAuthorityChangeStore:
                 )
             ):
                 raise sqlite3.DatabaseError(
-                    "conjunto de claims o evidencia terminal incompleto/inconsistente"
+                    "evidencia terminal incompleta o inconsistente"
                 )
 
             existing_release = connection.execute(
@@ -859,6 +857,14 @@ class SQLiteAuthorityChangeStore:
                         "liberación registrada pero quedan claims activos"
                     )
                 return True
+
+            if (
+                claim_set != expected_claims
+                or len(claims) != len(targets)
+            ):
+                raise sqlite3.DatabaseError(
+                    "conjunto de claims incompleto o inconsistente"
+                )
 
             connection.execute(
                 """
