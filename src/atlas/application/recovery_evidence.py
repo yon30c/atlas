@@ -13,6 +13,12 @@ from atlas.memory.authority_changes import (
 from atlas.ports.multi_authority_recovery_evidence_verifier import (
     MultiAuthorityRecoveryEvidenceVerifierPort,
 )
+from atlas.application.recovery_evidence_trust import (
+    RecoveryEvidenceIssuerTrustPolicy,
+)
+from atlas.ports.recovery_evidence_issuer_trust import (
+    RecoveryEvidenceIssuerTrustPolicyPort,
+)
 
 
 class RecoveryEvidenceVerificationStatus(str, Enum):
@@ -47,10 +53,19 @@ def _validate_utc(value: datetime, field: str) -> None:
 class MultiAuthorityRecoveryEvidenceVerificationService:
     """Checks local bindings then delegates authenticity to a trusted verifier."""
 
-    def __init__(self, verifier: MultiAuthorityRecoveryEvidenceVerifierPort) -> None:
+    def __init__(
+        self,
+        verifier: MultiAuthorityRecoveryEvidenceVerifierPort,
+        trust_policy_port: RecoveryEvidenceIssuerTrustPolicyPort,
+    ) -> None:
         if verifier is None or not callable(getattr(verifier, "verify", None)):
             raise ContractError("verifier debe implementar verify(evidence, now)")
+        if trust_policy_port is None or not callable(
+            getattr(trust_policy_port, "get_policy", None)
+        ):
+            raise ContractError("trust_policy_port debe implementar get_policy(issuer_id)")
         self._verifier = verifier
+        self._trust_policy_port = trust_policy_port
 
     def verify(
         self,
@@ -78,6 +93,25 @@ class MultiAuthorityRecoveryEvidenceVerificationService:
             or now < evidence.issued_at
             or now >= evidence.expires_at
         ):
+            return RecoveryEvidenceVerification(
+                RecoveryEvidenceVerificationStatus.DENIED,
+                evidence.evidence_id,
+            )
+
+        try:
+            policy = self._trust_policy_port.get_policy(evidence.issuer_id)
+        except Exception:
+            return RecoveryEvidenceVerification(
+                RecoveryEvidenceVerificationStatus.UNAVAILABLE,
+                evidence.evidence_id,
+            )
+
+        if policy is None or not isinstance(policy, RecoveryEvidenceIssuerTrustPolicy):
+            return RecoveryEvidenceVerification(
+                RecoveryEvidenceVerificationStatus.DENIED,
+                evidence.evidence_id,
+            )
+        if not policy.allows(evidence, now):
             return RecoveryEvidenceVerification(
                 RecoveryEvidenceVerificationStatus.DENIED,
                 evidence.evidence_id,
