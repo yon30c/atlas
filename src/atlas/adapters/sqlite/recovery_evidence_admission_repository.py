@@ -1,6 +1,5 @@
 """SQLite persistence for one-time recovery evidence admission."""
 
-from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
 import json
