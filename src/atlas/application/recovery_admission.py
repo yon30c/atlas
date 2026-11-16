@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from atlas.application.recovery_evidence import (
     RecoveryEvidenceVerification,
     RecoveryEvidenceVerificationStatus,
+    recovery_evidence_digest,
 )
 from atlas.core.errors import ContractError
 from atlas.memory.authority_changes import (
@@ -26,6 +27,7 @@ class RecoveryEvidenceAdmissionCommand:
     admission_id: str
     operation_id: str
     evidence_id: str
+    evidence_digest: str
     issuer_id: str
     issuer_registry_revision: int
     evidence_kind: MultiAuthorityRecoveryEvidenceKind
@@ -37,6 +39,12 @@ class RecoveryEvidenceAdmissionCommand:
             value = getattr(self, field)
             if not isinstance(value, str) or not value.strip():
                 raise ContractError(f"{field} debe ser una cadena no vacía")
+        if (
+            not isinstance(self.evidence_digest, str)
+            or len(self.evidence_digest) != 64
+            or any(char not in "0123456789abcdef" for char in self.evidence_digest)
+        ):
+            raise ContractError("evidence_digest debe ser SHA-256 hexadecimal lowercase")
         if (
             isinstance(self.issuer_registry_revision, bool)
             or not isinstance(self.issuer_registry_revision, int)
@@ -92,6 +100,9 @@ class RecoveryEvidenceAdmissionCommand:
             raise ContractError("la evidencia debe estar VERIFIED para solicitar admisión")
         if verification.evidence_id != evidence.evidence_id:
             raise ContractError("verification no corresponde a evidence")
+        digest = recovery_evidence_digest(evidence)
+        if verification.evidence_digest != digest:
+            raise ContractError("verification no corresponde al contenido exacto de evidence")
         if verification.issuer_registry_revision is None:
             raise ContractError("verification no contiene revisión del inventario")
         if not evidence.matches(operation_id, evidence_kind, targets):
@@ -101,6 +112,7 @@ class RecoveryEvidenceAdmissionCommand:
             "admission_id": admission_id,
             "operation_id": operation_id,
             "evidence_id": evidence.evidence_id,
+            "evidence_digest": digest,
             "issuer_id": evidence.issuer_id,
             "issuer_registry_revision": verification.issuer_registry_revision,
             "evidence_kind": evidence_kind,
