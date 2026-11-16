@@ -69,6 +69,17 @@ class LocalWorkspaceAdapter:
         root = self._workspaces.get(workspace_id)
         if root is None:
             raise NotFoundError("workspace no configurado")
+        try:
+            metadata = root.lstat()
+            resolved = root.resolve(strict=True)
+        except OSError as exc:
+            raise ContractError("la raíz configurada del workspace dejó de estar disponible") from exc
+        if (
+            stat.S_ISLNK(metadata.st_mode)
+            or not stat.S_ISDIR(metadata.st_mode)
+            or resolved != root
+        ):
+            raise ContractError("la raíz configurada del workspace dejó de ser canónica")
         return root
 
     def list_entries(self, workspace_id: str) -> WorkspaceListing:
