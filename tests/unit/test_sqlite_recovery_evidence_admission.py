@@ -194,6 +194,45 @@ class SQLiteRecoveryEvidenceAdmissionTests(unittest.TestCase):
             replay_as_new.status, RecoveryEvidenceAdmissionStatus.EVIDENCE_REUSED
         )
 
+    def test_audits_persisted_admission_as_healthy(self):
+        operation_id = self._prepare()
+        command = self._command(operation_id)
+        with SQLiteLocalAuthorityUnitOfWork(self.database) as uow:
+            result = uow.recovery_evidence_admissions.admit(command)
+            self.assertEqual(result.status, RecoveryEvidenceAdmissionStatus.ADMITTED)
+            uow.commit()
+        with SQLiteLocalAuthorityUnitOfWork(self.database) as uow:
+            audit = uow.recovery_evidence_admissions.audit_admission("admission-1")
+            report = uow.recovery_evidence_admissions.audit_all()
+            self.assertEqual(audit.status.value, "HEALTHY")
+            self.assertEqual(audit.diagnostic_codes, ())
+            self.assertEqual(report.healthy_count, 1)
+            self.assertEqual(report.corrupt_count, 0)
+            self.assertIsNone(
+                uow.recovery_evidence_admissions.audit_admission("missing")
+            )
+
+    def test_audit_detects_command_digest_corruption_without_mutating_receipt(self):
+        operation_id = self._prepare()
+        command = self._command(operation_id)
+        with SQLiteLocalAuthorityUnitOfWork(self.database) as uow:
+            uow.recovery_evidence_admissions.admit(command)
+            uow.commit()
+        with SQLiteLocalAuthorityUnitOfWork(self.database) as uow:
+            connection = uow._unit._connection_for(self.database)
+            connection.execute("DROP TRIGGER recovery_evidence_admissions_no_update")
+            connection.execute(
+                "UPDATE recovery_evidence_admissions SET command_digest = ? "
+                "WHERE admission_id = ?",
+                ("0" * 64, "admission-1"),
+            )
+            audit = uow.recovery_evidence_admissions.audit_admission("admission-1")
+            report = uow.recovery_evidence_admissions.audit_all()
+            self.assertEqual(audit.status.value, "CORRUPT")
+            self.assertIn("COMMAND_DIGEST_MISMATCH", audit.diagnostic_codes)
+            self.assertEqual(report.healthy_count, 0)
+            self.assertEqual(report.corrupt_count, 1)
+
     def test_schema_rejects_non_current_issuer_revision(self):
         operation_id = self._prepare(revision=2)
         with self.assertRaises(sqlite3.IntegrityError):
