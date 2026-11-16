@@ -20,7 +20,6 @@ class CapabilityCatalogTests(unittest.TestCase):
             (IntentKind.WORKSPACE_LIST, IntentKind.WORKSPACE_READ),
         )
         self.assertTrue(all(item.risk is CapabilityRisk.READ_ONLY for item in catalog.list_all()))
-        self.assertIsNone(catalog.get(IntentKind.WORKSPACE_WRITE)) if hasattr(IntentKind, "WORKSPACE_WRITE") else None
 
     def test_catalog_lookup_returns_definition_without_handler(self):
         catalog = build_default_capability_catalog()
