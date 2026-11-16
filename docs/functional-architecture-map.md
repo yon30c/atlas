@@ -244,3 +244,14 @@ La inspección confirma:
 - `SQLiteAuthorityChangeStore` solo almacena reservas/idempotencia, no realiza fencing ni reconciliación.
 
 No se debe construir un verificador genérico con lecturas puntuales ni simular consistencia global. El verificador de operaciones sigue siendo un puerto sin adaptador. La implementación de ejecución queda bloqueada hasta que exista una autoridad de consistencia compartida o se apruebe explícitamente un perfil local de prueba sin efectos que no afirme garantías de revocación concurrente.
+
+
+## 14. F2.3.4 — Decisión sobre consistencia de operaciones
+
+Documento: [Frontera de consistencia para operaciones del Assistant](design/assistant-operation-consistency-boundary.md).
+
+La evidencia CAM, incluso verificada, no es admisión ni permiso de ejecución. Las operaciones requieren una admisión exacta y coordinada con invalidación/fencing. La serialización `BEGIN IMMEDIATE` solo es una garantía válida si todas las fuentes de autoridad, el journal y las admisiones participan en la misma SQLiteDatabase/UoW y cada mutación usa el mismo coordinador.
+
+El primer perfil posible es de solo lectura (`workspace.list`, `workspace.read`). Las escrituras quedan fuera hasta tener un protocolo durable que cubra staging, commit del filesystem y recuperación de resultados inciertos. No se ha creado adaptador ni conectado runtime.
+
+**Siguiente inspección:** matriz de Identity/Grant/Project/Environment → repositorio → base de datos → UoW → caminos de mutación.
