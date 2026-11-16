@@ -301,6 +301,14 @@ Migración v10 aditiva y tablas separadas para operación, idempotencia y conjun
 
 **Estado:** validado por el propietario con 988/988 pruebas. Es registro durable, no exclusión mutua/claim de objetivos ni coordinador. No hay CAM, fencing, invalidación, mutación de fuentes ni runtime.
 
+### F2.3.17 — Contrato de evidencia terminal multiobjetivo
+
+Añadidos contratos inmutables para resultados terminales `COMPLETED` y `ABORTED`. Cada recibo debe vincular operación, referencia durable, registrador, timestamp UTC y el conjunto completo de objetivos/revisiones. COMPLETED exige observación de todas las revisiones propuestas; ABORTED exige que todas permanezcan en las revisiones esperadas. La coincidencia con la reserva se comprueba por operation_id y conjunto exacto de objetivos.
+
+**Límite:** por ahora solo se valida el contrato en memoria. No autentica la evidencia, no la persiste, no cambia el estado durable ni libera claims. Runtime desconectado.
+
+**Estado:** publicado; pendiente de validación local.
+
 ### F2.3.16 — Claims exclusivos multiobjetivo
 
 Migración v11 añade claims con unicidad global por tipo/ID de autoridad. `SQLiteAuthorityChangeStore.acquire_multi_claims` reclama el conjunto completo dentro de `BEGIN IMMEDIATE`, rechaza operaciones ausentes/no solicitables, permite retry exacto y devuelve conflicto sin adquisición parcial si cualquier target ya está reclamado. Se añade lectura de claims y triggers de binding a targets `REQUESTED`, inmutabilidad y no eliminación. Pruebas cubren adquisición completa, retry, conflicto sin parcialidad, competición entre conexiones y restricciones SQL.
