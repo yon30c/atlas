@@ -393,7 +393,7 @@ Identity y Project/Environment ahora pueden participar en una `SQLiteUnitOfWork`
 
 La composición puede confirmar o revertir en conjunto estas fuentes canónicas. La siguiente ampliación integra también `SQLiteAuthorityChangeStore` en la misma UoW; véase F2.3.22. La frontera continúa siendo solo de persistencia y no define el protocolo de coordinación. No implementa CAM, invalidación, fencing ni reconciliación real. Runtime desconectado.
 
-**Estado:** implementación y pruebas publicadas; pendiente de validación local.
+**Estado:** validado por el propietario con 1043/1043 pruebas (16 de noviembre de 2026).
 
 
 ## 23. F2.3.22 — Ledger de operaciones dentro de la UoW compartida
@@ -402,4 +402,4 @@ La composición puede confirmar o revertir en conjunto estas fuentes canónicas.
 
 Esto elimina la separación transaccional SQLite entre el ledger y esas fuentes cuando todos participan explícitamente en la misma UoW. No crea por sí solo un coordinador: faltan política de admisión, autorización CAM, orden de mutación, invalidación, fencing, reconciliación externa y pruebas de concurrencia de extremo a extremo. Runtime desconectado.
 
-**Estado:** implementación y pruebas publicadas; pendiente de validación local.
+**Estado:** validado por el propietario con 1040/1040 pruebas (16 de noviembre de 2026).
