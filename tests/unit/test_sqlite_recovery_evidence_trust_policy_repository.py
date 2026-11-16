@@ -141,7 +141,7 @@ class SQLiteRecoveryEvidenceIssuerTrustPolicyRepositoryTests(unittest.TestCase):
                         issuer_id, policy_revision, enabled,
                         allowed_evidence_kinds_json, valid_from, valid_until,
                         max_evidence_lifetime_seconds
-                    ) VALUES (?, 3, 1, '["source_outcome_receipt"]', ?, ?, 600)
+                    ) VALUES (?, 3, 1, '["SOURCE_OUTCOME_RECEIPT"]', ?, ?, 600)
                     """,
                     (
                         policy.issuer_id,
