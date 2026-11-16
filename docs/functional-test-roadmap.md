@@ -383,3 +383,12 @@ Distingue solicitudes no iniciadas, claims adquiridos antes de invalidación, in
 **Límite de seguridad:** `SOURCE_PENDING` se clasifica como resultado desconocido; nunca como no ejecutado. La clasificación no demuestra que un efecto externo haya ocurrido, no autoriza reintentos, no reanuda operaciones, no cambia estados y no libera claims. No se añade transición a `BLOCKED`.
 
 **Estado: VALIDADA.** Suite completa: 1054 tests OK. La evaluación es de solo lectura y no autoriza reintentos ni mutaciones.
+
+
+### F2.3.25 — Contrato declarativo de decisión de recuperación
+
+Se añaden decisiones tipadas y requisitos de evidencia por disposición del diagnóstico F2.3.24. La recomendación es pura y está ligada al operation_id; distingue revalidación de autoridad, verificación de invalidación, verificación del resultado de fuente, comprobación previa a reconciliación, revisión de evidencia terminal y escalamiento humano ante inconsistencias.
+
+Ninguna decisión permite ejecución automática ni reintentos. El contrato no cambia el ledger, no libera claims, no crea transiciones BLOCKED y no se conecta al runtime. La evidencia requerida es una condición para una futura revisión/coordinación, no autorización.
+
+**Estado:** implementación y pruebas publicadas; pendiente de validación local.
