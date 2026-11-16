@@ -3,7 +3,7 @@
 from atlas.assistant.interpretation import parse_intent_interpretation
 from atlas.assistant.planning import IntentInterpretation
 from atlas.core.errors import ContractError
-from atlas.ports.llm import LLMMessage, LLMMessageRole, LLMProvider, LLMRequest
+from atlas.ports.llm import LLMMessage, LLMMessageRole, LLMProvider, LLMRequest, LLMResponse
 
 
 INTENT_INTERPRETER_SYSTEM_PROMPT = """You are Atlas's intent classification component.
@@ -71,4 +71,6 @@ class OllamaIntentInterpreter:
             max_tokens=self._max_tokens,
         )
         response = self._provider.generate(request)
+        if not isinstance(response, LLMResponse):
+            raise ContractError("provider debe devolver una LLMResponse")
         return parse_intent_interpretation(response.content)
