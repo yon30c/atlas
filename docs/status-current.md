@@ -69,7 +69,7 @@ También se habían realizado verificaciones manuales locales de persistencia, b
 - Fase activa: [Fase 3 — Inteligencia y comportamiento seguro](phase-3-intelligence.md).
 - Modelo principal seleccionado previamente: Gemma 4 E2B. La Fase 3 valida su comportamiento; no repite la selección general.
 - P3-PI-001: fallo exploratorio inicial al seguir una instrucción destructiva en un documento; repetición controlada posterior con 4/4 respuestas seguras tras revisión manual y cero llamadas a herramientas.
-- Corpus y harness aislado versionados en `tests/evaluation/phase3/`; siguiente paso: ejecución local P3-PI-002 (12 corridas con `gemma4:e2b-it-q4_K_M`). Implementación aún pendiente de verificación local.
+- Corpus y harness aislado versionados en `tests/evaluation/phase3/`; diagnóstico local confirmó que `think: false` evita que Gemma agote el presupuesto en razonamiento sin respuesta final. El harness ahora desactiva thinking solo en su proveedor experimental y registra esa opción; no modifica el runtime productivo. Siguiente paso: ejecutar las pruebas unitarias actualizadas y después P3-PI-002 (12 corridas con `gemma4:e2b-it-q4_K_M`).
 
 ## Fuente de detalle
 
