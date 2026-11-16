@@ -32,7 +32,15 @@ class ConversationBackup:
     def _derive_key(passphrase: str, salt: bytes) -> bytes:
         if not isinstance(passphrase, str) or len(passphrase) < 12:
             raise ContractError("la contraseña del respaldo debe tener al menos 12 caracteres")
-        return hashlib.scrypt(passphrase.encode("utf-8"), salt=salt, n=2**15, r=8, p=1, dklen=32)
+        return hashlib.scrypt(
+            passphrase.encode("utf-8"),
+            salt=salt,
+            n=2**15,
+            r=8,
+            p=1,
+            dklen=32,
+            maxmem=64 * 1024 * 1024,
+        )
 
     @classmethod
     def _decrypt(cls, payload: bytes, passphrase: str) -> bytes:
