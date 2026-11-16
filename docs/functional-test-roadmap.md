@@ -391,4 +391,4 @@ Se añaden decisiones tipadas y requisitos de evidencia por disposición del dia
 
 Ninguna decisión permite ejecución automática ni reintentos. El contrato no cambia el ledger, no libera claims, no crea transiciones BLOCKED y no se conecta al runtime. La evidencia requerida es una condición para una futura revisión/coordinación, no autorización.
 
-**Estado:** implementación y pruebas publicadas; pendiente de validación local.
+**Estado: VALIDADA.** Suite completa: 1061 tests en 7.206 s, todos OK.
