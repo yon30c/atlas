@@ -73,7 +73,7 @@ Evidencia local reportada el 16 de noviembre de 2026:
 Objetivo: convertir los aprendizajes de la evaluación inicial en un comportamiento evaluable, consistente y seguro. Esta fase no habilita herramientas reales ni concede autoridad al modelo.
 
 Subfases:
-1. **3.1 — Consolidar baseline y protocolo reproducible.** En curso: corpus, esquema, registro JSONL y runner aislado implementados. P3-PI-002 se ejecutó y documentó en 40 corridas; falta confirmar localmente las pruebas unitarias actualizadas del harness.
+1. **3.1 — Consolidar baseline y protocolo reproducible.** Completada para el baseline/harness inicial: corpus, esquema, registro JSONL y runner aislado implementados; P3-PI-002 documentado en 40 corridas; pruebas unitarias locales del harness aprobadas 6/6 el 16 de noviembre de 2026.
 2. **3.2 — Instrucciones y resistencia a prompt injection.** En curso: P3-PI-001 tiene un fallo exploratorio histórico y una repetición controlada posterior con 4/4 respuestas seguras. P3-PI-002 está completado como escenario: 40/40 contención y 22/40 reconocimiento estricto. Faltan otros casos de inyección directa, suplantación de roles privilegiados, revelación de razonamiento y conflictos de autoridad.
 3. **3.3 — Salidas estructuradas en entorno de evaluación.** Verificar JSON/schema, argumentos, rechazo de campos extra, permisos declarados y necesidad de aprobación humana. No conectar esas salidas a ejecutores.
 4. **3.4 — Límites y honestidad operativa.** Probar que Gemma no afirme ejecución, no transforme planes en acciones realizadas, respete denegaciones y comunique errores/resultados inciertos.
@@ -88,7 +88,7 @@ Criterios de salida:
 - Ninguna herramienta real ni operación destructiva se ejecuta durante la evaluación.
 - Los fallos conocidos quedan documentados; no se ocultan con promedios de calidad.
 
-El corpus, harness y protocolo están en `tests/evaluation/phase3/`. P3-PI-002 se fijó a `gemma4:e2b-it-q4_K_M` y completó 40 corridas (10 por combinación); resultados: 40/40 contención y 22/40 reconocimiento estricto. Informe: [matriz P3-PI-002 de Gemma 4](evaluations/p3-pi-002-gemma4-language-matrix.md). Sigue pendiente la confirmación local de las pruebas unitarias actualizadas del harness. Documento de trabajo: [Fase 3 — Inteligencia y comportamiento](phase-3-intelligence.md).
+El corpus, harness y protocolo están en `tests/evaluation/phase3/`. P3-PI-002 se fijó a `gemma4:e2b-it-q4_K_M` y completó 40 corridas (10 por combinación); resultados: 40/40 contención y 22/40 reconocimiento estricto. Informe: [matriz P3-PI-002 de Gemma 4](evaluations/p3-pi-002-gemma4-language-matrix.md). Las pruebas unitarias locales del harness pasaron 6/6 el 16 de noviembre de 2026. Documento de trabajo: [Fase 3 — Inteligencia y comportamiento](phase-3-intelligence.md).
 
 ## Fase 4 — Capacidades del Assistant
 
@@ -129,7 +129,7 @@ El Recovery Gate seguirá cerrado hasta demostrar autoridad, bootstrap y recuper
 |---|---|---|---|
 | 2026-11-16 | 1 | Confirmada como completada | Implementación y validación documentadas en `docs/terminal/README.md` |
 | 2026-11-16 | 2 | Confirmada como completada | 6/6 pruebas focalizadas y 844/844 suite local en commit `610f027...` |
-| 2026-11-16 | 3 | En curso; baseline de inyección documentado y corpus inicial versionado | P3-PI-001: fallo exploratorio inicial; repetición controlada 4/4 segura tras revisión manual. Corpus en `tests/evaluation/phase3/corpus.json`; siguiente caso P3-PI-002 |
+| 2026-11-16 | 3 | 3.1 completada; fase 3 continúa en curso | P3-PI-002: 40/40 contención, 22/40 reconocimiento estricto; pruebas locales del harness 6/6 OK. 3.2 y 3.3–3.5 siguen abiertas |
 
 ## Trabajo transversal fuera de estas fases
 
