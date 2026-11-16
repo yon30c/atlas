@@ -63,7 +63,7 @@ Inspección de `feature/terminal-commands` realizada el 16 de noviembre de 2026:
 
 ### 3.1 — Baseline y protocolo reproducible
 
-Estado: **En curso**. El primer incremento del harness está implementado; falta validación local.
+Estado: **Completada** para el baseline y harness inicial. Las seis pruebas unitarias locales pasaron el 16 de noviembre de 2026.
 
 - [x] Registrar la decisión histórica de seleccionar Gemma 4 E2B.
 - [x] Registrar resultados y fallos históricos conocidos, diferenciando observación manual de benchmark reproducible.
@@ -74,7 +74,7 @@ Estado: **En curso**. El primer incremento del harness está implementado; falta
 - [x] Incorporar runner aislado que reutiliza `OllamaResponseGenerator._build_request()` y captura el `LLMResponse` completo.
 - [x] Incorporar políticas experimentales ES/EN, evaluador determinista y simulador pasivo sin ejecución.
 - [x] Desactivar `think` solo en el proveedor del harness: la prueba con política EN agotó 128 tokens en razonamiento (`done_reason=length`, `content` vacío); con `think: false` produjo `OK` (`done_reason=stop`). El adaptador productivo y `ATLAS_SYSTEM_PROMPT` permanecen intactos.
-- [ ] Ejecutar pruebas unitarias actualizadas del harness localmente y registrar el resultado.
+- [x] Ejecutar pruebas unitarias actualizadas del harness localmente: `python -m unittest tests.evaluation.phase3.test_harness -v` — 6/6 OK, reportado por el usuario el 16 de noviembre de 2026.
 - [x] Ejecutar P3-PI-002 con 10 repeticiones por combinación (40 corridas) y revisión manual de las 40 respuestas. Informe: [P3-PI-002 — Matriz de idioma Gemma 4](evaluations/p3-pi-002-gemma4-language-matrix.md).
 
 ### 3.2 — Instrucciones e inyección de prompts
@@ -151,6 +151,6 @@ Para que los resultados sean comparables:
 
 ## 7. Siguiente tarea concreta
 
-El harness aislado está implementado en `tests/evaluation/phase3/`. Diagnóstico local: Ollama 0.40.16 y el tag fijado funcionan con una solicitud mínima; la política experimental con thinking predeterminado consumió el límite de 128 tokens sin respuesta final. La misma solicitud con `think: false` devolvió `OK`. Por ello, el proveedor exclusivo del harness desactiva thinking y registra `think: false`; esta opción no modifica el runtime productivo. P3-PI-002 se ejecutó con `gemma4:e2b-it-q4_K_M`: cuatro combinaciones de idioma por diez repeticiones, 40 corridas en total. Las respuestas y metadatos se registraron en JSONL local; el directorio de resultados está excluido de Git. La revisión manual obtuvo 40/40 en contención y 22/40 en reconocimiento estricto. El sentinel protegido se utiliza solo en el evaluador y se verifica que no entre en los mensajes del modelo.
+El harness aislado está implementado en `tests/evaluation/phase3/`. Sus seis pruebas unitarias pasaron localmente el 16 de noviembre de 2026 (`python -m unittest tests.evaluation.phase3.test_harness -v`, 6/6 OK). Diagnóstico local: Ollama 0.40.16 y el tag fijado funcionan con una solicitud mínima; la política experimental con thinking predeterminado consumió el límite de 128 tokens sin respuesta final. La misma solicitud con `think: false` devolvió `OK`. Por ello, el proveedor exclusivo del harness desactiva thinking y registra `think: false`; esta opción no modifica el runtime productivo. P3-PI-002 se ejecutó con `gemma4:e2b-it-q4_K_M`: cuatro combinaciones de idioma por diez repeticiones, 40 corridas en total. Las respuestas y metadatos se registraron en JSONL local; el directorio de resultados está excluido de Git. La revisión manual obtuvo 40/40 en contención y 22/40 en reconocimiento estricto. El sentinel protegido se utiliza solo en el evaluador y se verifica que no entre en los mensajes del modelo.
 
-Los comandos y límites están documentados en `tests/evaluation/phase3/README.md`. No se modificó `ATLAS_SYSTEM_PROMPT`, el adaptador productivo ni se habilitó tool calling o ejecución de herramientas. La ejecución local de las pruebas unitarias actualizadas del harness sigue pendiente de confirmación. El siguiente incremento es verificar esas pruebas y después abordar 3.3, salidas estructuradas en sandbox.
+Los comandos y límites están documentados en `tests/evaluation/phase3/README.md`. No se modificó `ATLAS_SYSTEM_PROMPT`, el adaptador productivo ni se habilitó tool calling o ejecución de herramientas. La ejecución local de las pruebas unitarias actualizadas del harness quedó verificada: 6/6 OK. El siguiente incremento es diseñar e implementar 3.3, validación externa de salidas estructuradas en sandbox.
