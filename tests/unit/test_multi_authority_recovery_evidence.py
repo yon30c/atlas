@@ -7,6 +7,7 @@ from atlas.core.errors import ContractError
 from atlas.application.recovery_evidence import (
     MultiAuthorityRecoveryEvidenceVerificationService,
     RecoveryEvidenceVerificationStatus,
+    recovery_evidence_digest,
 )
 from atlas.authorization.recovery_evidence_trust import (
     RecoveryEvidenceIssuerTrustPolicy,
@@ -219,6 +220,7 @@ class MultiAuthorityRecoveryEvidenceVerificationTests(unittest.TestCase):
         self.assertEqual(result.status, RecoveryEvidenceVerificationStatus.VERIFIED)
         self.assertEqual(result.evidence_id, "evidence-1")
         self.assertEqual(result.issuer_registry_revision, 1)
+        self.assertEqual(result.evidence_digest, recovery_evidence_digest(make_evidence()))
         self.assertEqual(verifier.calls, 1)
 
     def test_trusted_verifier_false_returns_denied(self):
