@@ -431,4 +431,4 @@ Las recomendaciones distinguen: no requerir acción de recuperación para una op
 
 **Reglas obligatorias:** ninguna decisión permite acción automática; no existe recomendación de retry; la etapa registrada no autentica evidencia externa; la recomendación no cambia el ledger, no transiciona a BLOCKED, no libera claims, no sustituye CAM y no constituye permiso. La evidencia enumerada deberá ser obtenida y verificada independientemente por una futura capa coordinadora.
 
-**Validación:** pendiente de pruebas locales del propietario.
+**Estado: VALIDADA.** Suite completa: 1061 tests en 7.206 s, todos OK.
