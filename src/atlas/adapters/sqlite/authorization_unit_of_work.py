@@ -48,7 +48,8 @@ class SQLiteAuthorizationUnitOfWork:
 
     def commit(self) -> None:
         self._ensure_active()
-        self._connection.commit()
+        # The database context manager performs the physical commit on exit.
+        # Keeping the transaction open allows a later exception to roll it back.
         self._committed = True
 
     def rollback(self) -> None:
