@@ -4,7 +4,7 @@
 > Rama de seguimiento: `feature/terminal-commands`.
 > Actualizado: 16 de noviembre de 2026.
 
-Este documento registra el orden acordado para completar Atlas. Se actualiza al cerrar cada fase con evidencia verificable. Los estados describen el trabajo real implementado, no solamente diseños, contratos o planes.
+Este documento registra el orden acordado para completar Atlas. Se actualiza al cerrar cada fase con evidencia verificable. El 16 de noviembre de 2026 el propietario cambió la prioridad: pausar el endurecimiento avanzado de seguridad y concentrar el trabajo inmediato en un Atlas funcional de prueba. Los estados describen el trabajo real implementado, no solamente diseños, contratos o planes.
 
 ## Reglas de seguimiento
 
@@ -31,8 +31,8 @@ No se marcará una fase como completada por tener sus contratos escritos, por pa
 |---:|---|---|---|
 | 1 | Experiencia Terminal | Disponer de una superficie local utilizable para conversar con Atlas | **Completada** |
 | 2 | Conversaciones persistentes | Conservar, administrar, exportar y respaldar conversaciones | **Completada** |
-| 3 | Inteligencia y comportamiento seguro | Validar el comportamiento de Gemma, resistencia a inyección, salidas estructuradas, límites y honestidad | **En curso** |
-| 4 | Capacidades del Assistant | Interpretación, planificación, contratos de herramientas y ejecución mediada con autorización | **Pendiente** |
+| 3 | Inteligencia y comportamiento seguro | Validar comportamiento, inyección, salidas estructuradas y honestidad | **Pausada** |
+| 4 | Atlas funcional de prueba / capacidades del Assistant | Evolucionar de conversación a tareas completas en entorno local de prueba | **Prioridad actual** |
 | 5 | Integración y consolidación | Integración entre dominios, seguridad, recuperación, auditoría y preparación operativa | **Pendiente** |
 
 ## Fase 1 — Experiencia Terminal
@@ -68,7 +68,7 @@ Evidencia local reportada el 16 de noviembre de 2026:
 
 ## Fase 3 — Inteligencia y comportamiento seguro
 
-**Estado: En curso.** Modelo principal ya seleccionado: **Gemma 4 E2B**. La selección inicial de modelo no se repetirá como objetivo de esta fase.
+**Estado: Pausada por decisión del propietario el 16 de noviembre de 2026.** Modelo principal ya seleccionado: **Gemma 4 E2B**. La selección inicial de modelo no se repetirá como objetivo de esta fase.
 
 Objetivo: convertir los aprendizajes de la evaluación inicial en un comportamiento evaluable, consistente y seguro. Esta fase no habilita herramientas reales ni concede autoridad al modelo.
 
@@ -90,9 +90,9 @@ Criterios de salida:
 
 El corpus, harness y protocolo están en `tests/evaluation/phase3/`. P3-PI-002 se fijó a `gemma4:e2b-it-q4_K_M` y completó 40 corridas (10 por combinación); resultados: 40/40 contención y 22/40 reconocimiento estricto. Informe: [matriz P3-PI-002 de Gemma 4](evaluations/p3-pi-002-gemma4-language-matrix.md). Las pruebas unitarias locales del harness pasaron 6/6 el 16 de noviembre de 2026. Documento de trabajo: [Fase 3 — Inteligencia y comportamiento](phase-3-intelligence.md).
 
-## Fase 4 — Capacidades del Assistant
+## Fase 4 — Atlas funcional de prueba / capacidades del Assistant
 
-**Estado: Pendiente.**
+**Estado: Prioridad actual.** El objetivo inmediato es disponer de un asistente local que pueda completar flujos de trabajo de prueba de principio a fin, no limitarse a conversar. El alcance, los incrementos y los criterios de aceptación están en [docs/functional-test-roadmap.md](functional-test-roadmap.md).
 
 Objetivo: permitir que Atlas comprenda solicitudes, elabore planes y solicite capacidades de forma controlada, manteniendo al modelo fuera de la frontera de autoridad.
 
@@ -129,7 +129,8 @@ El Recovery Gate seguirá cerrado hasta demostrar autoridad, bootstrap y recuper
 |---|---|---|---|
 | 2026-11-16 | 1 | Confirmada como completada | Implementación y validación documentadas en `docs/terminal/README.md` |
 | 2026-11-16 | 2 | Confirmada como completada | 6/6 pruebas focalizadas y 844/844 suite local en commit `610f027...` |
-| 2026-11-16 | 3 | 3.1 completada; fase 3 continúa en curso | P3-PI-002: 40/40 contención, 22/40 reconocimiento estricto; pruebas locales del harness 6/6 OK. 3.2 y 3.3–3.5 siguen abiertas |
+| 2026-11-16 | 3 | Pausada por decisión del propietario | P3-SR con `schema_only`: 9/9 PASS determinísticos en una pasada; SR-008: 5/5. SR-006 conserva revisión semántica pendiente. No es aprobación de seguridad. |
+| 2026-11-16 | 4 | Convertida en prioridad actual: Atlas funcional de prueba | Acuerdo de construir capacidades end-to-end en entorno local de prueba; plan en `docs/functional-test-roadmap.md`. |
 
 ## Trabajo transversal fuera de estas fases
 
@@ -138,6 +139,7 @@ Las fases organizan el camino de entrega; no sustituyen el estado de cada domini
 ## Referencias
 
 - [Estado vigente de Atlas](status-current.md)
+- [Plan de Atlas funcional de prueba](functional-test-roadmap.md)
 - [Fase 3 — Inteligencia y comportamiento](phase-3-intelligence.md)
 - [Atlas Terminal](terminal/README.md)
 - [Roadmap detallado Terminal-first](terminal/roadmap.md)
