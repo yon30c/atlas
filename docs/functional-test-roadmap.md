@@ -102,7 +102,7 @@ El conjunto exacto de operaciones se define al inspeccionar los módulos existen
 
 ### F1 — Interpretación y planificación
 
-**Estado:** F1.1 (contratos de intención/plan) integrado y validado por el propietario con 852/852 pruebas. F1.2 (parser JSON estricto de `IntentInterpretation`) añadido; pruebas focalizadas y suite completa pendientes de ejecución local.
+**Estado:** F1.1 (contratos de intención/plan) integrado y validado por el propietario con 852/852 pruebas. F1.2 incluye parser JSON estricto y adaptador `OllamaIntentInterpreter` separado del flujo conversacional; el propietario validó el parser y la suite completa con 860/860 pruebas antes de añadir el adaptador. Las pruebas del adaptador y la suite completa quedan pendientes.
 
 - Clasificar la solicitud en una intención de producto.
 - Extraer parámetros y detectar datos faltantes.
@@ -206,4 +206,4 @@ Para cada siguiente incremento:
 6. Revisar los resultados antes de continuar.
 7. Actualizar esta documentación con evidencia, commit y estado real.
 
-**Siguiente acción:** actualizar el checkout Debian y ejecutar las pruebas nuevas del parser y la suite completa. Corregir cualquier regresión antes de conectar el parser a un intérprete LLM. El primer flujo vertical será `workspace.list` sobre un workspace demo aislado.
+**Siguiente acción:** actualizar el checkout Debian y ejecutar `tests.unit.test_ollama_interpreter` y la suite completa. Si pasan, probar el intérprete contra Gemma local con solicitudes representativas, sin conectarlo aún al flujo conversacional ni ejecutar capacidades. El primer flujo vertical será `workspace.list` sobre un workspace demo aislado.
