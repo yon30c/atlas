@@ -471,3 +471,5 @@ Pruebas añadidas para persistencia, replay, revisión obsoleta, emisor deshabil
 **Límite:** la transacción solo hace atómica la admisión local. No protege un efecto posterior ni habilita recuperación/runtime. ADMITTED no es autoridad de ejecución.
 
 **Estado:** implementado en la rama; pruebas locales pendientes.
+
+La verificación VERIFIED queda ligada también a un digest canónico SHA-256 de la evidencia completa. El comando de admisión exige coincidencia de ese digest, no solo de evidence_id, evitando reutilizar una verificación con un objeto alterado que conserve el mismo identificador.
