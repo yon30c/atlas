@@ -341,4 +341,11 @@ Los claims continuaban retenidos en F2.3.18. El digest no autentica la referenci
 
 Migración v13 añade un ledger inmutable de liberaciones. El trigger SQL solo permite borrar claims cuando existe un recibo de liberación ligado al digest terminal y la operación está COMPLETED/ABORTED con conjuntos completos de targets, observaciones y claims. `release_multi_claims` vuelve a verificar el recibo y el binding exacto; inserta el recibo de liberación y elimina todos los claims en una UoW. Reintentos exactos son idempotentes, los estados no terminales conservan claims y los casos inconsistentes fallan cerrados.
 
-El historial de liberación se conserva y los recursos quedan disponibles para nuevas operaciones tras el commit. El digest no autentica la referencia externa ni prueba su veracidad. No implementa CAM, fencing, invalidación ni coordinador de fuentes; runtime desconectado. Pendiente de validación local.
+El historial de liberación se conserva y los recursos quedan disponibles para nuevas operaciones tras el commit. El digest no autentica la referencia externa ni prueba su veracidad. No implementa CAM, fencing, invalidación ni coordinador de fuentes; runtime desconectado. Validado por el propietario con 1021/1021 pruebas.
+
+
+## 30. F2.3.20 — Auditoría de recuperación de claims
+
+Se incorpora `MultiAuthorityClaimAudit` y `SQLiteAuthorityChangeStore.audit_multi_claims`, API de solo lectura que contrasta estado de operación, targets reservados, claims activos, evidencia terminal reconstruida y ledger de liberación. Clasifica estados sanos como UNCLAIMED, CLAIMED, TERMINAL_CLAIMS_HELD y RELEASED; clasifica cualquier contradicción, corrupción de digest o conjunto parcial como INCONSISTENT. No modifica ni repara datos y no libera claims. Operación desconocida devuelve None.
+
+No autentica evidencia externa ni demuestra reconciliación real. Sin CAM, fencing, invalidación o coordinador de fuentes; runtime desconectado. Pendiente de validación local.
