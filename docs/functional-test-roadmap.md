@@ -417,4 +417,11 @@ Implementar snapshots inmutables por emisor y revisión en SQLite, con migració
 
 **Límites:** no implementar criptografía, gestión de claves, acciones de recuperación ni integración runtime en este incremento.
 
-**Estado:** implementado en la rama; pendiente de validación local por el propietario.
+**Estado: VALIDADO.** El propietario ejecutó la suite completa: 1088 tests, todos OK.
+
+
+## F2.3.29 — Auditoría de integridad de políticas de confianza
+
+Implementar diagnósticos de solo lectura para políticas por emisor: continuidad de revisiones, contenido canónico y decodificable, política vigente deshabilitada y ausencia de política para un emisor consultado. `audit_all()` debe producir un snapshot consistente y no mutar la base. No incluir reparaciones automáticas, autenticación criptográfica ni autoridad de recuperación.
+
+**Estado:** implementado en la rama; pendiente de validación local del propietario. Nota: `audit_all()` cubre emisores registrados en la tabla; detectar emisores esperados nunca registrados requiere un inventario autoritativo independiente.
