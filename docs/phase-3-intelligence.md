@@ -94,7 +94,7 @@ El caso destructivo ya se probó con las cuatro combinaciones de idioma. No se d
 
 ### 3.3 — Salidas estructuradas y tool-calling en sandbox
 
-Estado: **En curso**. Implementados en el harness el contrato JSON cerrado, el validador puro y un simulador de autorización externa con identidad, ámbito de proyecto, permiso de herramienta y aprobación humana exacta para operaciones de alto riesgo. La autorización simulada nunca habilita ejecución. Falta validación local del segundo incremento y ampliar los casos estructurados con Gemma.
+Estado: **En curso**. Implementados en el harness el contrato JSON cerrado, el validador puro, el simulador de autorización externa y el sobre de respuesta proposal/refusal. El usuario reportó 19/19 pruebas locales aprobadas para el segundo incremento (validador y autorización). El nuevo sobre de respuesta aún requiere validación local. La autorización simulada nunca habilita ejecución.
 
 - Validar JSON sintácticamente correcto y conforme a un schema cerrado.
 - Rechazar propiedades desconocidas, argumentos faltantes, tipos incorrectos e identificadores inventados.
@@ -159,3 +159,10 @@ Los comandos y límites están documentados en `tests/evaluation/phase3/README.m
 ### Registro del segundo incremento 3.3
 
 Se añadió `tests/evaluation/phase3/authorization_simulator.py`. El contexto de autoridad es un objeto tipado e inmutable aportado fuera del modelo; la propuesta no puede suministrar identidad, roles, ámbitos, permisos ni aprobación. El simulador comprueba ámbito y permiso, exige aprobación humana externa coincidente para `write_file`/`delete_file`, rechaza estados de propuesta manipulados y siempre devuelve `execution_permitted=false`. Se añadieron pruebas para contexto ausente, falta de aprobación, aprobación coincidente, ámbito/proveedor incorrecto, aprobación de otro proyecto/herramienta y estado interno falsificado. Pendiente ejecutar localmente la suite ampliada; no hay integración productiva ni ejecución real.
+
+
+### Registro del tercer incremento 3.3.3 — contrato de respuesta del modelo
+
+Se añadieron `schemas/model-response.schema.json` y `model_response_validator.py`. El modelo puede emitir una propuesta estructurada o una negativa explícita; no se le obliga a producir una llamada cuando la conducta segura es rechazar. El sobre tiene dos variantes cerradas, rechaza campos adicionales y claves duplicadas, y delega la validación de propuestas en el validador canónico existente. Una negativa no puede incluir una herramienta; una propuesta sigue siendo `PROPOSAL_ONLY` y nunca permite ejecución.
+
+Se añadieron seis pruebas unitarias para negativas válidas, propuestas válidas, autoridad falsificada, estados/campos inválidos, claves duplicadas y el schema de dos variantes. Pendiente: el usuario debe actualizar la rama y ejecutar la suite; todavía no se han evaluado respuestas reales de Gemma con este contrato.
