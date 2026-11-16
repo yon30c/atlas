@@ -256,3 +256,9 @@ Migración v8 para solicitudes de renovación, repositorio SQLite con CAS y deci
 Pruebas añadidas para persistencia, CAS, binding/decisión inmutable, rollback, commit explícito, excepción después de solicitar commit, y servicios de emisión/renovación.
 
 **Estado:** publicado, pendiente de validación local. La composición local expone la fábrica, pero el wiring de servicios de aplicación y el coordinador común siguen pendientes.
+
+### F2.3.9 — Fuentes canónicas Project y Environment
+
+Añadida migración v9 con tablas canónicas para Project y Environment, snapshots tipados reutilizando los puertos existentes de metadatos, repositorio SQLite con altas/lecturas/actualizaciones CAS y retención de tombstones. La composición local expone el repositorio usando la misma instancia SQLite que Identity, Grants, renovaciones y el ledger de cambios. Se añadieron pruebas de persistencia, revisión obsoleta, restricciones SQL y composición.
+
+**Estado:** publicado; pendiente de validación local. Las mutaciones todavía no pasan por un coordinador común de invalidación/fencing; no conectar a la admisión ni al runtime.
