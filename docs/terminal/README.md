@@ -129,4 +129,4 @@ Configuración principal:
 
 ## 9. Próximo trabajo
 
-La siguiente fase de producto es evaluar de forma reproducible el comportamiento de modelos e instrucciones. La hoja de ruta está en [roadmap.md](roadmap.md). No se debe habilitar ejecución arbitraria ni saltarse las fronteras de autorización como atajo para hacer que Atlas parezca más autónomo.
+La prioridad actual es construir un Atlas funcional de prueba, evolucionando desde la conversación hacia flujos locales completos: interpretación, planificación, capacidades concretas, ejecución de tareas y resultados verificables. El plan y sus criterios de aceptación están en [Atlas funcional de prueba](../functional-test-roadmap.md). El endurecimiento avanzado de seguridad de la Fase 3 queda pausado por decisión del propietario y se retomará más adelante. Se conservan las protecciones mínimas existentes; no se habilita shell arbitrario ni se conectan propuestas experimentales del harness al runtime.
