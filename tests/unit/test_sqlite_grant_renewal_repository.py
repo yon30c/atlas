@@ -85,6 +85,15 @@ class SQLiteGrantRenewalRepositoryTests(unittest.TestCase):
         )
         self.assertTrue(self.repository.update_if_version(approved, 1))
         self.assertFalse(self.repository.update_if_version(approved, 1))
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    """
+                    UPDATE authorization_grant_renewals
+                    SET decided_by_user_id = 'other-user', version = 3
+                    WHERE renewal_id = ?
+                    """,
+                    (self.request.renewal_id,),
+                )
         self.assertEqual(self.repository.get(self.request.renewal_id), approved)
 
     def test_update_uses_next_version_and_reports_stale_write(self):
