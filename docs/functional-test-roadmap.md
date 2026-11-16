@@ -276,3 +276,9 @@ Inspeccionadas las rutas actuales de Identity, emisión/revocación/renovación 
 `GrantManagementService.issue` ya no permite el fallback de escritura directa cuando falta `unit_of_work_factory`: falla cerrado antes de modificar el repositorio. La comprobación de unicidad y la inserción solo se realizan dentro de la unidad transaccional compartida. Se añadió una prueba que confirma que la ausencia de UoW no crea el Grant, y se adaptó el fixture de servicio a una UoW en memoria.
 
 **Estado:** validado por el propietario con 968/968 pruebas. Esto cierra únicamente el bypass de emisión; no coordina todavía la mutación con invalidación/fencing.
+
+### F2.3.12 — Auditoría detallada de renovaciones
+
+Se verificó que la UoW hace atómica la actualización de Grant + solicitud al aprobar una renovación, pero no coordina invalidación/fencing de admisiones basadas en la revisión anterior. La solicitud y el rechazo tienen semánticas distintas y requieren política explícita de auditoría/autorización. Se documentó la vinculación futura entre operación, Grant, versión de renovación, actor, owner, proyecto y entorno. No se reutilizará el autorizador CAM específico de revocación ni se añadirá un coordinador ficticio.
+
+**Estado:** auditoría documentada; sin cambios de runtime ni pruebas nuevas.
