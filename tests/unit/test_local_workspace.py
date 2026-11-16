@@ -150,6 +150,18 @@ class LocalWorkspaceAdapterTests(unittest.TestCase):
             with self.assertRaises(ContractError):
                 adapter.read_file("demo", "binary.bin")
 
+    def test_staging_metadata_is_hidden_from_listing_and_reads(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".atlas-staging").mkdir()
+            (root / ".atlas-staging" / "private.json").write_text("{}", encoding="utf-8")
+            (root / "visible.txt").write_text("visible", encoding="utf-8")
+            adapter = LocalWorkspaceAdapter({"demo": root})
+            result = adapter.list_entries("demo")
+            self.assertEqual([entry.name for entry in result.entries], ["visible.txt"])
+            with self.assertRaises(ContractError):
+                adapter.read_file("demo", ".atlas-staging/private.json")
+
     def test_rejects_directory_as_file(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
