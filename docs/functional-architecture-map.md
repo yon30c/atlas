@@ -485,3 +485,13 @@ Se incorporan pruebas para ambos lados de esa frontera temporal: una desactivaci
 La comprobación es de solo lectura y depende de timestamps almacenados localmente; no autentica el reloj ni la procedencia externa de los cambios. No habilita acciones, efectos ni runtime.
 
 **Estado: VALIDADO por el propietario; suite completa: 1135 tests en 9.444 s, todos OK.**
+
+## 48. F2.3.38 — Auditoría global de admisiones
+
+La auditoría de admisiones cruza ahora los recibos con las operaciones y sus reservas. Detecta operación inexistente, revisión histórica del emisor ausente, duplicidad de evidence_id y discrepancias en el conjunto de claims. Para operaciones terminales, reconoce que los claims pueden haberse liberado, pero exige el recibo de liberación y la coincidencia exacta de los objetivos terminales.
+
+El informe añade `global_diagnostic_codes` e `is_healthy` sin reemplazar el detalle por recibo. Una prueba de corrupción controlada demuestra la detección de un claim faltante.
+
+La consulta es de solo lectura y no repara datos, no concede autoridad y no conecta recuperación ni runtime.
+
+**Estado:** implementado en la rama; pruebas locales pendientes.
