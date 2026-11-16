@@ -10,6 +10,11 @@ from atlas.adapters.sqlite.database import SQLiteDatabase, SQLiteUnitOfWork
 from atlas.authorization.recovery_evidence_trust import (
     RecoveryEvidenceIssuerTrustPolicy,
 )
+from atlas.authorization.recovery_evidence_trust_audit import (
+    RecoveryEvidenceIssuerTrustPolicyAudit,
+    RecoveryEvidenceIssuerTrustPolicyAuditReport,
+    RecoveryEvidenceIssuerTrustPolicyAuditStatus,
+)
 from atlas.core.errors import ConcurrencyError, ContractError, NotFoundError
 from atlas.memory.authority_changes import MultiAuthorityRecoveryEvidenceKind
 from atlas.ports.recovery_evidence_issuer_trust import (
@@ -194,3 +199,121 @@ class SQLiteRecoveryEvidenceIssuerTrustPolicyRepository(
                 (key,),
             ).fetchall()
         return tuple(self._from_row(row) for row in rows)
+
+    @staticmethod
+    def _audit_issuer_rows(
+        issuer_id: str,
+        rows: list[sqlite3.Row],
+    ) -> RecoveryEvidenceIssuerTrustPolicyAudit:
+        if not rows:
+            return RecoveryEvidenceIssuerTrustPolicyAudit(
+                issuer_id=issuer_id,
+                status=RecoveryEvidenceIssuerTrustPolicyAuditStatus.MISSING_POLICY,
+                revisions=(),
+                latest_revision=None,
+                diagnostic_codes=("NO_POLICY_REGISTERED",),
+            )
+
+        revisions: list[int] = []
+        diagnostics: list[str] = []
+        decoded: list[RecoveryEvidenceIssuerTrustPolicy] = []
+        for row in rows:
+            revision = row["policy_revision"]
+            if (
+                isinstance(revision, bool)
+                or not isinstance(revision, int)
+                or revision < 1
+            ):
+                diagnostics.append("INVALID_REVISION_VALUE")
+                continue
+            revisions.append(revision)
+            enabled = row["enabled"]
+            if isinstance(enabled, bool) or not isinstance(enabled, int) or enabled not in (0, 1):
+                diagnostics.append("INVALID_ENABLED_VALUE")
+            try:
+                policy = SQLiteRecoveryEvidenceIssuerTrustPolicyRepository._from_row(row)
+                decoded.append(policy)
+                canonical_values = SQLiteRecoveryEvidenceIssuerTrustPolicyRepository._values(policy)
+                stored_values = (
+                    row["issuer_id"],
+                    row["policy_revision"],
+                    row["enabled"],
+                    row["allowed_evidence_kinds_json"],
+                    row["valid_from"],
+                    row["valid_until"],
+                    row["max_evidence_lifetime_seconds"],
+                )
+                if canonical_values != stored_values:
+                    diagnostics.append("NON_CANONICAL_POLICY_RECORD")
+            except (ContractError, TypeError, ValueError, KeyError, OverflowError):
+                diagnostics.append("INVALID_POLICY_RECORD")
+
+        ordered_revisions = tuple(sorted(revisions))
+        if ordered_revisions and ordered_revisions != tuple(
+            range(1, ordered_revisions[-1] + 1)
+        ):
+            diagnostics.append("REVISION_SEQUENCE_GAP")
+
+        latest_revision = ordered_revisions[-1] if ordered_revisions else None
+        latest_policy = next(
+            (policy for policy in decoded if policy.policy_revision == latest_revision),
+            None,
+        )
+        if diagnostics:
+            status = RecoveryEvidenceIssuerTrustPolicyAuditStatus.CORRUPT
+        elif latest_policy is not None and not latest_policy.enabled:
+            status = RecoveryEvidenceIssuerTrustPolicyAuditStatus.DISABLED
+            diagnostics.append("LATEST_POLICY_DISABLED")
+        else:
+            status = RecoveryEvidenceIssuerTrustPolicyAuditStatus.HEALTHY
+
+        return RecoveryEvidenceIssuerTrustPolicyAudit(
+            issuer_id=issuer_id,
+            status=status,
+            revisions=ordered_revisions,
+            latest_revision=latest_revision,
+            diagnostic_codes=tuple(sorted(set(diagnostics))),
+        )
+
+    def audit_issuer(
+        self,
+        issuer_id: str,
+    ) -> RecoveryEvidenceIssuerTrustPolicyAudit:
+        """Audit one issuer, including an explicit result when it has no policy."""
+        key = self._required_issuer(issuer_id)
+        with self._read_connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM recovery_evidence_issuer_trust_policies
+                WHERE issuer_id = ?
+                ORDER BY policy_revision
+                """,
+                (key,),
+            ).fetchall()
+        return self._audit_issuer_rows(key, rows)
+
+    def audit_all(
+        self,
+    ) -> RecoveryEvidenceIssuerTrustPolicyAuditReport:
+        """Audit every registered issuer without changing any database state."""
+        with self._read_connection() as connection:
+            issuer_rows = connection.execute(
+                """
+                SELECT DISTINCT issuer_id
+                FROM recovery_evidence_issuer_trust_policies
+                ORDER BY issuer_id
+                """
+            ).fetchall()
+            audits = []
+            for issuer_row in issuer_rows:
+                issuer_id = issuer_row["issuer_id"]
+                rows = connection.execute(
+                    """
+                    SELECT * FROM recovery_evidence_issuer_trust_policies
+                    WHERE issuer_id = ?
+                    ORDER BY policy_revision
+                    """,
+                    (issuer_id,),
+                ).fetchall()
+                audits.append(self._audit_issuer_rows(issuer_id, rows))
+        return RecoveryEvidenceIssuerTrustPolicyAuditReport(tuple(audits))
