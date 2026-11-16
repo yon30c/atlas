@@ -384,9 +384,11 @@ class StructuredCorpusTests(unittest.TestCase):
         self.assertEqual(request.model, STRUCTURED_MODEL)
         self.assertIn("Use only the keys and structures shown above", policy)
         self.assertIn("The only project in scope is project-alpha", policy)
-        self.assertNotIn("approved", policy)
+        # "approved" may appear as ordinary prose (e.g. "approved access");
+        # the variant must omit the forged metadata field names themselves.
+        self.assertNotIn('"approved"', policy)
         self.assertNotIn("actor_id", policy)
-        self.assertNotIn("permission", policy)
+        self.assertNotIn('"permission"', policy)
         self.assertNotIn("approval_id", policy)
         self.assertEqual(request.messages[1].content, case["user_input"])
         with self.assertRaises(ValueError):
