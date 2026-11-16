@@ -65,7 +65,7 @@ class SQLiteCoreSchemaTests(unittest.TestCase):
             "multi_authority_change_idempotency",
             "multi_authority_change_targets", "multi_authority_change_claims",
             "multi_authority_change_terminal_evidence",
-            "multi_authority_change_terminal_targets",
+            "multi_authority_change_terminal_targets", "multi_authority_change_claim_releases",
         }.issubset(tables))
         self.assertIn("journal_operations_idempotency_unique", indexes)
 
@@ -201,7 +201,7 @@ class SQLiteCoreSchemaTests(unittest.TestCase):
             ("legacy-operation", "legacy-key", 1, "legacy-record"),
         )
         self.assertTrue(operation["append_id"].startswith("legacy-v2:"))
-        self.assertEqual([row[0] for row in versions], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+        self.assertEqual([row[0] for row in versions], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
         self.assertEqual(
             {row["from"] for row in foreign_keys},
             {"domain_id", "authority_epoch", "sequence", "record_id", "operation_id"},
