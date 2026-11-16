@@ -98,8 +98,8 @@ class AuthorityChangeTerminalEvidenceTests(unittest.TestCase):
 
     def test_evidence_must_cover_exact_operation_and_all_targets(self):
         self.assertFalse(evidence(operation_id="another-operation").matches(reservation()))
-        incomplete = evidence(targets=(targets()[0],))
-        self.assertFalse(incomplete.matches(reservation()))
+        with self.assertRaises(ContractError):
+            evidence(targets=(targets()[0],))
 
     def test_evidence_rejects_changed_target_revision_or_identity(self):
         changed = (
