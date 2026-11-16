@@ -11,6 +11,11 @@ from atlas.adapters.sqlite.authorization_unit_of_work import (
     SQLiteAuthorizationUnitOfWorkFactory,
 )
 from atlas.adapters.sqlite.migrations import SQLITE_MIGRATIONS
+from atlas.authorization.grant_management import GrantManagementService
+from atlas.authorization.renewal_service import GrantRenewalService
+from atlas.core.context import OperationContext
+from atlas.core.enums import DelegationMode
+from atlas.core.identity import Identity, IdentityKind, IdentityStatus
 from atlas.authorization.models import (
     Grant,
     GrantRenewalRequest,
@@ -145,6 +150,88 @@ class SQLiteAuthorizationUnitOfWorkTests(unittest.TestCase):
         self.assertEqual(
             self.factory().renewals.get(self.renewal.renewal_id),
             self.renewal,
+        )
+
+    def test_grant_issue_service_uses_atomic_shared_unit_of_work(self):
+        actor = Identity(
+            identity_id="user-001",
+            kind=IdentityKind.USER,
+            status=IdentityStatus.ACTIVE,
+        )
+        context = OperationContext(
+            request_id="request-issue",
+            correlation_id="correlation-issue",
+            actor=actor,
+            user_id="user-001",
+            origin="unit-test",
+            delegation=None,
+            project_id="atlas",
+            environment="test",
+            purpose="issue grant",
+            classification="internal",
+            created_at=NOW,
+        )
+        service = GrantManagementService(
+            SQLiteGrantRepository(self.database),
+            unit_of_work_factory=self.factory,
+        )
+        self.assertEqual(service.issue(context, self.grant, NOW), self.grant)
+        with self.assertRaises(ContractError):
+            service.issue(context, self.grant, NOW)
+        self.assertEqual(self.factory().grants.get(self.grant.grant_id), self.grant)
+
+    def test_grant_renewal_service_runs_on_sqlite_unit_of_work(self):
+        with self.factory() as uow:
+            uow.grants.create(self.grant)
+            uow.commit()
+
+        agent = Identity(
+            identity_id="agent-001",
+            kind=IdentityKind.AGENT,
+            status=IdentityStatus.ACTIVE,
+        )
+        subject_context = OperationContext(
+            request_id="request-renew",
+            correlation_id="correlation-renew",
+            actor=agent,
+            user_id="user-001",
+            origin="unit-test",
+            delegation=DelegationMode.DELEGATED,
+            project_id="atlas",
+            environment="test",
+            purpose="renew grant",
+            classification="internal",
+            created_at=NOW,
+        )
+        service = GrantRenewalService(self.factory)
+        request = service.request_renewal(
+            subject_context,
+            "renewal-service",
+            self.grant.grant_id,
+            self.grant.expires_at + timedelta(days=7),
+            NOW + timedelta(hours=1),
+        )
+        owner = Identity(
+            identity_id="user-001",
+            kind=IdentityKind.USER,
+            status=IdentityStatus.ACTIVE,
+        )
+        owner_context = replace(
+            subject_context,
+            actor=owner,
+            delegation=None,
+            request_id="request-approve",
+        )
+        updated = service.approve_renewal(
+            owner_context,
+            request.renewal_id,
+            NOW + timedelta(hours=2),
+        )
+        self.assertEqual(updated.revision, 2)
+        self.assertEqual(updated.expires_at, request.proposed_expires_at)
+        self.assertEqual(
+            self.factory().renewals.get(request.renewal_id).status,
+            RenewalStatus.APPROVED,
         )
 
     def test_repository_cannot_use_unit_of_work_after_context(self):
