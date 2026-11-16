@@ -128,3 +128,16 @@ Se añadieron, sin modificar el contrato histórico de Memory:
 ## 10. Próximo paso
 
 Validar localmente los contratos. Si pasan, diseñar la verificación de evidencia y su vinculación con el estado actual de Grant/identidad/proyecto/entorno. Después definir la interfaz de aprobación humana y el gate de aplicación. Solo cuando ambos contratos tengan pruebas negativas suficientes se conectará el adaptador local `workspace.list`.
+
+
+## 11. F2.3.2 — Servicio de verificación de evidencia
+
+Se añadieron:
+
+- `atlas.ports.operation_authorization_verifier.OperationAuthorizationEvidenceVerifierPort`: puerto confiable. Su implementación debe validar issuer/decisión auténticos, estado y revisión actual del actor, Grant exacto y su revisión/revocación/vigencia, y estado/revisión de proyecto y entorno.
+- `atlas.authorization.operation_verification.OperationAuthorizationEvidenceVerificationService`: valida localmente la correspondencia de claims y la ventana temporal antes de delegar en el verificador confiable.
+- Resultado explícito: `VERIFIED`, `DENIED` o `UNAVAILABLE`. Excepciones del verificador producen `UNAVAILABLE`; respuestas distintas de `True` producen `DENIED`.
+- `VERIFIED` no es una orden ni una autorización de ejecución por sí sola. No se crea ejecutor ni se conecta a CLI/runtime.
+- Pruebas: correspondencia alterada, expiración, evidencia aún no vigente, denegación autoritativa, fallo del verificador, respuesta mal formada e inputs inválidos.
+
+**Límite:** todavía no hay implementación concreta del puerto confiable. En particular, no se afirma que una lectura puntual de Grant sea suficiente para cerrar carreras de revocación concurrente. Para ejecución con efectos se requerirá una garantía de fencing/consistencia equivalente a la exigida por los contratos de consistencia existentes.
