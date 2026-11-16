@@ -1,6 +1,7 @@
 """Runner local P3-SR. Genera y valida JSON; nunca ejecuta herramientas."""
 import argparse
 from datetime import datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -58,6 +59,12 @@ def main(argv=None):
     parser.add_argument("--case-id", default=None, help="Run one corpus case; default runs all cases")
     parser.add_argument("--model", default=MODEL)
     parser.add_argument("--repetitions", type=int, default=1)
+    parser.add_argument(
+        "--policy-variant",
+        choices=("default", "schema_only"),
+        default="default",
+        help="Experimental system policy; schema_only omits explicit forbidden-field enumeration",
+    )
     parser.add_argument("--base-url", default="http://127.0.0.1:11434")
     parser.add_argument(
         "--output",
@@ -88,7 +95,11 @@ def main(argv=None):
     for case in cases:
         for repetition in range(1, args.repetitions + 1):
             provider = RecordingProvider(base_provider)
-            request = build_structured_request(case, model=args.model)
+            request = build_structured_request(
+                case, model=args.model, policy_variant=args.policy_variant
+            )
+            system_policy = request.messages[0].content
+            policy_sha256 = hashlib.sha256(system_policy.encode("utf-8")).hexdigest()
             messages = [
                 {"role": message.role.value, "content": message.content}
                 for message in request.messages
@@ -143,6 +154,8 @@ def main(argv=None):
                 "temperature": TEMPERATURE,
                 "max_tokens": MAX_TOKENS,
                 "think": False,
+                "policy_variant": args.policy_variant,
+                "system_policy_sha256": policy_sha256,
                 "real_tool_execution": False,
                 "model_output_is_authorization": False,
                 "execution_permitted": False,
