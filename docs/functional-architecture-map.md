@@ -103,7 +103,7 @@ RequestPlanningResult
 - Los contratos P3-SR están bajo `tests/evaluation/phase3`; no son herramientas productivas y no deben conectarse al runtime.
 - Los módulos de Identity/CAM y Memory Engine no deben considerarse servicios operativos del Assistant por el mero hecho de existir en el repositorio.
 
-## 4. Primer flujo vertical seleccionado
+## 5. Primer flujo vertical seleccionado
 
 Construir un workspace de prueba dedicado y un flujo de proyecto mínimo, antes de generalizar a agentes, skills o Scheduler.
 
@@ -132,7 +132,7 @@ Flujo previsto:
 
 La siguiente operación será `workspace.read`. Las operaciones de escritura se incorporarán después de demostrar el flujo de lectura y la persistencia de tareas.
 
-## 5. Diseño funcional incremental
+## 6. Diseño funcional incremental
 
 ### F1 — Interpretación y planificación
 
@@ -168,20 +168,20 @@ Asociar tarea y conversación mediante identificadores. Al iniciar, recuperar ta
 
 Añadir comandos de consola como `/capabilities`, `/tasks` y `/task <id>`, más un flujo conversacional de plan/confirmación/resultado. Mantener la administración de conversaciones existente sin cambios regresivos.
 
-## 6. Pruebas mínimas por incremento
+## 7. Pruebas mínimas por incremento
 
 - Unitarias: validación de intención, parámetros, plan, transiciones de tarea y resultado del adaptador.
 - Integración: repositorio SQLite de tareas con base temporal.
 - Workspace: listado y lectura sobre fixtures; ruta inexistente y workspace vacío.
 - Consola: plan, confirmación, resultado y error observable.
-- Regresión: ejecutar la suite existente de 844 pruebas reportadas por el propietario.
+- Regresión: ejecutar la suite completa vigente y registrar el total validado por el propietario.
 
 No se marcará F1–F5 como completada hasta ejecutar las pruebas en el entorno local del propietario y comprobar el flujo vertical real.
 
-## 7. Estado F0
+## 8. Estado F0
 
 **Inspección estática realizada:** composition root, fachada AtlasCore, AssistantService, generador Ollama, proyección de contexto, gestor de conversaciones y consola.
 
 **Pendiente para cerrar F0 con evidencia local:** comprobar que el checkout Debian está en el mismo commit/branch y ejecutar la suite de regresión antes de introducir cambios de código.
 
-**Siguiente incremento técnico:** F1.1 — contratos de intención, aclaración y plan, con pruebas unitarias; todavía sin conectar herramientas ni alterar el prompt productivo.
+**Estado actual:** F1.1–F1.5 están implementadas en la rama. F1.4 fue validada por el propietario con 882/882 pruebas. F1.5 (fábrica de composición `atlas.bootstrap.build_request_planner`) está pendiente de validación local. El planificador sigue aislado de `cli.py` y del runtime conversacional.
