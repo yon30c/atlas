@@ -3,7 +3,6 @@
 import json
 import os
 from pathlib import Path
-import stat
 
 from atlas.core.errors import ContractError, NotFoundError
 
@@ -12,7 +11,7 @@ class ConversationExport:
     """Exporta metadatos e historial completo a JSON sin modificar la base activa.
 
     El JSON es texto legible y no está cifrado. El archivo se crea con modo
-    0600, sin seguir enlaces simbólicos ni sobrescribir destinos existentes.
+    0600, sin seguir un enlace simbólico en el destino ni sobrescribir archivos existentes.
     """
 
     def __init__(self, repository) -> None:
