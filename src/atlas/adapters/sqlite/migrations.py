@@ -1329,8 +1329,67 @@ CORE_SCHEMA_V13 = SQLiteMigration(
     """,
 )
 
+
+# v14 constrains multi-authority lifecycle transitions to a strict forward graph.
+# Intermediate progression requires the complete exclusive claim set; terminal
+# transitions remain separately gated by the immutable reconciliation receipt.
+CORE_SCHEMA_V14 = SQLiteMigration(
+    version=14,
+    name="constrained_multi_authority_operation_lifecycle",
+    sql="""
+    CREATE TRIGGER multi_authority_operation_status_forward_only
+    BEFORE UPDATE OF status ON multi_authority_change_operations
+    WHEN NEW.status != OLD.status
+    AND NOT (
+        (OLD.status = 'REQUESTED' AND NEW.status = 'INVALIDATION_PENDING')
+        OR
+        (OLD.status = 'INVALIDATION_PENDING' AND NEW.status = 'SOURCE_PENDING')
+        OR
+        (OLD.status = 'SOURCE_PENDING' AND NEW.status = 'SOURCE_CONFIRMED')
+        OR
+        (OLD.status = 'SOURCE_CONFIRMED' AND NEW.status = 'RECONCILING')
+        OR
+        (OLD.status = 'RECONCILING' AND NEW.status IN ('COMPLETED', 'ABORTED'))
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'invalid multi-authority operation status transition');
+    END;
+
+    CREATE TRIGGER multi_authority_operation_progress_requires_complete_claims
+    BEFORE UPDATE OF status ON multi_authority_change_operations
+    WHEN NEW.status != OLD.status
+    AND NEW.status IN (
+        'INVALIDATION_PENDING', 'SOURCE_PENDING',
+        'SOURCE_CONFIRMED', 'RECONCILING'
+    )
+    AND (
+        (SELECT COUNT(*) FROM multi_authority_change_targets
+         WHERE operation_id = OLD.operation_id) < 2
+        OR
+        (SELECT COUNT(*) FROM multi_authority_change_claims
+         WHERE operation_id = OLD.operation_id)
+        !=
+        (SELECT COUNT(*) FROM multi_authority_change_targets
+         WHERE operation_id = OLD.operation_id)
+        OR EXISTS (
+            SELECT 1
+            FROM multi_authority_change_targets AS t
+            LEFT JOIN multi_authority_change_claims AS c
+              ON c.operation_id = t.operation_id
+             AND c.authority_kind = t.authority_kind
+             AND c.authority_id = t.authority_id
+            WHERE t.operation_id = OLD.operation_id
+              AND c.operation_id IS NULL
+        )
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'multi-authority progression requires the complete claim set');
+    END;
+    """,
+)
+
 SQLITE_MIGRATIONS = (
     CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
     CORE_SCHEMA_V5, CORE_SCHEMA_V6, CORE_SCHEMA_V7, CORE_SCHEMA_V8,
-    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13,
-)
+    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13, CORE_SCHEMA_V14,
+
