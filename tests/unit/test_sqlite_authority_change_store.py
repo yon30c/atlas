@@ -177,7 +177,33 @@ class SQLiteMultiAuthorityChangeStoreTests(unittest.TestCase):
         )
 
     def _operation_at(self, status, key):
-        reservation = self.store.reserve_multi_change(self.intent(key=key))
+        base = self.intent(key=key)
+        unique_intent = MultiAuthorityChangeIntent(
+            idempotency_key=base.idempotency_key,
+            consumer_id=base.consumer_id,
+            action=base.action,
+            actor_identity_id=base.actor_identity_id,
+            owner_id=base.owner_id,
+            project_id=base.project_id,
+            environment_id=base.environment_id,
+            targets=(
+                AuthorityChangeTarget(
+                    AuthorityChangeTargetKind.GRANT,
+                    f"grant-{key}",
+                    4,
+                    5,
+                ),
+                AuthorityChangeTarget(
+                    AuthorityChangeTargetKind.GRANT_RENEWAL,
+                    f"renewal-{key}",
+                    2,
+                    3,
+                ),
+            ),
+            request_context_ref=base.request_context_ref,
+            requested_at=base.requested_at,
+        )
+        reservation = self.store.reserve_multi_change(unique_intent)
         self.assertTrue(self.store.acquire_multi_claims(reservation.operation_id))
         stages = (
             (AuthorityChangeStatus.REQUESTED, AuthorityChangeStatus.INVALIDATION_PENDING),
