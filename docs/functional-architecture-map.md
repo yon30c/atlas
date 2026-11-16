@@ -440,3 +440,12 @@ La verificación queda ligada a la revisión inicial del inventario. Tras el ret
 Esta comprobación detecta cambios concurrentes durante el cálculo criptográfico, pero no es un fence consumible ni protege la ventana posterior al retorno. La admisión y el efecto real aún necesitarán coordinación transaccional/fencing en su propio punto de efecto. No se habilita runtime ni recuperación.
 
 **Estado: implementado; pruebas locales pendientes.**
+
+
+## 43. F2.3.33 — Contrato de admisión transaccional
+
+La capa application construye `RecoveryEvidenceAdmissionCommand` únicamente desde `RecoveryEvidenceVerificationStatus.VERIFIED`, preservando el binding de evidencia y revisión de emisor. El puerto `RecoveryEvidenceAdmissionPort` exige atomicidad para validar inventario vigente, operación/targets/claims y consumo único de evidencia, y define resultados diferenciados para replay exacto, revisión obsoleta, emisor deshabilitado, discrepancia, reutilización e indisponibilidad.
+
+Actualmente solo existen el contrato y sus pruebas. No hay adaptador persistente ni admisión efectiva; el contrato tampoco es autoridad para un efecto. La futura implementación deberá integrar el ledger y el inventario en la misma UoW y, posteriormente, coordinar el efecto bajo esa frontera.
+
+**Estado:** implementado en la rama; pruebas locales pendientes.
