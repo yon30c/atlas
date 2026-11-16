@@ -81,8 +81,8 @@ class SQLiteAuthorizationUnitOfWorkTests(unittest.TestCase):
             uow.grants.create(self.grant)
             uow.renewals.create(self.renewal)
 
-        self.assertIsNone(self.factory().grants.get(self.grant.grant_id))
-        self.assertIsNone(self.factory().renewals.get(self.renewal.renewal_id))
+        self.assertIsNone(SQLiteGrantRepository(self.database).get(self.grant.grant_id))
+        self.assertIsNone(SQLiteGrantRenewalRepository(self.database).get(self.renewal.renewal_id))
 
     def test_exception_rolls_back_grant_and_renewal_together(self):
         with self.assertRaises(RuntimeError):
@@ -230,7 +230,7 @@ class SQLiteAuthorizationUnitOfWorkTests(unittest.TestCase):
         self.assertEqual(updated.revision, 2)
         self.assertEqual(updated.expires_at, request.proposed_expires_at)
         self.assertEqual(
-            self.factory().renewals.get(request.renewal_id).status,
+            SQLiteGrantRenewalRepository(self.database).get(request.renewal_id).status,
             RenewalStatus.APPROVED,
         )
 
