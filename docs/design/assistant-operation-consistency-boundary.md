@@ -137,3 +137,12 @@ La estrategia de una única UoW SQLite para las cuatro autoridades **no es imple
 La ruta recomendada es una composición de autoridad local explícita que reciba una única instancia `SQLiteDatabase` y que sea dueña de los repositorios canónicos Identity, Grant, Project, Environment, el journal y las tablas de admisión/invalidation. Todos los servicios de mutación deben usar el coordinador de esa composición; los métodos directos actuales deberán convertirse en fachadas delegadas o quedar fuera de la composición protegida. No se debe mantener un segundo repositorio "de espejo" como fuente de verdad.
 
 Antes de implementar, hay una decisión de alcance: ¿construir ahora esas cuatro fuentes canónicas mínimas para el perfil de prueba, o mantener el scope de F2 read-only sin autorización CAM integrada y avanzar primero con tareas/UX? No se ha cambiado código ni se ha habilitado ejecución.
+
+
+## 11. F2.3.6 — Punto de composición compartida para Identity
+
+Se añadió `compose_sqlite_identity_on_database(database)` en `atlas.adapters.sqlite.identity_composition`. Esta función acepta una instancia ya creada de `SQLiteDatabase`, aplica las migraciones de Identity y construye `SQLiteIdentityAuthority` usando exactamente esa misma instancia. No crea ni sustituye la base recibida. La composición standalone anterior `compose_sqlite_identity(path)` se conserva y delega en la nueva función, por compatibilidad.
+
+Pruebas añadidas para verificar identidad de objeto de la base compartida, lectura/escritura canónica y rechazo de entradas que no sean `SQLiteDatabase`.
+
+**Límite explícito:** este incremento solo abre el seam de composición para Identity. No crea todavía repositorios de Grant/Project/Environment, ni coordinador, invalidación, admisiones o fencing. El CAS de Identity sigue sin integrarse al protocolo común. No habilita operaciones del Assistant.
