@@ -216,3 +216,14 @@ Para cada siguiente incremento:
 La inspección confirmó que los contratos de Memory `RevisionValidationPort` dependen de `AuthorizationSnapshot` y `ConsistencyPosition`, y exigen invalidation-first + revalidación transaccional; no hay adaptador concreto que lo demuestre. `GrantRepository` es persistencia simple; `SQLiteIdentityAuthority` aplica CAS pero no coordina invalidación; `AuthorityChangeCoordinatorPort` no tiene implementación concreta en la rama; `SQLiteAuthorityChangeStore` solo reserva/idempotencia.
 
 Por tanto, no se implementará un verificador que haga lecturas puntuales multi-repositorio ni se declarará que estas cierran carreras de revocación. El siguiente diseño debe decidir entre completar la autoridad durable común (coordinador + fencing + UoW compartida) o restringir expresamente el perfil de prueba sin efectos y sin garantías de revocación concurrente. El runtime permanece desconectado.
+
+
+### F2.3.4 — Frontera de consistencia de operaciones
+
+Decisión documentada en [assistant-operation-consistency-boundary.md](design/assistant-operation-consistency-boundary.md). Una evidencia CAM verificada no equivale a admisión. Las operaciones con efectos requieren admisión exacta vinculada a operación, actor, recurso, cuatro revisiones y posición de consistencia, coordinada con invalidación/fencing.
+
+Se establece que `BEGIN IMMEDIATE` solo serializa de forma útil si Identity, Grant, Project, Environment, journal, admisiones e invalidaciones comparten la misma `SQLiteDatabase`/UoW y todos los caminos de mutación pasan por el coordinador. No se acepta una composición de lecturas puntuales ni locks de proceso.
+
+El alcance inicial queda limitado a lecturas `workspace.list` y `workspace.read`; las escrituras quedan desconectadas porque SQLite no puede confirmar atómicamente efectos del sistema de archivos. Se definieron ocho criterios previos a implementar un adaptador.
+
+**Estado:** decisión de arquitectura publicada; sin código de ejecución, coordinador durable ni adaptador CAM. Próximo paso F2.3.5: inventario de persistencia/composición de Identity, Grant, Project y Environment (repositorio, base, UoW y caminos de mutación).
