@@ -78,6 +78,8 @@ class LocalWorkspaceAdapter:
         try:
             with os.scandir(root) as iterator:
                 for item in iterator:
+                    if item.name == ".atlas-staging":
+                        continue
                     metadata = item.stat(follow_symlinks=False)
                     mode = metadata.st_mode
                     if stat.S_ISLNK(mode):
@@ -117,6 +119,8 @@ class LocalWorkspaceAdapter:
         parts = path.split("/")
         if any(part in ("", ".", "..") for part in parts):
             raise ContractError("path contiene componentes no permitidos")
+        if parts[0] == ".atlas-staging":
+            raise ContractError("la ruta está reservada para el sistema de staging")
 
         candidate = root
         try:
