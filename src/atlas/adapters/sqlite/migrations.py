@@ -1039,8 +1039,67 @@ CORE_SCHEMA_V10 = SQLiteMigration(
 )
 
 
+# v11 adds exclusive resource claims for multi-authority operations. Claims are
+# acquired as a complete target set under BEGIN IMMEDIATE. They are retained
+# conservatively; release is intentionally unavailable until terminal
+# reconciliation evidence is implemented by the consistency coordinator.
+CORE_SCHEMA_V11 = SQLiteMigration(
+    version=11,
+    name="exclusive_multi_authority_resource_claims",
+    sql="""
+    CREATE TABLE multi_authority_change_claims (
+        authority_kind TEXT NOT NULL CHECK (
+            authority_kind IN (
+                'memory', 'memory_version', 'identity', 'project',
+                'environment', 'grant', 'grant_renewal', 'consistency'
+            )
+        ),
+        authority_id TEXT NOT NULL CHECK (length(trim(authority_id)) > 0),
+        operation_id TEXT NOT NULL,
+        acquired_at TEXT NOT NULL,
+        PRIMARY KEY (authority_kind, authority_id),
+        UNIQUE (operation_id, authority_kind, authority_id),
+        FOREIGN KEY (operation_id)
+            REFERENCES multi_authority_change_operations(operation_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE INDEX multi_authority_change_claims_operation
+        ON multi_authority_change_claims(operation_id);
+
+    CREATE TRIGGER multi_authority_change_claims_require_target
+    BEFORE INSERT ON multi_authority_change_claims
+    WHEN NOT EXISTS (
+        SELECT 1
+        FROM multi_authority_change_targets AS t
+        JOIN multi_authority_change_operations AS o
+          ON o.operation_id = t.operation_id
+        WHERE t.operation_id = NEW.operation_id
+          AND t.authority_kind = NEW.authority_kind
+          AND t.authority_id = NEW.authority_id
+          AND o.status = 'REQUESTED'
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'claim must match a requested operation target');
+    END;
+
+    CREATE TRIGGER multi_authority_change_claims_no_update
+    BEFORE UPDATE ON multi_authority_change_claims
+    BEGIN
+        SELECT RAISE(ABORT, 'resource claims are immutable');
+    END;
+
+    CREATE TRIGGER multi_authority_change_claims_no_delete
+    BEFORE DELETE ON multi_authority_change_claims
+    BEGIN
+        SELECT RAISE(ABORT, 'resource claims cannot be released before reconciliation support');
+    END;
+    """,
+)
+
+
 SQLITE_MIGRATIONS = (
     CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
     CORE_SCHEMA_V5, CORE_SCHEMA_V6, CORE_SCHEMA_V7, CORE_SCHEMA_V8,
-    CORE_SCHEMA_V9, CORE_SCHEMA_V10,
+    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11,
 )
