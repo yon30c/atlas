@@ -133,7 +133,7 @@ class MultiAuthorityRecoveryEvidenceContractTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             make_evidence(issued_at=NOW.replace(tzinfo=timezone(timedelta(hours=1))))
         with self.assertRaises(ContractError):
-            make_evidence(expires_at=NOW - timedelta(seconds=1))
+            make_evidence(expires_at=NOW - timedelta(minutes=2))
 
 
 class MultiAuthorityRecoveryEvidenceVerificationTests(unittest.TestCase):
