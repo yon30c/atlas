@@ -82,6 +82,19 @@ class LocalWorkspaceAdapterTests(unittest.TestCase):
             with self.assertRaises(ContractError):
                 LocalWorkspaceAdapter({"demo": alias})
 
+    def test_revalidates_root_if_replaced_after_adapter_creation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "workspace"
+            outside = base / "outside"
+            root.mkdir()
+            outside.mkdir()
+            adapter = LocalWorkspaceAdapter({"demo": root})
+            root.rename(base / "original")
+            root.symlink_to(outside, target_is_directory=True)
+            with self.assertRaises(ContractError):
+                adapter.list_entries("demo")
+
     def test_rejects_invalid_workspace_id(self):
         with tempfile.TemporaryDirectory() as temporary:
             adapter = LocalWorkspaceAdapter({"demo": temporary})
