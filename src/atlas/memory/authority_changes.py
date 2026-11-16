@@ -440,3 +440,35 @@ class MultiAuthorityClaimAudit:
                 or any(ch not in "0123456789abcdef" for ch in self.release_digest)
             ):
                 raise ContractError("release_digest debe ser SHA-256 hexadecimal")
+
+
+class MultiAuthorityRecoveryDisposition(str, Enum):
+    """Read-only interpretation of a durable operation's recovery position."""
+
+    NOT_STARTED = "NOT_STARTED"
+    CLAIMED_BEFORE_INVALIDATION = "CLAIMED_BEFORE_INVALIDATION"
+    INVALIDATION_OUTCOME_UNKNOWN = "INVALIDATION_OUTCOME_UNKNOWN"
+    SOURCE_OUTCOME_UNKNOWN = "SOURCE_OUTCOME_UNKNOWN"
+    SOURCE_CONFIRMATION_RECORDED = "SOURCE_CONFIRMATION_RECORDED"
+    RECONCILIATION_IN_PROGRESS = "RECONCILIATION_IN_PROGRESS"
+    TERMINAL_CLAIMS_HELD = "TERMINAL_CLAIMS_HELD"
+    TERMINAL_RELEASED = "TERMINAL_RELEASED"
+    INCONSISTENT = "INCONSISTENT"
+
+
+@dataclass(frozen=True, slots=True)
+class MultiAuthorityRecoveryAssessment:
+    """Read-only recovery classification; never authorizes retry or mutation."""
+
+    disposition: MultiAuthorityRecoveryDisposition
+    claim_audit: MultiAuthorityClaimAudit
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.disposition, MultiAuthorityRecoveryDisposition):
+            raise ContractError(
+                "disposition debe ser MultiAuthorityRecoveryDisposition"
+            )
+        if not isinstance(self.claim_audit, MultiAuthorityClaimAudit):
+            raise ContractError(
+                "claim_audit debe ser MultiAuthorityClaimAudit"
+            )
