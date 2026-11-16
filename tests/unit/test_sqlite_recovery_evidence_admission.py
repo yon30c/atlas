@@ -195,13 +195,13 @@ class SQLiteRecoveryEvidenceAdmissionTests(unittest.TestCase):
                 uow._unit._connection_for(self.database).execute(
                     """
                     INSERT INTO recovery_evidence_admissions (
-                        admission_id, evidence_id, operation_id, issuer_id,
+                        admission_id, evidence_id, evidence_digest, operation_id, issuer_id,
                         issuer_registry_revision, evidence_kind, target_count,
                         command_digest, command_canonical, requested_at, recorded_at
-                    ) VALUES ('raw-admission', 'raw-evidence', ?, 'issuer-1', 1,
+                    ) VALUES ('raw-admission', 'raw-evidence', ?, ?, 'issuer-1', 1,
                               'SOURCE_OUTCOME_RECEIPT', 2, ?, X'7B7D', ?, ?)
                     """,
-                    (operation_id, "a" * 64, NOW.isoformat(), NOW.isoformat()),
+                    ( "b" * 64, operation_id, "a" * 64, NOW.isoformat(), NOW.isoformat()),
                 )
 
 
