@@ -74,16 +74,23 @@ class SQLiteRecoveryEvidenceAdmissionRepository(RecoveryEvidenceAdmissionPort):
 
         existing = connection.execute(
             """
-            SELECT admission_id, evidence_id, command_digest, command_canonical
+            SELECT admission_id, evidence_id, evidence_digest, command_digest, command_canonical
             FROM recovery_evidence_admissions
             WHERE admission_id = ? OR evidence_id = ?
             """,
             (command.admission_id, command.evidence_id),
         ).fetchall()
         if existing:
+            for row in existing:
+                stored_canonical = bytes(row["command_canonical"])
+                if hashlib.sha256(stored_canonical).hexdigest() != row["command_digest"]:
+                    raise sqlite3.DatabaseError(
+                        "el recibo de admisión persistido no supera la verificación de integridad"
+                    )
             if (
                 len(existing) == 1
                 and existing[0]["admission_id"] == command.admission_id
+                and existing[0]["evidence_digest"] == command.evidence_digest
                 and existing[0]["evidence_id"] == command.evidence_id
                 and existing[0]["command_digest"] == digest
                 and bytes(existing[0]["command_canonical"]) == canonical
