@@ -530,5 +530,46 @@ class SQLiteMultiTerminalEvidenceTests(unittest.TestCase):
         self.assertIsNone(self.store.audit_multi_claims("missing-operation"))
 
 
+    def test_claim_audit_detects_release_receipt_with_claims_still_present(self):
+        reservation = self._prepare_reconciling(key="audit-release-with-claims")
+        self.store.record_multi_terminal_evidence(self._evidence(reservation))
+        with self.database.connection() as connection:
+            terminal = connection.execute(
+                """
+                SELECT evidence_digest FROM multi_authority_change_terminal_evidence
+                WHERE operation_id = ?
+                """,
+                (reservation.operation_id,),
+            ).fetchone()
+            connection.execute(
+                """
+                INSERT INTO multi_authority_change_claim_releases (
+                    operation_id, evidence_digest, released_at
+                ) VALUES (?, ?, ?)
+                """,
+                (reservation.operation_id, terminal["evidence_digest"], NOW.isoformat()),
+            )
+        audit = self.store.audit_multi_claims(reservation.operation_id)
+        self.assertEqual(
+            audit.audit_status,
+            MultiAuthorityClaimAuditStatus.INCONSISTENT,
+        )
+        self.assertEqual(audit.claimed_targets, reservation.intent.targets)
+
+    def test_claim_audit_does_not_mutate_or_release_anything(self):
+        reservation = self._prepare_reconciling(key="audit-read-only")
+        self.store.record_multi_terminal_evidence(self._evidence(reservation))
+        before = self.store.get_multi_claims(reservation.operation_id)
+        first = self.store.audit_multi_claims(reservation.operation_id)
+        second = self.store.audit_multi_claims(reservation.operation_id)
+        after = self.store.get_multi_claims(reservation.operation_id)
+        self.assertEqual(first, second)
+        self.assertEqual(before, after)
+        self.assertEqual(
+            first.audit_status,
+            MultiAuthorityClaimAuditStatus.TERMINAL_CLAIMS_HELD,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
