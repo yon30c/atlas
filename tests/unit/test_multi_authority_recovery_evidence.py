@@ -444,6 +444,16 @@ class MultiAuthorityRecoveryEvidenceVerificationTests(unittest.TestCase):
         self.assertEqual(registry.calls, 2)
         self.assertIsNone(result.issuer_registry_revision)
 
+    def test_verified_result_requires_exact_evidence_digest(self):
+        from atlas.application.recovery_evidence import RecoveryEvidenceVerification
+
+        with self.assertRaises(ContractError):
+            RecoveryEvidenceVerification(
+                RecoveryEvidenceVerificationStatus.VERIFIED,
+                "evidence-1",
+                1,
+            )
+
     def test_verified_result_requires_registry_revision(self):
         from atlas.application.recovery_evidence import RecoveryEvidenceVerification
 
