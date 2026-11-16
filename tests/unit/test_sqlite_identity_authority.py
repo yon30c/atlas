@@ -627,5 +627,52 @@ class SQLiteIdentityAuthorityTests(unittest.TestCase):
                 )
 
 
+    def test_create_user_joins_outer_unit_of_work_and_rolls_back(self):
+        created = None
+        with self.assertRaisesRegex(RuntimeError, "force outer rollback"):
+            with self.database.unit_of_work() as unit:
+                joined = SQLiteIdentityAuthority(
+                    self.database,
+                    unit_of_work=unit,
+                )
+                created = joined.create_user()
+                raise RuntimeError("force outer rollback")
+        self.assertIsNotNone(created)
+        self.assertIsNone(self.authority.get_user(created.user_id))
+        with self.database.connection() as connection:
+            self.assertEqual(connection.execute(
+                "SELECT COUNT(*) FROM identity_records"
+            ).fetchone()[0], 0)
+
+    def test_update_user_status_joins_outer_unit_of_work_and_rolls_back(self):
+        user = self.authority.create_user()
+        with self.assertRaisesRegex(RuntimeError, "force outer rollback"):
+            with self.database.unit_of_work() as unit:
+                joined = SQLiteIdentityAuthority(
+                    self.database,
+                    unit_of_work=unit,
+                )
+                joined.update_user_status(
+                    user.user_id,
+                    expected_revision=1,
+                    status=IdentityStatus.SUSPENDED,
+                )
+                raise RuntimeError("force outer rollback")
+        self.assertEqual(self.authority.get_user(user.user_id), user)
+
+    def test_identity_authority_rejects_unit_of_work_from_another_database(self):
+        other_database = SQLiteDatabase(
+            Path(self.temp_dir.name) / "other.sqlite"
+        )
+        other_database.apply_migrations(SQLITE_MIGRATIONS)
+        with other_database.unit_of_work() as unit:
+            joined = SQLiteIdentityAuthority(
+                self.database,
+                unit_of_work=unit,
+            )
+            with self.assertRaises(ContractError):
+                joined.create_user()
+
+
 if __name__ == "__main__":
     unittest.main()
