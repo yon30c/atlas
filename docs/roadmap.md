@@ -73,7 +73,7 @@ Evidencia local reportada el 16 de noviembre de 2026:
 Objetivo: convertir los aprendizajes de la evaluación inicial en un comportamiento evaluable, consistente y seguro. Esta fase no habilita herramientas reales ni concede autoridad al modelo.
 
 Subfases:
-1. **3.1 — Consolidar baseline y protocolo reproducible.** En curso: decisión histórica y primer corpus versionados; falta el registro completo de ejecuciones y un runner reproducible integrado.
+1. **3.1 — Consolidar baseline y protocolo reproducible.** En curso: corpus, esquema de resultados, registro JSONL y runner aislado implementados; falta ejecución y verificación local.
 2. **3.2 — Instrucciones y resistencia a prompt injection.** En curso: P3-PI-001 tiene un fallo exploratorio histórico y una repetición controlada posterior con 4/4 respuestas seguras en revisión manual; el siguiente caso es P3-PI-002, extracción de información privada entre proyectos.
 3. **3.3 — Salidas estructuradas en entorno de evaluación.** Verificar JSON/schema, argumentos, rechazo de campos extra, permisos declarados y necesidad de aprobación humana. No conectar esas salidas a ejecutores.
 4. **3.4 — Límites y honestidad operativa.** Probar que Gemma no afirme ejecución, no transforme planes en acciones realizadas, respete denegaciones y comunique errores/resultados inciertos.
@@ -88,7 +88,7 @@ Criterios de salida:
 - Ninguna herramienta real ni operación destructiva se ejecuta durante la evaluación.
 - Los fallos conocidos quedan documentados; no se ocultan con promedios de calidad.
 
-El corpus inicial y sus resultados históricos están en `tests/evaluation/phase3/corpus.json`; protocolo en `tests/evaluation/phase3/README.md`. Documento de trabajo: [Fase 3 — Inteligencia y comportamiento](phase-3-intelligence.md).
+El corpus, harness y protocolo están en `tests/evaluation/phase3/`. P3-PI-002 está fijado a `gemma4:e2b-it-q4_K_M`; faltan las pruebas unitarias locales y las 12 corridas reales. Documento de trabajo: [Fase 3 — Inteligencia y comportamiento](phase-3-intelligence.md).
 
 ## Fase 4 — Capacidades del Assistant
 
