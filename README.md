@@ -15,17 +15,17 @@ La visión de Atlas se apoya en estos principios:
 
 La autonomía de Atlas no equivale a autoridad. Comprender una solicitud, generar una respuesta o proponer un plan no autoriza ni ejecuta una operación.
 
-> **Estado de esta documentación:** revisión del código y documentación de la rama `main`, commit `c2803a931b672cbf5c6843eb77816cb4824dd1c4` (15 de noviembre de 2026). Este README diferencia implementación existente, composición parcial y trabajo pendiente. Un contrato, puerto, modelo, reducer o prueba no demuestra por sí solo que una capacidad esté habilitada en un runtime completo.
+> **Estado de esta documentación:** sincronizado con el estado conocido de la rama `feature/terminal-commands` al 16 de noviembre de 2026. La evidencia de pruebas corresponde al commit de código `610f027f1fe91933278e431d8a9ec29dd291b96e`; las actualizaciones documentales posteriores no modifican código. Este README diferencia capacidades funcionales, composición parcial y trabajo pendiente. Un contrato, puerto, modelo o reducer no demuestra por sí solo que una capacidad esté habilitada en un runtime completo.
 
 ## Estado general del desarrollo
 
-Atlas tiene una base real de código para la experiencia conversacional local, identidad interna, autorización CAM y una parte importante de la infraestructura del Memory Engine. Sin embargo, todavía no es el entorno autónomo completo descrito por su visión.
+Atlas es software funcional en desarrollo incremental, no solamente un conjunto de contratos o un prototipo. Ya dispone de una experiencia conversacional local ejecutable, integración con Ollama y gestión durable de conversaciones, incluyendo administración, exportación, backup cifrado, verificación y restauración. La suite completa local ha sido ejecutada y aprobada. A la vez, Atlas todavía no es el entorno autónomo completo descrito por su visión. Consulta el [estado vigente del proyecto](docs/status-current.md).
 
 | Área | Estado real |
 |---|---|
-| Assistant local y consola | **Implementado en alcance limitado** |
+| Assistant local y consola | **Funcional: consola, composición local y conversación con Ollama** |
 | Integración con Ollama | **Implementada** |
-| Contexto conversacional | **Implementado en memoria de proceso; no durable** |
+| Contexto conversacional | **Persistente en SQLite; historial durable y proyección acotada al modelo** |
 | AtlasCore | **Fachada de aplicación implementada; orquestación completa pendiente** |
 | Identidad canónica local | **Persistencia SQLite implementada para UserId–Identity(USER)** |
 | Autenticación externa e identidad verificada completa | **Pendiente** |
@@ -44,7 +44,14 @@ Atlas tiene una base real de código para la experiencia conversacional local, i
 
 ## Desarrollo actual: Atlas Terminal
 
-La prioridad inmediata es validar la experiencia conversacional local antes de ampliar las capacidades del Assistant. El estado de implementación, los comandos disponibles y la hoja de ruta incremental se mantienen en la [documentación de Atlas Terminal](docs/terminal/README.md) y su [hoja de ruta](docs/terminal/roadmap.md). Los cambios de comandos actualmente están en una rama de trabajo y no se consideran integrados en `main` hasta su validación y merge.
+Atlas Terminal ya es una superficie funcional en `feature/terminal-commands`: inicia la consola, conversa con Ollama cuando está disponible, conserva conversaciones en SQLite y permite administrarlas. Las fases 1 y 2 están implementadas y validadas en el alcance descrito. Consulta la [documentación de Atlas Terminal](docs/terminal/README.md), la [hoja de ruta](docs/terminal/roadmap.md) y la [guía de conversaciones](docs/conversations.md). Esta rama no debe confundirse con `main`; el estado aquí documentado corresponde a la rama indicada en el encabezado.
+
+## Documentación del proyecto
+
+- [Estado vigente de Atlas](docs/status-current.md)
+- [Atlas Terminal](docs/terminal/README.md)
+- [Hoja de ruta](docs/terminal/roadmap.md)
+- [Gestión de conversaciones](docs/conversations.md)
 
 ## Arquitectura y componentes
 
@@ -65,15 +72,17 @@ El prompt del adaptador Ollama limita expresamente al modelo a generar texto con
 
 **Contexto conversacional actual:**
 
-La implementación activa utiliza `InMemoryConversationHistory`:
+El flujo conversacional utiliza persistencia SQLite durable, independiente de la base de autoridad:
 
-- Historial separado por `conversation_id`.
-- Hasta 8 turnos anteriores.
-- Hasta 2.000 caracteres por mensaje histórico.
-- Se guardan turnos exitosos; las respuestas de tipo `ERROR` no se incorporan al historial.
-- El historial se pierde al terminar el proceso.
+- Conversaciones y mensajes se conservan entre ejecuciones.
+- Se recupera la conversación activa al iniciar Atlas.
+- El historial se conserva íntegro en almacenamiento.
+- La proyección enviada al modelo se limita a los últimos 8 turnos y a 2.000 caracteres por mensaje.
+- Los turnos exitosos se incorporan al historial; las respuestas de tipo `ERROR` no se guardan como turnos exitosos.
+- La administración incluye crear, listar, seleccionar, renombrar, cerrar y eliminar con confirmación.
+- Se dispone de exportación JSON versionada, backup cifrado, verificación y restauración a una ruta nueva.
 
-Existe un contrato `ConversationHistoryStore` que permite sustituir el almacenamiento, pero no hay una implementación durable conectada al flujo conversacional actual.
+La ruta predeterminada de la base es `~/.local/state/atlas/conversations.sqlite3`. Los detalles de permisos y operaciones están en [docs/conversations.md](docs/conversations.md).
 
 **Pendiente:**
 
@@ -278,13 +287,14 @@ La consola/Assistant actual no tiene acceso directo a archivos, SQL, shell, cont
 
 ## Ejecución local
 
-Desde la raíz del repositorio:
+Desde la raíz del repositorio, en Debian/Linux, activa primero el entorno virtual del proyecto:
 
 ```bash
-PYTHONPATH=src python -m atlas
+source .venv/bin/activate
+python -m atlas
 ```
 
-Instalación editable en el entorno activo:
+Si todavía no está instalado en el entorno activo:
 
 ```bash
 python -m pip install -e .
@@ -294,7 +304,7 @@ atlas
 Modo informativo sin proveedor LLM:
 
 ```bash
-ATLAS_MODE=offline PYTHONPATH=src python -m atlas
+ATLAS_MODE=offline python -m atlas
 ```
 
 Configuración principal:
@@ -307,19 +317,21 @@ Atlas no instala, descarga ni inicia Ollama automáticamente.
 
 ## Pruebas y evidencia de validación
 
-Ejecutar la suite completa:
+Ejecutar las pruebas desde la raíz del repositorio con `.venv` activado:
 
 ```bash
-PYTHONPATH=src python -m unittest discover -s tests -v
+source .venv/bin/activate
+python -m unittest discover -s tests -v
 ```
 
-**Última evidencia local registrada para el commit de esta documentación (`c2803a9`):**
+**Última evidencia local reportada por el usuario (16 de noviembre de 2026):**
 
-- Entorno: Debian, Python 3.13.5 y SQLite 3.46.1.
-- Suite completa: **816 pruebas correctas**.
-- Pruebas focalizadas de SQLite, identidad y autoridad: **56 pruebas correctas**.
+- Pruebas específicas de eliminación: **6/6 aprobadas**.
+- Suite completa: **844 pruebas aprobadas**, 0 fallos y 0 errores (3.304 segundos).
+- Entorno: Debian, dentro del entorno virtual `.venv`.
+- Código probado: commit `610f027f1fe91933278e431d8a9ec29dd291b96e`.
 
-Estos resultados corresponden a ejecuciones locales informadas para ese commit; no son un resultado de GitHub Actions ni una validación de despliegue en producción. El workflow de pruebas incluye una comprobación de compatibilidad de SQLite, pero no se debe inferir que CI pasó sin una ejecución verificada.
+Estas son ejecuciones locales; no son resultados de GitHub Actions ni validación de despliegue productivo. No se ejecutaron pruebas en GitHub durante esta revisión documental.
 
 ## Documentación técnica y contractual
 
