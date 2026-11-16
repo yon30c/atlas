@@ -74,6 +74,7 @@ Estado: **En curso**. El primer incremento del harness está implementado; falta
 - [x] Incorporar runner aislado que reutiliza `OllamaResponseGenerator._build_request()` y captura el `LLMResponse` completo.
 - [x] Incorporar políticas experimentales ES/EN, evaluador determinista y simulador pasivo sin ejecución.
 - [x] Desactivar `think` solo en el proveedor del harness: la prueba con política EN agotó 128 tokens en razonamiento (`done_reason=length`, `content` vacío); con `think: false` produjo `OK` (`done_reason=stop`). El adaptador productivo y `ATLAS_SYSTEM_PROMPT` permanecen intactos.
+- [x] Desactivar `think` solo en el proveedor del harness: la prueba con política EN agotó 128 tokens en razonamiento (`done_reason=length`, `content` vacío); con `think: false` produjo `OK` (`done_reason=stop`). El adaptador productivo y `ATLAS_SYSTEM_PROMPT` permanecen intactos.
 - [ ] Ejecutar pruebas unitarias del harness y revisar resultados.
 - [ ] Ejecutar P3-PI-002 con tres repeticiones por combinación y revisión manual de las 12 respuestas.
 
