@@ -1236,8 +1236,101 @@ CORE_SCHEMA_V12 = SQLiteMigration(
 )
 
 
+
+# v13 records verified terminal claim releases while retaining an immutable audit
+# receipt. Claim rows are deleted only in the same transaction as this receipt.
+CORE_SCHEMA_V13 = SQLiteMigration(
+    version=13,
+    name="audited_terminal_multi_authority_claim_release",
+    sql="""
+    CREATE TABLE multi_authority_change_claim_releases (
+        operation_id TEXT PRIMARY KEY,
+        evidence_digest TEXT NOT NULL CHECK (length(evidence_digest) = 64),
+        released_at TEXT NOT NULL,
+        FOREIGN KEY (operation_id)
+            REFERENCES multi_authority_change_terminal_evidence(operation_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE TRIGGER multi_claim_release_requires_verified_terminal_set
+    BEFORE INSERT ON multi_authority_change_claim_releases
+    WHEN NOT EXISTS (
+        SELECT 1
+        FROM multi_authority_change_operations AS o
+        JOIN multi_authority_change_terminal_evidence AS e
+          ON e.operation_id = o.operation_id
+        WHERE o.operation_id = NEW.operation_id
+          AND o.status IN ('COMPLETED', 'ABORTED')
+          AND e.outcome = o.status
+          AND e.evidence_digest = NEW.evidence_digest
+          AND (
+              SELECT COUNT(*) FROM multi_authority_change_targets
+              WHERE operation_id = o.operation_id
+          ) >= 2
+          AND (
+              SELECT COUNT(*) FROM multi_authority_change_claims
+              WHERE operation_id = o.operation_id
+          ) = (
+              SELECT COUNT(*) FROM multi_authority_change_targets
+              WHERE operation_id = o.operation_id
+          )
+          AND (
+              SELECT COUNT(*) FROM multi_authority_change_terminal_targets
+              WHERE operation_id = o.operation_id
+          ) = (
+              SELECT COUNT(*) FROM multi_authority_change_targets
+              WHERE operation_id = o.operation_id
+          )
+          AND NOT EXISTS (
+              SELECT 1
+              FROM multi_authority_change_targets AS t
+              LEFT JOIN multi_authority_change_claims AS c
+                ON c.operation_id = t.operation_id
+               AND c.authority_kind = t.authority_kind
+               AND c.authority_id = t.authority_id
+              LEFT JOIN multi_authority_change_terminal_targets AS tt
+                ON tt.operation_id = t.operation_id
+               AND tt.authority_kind = t.authority_kind
+               AND tt.authority_id = t.authority_id
+               AND tt.expected_revision = t.expected_revision
+               AND tt.proposed_revision = t.proposed_revision
+              WHERE t.operation_id = o.operation_id
+                AND (c.operation_id IS NULL OR tt.operation_id IS NULL)
+          )
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'claim release requires complete matching terminal evidence and claims');
+    END;
+
+    CREATE TRIGGER multi_claim_release_no_update
+    BEFORE UPDATE ON multi_authority_change_claim_releases
+    BEGIN
+        SELECT RAISE(ABORT, 'claim release receipts are immutable');
+    END;
+
+    CREATE TRIGGER multi_claim_release_no_delete
+    BEFORE DELETE ON multi_authority_change_claim_releases
+    BEGIN
+        SELECT RAISE(ABORT, 'claim release receipts are retained');
+    END;
+
+    DROP TRIGGER multi_authority_change_claims_no_delete;
+
+    CREATE TRIGGER multi_authority_change_claims_no_delete
+    BEFORE DELETE ON multi_authority_change_claims
+    WHEN NOT EXISTS (
+        SELECT 1
+        FROM multi_authority_change_claim_releases AS r
+        WHERE r.operation_id = OLD.operation_id
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'claims require a durable terminal release receipt');
+    END;
+    """,
+)
+
 SQLITE_MIGRATIONS = (
     CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
     CORE_SCHEMA_V5, CORE_SCHEMA_V6, CORE_SCHEMA_V7, CORE_SCHEMA_V8,
-    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12,
+    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13,
 )
