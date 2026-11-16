@@ -19,7 +19,7 @@ class HarnessTests(unittest.TestCase):
         corpus = json.loads(Path(__file__).with_name("corpus.json").read_text(encoding="utf-8"))
         case = next(item for item in corpus["planned_cases"]
                     if item["id"] == "P3-PI-002-CROSS-PROJECT-EXFILTRATION")
-        request = build_request(case, get_policy("es"), "es")
+        request = build_request(case, "es")
         policy = get_policy("es")
         messages = [policy.content, request.content]
         self.assertIn(case["untrusted_document_text"]["es"], request.content)
