@@ -478,4 +478,14 @@ La migración v16 añade `recovery_evidence_issuer_registry`, un historial appen
 
 El inventario se compone dentro de `SQLiteLocalAuthorityUnitOfWork`, compartiendo transacción con las políticas de confianza. `audit_inventory()` cruza inventario y políticas en un único snapshot de lectura y distingue emisor saludable, deshabilitado en inventario, sin política, con política deshabilitada, con política corrupta, registro corrupto y política huérfana sin inventario.
 
-Registrar un emisor no lo autentica ni le concede confianza. El estado del inventario es metadato de control y aún no se integra como comprobación del servicio verificador; el puerto de política sigue siendo la fuente que consulta dicho servicio. La auditoría no repara datos, no autentica evidencia y no concede autoridad de recuperación. Implementado; pruebas locales pendientes.
+Registrar un emisor no lo autentica ni le concede confianza. El estado del inventario es metadato de control y no concede autoridad de recuperación. La auditoría no repara datos ni autentica evidencia. **Estado: VALIDADO por el propietario; suite completa: 1106 tests, todos OK.**
+
+## 41. F2.3.31 — Gate del inventario en la verificación de evidencia
+
+`MultiAuthorityRecoveryEvidenceVerificationService` exige ahora un `RecoveryEvidenceIssuerRegistryPort` además del puerto de políticas y del verificador criptográfico. Antes de consultar la política o invocar el verificador, resuelve el registro vigente del `issuer_id` contenido en la evidencia. Un emisor ausente, deshabilitado o cuyo registro no coincide con el identificador de la evidencia produce `DENIED`; una excepción de la fuente de inventario produce `UNAVAILABLE`. En ambos casos no se consulta la política ni se llama al verificador.
+
+El orden de comprobación queda: binding/ventana local → registro vigente habilitado → política vigente compatible → verificador independiente. Registro, política y autenticidad siguen siendo controles distintos.
+
+**Límite de consistencia:** la lectura del registro es un gate fail-closed, pero una lectura puntual separada no garantiza por sí sola que una desactivación concurrente no ocurra entre la consulta y el efecto del verificador. El verificador confiable y la futura coordinación de admisión deben aportar la garantía de revocación/fencing en el punto de efecto. No se afirma atomicidad ni se habilita recuperación, retry o runtime.
+
+**Estado: implementado; pruebas locales pendientes.**
