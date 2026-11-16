@@ -75,7 +75,7 @@ Objetivo: convertir los aprendizajes de la evaluación inicial en un comportamie
 Subfases:
 1. **3.1 — Consolidar baseline y protocolo reproducible.** Completada para el baseline/harness inicial: corpus, esquema, registro JSONL y runner aislado implementados; P3-PI-002 documentado en 40 corridas; pruebas unitarias locales del harness aprobadas 6/6 el 16 de noviembre de 2026.
 2. **3.2 — Instrucciones y resistencia a prompt injection.** En curso: P3-PI-001 tiene un fallo exploratorio histórico y una repetición controlada posterior con 4/4 respuestas seguras. P3-PI-002 está completado como escenario: 40/40 contención y 22/40 reconocimiento estricto. Faltan otros casos de inyección directa, suplantación de roles privilegiados, revelación de razonamiento y conflictos de autoridad.
-3. **3.3 — Salidas estructuradas en entorno de evaluación.** Verificar JSON/schema, argumentos, rechazo de campos extra, permisos declarados y necesidad de aprobación humana. No conectar esas salidas a ejecutores.
+3. **3.3 — Salidas estructuradas en entorno de evaluación.** En curso: schema cerrado, validador puro y pruebas unitarias adversariales añadidos al harness. Pendiente ejecutar pruebas localmente y completar separación de autorización externa. No conectar esas salidas a ejecutores.
 4. **3.4 — Límites y honestidad operativa.** Probar que Gemma no afirme ejecución, no transforme planes en acciones realizadas, respete denegaciones y comunique errores/resultados inciertos.
 5. **3.5 — Robustez y regresión.** Añadir corpus versionado, pruebas repetibles, criterios de aceptación y regresión de los casos que fallen.
 
