@@ -71,10 +71,12 @@ class ConversationBackup:
                 connection.close()
 
     def create(self, destination: str | Path, passphrase: str) -> Path:
+        """Crea un backup cifrado sin sobrescribir un archivo existente."""
         target = Path(destination).expanduser()
         if not target.is_absolute() or not target.parent.is_dir():
             raise ContractError("el destino del respaldo debe ser absoluto y su directorio debe existir")
-        self._derive_key(passphrase, b"0" * _SALT_BYTES)
+        if not isinstance(passphrase, str) or len(passphrase) < 12:
+            raise ContractError("la contraseña del respaldo debe tener al menos 12 caracteres")
         fd, snapshot_path = tempfile.mkstemp(prefix=".atlas-snapshot-", suffix=".sqlite3", dir=self._database.path.parent)
         os.fchmod(fd, 0o600)
         os.close(fd)
@@ -147,6 +149,12 @@ class ConversationBackup:
                 written = os.write(fd, view)
                 view = view[written:]
             os.fsync(fd)
+        except Exception:
+            try:
+                os.unlink(target)
+            except FileNotFoundError:
+                pass
+            raise
         finally:
             os.close(fd)
         return target
