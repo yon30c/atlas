@@ -1,7 +1,10 @@
 """Port for atomic, one-time admission of verified recovery evidence."""
 
+from dataclasses import dataclass
 from enum import Enum
 from typing import Protocol
+
+from atlas.core.errors import ContractError
 
 from atlas.application.recovery_admission import RecoveryEvidenceAdmissionCommand
 
@@ -16,26 +19,23 @@ class RecoveryEvidenceAdmissionStatus(str, Enum):
     UNAVAILABLE = "UNAVAILABLE"
 
 
+@dataclass(frozen=True, slots=True)
 class RecoveryEvidenceAdmissionResult:
     """Outcome of a durable admission attempt; never execution authority."""
 
-    __slots__ = ("status", "admission_id")
+    status: RecoveryEvidenceAdmissionStatus
+    admission_id: str
 
-    def __init__(self, status: RecoveryEvidenceAdmissionStatus, admission_id: str):
-        from atlas.core.errors import ContractError
-
-        if not isinstance(status, RecoveryEvidenceAdmissionStatus):
+    def __post_init__(self) -> None:
+        if not isinstance(self.status, RecoveryEvidenceAdmissionStatus):
             raise ContractError("status debe ser RecoveryEvidenceAdmissionStatus")
-        if not isinstance(admission_id, str) or not admission_id.strip():
+        if not isinstance(self.admission_id, str) or not self.admission_id.strip():
             raise ContractError("admission_id debe ser una cadena no vacía")
-        self.status = status
-        self.admission_id = admission_id
 
     @property
     def effect_permitted(self) -> bool:
         """Admission records evidence; it never authorizes a recovery effect."""
         return False
-
 
 class RecoveryEvidenceAdmissionPort(Protocol):
     """Atomically persist admission against the current local authority snapshot.
