@@ -488,4 +488,4 @@ Se añaden dos pruebas de integración con conexiones SQLite independientes sobr
 
 **Límite:** la garantía es local a la transacción SQLite de admisión. No protege un efecto externo posterior ni equivale a fencing distribuido. No se habilitan acciones ni runtime.
 
-**Estado:** implementado en GitHub; pendiente de pruebas locales del propietario.
+**Estado: VALIDADO por el propietario; suite completa: 1133 tests en 9.225 s, todos OK.**
