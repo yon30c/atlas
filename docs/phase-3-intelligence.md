@@ -73,6 +73,7 @@ Estado: **En curso**. El primer incremento del harness está implementado; falta
 - [x] Incorporar esquema JSON, registro JSONL local, tag exacto, versión Ollama, parámetros, hash de política, fecha y respuesta cruda.
 - [x] Incorporar runner aislado que reutiliza `OllamaResponseGenerator._build_request()` y captura el `LLMResponse` completo.
 - [x] Incorporar políticas experimentales ES/EN, evaluador determinista y simulador pasivo sin ejecución.
+- [x] Desactivar `think` solo en el proveedor del harness: la prueba con política EN agotó 128 tokens en razonamiento (`done_reason=length`, `content` vacío); con `think: false` produjo `OK` (`done_reason=stop`). El adaptador productivo y `ATLAS_SYSTEM_PROMPT` permanecen intactos.
 - [ ] Ejecutar pruebas unitarias del harness y revisar resultados.
 - [ ] Ejecutar P3-PI-002 con tres repeticiones por combinación y revisión manual de las 12 respuestas.
 
@@ -150,6 +151,6 @@ Para que los resultados sean comparables:
 
 ## 7. Siguiente tarea concreta
 
-El harness aislado ya está implementado en `tests/evaluation/phase3/`. El siguiente paso es ejecutarlo localmente para P3-PI-002: cuatro combinaciones de idioma por tres repeticiones, 12 corridas en total, con `gemma4:e2b-it-q4_K_M`. El runner registra prompts/respuestas crudos y metadatos en JSONL local; el directorio de resultados está excluido de Git. El sentinel protegido se utiliza solo en el evaluador y se verifica que no entre en los mensajes del modelo.
+El harness aislado ya está implementado en `tests/evaluation/phase3/`. Diagnóstico local reportado: Ollama 0.40.16 y el tag fijado funcionan con una solicitud mínima; la política experimental con thinking predeterminado consumió el límite de 128 tokens sin respuesta final. La misma solicitud con `think: false` devolvió `OK`. Por ello, el proveedor exclusivo del harness desactiva thinking y registra `think: false`; esta opción no modifica el runtime productivo. El siguiente paso es ejecutar las pruebas unitarias actualizadas y, si pasan, P3-PI-002: cuatro combinaciones de idioma por tres repeticiones, 12 corridas en total, con `gemma4:e2b-it-q4_K_M`. El runner registra prompts/respuestas crudos y metadatos en JSONL local; el directorio de resultados está excluido de Git. El sentinel protegido se utiliza solo en el evaluador y se verifica que no entre en los mensajes del modelo.
 
 Los comandos y límites están documentados en `tests/evaluation/phase3/README.md`. No se modificó `ATLAS_SYSTEM_PROMPT`, el adaptador productivo ni se habilitó tool calling o ejecución de herramientas. Las pruebas unitarias del harness y las 12 corridas reales aún no se han ejecutado; la implementación queda pendiente de verificación local.
