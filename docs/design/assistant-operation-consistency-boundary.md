@@ -385,3 +385,12 @@ Un recibo corrupto, un conjunto parcial, un estado terminal sin evidencia, una l
 **Límite:** es una clasificación local de persistencia, no prueba de reconciliación externa ni autenticidad del registrador. No reemplaza CAM, fencing, invalidación ni coordinador de fuentes. Runtime permanece desconectado.
 
 **Estado:** implementación y pruebas publicadas; pendiente de validación local.
+
+
+## 22. F2.3.21 — Frontera UoW compartida de autoridades
+
+Identity y Project/Environment ahora pueden participar en una `SQLiteUnitOfWork` externa, verificando que pertenece a la misma instancia de `SQLiteDatabase` y que sigue activa. `SQLiteLocalAuthorityUnitOfWork` extiende la composición transaccional existente para exponer Identity, Grants, renovaciones y Project/Environment sobre la misma conexión y transacción.
+
+La composición puede confirmar o revertir en conjunto estas fuentes canónicas. Todavía no incluye `SQLiteAuthorityChangeStore`: sus reservas/claims/evidencias siguen en transacciones independientes, por lo que no debe interpretarse como atomicidad de una operación de autoridad completa. No implementa CAM, invalidación, fencing ni reconciliación real. Runtime desconectado.
+
+**Estado:** implementación y pruebas publicadas; pendiente de validación local.
