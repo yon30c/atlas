@@ -16,6 +16,9 @@ from atlas.adapters.sqlite import (
 from atlas.authorization.recovery_evidence_trust import (
     RecoveryEvidenceIssuerTrustPolicy,
 )
+from atlas.authorization.recovery_evidence_trust_audit import (
+    RecoveryEvidenceIssuerTrustPolicyAuditStatus,
+)
 from atlas.core.errors import ConcurrencyError, ContractError, NotFoundError
 from atlas.memory.authority_changes import MultiAuthorityRecoveryEvidenceKind
 
@@ -172,6 +175,112 @@ class SQLiteRecoveryEvidenceIssuerTrustPolicyRepositoryTests(unittest.TestCase):
             )
             with self.assertRaises(ContractError):
                 foreign.get_policy("trusted-source-1")
+
+
+    def test_audit_reports_healthy_and_disabled_issuers_without_mutating_rows(self):
+        healthy = make_policy(issuer_id="healthy-source")
+        disabled = make_policy(issuer_id="disabled-source", enabled=False)
+        self.repository.create(healthy)
+        self.repository.create(disabled)
+        with self.database.connection() as connection:
+            before = connection.execute(
+                "SELECT COUNT(*) FROM recovery_evidence_issuer_trust_policies"
+            ).fetchone()[0]
+
+        report = self.repository.audit_all()
+
+        with self.database.connection() as connection:
+            after = connection.execute(
+                "SELECT COUNT(*) FROM recovery_evidence_issuer_trust_policies"
+            ).fetchone()[0]
+        self.assertEqual(before, after)
+        self.assertEqual(len(report.issuers), 2)
+        by_id = {item.issuer_id: item for item in report.issuers}
+        self.assertEqual(
+            by_id["healthy-source"].status,
+            RecoveryEvidenceIssuerTrustPolicyAuditStatus.HEALTHY,
+        )
+        self.assertEqual(
+            by_id["disabled-source"].status,
+            RecoveryEvidenceIssuerTrustPolicyAuditStatus.DISABLED,
+        )
+        self.assertIn("LATEST_POLICY_DISABLED", by_id["disabled-source"].diagnostic_codes)
+        self.assertFalse(report.is_healthy)
+
+    def test_audit_issuer_reports_missing_policy_explicitly(self):
+        audit = self.repository.audit_issuer("not-registered")
+        self.assertEqual(
+            audit.status,
+            RecoveryEvidenceIssuerTrustPolicyAuditStatus.MISSING_POLICY,
+        )
+        self.assertEqual(audit.diagnostic_codes, ("NO_POLICY_REGISTERED",))
+        self.assertIsNone(audit.latest_revision)
+
+    def test_audit_detects_revision_gap_if_database_history_is_damaged(self):
+        policy = make_policy()
+        self.repository.create(policy)
+        with self.database.connection() as connection:
+            connection.execute(
+                "DROP TRIGGER recovery_evidence_trust_policy_revision_sequential"
+            )
+            connection.execute(
+                """
+                INSERT INTO recovery_evidence_issuer_trust_policies (
+                    issuer_id, policy_revision, enabled,
+                    allowed_evidence_kinds_json, valid_from, valid_until,
+                    max_evidence_lifetime_seconds
+                ) VALUES (?, 3, 1, ?, ?, ?, ?)
+                """,
+                (
+                    policy.issuer_id,
+                    self.repository._values(policy)[3],
+                    policy.valid_from.isoformat(timespec="microseconds"),
+                    policy.valid_until.isoformat(timespec="microseconds"),
+                    policy.max_evidence_lifetime_seconds,
+                ),
+            )
+        audit = self.repository.audit_issuer(policy.issuer_id)
+        self.assertEqual(
+            audit.status,
+            RecoveryEvidenceIssuerTrustPolicyAuditStatus.CORRUPT,
+        )
+        self.assertIn("REVISION_SEQUENCE_GAP", audit.diagnostic_codes)
+        self.assertEqual(audit.revisions, (1, 3))
+
+    def test_audit_detects_malformed_policy_payload(self):
+        policy = make_policy()
+        self.repository.create(policy)
+        with self.database.connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO recovery_evidence_issuer_trust_policies (
+                    issuer_id, policy_revision, enabled,
+                    allowed_evidence_kinds_json, valid_from, valid_until,
+                    max_evidence_lifetime_seconds
+                ) VALUES (?, 2, 1, '["unknown_evidence_kind"]', ?, ?, 600)
+                """,
+                (
+                    policy.issuer_id,
+                    policy.valid_from.isoformat(timespec="microseconds"),
+                    policy.valid_until.isoformat(timespec="microseconds"),
+                ),
+            )
+        audit = self.repository.audit_issuer(policy.issuer_id)
+        self.assertEqual(
+            audit.status,
+            RecoveryEvidenceIssuerTrustPolicyAuditStatus.CORRUPT,
+        )
+        self.assertIn("INVALID_POLICY_RECORD", audit.diagnostic_codes)
+        self.assertEqual(audit.latest_revision, 2)
+
+    def test_audit_all_is_sorted_by_issuer_id(self):
+        self.repository.create(make_policy(issuer_id="z-source"))
+        self.repository.create(make_policy(issuer_id="a-source"))
+        report = self.repository.audit_all()
+        self.assertEqual(
+            tuple(item.issuer_id for item in report.issuers),
+            ("a-source", "z-source"),
+        )
 
 
 if __name__ == "__main__":
