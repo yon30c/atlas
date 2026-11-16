@@ -13,6 +13,10 @@ from atlas.authorization.recovery_evidence_admission_audit import (
     RecoveryEvidenceAdmissionAuditReport,
     RecoveryEvidenceAdmissionAuditStatus,
 )
+from atlas.memory.authority_changes import (
+    AuthorityChangeTargetKind,
+    MultiAuthorityRecoveryEvidenceKind,
+)
 from atlas.ports.recovery_evidence_admission import (
     RecoveryEvidenceAdmissionPort,
     RecoveryEvidenceAdmissionResult,
@@ -98,6 +102,11 @@ class SQLiteRecoveryEvidenceAdmissionRepository(RecoveryEvidenceAdmissionPort):
             or any(char not in "0123456789abcdef" for char in row["evidence_digest"])
         ):
             diagnostics.append("INVALID_EVIDENCE_DIGEST")
+
+        if row["evidence_kind"] not in {
+            item.value for item in MultiAuthorityRecoveryEvidenceKind
+        }:
+            diagnostics.append("INVALID_EVIDENCE_KIND")
 
         issuer_revision = connection.execute(
             """
@@ -195,6 +204,9 @@ class SQLiteRecoveryEvidenceAdmissionRepository(RecoveryEvidenceAdmissionPort):
                     "expected_revision", "proposed_revision",
                 }
                 or not isinstance(target.get("authority_kind"), str)
+                or target.get("authority_kind") not in {
+                    item.value for item in AuthorityChangeTargetKind
+                }
                 or not isinstance(target.get("authority_id"), str)
                 or not target.get("authority_id", "").strip()
                 or isinstance(target.get("expected_revision"), bool)
@@ -213,6 +225,13 @@ class SQLiteRecoveryEvidenceAdmissionRepository(RecoveryEvidenceAdmissionPort):
                 )
                 if identities != tuple(sorted(set(identities))):
                     diagnostics.append("NON_CANONICAL_TARGET_SET")
+                if any(
+                    target["authority_kind"] not in {
+                        item.value for item in AuthorityChangeTargetKind
+                    }
+                    for target in targets
+                ):
+                    diagnostics.append("INVALID_AUTHORITY_KIND")
                 reserved = connection.execute(
                     """
                     SELECT authority_kind, authority_id, expected_revision, proposed_revision
@@ -339,6 +358,8 @@ class SQLiteRecoveryEvidenceAdmissionRepository(RecoveryEvidenceAdmissionPort):
                 "OPERATION_NOT_FOUND",
                 "ISSUER_REVISION_NOT_FOUND",
                 "OPERATION_CLAIMS_MISMATCH",
+                "INVALID_EVIDENCE_KIND",
+                "INVALID_AUTHORITY_KIND",
             }
         }))
         return RecoveryEvidenceAdmissionAuditReport(
