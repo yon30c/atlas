@@ -208,4 +208,4 @@ Para cada siguiente incremento:
 6. Revisar los resultados antes de continuar.
 7. Actualizar esta documentación con evidencia, commit y estado real.
 
-**Siguiente acción:** actualizar el checkout Debian y ejecutar `tests.unit.test_bootstrap` y después la suite completa. Si pasan, F1.5 quedará validado a nivel unitario. Después se probará la composición con Gemma real mediante un pequeño comando Python manual; todavía sin conectarla a la consola ni ejecutar capacidades. El primer flujo vertical seguirá siendo `workspace.list` sobre un workspace demo aislado.
+**Siguiente acción:** actualizar el checkout Debian y ejecutar `tests.unit.test_local_workspace` y después la suite completa. Si pasan, F2.1 quedará validado a nivel unitario. A continuación se añadirá el servicio de aplicación que consume `WorkspaceReader`; todavía sin conectar la capacidad a la consola ni al runtime conversacional.
