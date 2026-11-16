@@ -577,4 +577,4 @@ Se añade una prueba de corrupción controlada que inserta una revisión posteri
 
 **Límites:** no se impide reactivar un emisor mediante una nueva revisión; no se modifica el esquema ni el flujo de admisión. La auditoría no autentica la fuente del reloj y permanece en solo lectura.
 
-**Estado:** implementado en GitHub; pruebas locales pendientes.
+**Estado: VALIDADO por el propietario; suite completa: 1139 tests en 8.811 s, todos OK.**
