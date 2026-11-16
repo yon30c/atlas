@@ -113,10 +113,9 @@ class GrantManagementService:
                 "issued_at debe coincidir con el momento de emisión"
             )
         if self._unit_of_work_factory is None:
-            if self._repository.get(grant.grant_id) is not None:
-                raise ContractError("El grant_id ya existe")
-            self._repository.create(grant)
-            return grant
+            raise ContractError(
+                "emisión deshabilitada: requiere una unidad de trabajo transaccional"
+            )
 
         # The uniqueness check and insert must share one immediate transaction.
         with self._unit_of_work_factory() as uow:
