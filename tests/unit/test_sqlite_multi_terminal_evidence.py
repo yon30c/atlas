@@ -306,22 +306,22 @@ class SQLiteMultiTerminalEvidenceTests(unittest.TestCase):
         self.assertTrue(self.store.release_multi_claims(reservation.operation_id))
         self.assertEqual(self.store.get_multi_claims(reservation.operation_id), ())
         with self.database.connection() as connection:
-            receipt = connection.execute(
+            release = connection.execute(
                 """
                 SELECT evidence_digest FROM multi_authority_change_claim_releases
                 WHERE operation_id = ?
                 """,
                 (reservation.operation_id,),
             ).fetchone()
-        self.assertIsNotNone(receipt)
-        self.assertEqual(
-            receipt["evidence_digest"],
-            self.store.get_multi_terminal_evidence(reservation.operation_id) and
-            connection.execute(
-                "SELECT evidence_digest FROM multi_authority_change_terminal_evidence WHERE operation_id = ?",
+            terminal = connection.execute(
+                """
+                SELECT evidence_digest FROM multi_authority_change_terminal_evidence
+                WHERE operation_id = ?
+                """,
                 (reservation.operation_id,),
-            ).fetchone()["evidence_digest"],
-        )
+            ).fetchone()
+        self.assertIsNotNone(release)
+        self.assertEqual(release["evidence_digest"], terminal["evidence_digest"])
 
     def test_aborted_operation_can_release_only_after_terminal_receipt(self):
         reservation = self._prepare_reconciling(key="release-aborted")
