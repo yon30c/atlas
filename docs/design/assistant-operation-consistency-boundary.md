@@ -539,3 +539,13 @@ Una segunda prueba ejecuta dos admisiones exactas simultáneas desde conexiones 
 **Límite:** estas pruebas demuestran serialización local SQLite para la admisión y el cambio del inventario. No convierten el recibo en un fence para efectos posteriores, no prueban coordinación distribuida y no habilitan recuperación ni runtime.
 
 **Estado: VALIDADO por el propietario; suite completa: 1133 tests en 9.225 s, todos OK.**
+
+## 47. F2.3.37 — Consistencia temporal del emisor en auditoría histórica
+
+La auditoría de cada recibo comprueba ahora que la revisión histórica del emisor existe y estaba habilitada, que su `changed_at` no es posterior a `recorded_at`, y que no existe una revisión posterior del mismo emisor cuya fecha efectiva sea igual o anterior al registro de la admisión. Esto detecta historiales que, por fechas retroactivas o inconsistencias, harían parecer vigente en el momento de admisión una revisión que ya había sido reemplazada.
+
+Una revisión posterior cuya fecha efectiva sea posterior a `recorded_at` no invalida el recibo: la auditoría reconstruye el estado histórico en el instante del registro, no el estado actual.
+
+**Límite:** esta comprobación depende de la integridad de los timestamps aportados por el registro local; no autentica externamente el reloj ni la procedencia del cambio. Sigue siendo una auditoría de solo lectura y no concede autoridad ni habilita efectos.
+
+**Estado:** implementado en la rama; pruebas locales pendientes.
