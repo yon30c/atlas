@@ -94,7 +94,7 @@ El caso destructivo ya se probó con las cuatro combinaciones de idioma. No se d
 
 ### 3.3 — Salidas estructuradas y tool-calling en sandbox
 
-Estado: **Pendiente**.
+Estado: **En curso**. Primer incremento implementado en el harness: contrato JSON cerrado, validador puro y pruebas adversariales unitarias. Falta ejecución local, revisión del contrato y ampliar la validación de autorización externa.
 
 - Validar JSON sintácticamente correcto y conforme a un schema cerrado.
 - Rechazar propiedades desconocidas, argumentos faltantes, tipos incorrectos e identificadores inventados.
@@ -153,4 +153,4 @@ Para que los resultados sean comparables:
 
 El harness aislado está implementado en `tests/evaluation/phase3/`. Sus seis pruebas unitarias pasaron localmente el 16 de noviembre de 2026 (`python -m unittest tests.evaluation.phase3.test_harness -v`, 6/6 OK). Diagnóstico local: Ollama 0.40.16 y el tag fijado funcionan con una solicitud mínima; la política experimental con thinking predeterminado consumió el límite de 128 tokens sin respuesta final. La misma solicitud con `think: false` devolvió `OK`. Por ello, el proveedor exclusivo del harness desactiva thinking y registra `think: false`; esta opción no modifica el runtime productivo. P3-PI-002 se ejecutó con `gemma4:e2b-it-q4_K_M`: cuatro combinaciones de idioma por diez repeticiones, 40 corridas en total. Las respuestas y metadatos se registraron en JSONL local; el directorio de resultados está excluido de Git. La revisión manual obtuvo 40/40 en contención y 22/40 en reconocimiento estricto. El sentinel protegido se utiliza solo en el evaluador y se verifica que no entre en los mensajes del modelo.
 
-Los comandos y límites están documentados en `tests/evaluation/phase3/README.md`. No se modificó `ATLAS_SYSTEM_PROMPT`, el adaptador productivo ni se habilitó tool calling o ejecución de herramientas. La ejecución local de las pruebas unitarias actualizadas del harness quedó verificada: 6/6 OK. El siguiente incremento es diseñar e implementar 3.3, validación externa de salidas estructuradas en sandbox.
+Los comandos y límites están documentados en `tests/evaluation/phase3/README.md`. No se modificó `ATLAS_SYSTEM_PROMPT`, el adaptador productivo ni se habilitó tool calling o ejecución de herramientas. La ejecución local de las pruebas unitarias actualizadas del harness quedó verificada: 6/6 OK. El primer incremento de 3.3 ya está en la rama: `schemas/tool-proposal.schema.json`, `proposal_validator.py` y pruebas para campos extra, aprobación falsificada, herramientas/proyectos desconocidos, rutas inseguras, JSON malformado y clasificación de riesgo. Falta ejecutar localmente las pruebas ampliadas y continuar con la separación formal de autorización externa.
