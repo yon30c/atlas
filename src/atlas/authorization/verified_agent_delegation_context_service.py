@@ -186,6 +186,10 @@ class VerifiedAgentDelegationContextService:
                     owner_user_id=delegation.owner_user_id,
                     owner_identity_id=delegation.owner_identity_id,
                     agent_identity_id=delegation.agent_identity_id,
+                    agent_identity_revision=canonical_agent.identity.revision,
+                    agent_context_id=verified_agent_identity.context_id,
+                    agent_binding_id=verified_agent_identity.binding_id,
+                    agent_binding_revision=verified_agent_identity.binding_revision,
                     grant_id=delegation.grant_id,
                     grant_revision=delegation.grant_revision,
                     project_id=delegation.project_id,
@@ -251,4 +255,16 @@ class VerifiedAgentDelegationContextService:
         if grant is None:
             raise VerifiedAgentDelegationContextRejected("Grant canónico no encontrado")
         self._require_live_bindings(unit, delegation, grant, now)
+        agent = unit.agent_identity.get_agent_by_identity_id(context.agent_identity_id)
+        binding = unit.native_agent_identity.get_native_agent_binding_by_id(context.agent_binding_id)
+        if (
+            agent is None
+            or agent.identity.revision != context.agent_identity_revision
+            or binding is None
+            or binding.identity_id != context.agent_identity_id
+            or binding.issuer_id != context.issuer_id
+            or binding.revision != context.agent_binding_revision
+            or binding.status.value != "active"
+        ):
+            raise VerifiedAgentDelegationContextRejected("la identidad o binding AGENT cambió")
         return delegation
