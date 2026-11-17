@@ -5,11 +5,12 @@ from typing import Protocol
 from uuid import uuid4
 
 from atlas.authorization.models import Grant
-from atlas.core.agent_delegation import AgentDelegation, AgentDelegationScope
+from atlas.core.agent_delegation import AgentDelegation, AgentDelegationScope, VerifiedAgentDelegationContext
 from atlas.core.errors import AuthorizationError, ContractError, NotFoundError
 from atlas.core.identity import IdentityStatus
 from atlas.core.user_identity import validate_canonical_uuid4
 from atlas.core.verified_identity_context import VerifiedIdentityContext
+from atlas.core.verified_agent_identity_context import VerifiedAgentIdentityContext
 from atlas.ports.clock import Clock
 
 
@@ -60,8 +61,8 @@ class SQLiteAgentDelegationAuthority:
         delegation_id: str,
         *,
         expected_revision: int,
-        verified_agent_identity,
-    ):
+        verified_agent_identity: VerifiedAgentIdentityContext,
+    ) -> VerifiedAgentDelegationContext:
         """Delegate operation evidence issuance to the separately configured verifier."""
         if self._operation_verifier is None:
             raise AuthorizationError("la verificación de delegaciones AGENT no está configurada")
