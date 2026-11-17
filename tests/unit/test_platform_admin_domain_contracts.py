@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import unittest
 from uuid import uuid4
 
-from atlas.core.errors import ContractError
+from atlas.core.errors import AuthorizationError, ContractError
 from atlas.core.platform_admin import (
     PlatformAdminGrant,
     PlatformAdminGrantStatus,
@@ -50,7 +50,7 @@ class PlatformAdminDomainContractTests(unittest.TestCase):
             user_identity_revision=3,
             now=self.now,
         )
-        with self.assertRaises(ContractError):
+        with self.assertRaises(AuthorizationError):
             require_platform_admin_permission(
                 self.grant,
                 permission=PlatformAdminPermission.ASSOCIATION_REACTIVATE,
@@ -66,7 +66,7 @@ class PlatformAdminDomainContractTests(unittest.TestCase):
             {"user_identity_id": uid()},
             {"user_identity_revision": 4},
         ):
-            with self.subTest(changes=changes), self.assertRaises(ContractError):
+            with self.subTest(changes=changes), self.assertRaises(AuthorizationError):
                 require_platform_admin_permission(
                     self.grant,
                     permission=PlatformAdminPermission.ASSOCIATION_SUSPEND,
@@ -86,7 +86,7 @@ class PlatformAdminDomainContractTests(unittest.TestCase):
         )
         expired = replace(self.grant, expires_at=self.now)
         for grant in (revoked, expired):
-            with self.subTest(grant=grant.status), self.assertRaises(ContractError):
+            with self.subTest(grant=grant.status), self.assertRaises(AuthorizationError):
                 require_platform_admin_permission(
                     grant,
                     permission=PlatformAdminPermission.ASSOCIATION_SUSPEND,
@@ -97,7 +97,7 @@ class PlatformAdminDomainContractTests(unittest.TestCase):
                 )
 
     def test_not_before_is_enforced(self):
-        with self.assertRaises(ContractError):
+        with self.assertRaises(AuthorizationError):
             require_platform_admin_permission(
                 self.grant,
                 permission=PlatformAdminPermission.ASSOCIATION_SUSPEND,
