@@ -532,3 +532,21 @@ Comprobar que `changed_at` no retroceda entre revisiones consecutivas del invent
 La UoW usa `BEGIN IMMEDIATE` y se mantiene abierta durante la lectura del filesystem, de modo que las mutaciones de autoridad SQLite sobre esa misma base no puedan intercalarse entre la comprobación y la lectura. `get_environment()` ahora usa la conexión de la UoW, igual que Project, Identity y Grants. Esto es una garantía local de la composición SQLite, no fencing distribuido ni protección contra cambios de configuración externos.
 
 **Límites:** solo capacidades READ_ONLY; sin `workspace.write`, shell, aprobación `REQUIRE_APPROVAL`, ejecución multi-paso, verificación criptográfica de evidencia, coordinador genérico ni integración en `cli.py`. La política inicial considera que los workspaces configurados pertenecen al UserId canónico de la sesión. **VALIDADO por el propietario: suite completa de 1,194 tests en 9.318 s, todos OK.**
+
+
+## 9. Fundamento operativo transversal — Atlas Workstation
+
+**Diseño aprobado; implementación pendiente.** La especificación se encuentra en [Atlas Workstation](design/atlas-workstation.md).
+
+Atlas Workstation será el entorno aislado donde Atlas realizará trabajo de proyecto y ejecutará tareas. Separa el workspace persistente de cada proyecto del runtime efímero de cada tarea. La implementación objetivo usa contenedores confinados, no acceso directo al host.
+
+El trabajo se organiza en W0–W6:
+- W0: diseño y límites (documentado).
+- W1: workspace persistente y ownership canónico.
+- W2: contrato del adaptador de runtime y evaluación de Atlas Broker.
+- W3: runtime confinado mínimo, sin red por defecto.
+- W4: catálogo cerrado de tareas y seguimiento durable.
+- W5: terminal interactiva limitada, solo tras validar el aislamiento.
+- W6: experiencia multiplataforma.
+
+Workstation no es una autorización independiente. CAM y las aprobaciones siguen siendo obligatorias; Assistant, agentes y Skills no reciben Docker socket, root ni shell irrestricta. El siguiente paso inmediato continúa siendo el Ciclo 3.2 (bootstrap confiable, contexto canónico y ownership de workspaces). La documentación W0 não implica ejecución habilitada ni cambios en el servidor.
