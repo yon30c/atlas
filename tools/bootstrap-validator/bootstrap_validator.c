@@ -326,23 +326,16 @@ bv_parse_result bv_parse_stat(const unsigned char *d, size_t n,
      * those fields only as space-separated signed/unsigned decimal tokens.
      */
     while (p < end) {
-        size_t st;
+        size_t st = p;
 
-        if (d[p] != ' ') {
-            return BV_INVALID;
-        }
-        while (p < end && d[p] == ' ') {
-            p++;
-        }
-        if (p == end) {
-            break;
-        }
-        st = p;
         while (p < end && d[p] != ' ') {
             p++;
         }
         if (!decimal_token(d + st, p - st)) {
             return BV_INVALID;
+        }
+        while (p < end && d[p] == ' ') {
+            p++;
         }
     }
     v.pid = parsed_pid;
