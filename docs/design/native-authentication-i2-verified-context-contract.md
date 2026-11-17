@@ -13,14 +13,14 @@
 - El servicio de autenticación de aplicación es el único flujo previsto para emitir proofs: resuelve el autenticador por realm/login handle, verifica Argon2id y solo entonces persiste proof.
 - `NativeIdentityAuthorityPort` resuelve issuer y binding. No autentica.
 - `IdentityAuthorityPort.get_user_by_identity_id` (I-1) resuelve el par canónico UserId/Identity(USER).
-- El servicio de admisión consume proof, verifica toda la cadena y emite contexto dentro de una sola UoW local.
+- El servicio de aplicación de Identity Authority consume proof, verifica toda la cadena y emite VerifiedIdentityContext dentro de una sola UoW local.
 - CAM continúa siendo la autoridad exclusiva de permisos. Un contexto autenticado no concede Grants.
 
 No se debe exponer el adaptador SQLite ni su método de creación de proof a callers de request, plugins, herramientas o modelos. La composición confiable debe entregar al entrypoint solo el servicio de aplicación.
 
 ### 1.2 Configuración confiable
 
-El servicio se construye con configuración inyectada por el composition root:
+El servicio de Authentication Authority se construye con configuración inyectada por el composition root:
 
 - realm nativo exacto;
 - audience interna exacta del consumidor;
@@ -80,9 +80,11 @@ Requisitos mínimos del guard:
 
 No se acepta un contador solo en memoria como protección de producción: reinicios y múltiples workers lo eludirían. La implementación SQLite del guard, sus límites de retención y su migración deben revisarse como cambio separado antes de conectar un entrypoint. Hasta entonces el servicio no se compone para uso operativo; los tests usan un fake determinista del puerto.
 
-## 3. Proof admission y resolución canónica
+## 3. Proof admission y resolución canónica — Identity Authority
 
-La operación recibe solo la referencia opaca. La audience y realm esperados proceden de configuración confiable.
+La admisión y emisión del VerifiedIdentityContext pertenecen a Identity Authority, conforme B1-B-03D. Native Authentication Authority solo acredita que verificó una credencial y emite un proof opaco; no resuelve bindings ni usuarios.
+
+La operación de Identity Authority recibe solo la referencia opaca. La audience y realm esperados proceden de configuración confiable.
 
 Dentro de una única `SQLiteLocalAuthorityUnitOfWork`:
 
@@ -95,7 +97,7 @@ Dentro de una única `SQLiteLocalAuthorityUnitOfWork`:
 7. Resolver con I-1 `identity_id -> CanonicalUserIdentity`.
 8. Exigir identidad USER y ACTIVE; conservar UserId e identity_id separados.
 9. Emitir el contexto efímero con binding_id/revision, issuer_id, identity_revision y timestamps.
-10. Confirmar la UoW. Cualquier error previo a commit revierte el consumo del proof.
+10. Identity Authority construye el VerifiedIdentityContext inmutable y efímero con los datos canónicos obtenidos. Confirmar la UoW. Cualquier error previo a commit revierte el consumo del proof.
 
 No abrir transacciones independientes para consumir proof y resolver binding/identidad. La garantía es atomicidad SQLite local solo cuando todas las autoridades comparten la misma instancia de base de datos y la misma UoW. No implica coordinación con Consistency Journal, Recovery Gate ni fencing global.
 
@@ -184,4 +186,4 @@ I-2 no habilita:
 - rate limiting productivo hasta que exista adaptador compartido y revisado;
 - fencing global, coordinación con Consistency Journal o resistencia anti-rollback.
 
-El cierre de I-2 requiere tests unitarios y de integración, suite completa, compileall, revisión del diff y evidencia de rollback UoW. No se declarará listo para operación mientras el guard de intentos no tenga adaptador compartido aprobado.
+El cierre de I-2 requiere tests unitarios y de integración, suite completa, compileall, revisión del diff y evidencia de rollback UoW. La implementación debe mantener la propiedad de responsabilidades: Authentication Authority verifica credenciales y emite proofs; Identity Authority consume la evidencia, resuelve el binding y emite VerifiedIdentityContext. No se declarará listo para operación mientras el guard de intentos no tenga adaptador compartido aprobado.
