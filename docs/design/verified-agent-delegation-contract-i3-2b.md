@@ -343,7 +343,7 @@ Pruebas adicionales en tests/unit/test_sqlite_native_agent_identity_authority.py
 
 ## 13. I3-2B.3A — persistencia canónica de delegaciones (substrato)
 
-**Implementación inicial publicada; pendiente de validación en Debian. No equivale todavía a una autoridad de emisión/verificación.**
+**Validada en Debian:** suite completa 1,329/1,329 tests OK; `python -m compileall -q src tests` con exit code 0. No equivale todavía a una autoridad de emisión/verificación.
 
 Se añadió CORE_SCHEMA_V23 y SQLiteAgentDelegationRepository para persistir el agregado AgentDelegation:
 - FKs a atlas_users, identity_records, authorization_grants y native_identity_issuers.
@@ -354,6 +354,8 @@ Se añadió CORE_SCHEMA_V23 y SQLiteAgentDelegationRepository para persistir el 
 - El repositorio participa en SQLiteUnitOfWork explícita. SQLiteLocalAuthorityUnitOfWork expone identity, agent_identity, native_identity, native_agent_identity, grants y agent_delegations sobre la misma transacción.
 
 Pruebas añadidas en tests/unit/test_sqlite_agent_delegation_repository.py y ampliación de test_sqlite_local_authority_unit_of_work.py.
+
+**Validación del propietario en Debian:** `Ran 1329 tests in 17.000s — OK`; `COMPILE_EXIT_CODE=0`. Esto valida el estado actual del branch, incluyendo las pruebas de repositorio de delegaciones y la integración con la UoW. No se afirma que exista autoridad de emisión/verificación.
 
 ### Límite de seguridad y siguiente trabajo
 
