@@ -61,6 +61,15 @@ class SQLiteNativeIdentityAuthorityTests(unittest.TestCase):
             self.authority.get_native_binding(self.issuer.issuer_id, "a" * 64),
             binding,
         )
+        self.assertEqual(
+            self.authority.get_native_binding_by_id(binding.binding_id),
+            binding,
+        )
+        self.assertIsNone(
+            self.authority.get_native_binding_by_id(
+                "ffffffff-ffff-4fff-8fff-ffffffffffff"
+            )
+        )
         self.assertEqual(binding.identity_id, self.user.identity.identity_id)
 
     def test_duplicate_subject_digest_is_never_reassigned(self):
