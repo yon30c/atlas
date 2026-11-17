@@ -532,8 +532,19 @@ The updated contract now requires `VerifiedIdentityContextVerifierPort.verify_in
 
 The transactional owner check compares the canonical USER kind/status/revision, identity ID, UserId, OperationContext actor/UserId, and absence of delegation. Tests assert the standalone verifier is not called for approval/rejection and that a legacy-only verifier cannot decide a renewal.
 
-**Validation pending:** this follow-on hardening was committed after the owner-reported 1,396-test checkpoint for I3-2B.6B/6C. The updated HEAD requires fresh focused tests, full unit suite and compileall on Debian.
+**Validated by the owner on Debian:** full suite **1,397 tests in 21.871s — OK**; `python -m compileall -q src tests` returned **COMPILE_EXIT_CODE=0**. This validates the USER owner shared-UoW hardening in I3-2B.6D.
 
 #### Project/Environment association boundary
 
 The current canonical metadata adapter stores Project and Environment as independent records and exposes independent lookups. No Project-to-Environment relationship is represented in the current schema/port. Renewal therefore verifies both records are individually present and active and that their IDs match the Grant, but cannot assert membership. Do not infer or fabricate that relationship. If required, introduce an explicit canonical association contract and migration in a separately reviewed slice before enforcing it.
+
+
+#### 18.8 I3-2B.6D — validation follow-up
+
+The owner confirmed the updated implementation on Debian:
+- Full unit suite: **1,397 tests in 21.871 seconds, OK**.
+- `python -m compileall -q src tests`: **COMPILE_EXIT_CODE=0**.
+
+The production `VerifiedIdentityContextService` already implements the shared-UoW verifier contract and revalidates the USER attestation, TTL, issuer, native binding, canonical identity and revisions through the supplied unit of work without opening or committing it. The renewal service now uses this contract for both owner approval and rejection.
+
+No AGENT runtime, login or endpoint was enabled by this validation.
