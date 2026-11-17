@@ -141,14 +141,16 @@ class SQLiteNativeAuthenticationAuthorityTests(unittest.TestCase):
 
     def test_v19_to_v20_upgrade_and_foreign_key_check(self):
         legacy = SQLiteDatabase(Path(self.temp_dir.name) / "v19.sqlite")
-        legacy.apply_migrations(SQLITE_MIGRATIONS[:-1])
+        # Keep this regression test scoped to the V19 -> V20 upgrade.
+        # Later migrations (V21/V22) are covered by their own authority tests.
+        legacy.apply_migrations(SQLITE_MIGRATIONS[:19])
         legacy_identity = SQLiteNativeIdentityAuthority(legacy)
         preserved_issuer = legacy_identity.create_native_issuer("atlas.preserved")
         with legacy.connection() as connection:
             self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 19)
-        self.assertEqual(legacy.apply_migrations(SQLITE_MIGRATIONS), 20)
+        self.assertEqual(legacy.apply_migrations(SQLITE_MIGRATIONS[:20]), 20)
         self.assertEqual(legacy_identity.get_native_issuer("atlas.preserved"), preserved_issuer)
-        self.assertEqual(legacy.apply_migrations(SQLITE_MIGRATIONS), 20)
+        self.assertEqual(legacy.apply_migrations(SQLITE_MIGRATIONS[:20]), 20)
         with legacy.connection() as connection:
             self.assertEqual(connection.execute("PRAGMA foreign_key_check").fetchall(), [])
             self.assertIsNotNone(connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='native_authenticators'").fetchone())
