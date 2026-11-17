@@ -199,3 +199,31 @@ class VerifiedAgentDelegationContext:
             f"agent_identity_id={self.agent_identity_id!r}, grant_id={self.grant_id!r}, "
             "verification_ref=<redacted>, attestation=<redacted>)"
         )
+
+
+def validate_agent_delegation_transition(
+    current: AgentDelegation, updated: AgentDelegation
+) -> None:
+    """Reject illegal state transitions before a CAS persistence operation.
+
+    This check must run against the canonical current row inside the same
+    transaction/fencing boundary used by the authority. A value object alone
+    cannot infer its history.
+    """
+    if not isinstance(current, AgentDelegation) or not isinstance(updated, AgentDelegation):
+        raise ContractError("current y updated deben ser AgentDelegation")
+    if current.delegation_id != updated.delegation_id:
+        raise ContractError("no se puede cambiar delegation_id")
+    if updated.revision != current.revision + 1:
+        raise ContractError("la revisión debe avanzar exactamente en una unidad")
+    if current.status is AgentDelegationStatus.REVOKED:
+        if updated.status is not AgentDelegationStatus.REVOKED:
+            raise ContractError("una delegación revocada no puede reactivarse")
+        if (
+            updated.revoked_at != current.revoked_at
+            or updated.revoked_by_user_id != current.revoked_by_user_id
+        ):
+            raise ContractError("la auditoría de revocación es inmutable")
+    if current.status is AgentDelegationStatus.ACTIVE and updated.status is AgentDelegationStatus.REVOKED:
+        if updated.revoked_at is None or updated.revoked_by_user_id is None:
+            raise ContractError("la revocación requiere auditoría completa")
