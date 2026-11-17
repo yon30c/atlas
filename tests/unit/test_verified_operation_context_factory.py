@@ -20,8 +20,8 @@ from atlas.authentication.native import (
     NativeSubject,
 )
 from atlas.core.errors import ContractError
-from atlas.core.enums import DelegationMode
 from atlas.identity.verified_identity_context_service import (
+    VerifiedIdentityContextRejected,
     VerifiedIdentityContextService,
 )
 from atlas.identity.verified_operation_context_factory import (
@@ -108,7 +108,7 @@ class VerifiedOperationContextFactoryTests(unittest.TestCase):
 
     def test_invalid_or_stale_verified_context_cannot_derive_operation(self):
         self.clock.value += timedelta(minutes=3)
-        with self.assertRaises(Exception):
+        with self.assertRaises(VerifiedIdentityContextRejected):
             self.operation_factory.create(
                 self.context,
                 request_id="req-2",
