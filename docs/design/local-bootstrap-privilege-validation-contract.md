@@ -1,6 +1,6 @@
 # Contrato de validación de privilegios para bootstrap LOCAL (candidato A)
 
-**Estado:** V1 aislada completada; V2 de observación Linux aprobada para implementación y pendiente de pruebas Debian del propietario. Contrato general abierto; candidato A no aprobado para ejecución privilegiada.  
+**Estado:** V1 aislada completada; implementación V2 de observación Linux publicada y pendiente de pruebas Debian del propietario. Contrato general abierto; candidato A no aprobado para ejecución privilegiada.  
 **Rama:** `feature/terminal-commands`.  
 **Fecha:** 16 de noviembre de 2026.  
 **Relacionado:** `local-bootstrap-privilege-boundary.md`, `local-pam-bootstrap-authenticator.md`, `local-pam-bootstrap-proof-protocol.md`, `local-bootstrap-coordination-architecture.md`.
@@ -250,9 +250,9 @@ Condiciones obligatorias:
 
 V1 quedó validada mediante compilación estricta, suite ampliada y ejecución con AddressSanitizer/UndefinedBehaviorSanitizer en Debian, según los resultados comunicados por el propietario. La aprobación posterior y explícita del propietario del 16-11-2026 autoriza únicamente la V2 definida en `local-bootstrap-observer-v2-design.md`, bajo sus límites de solo observación, sin instalación ni cambios del host.
 
-### Etapa V2 — observador Linux de solo lectura (APROBADA PARA IMPLEMENTACIÓN)
+### Etapa V2 — observador Linux de solo lectura (IMPLEMENTADA; VALIDACIÓN DEBIAN PENDIENTE)
 
-El propietario aprobó expresamente el 16-11-2026 la implementación de V2 según `local-bootstrap-observer-v2-design.md`. El alcance incluye un adaptador Linux separado que observa el proceso actual y su padre directo mediante lecturas acotadas de procfs, pidfd, metadatos de `/proc/PID/exe` y consultas TTY. Reutiliza los parsers/evaluador puros V1, sin modificar su semántica.
+El propietario aprobó expresamente el 16-11-2026 la implementación de V2 según `local-bootstrap-observer-v2-design.md`; el código y la documentación ya están publicados, pero la compilación y pruebas Debian del propietario siguen pendientes. El alcance incluye un adaptador Linux separado que observa el proceso actual y su padre directo mediante lecturas acotadas de procfs, pidfd, metadatos de `/proc/PID/exe` y consultas TTY. Reutiliza los parsers/evaluador puros V1, sin modificar su semántica.
 
 La aprobación permite escribir y documentar el observador no privilegiado, su suite automatizada y comandos de pruebas manuales. No autoriza instalación, paquetes, cambios del host, PAM, claves, configuración protegida, sudoers, systemd, SSH, Broker, SQLite, CAM, red ni runtime. El programa no invoca sudo ni solicita privilegios; los escenarios sudo/SSH son decisiones manuales del propietario después de recibir el código.
 
@@ -320,4 +320,4 @@ No:
 - conectar el helper con el runtime;
 - aceptar observaciones diagnósticas como autorización.
 
-**Estado:** V1 aislada completada y validada. V2 de observación Linux aprobada para implementación el 16-11-2026 según su diseño dedicado; las pruebas del propietario en Debian quedan pendientes. El contrato general permanece abierto y el candidato A no está aprobado. V3/V4, PAM, helper privilegiado o cambios del host requieren diseño, revisión y aprobación separados.
+**Estado:** V1 aislada completada y validada. V2 de observación Linux implementada y publicada según su diseño dedicado; las pruebas del propietario en Debian quedan pendientes. El contrato general permanece abierto y el candidato A no está aprobado. V3/V4, PAM, helper privilegiado o cambios del host requieren diseño, revisión y aprobación separados.
