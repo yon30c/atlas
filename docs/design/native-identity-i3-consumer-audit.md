@@ -226,3 +226,19 @@ Se añadió `docs/design/verified-agent-delegation-contract-i3-2b.md`, que defin
 - secuencia de slices I3-2B.1 a I3-2B.6.
 
 **Estado:** solo documentación. `GrantRenewalService.request_renewal` permanece fail-closed. No se amplían tipos USER, no se crea persistencia ni se habilitan rutas AGENT.
+
+
+## 11. I3-2B.1 — contratos AGENT separados
+
+Se añadieron contratos puros en `src/atlas/core` y puertos en `src/atlas/ports` para:
+- `CanonicalAgentIdentity` sin UserId;
+- `VerifiedAgentIdentityContext` AGENT-only;
+- `NativeAgentIdentityBinding` separado del binding USER;
+- `AgentDelegation`, scope explícito y `VerifiedAgentDelegationContext`;
+- autoridades y verificadores independientes para identidad, binding y delegación AGENT.
+
+La prueba unitaria focalizada es `tests/unit/test_agent_delegation_domain_contracts.py`. No hay adaptadores, persistencia, migraciones, proof admission, composition root ni cambios a `GrantRenewalService`.
+
+**Límite transaccional confirmado:** la auditoría `assistant-operation-consistency-boundary.md` describe UoWs/SQLite independientes para Identity y CAM/Grant/Renewal. No existe evidencia de una transacción común entre esas fuentes. I3-2B.5 debe resolver y probar ese límite o mantener fail-closed. No afirmar atomicidad global en el diseño actual.
+
+**Estado de validación:** pruebas añadidas pero todavía no ejecutadas en Debian por el propietario.
