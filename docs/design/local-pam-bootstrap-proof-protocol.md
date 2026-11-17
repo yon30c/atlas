@@ -211,3 +211,17 @@ Esta lista es una meta de composición, no una afirmación de que las tablas, pu
 5. No se han comprobado OpenSSL EVP headers/libs ni la custodia viable de la clave privada en el host.
 
 Por estos bloqueadores, el protocolo queda documentado como diseño propuesto, pero no está listo para implementación del helper. El próximo incremento debe resolver el modelo de emisor/desafío y el binding del propietario antes de fijar el layout binario.
+
+## 14. Resolución de arquitectura: sin emisor de desafíos separado
+
+La propuesta anterior de §§2.3 y 3 de este documento queda **sustituida** por la arquitectura de [coordinación del bootstrap LOCAL](local-bootstrap-coordination-architecture.md), que es la referencia vigente para el origen de la solicitud y el descriptor.
+
+No habrá un servicio separado que firme desafíos. El helper no recibirá un descriptor ni un challenge fabricado por Python. En su lugar, leerá el descriptor esperado desde configuración protegida del host, presentará esos términos al operador, recogerá la confirmación en su TTY, realizará PAM y generará internamente request_id, nonce y proof_id. La prueba firmada enlazará el digest/revisión de esa configuración y todos los atributos observados.
+
+La configuración protegida define qué bootstrap está permitido solicitar; no demuestra que siga pendiente. El verificador CAM debe comprobar el estado pendiente dentro de la transacción de génesis. La prueba firmada no abre el gate por sí misma.
+
+El consumo único de proof_id/request_id/nonce y el evento DOMAIN_BOOTSTRAPPED deben confirmarse en la misma SQLiteUnitOfWork que la creación de identidad y binding. Un fallo revierte todo; un commit ambiguo se resuelve por idempotencia exacta, no emitiendo una segunda identidad.
+
+El bootstrap_binding_id es un slot de propietario estable configurado, no un UserId. SQLiteIdentityAuthority genera el UserId canónico durante la transacción; el binding hacia ese UserId se registra en la misma UoW.
+
+El resto del contrato de firma, expiración, validación estricta, TTY, PAM, replay y límites sigue vigente en cuanto no contradiga esta resolución. El layout binario, la invocación privilegiada, la custodia de clave y los límites temporales siguen pendientes.
