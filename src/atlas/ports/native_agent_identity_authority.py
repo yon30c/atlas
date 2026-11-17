@@ -5,7 +5,6 @@ from typing import Protocol
 
 from atlas.core.agent_identity import CanonicalAgentIdentity
 from atlas.core.native_agent_identity import NativeAgentIdentityBinding
-from atlas.core.native_identity import NativeIdentityIssuer
 
 
 class NativeAgentIdentityAuthorityPort(Protocol):
@@ -24,12 +23,12 @@ class NativeAgentIdentityAuthorityPort(Protocol):
     def create_native_agent_binding(
         self,
         identity: CanonicalAgentIdentity,
-        issuer: NativeIdentityIssuer,
+        issuer_id: str,
         subject_digest: str,
         *,
         verified_at: datetime,
     ) -> NativeAgentIdentityBinding:
-        """Bind an existing canonical AGENT to a registered issuer."""
+        """Bind an existing canonical AGENT to a previously registered issuer ID."""
 
     def revoke_native_agent_binding(
         self,
