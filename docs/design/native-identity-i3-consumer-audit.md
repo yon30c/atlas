@@ -331,3 +331,14 @@ No se implementa todavía `verify_for_operation`, emisión de `VerifiedAgentDele
 Tests focalizados añadidos: éxito y auditoría, evidencia manipulada/expirada, otro propietario, revisión obsoleta, registro ausente y rollback tras escritura.
 
 **Validación Debian:** pendiente de ejecución por el propietario; no declarar el slice validado hasta recibir resultados.
+
+
+## 18. I3-2B.5 — evidencia de operación delegada
+
+Se implementó un servicio separado `VerifiedAgentDelegationContextService` para emitir y revalidar evidencia efímera de consentimiento AGENT. La configuración de realm, audience, TTL, reloj y attestor pertenece al composition root; los argumentos del caller ya no permiten elegir esos parámetros. `SQLiteAgentDelegationAuthority.verify_for_operation` delega a un verificador configurado y deniega si falta.
+
+La emisión revalida el contexto AGENT dentro de la UoW compartida, enlaza identidad AGENT e issuer con la delegación exacta, y comprueba propietario USER activo, AGENT activo, binding nativo activo, delegación ACTIVE/ventana/revisión, Grant exacto/no revocado/revisión, proyecto, entorno y subconjuntos de recursos/acciones. La evidencia se firma con HMAC y TTL máximo de un minuto.
+
+La revalidación posterior verifica attestation, configuración confiable, TTL, claims, estado/revisión de delegación y Grant, propietario, identidad AGENT y binding nativo. La variante `verify_in_unit_of_work` no controla el commit del caller. Esta evidencia no es autorización CAM.
+
+**Límite preservado:** no se conecta a `GrantRenewalService.request_renewal`, no se habilita runtime AGENT, login ni endpoints. La ruta de renovación sigue fail-closed. Validación Debian pendiente del propietario; no se declaran pruebas aprobadas hasta recibir el resultado de la suite y compileall.
