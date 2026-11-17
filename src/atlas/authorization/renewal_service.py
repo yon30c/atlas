@@ -15,6 +15,7 @@ from atlas.authorization.models import (
     RenewalStatus,
 )
 from atlas.core.context import OperationContext
+from atlas.core.identity import IdentityKind, IdentityStatus
 from atlas.core.errors import (
     AuthorizationError,
     ConcurrencyError,
@@ -24,7 +25,11 @@ from atlas.core.errors import (
 from atlas.core.user_identity import CanonicalUserIdentity
 from atlas.core.verified_identity_context import VerifiedIdentityContext
 from atlas.core.verified_agent_identity_context import VerifiedAgentIdentityContext
-from atlas.core.agent_delegation import VerifiedAgentDelegationContext
+from atlas.core.agent_delegation import (
+    AgentDelegation,
+    AgentDelegationStatus,
+    VerifiedAgentDelegationContext,
+)
 from atlas.ports.clock import Clock
 from atlas.ports.verified_agent_identity_context_verifier import VerifiedAgentIdentityContextVerifierPort
 from atlas.ports.verified_agent_delegation_context_verifier import VerifiedAgentDelegationContextVerifierPort
@@ -254,7 +259,13 @@ class GrantRenewalService:
                     "El vencimiento del Grant cambió desde la solicitud"
                 )
 
-            self._validate_grant_active(grant, now)
+            decision_time = now
+            if request.delegation_id is not None:
+                decision_time = self._require_current_agent_renewal_authority(
+                    uow, request, grant
+                )
+
+            self._validate_grant_active(grant, decision_time)
 
             expected_version = request.version
             updated_grant = replace(
@@ -265,7 +276,7 @@ class GrantRenewalService:
             approved_request = replace(
                 request,
                 status=RenewalStatus.APPROVED,
-                decided_at=now,
+                decided_at=decision_time,
                 decided_by_user_id=canonical.user_id,
                 version=expected_version + 1,
             )
@@ -325,6 +336,101 @@ class GrantRenewalService:
             uow.commit()
 
         return rejected_request
+
+    def _require_current_agent_renewal_authority(
+        self,
+        unit_of_work: AuthorizationUnitOfWork,
+        request: GrantRenewalRequest,
+        grant: Grant,
+    ) -> datetime:
+        """Revalidate AGENT authority at USER approval time in the shared UoW."""
+        required = (
+            "agent_delegations", "identity", "agent_identity",
+            "native_agent_identity", "project_environments", "workspaces",
+        )
+        if any(getattr(unit_of_work, name, None) is None for name in required):
+            raise AuthorizationError(
+                "No están disponibles todas las autoridades para revalidar la renovación AGENT"
+            )
+        if self._clock is None or not callable(getattr(self._clock, "now", None)):
+            raise AuthorizationError("Se requiere reloj confiable para aprobar una solicitud AGENT")
+        try:
+            decision_time = self._clock.now()
+            self._validate_utc(decision_time, "clock.now()")
+            delegation = unit_of_work.agent_delegations.get(request.delegation_id)
+            if not isinstance(delegation, AgentDelegation):
+                raise AuthorizationError("La delegación canónica ya no existe")
+            if (
+                delegation.status is not AgentDelegationStatus.ACTIVE
+                or delegation.revision != request.delegation_revision
+                or delegation.delegation_id != request.delegation_id
+                or not (delegation.not_before <= decision_time < delegation.expires_at)
+                or delegation.grant_id != grant.grant_id
+                or delegation.grant_revision != request.grant_revision
+                or delegation.grant_revision != grant.revision
+                or delegation.owner_user_id != request.owner_user_id
+                or delegation.agent_identity_id != request.requested_by_identity_id
+                or delegation.agent_identity_id != grant.subject_identity_id
+                or delegation.project_id != grant.project_id
+                or delegation.environment != grant.environment
+                or delegation.scope.resource_type != grant.resource_type
+                or delegation.scope.resource_ids != grant.resource_ids
+                or "grant.renewal.request" not in delegation.scope.actions
+                or "grant.renewal.request" not in grant.actions
+                or delegation.expires_at > grant.expires_at
+            ):
+                raise AuthorizationError(
+                    "La delegación AGENT fue revocada, cambió o ya no cubre exactamente el Grant"
+                )
+
+            owner = unit_of_work.identity.get_user_by_identity_id(
+                delegation.owner_identity_id
+            )
+            agent = unit_of_work.agent_identity.get_agent_by_identity_id(
+                delegation.agent_identity_id
+            )
+            if (
+                owner is None
+                or owner.user_id != delegation.owner_user_id
+                or owner.identity.kind is not IdentityKind.USER
+                or owner.identity.status is not IdentityStatus.ACTIVE
+                or agent is None
+                or agent.identity.identity_id != delegation.agent_identity_id
+                or agent.identity.kind is not IdentityKind.AGENT
+                or agent.identity.status is not IdentityStatus.ACTIVE
+                or not unit_of_work.native_agent_identity.has_active_native_agent_binding(
+                    delegation.agent_identity_id, delegation.issuer_id
+                )
+            ):
+                raise AuthorizationError(
+                    "La identidad owner, AGENT o su binding nativo ya no está activo"
+                )
+
+            project = unit_of_work.project_environments.get_project(grant.project_id)
+            environment = unit_of_work.project_environments.get_environment(grant.environment)
+            association = unit_of_work.workspaces.get_association(
+                grant.project_id, grant.environment
+            )
+            if (
+                project is None or project.status != "active"
+                or str(project.project_id) != grant.project_id
+                or environment is None or environment.status != "active"
+                or str(environment.environment_id) != grant.environment
+                or association is None
+                or association.status.value != "active"
+                or str(association.project_id) != grant.project_id
+                or str(association.environment_id) != grant.environment
+            ):
+                raise AuthorizationError(
+                    "La asociación Project/Environment ya no está activa"
+                )
+            return decision_time
+        except AuthorizationError:
+            raise
+        except Exception as exc:
+            raise AuthorizationError(
+                "No se pudo revalidar la autoridad AGENT dentro de la transacción"
+            ) from exc
 
     @staticmethod
     def _get_grant(
