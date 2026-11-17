@@ -27,6 +27,7 @@ from atlas.core.context import OperationContext
 from atlas.core.errors import AuthorizationError, ContractError
 from atlas.core.identity import IdentityKind, IdentityStatus
 from atlas.memory.models import EnvironmentId, ProjectId
+from atlas.ports.workspace_mounts import WorkspaceMountResolver
 from atlas.workspace.models import (
     ProjectEnvironmentStatus,
     WorkspaceStatus,
@@ -80,7 +81,7 @@ class WorkspaceCapabilityExecutionService:
         self,
         *,
         unit_of_work_factory: SQLiteLocalAuthorityUnitOfWorkFactory,
-        mount_resolver: object,
+        mount_resolver: WorkspaceMountResolver,
         catalog: CapabilityCatalog | None = None,
         evaluator: AuthorizationEvaluator | None = None,
     ) -> None:
