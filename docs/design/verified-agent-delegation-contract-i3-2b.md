@@ -367,7 +367,7 @@ Por esa razón:
 - No se habilita request_renewal ni ninguna operación delegada.
 - No debe exponerse el repositorio como API de aplicación ni llamarse sin un servicio de autoridad que valide owner evidence y revalide el Grant dentro de la misma transacción.
 
-I3-2B.3B debe implementar el verificador USER/AGENT transaccional y la autoridad de emisión/revocación; la emisión de contexto verificado queda condicionada a firma/verificación criptográfica y revalidación del Grant/identidad/binding en cada operación. No se afirmará atomicidad fuera de la UoW compartida.
+En el checkpoint de I3-2B.3A, I3-2B.3B aún debía implementar el verificador USER/AGENT transaccional y la autoridad de emisión/revocación. El soporte de verificación dentro de UoW compartida quedó implementado en I3-2B.3B.3 (sección 16); la autoridad de delegación y la emisión de contexto delegado siguen pendientes. No se afirmará atomicidad fuera de la UoW compartida.
 
 
 ## 14. I3-2B.3B.1 — admisión y revalidación de identidad AGENT
