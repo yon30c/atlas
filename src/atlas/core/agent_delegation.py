@@ -69,10 +69,6 @@ class AgentDelegation:
     owner_user_id: str
     owner_identity_id: str
     agent_identity_id: str
-    agent_identity_revision: int
-    agent_context_id: str
-    agent_binding_id: str
-    agent_binding_revision: int
     grant_id: str
     grant_revision: int
     project_id: str
@@ -133,6 +129,10 @@ class VerifiedAgentDelegationContext:
     owner_user_id: str
     owner_identity_id: str
     agent_identity_id: str
+    agent_identity_revision: int
+    agent_context_id: str
+    agent_binding_id: str
+    agent_binding_revision: int
     grant_id: str
     grant_revision: int
     project_id: str
