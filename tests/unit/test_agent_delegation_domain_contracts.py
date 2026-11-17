@@ -160,6 +160,8 @@ class AgentDelegationDomainContractTests(unittest.TestCase):
         self.assertEqual(delegation.agent_identity_id, self.agent_id)
         self.assertEqual(delegation.grant_revision, 4)
         with self.assertRaises(ContractError):
+            self._delegation(agent_identity_id=self.owner_identity_id)
+        with self.assertRaises(ContractError):
             self._delegation(not_before=self.now - timedelta(seconds=1))
         with self.assertRaises(ContractError):
             self._delegation(expires_at=self.now)
@@ -197,10 +199,10 @@ class AgentDelegationDomainContractTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             replace(context, expires_at=context.verified_at)
 
-    def test_verified_delegation_context_rejects_user_identity_as_agent(self):
+    def test_verified_delegation_context_rejects_noncanonical_identity_ids(self):
         context = self._delegation_context()
         with self.assertRaises(ContractError):
-            replace(context, agent_identity_id=self.owner_user_id, delegation_id="invalid")
+            replace(context, agent_identity_id="not-a-canonical-uuid")
 
 
 if __name__ == "__main__":
