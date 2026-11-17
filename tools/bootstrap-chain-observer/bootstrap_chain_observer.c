@@ -289,7 +289,8 @@ aco_result aco_evaluate(aco_report *report) {
         report->self_stat.session != report->self_sid ||
         report->self_stat.pgrp != report->self_pgrp ||
         report->self_stat.tty_nr != direct->stat.tty_nr ||
-        report->self_stat.tpgid != report->foreground_pgrp) {
+        (report->tty_available &&
+         report->self_stat.tpgid != report->foreground_pgrp)) {
         report->reason = "DIRECT_PARENT_OR_SESSION_RELATION_MISMATCH";
         return report->result = ACO_CHAIN_MISMATCH;
     }
@@ -382,14 +383,14 @@ int aco_collect(aco_report *report) {
     report->self_parent_pid = initial_parent;
     report->self_sid = (int32_t)getsid(0);
     report->self_pgrp = (int32_t)getpgrp();
+    report->chain_stable = true;
+    report->pidfds_stable = true;
+    report->collection_complete = true;
     report->self_stat_available =
         capture_self_stat(report->self_pid, &report->self_stat);
-    report->chain_stable = true;
     if (!report->self_stat_available) {
         report->collection_complete = false;
     }
-    report->pidfds_stable = true;
-    report->collection_complete = true;
 
     tty_fd = open("/dev/tty", O_RDONLY | O_CLOEXEC | O_NOCTTY);
     if (tty_fd >= 0) {
