@@ -192,11 +192,11 @@ Cambio aplicado en la rama:
 
 **Validación de I3-2B.6D pendiente:** los tests y compileall deben ejecutarse en Debian sobre el HEAD actualizado.
 
-### Relación Project/Environment — resultado de inspección
+### Relación Project/Environment — corrección de inspección
 
-El adaptador canónico actual expone `get_project(project_id)` y `get_environment(environment_id)` sobre catálogos separados (`atlas_projects` y `atlas_environments`). Los modelos recuperados solo contienen identificador, estado y revisión; no existe una tabla, clave o contrato de asociación Project-Environment en esta capa.
+La asociación canónica **sí existe** desde `CORE_SCHEMA_V18` (`atlas_project_environments`). La implementan `ProjectEnvironmentAssociation`, `ProjectEnvironmentStatus` y `SQLiteWorkspaceRegistryRepository.get_association/create_association/update_association`. La clave compuesta es (project_id, environment_id), la identidad de la asociación es inmutable, tiene revisión CAS y estado active/suspended. La creación exige que Project y Environment existan; el workspace registry ya exige asociación activa al crear Workspaces.
 
-Por tanto, 6C puede comprobar que ambos registros existen, están activos y coinciden con los IDs del Grant, pero no puede afirmar que el Environment pertenezca al Project. No se añadió una asociación implícita ni una regla ad hoc. Si el producto requiere esa relación, deberá modelarse explícitamente —incluyendo migración, autoridad/puerto, reglas de lifecycle y pruebas— antes de hacerla obligatoria en la renovación.
+La auditoría anterior se limitó incorrectamente a `SQLiteProjectEnvironmentRepository` y no siguió la autoridad del workspace registry. La renovación 6C resolvía Project y Environment pero omitía consultar la asociación existente. No hace falta nueva migración ni nuevo modelo: I3-2B.6E conecta la renovación a `uow.workspaces.get_association` dentro de la misma UoW y falla cerrada si la relación falta o está suspendida.
 
 ### Estado
 
@@ -225,3 +225,14 @@ El servicio productivo `VerifiedIdentityContextService` ya implementa `verify_in
 **Estado de validación:** I3-2B.6B/6C y 6D están validados por el propietario en Debian. La evidencia se refiere al HEAD correspondiente a los cambios 6D reportados; confirmar SHA local/remoto antes de etiquetar releases o habilitar runtime.
 
 **Límites sin cambio:** no se ha modelado una asociación canónica Project-Environment; no se habilitan endpoints, login ni runtime AGENT. PR #16 permanece Draft, abierto y sin fusionar.
+
+
+### I3-2B.6E — exigir la asociación canónica Project/Environment
+
+- `GrantRenewalService.request_renewal` exige ahora el repositorio `workspaces` en la UoW compartida.
+- Después de resolver Project y Environment activos, consulta la asociación exacta por ambos IDs mediante `uow.workspaces.get_association`.
+- La solicitud AGENT se deniega si la asociación no existe, está suspendida o sus IDs no coinciden exactamente.
+- No se añadió migración: se reutiliza el contrato y la tabla V18 existentes.
+- Se añadieron pruebas de servicio para asociación inexistente y suspendida, ambas sin escritura ni commit.
+
+**Validación I3-2B.6E pendiente:** ejecutar tests focalizados, suite completa y compileall en Debian sobre el HEAD que incluye 6E.
