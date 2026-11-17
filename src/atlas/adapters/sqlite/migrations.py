@@ -1626,7 +1626,7 @@ CORE_SCHEMA_V18 = SQLiteMigration(
         owner_user_id TEXT NOT NULL,
         project_id TEXT NOT NULL,
         environment_id TEXT NOT NULL,
-        root_ref TEXT NOT NULL CHECK (length(trim(root_ref)) > 0),
+        root_ref TEXT NOT NULL CHECK (length(trim(root_ref)) > 6 AND substr(root_ref, 1, 6) = 'mount:' AND instr(root_ref, '/') = 0 AND instr(root_ref, char(92)) = 0),
         status TEXT NOT NULL CHECK (status IN ('active', 'suspended', 'disabled')),
         revision INTEGER NOT NULL CHECK (revision > 0),
         created_at TEXT NOT NULL,
