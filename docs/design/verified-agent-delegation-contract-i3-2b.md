@@ -368,3 +368,22 @@ Por esa razón:
 - No debe exponerse el repositorio como API de aplicación ni llamarse sin un servicio de autoridad que valide owner evidence y revalide el Grant dentro de la misma transacción.
 
 I3-2B.3B debe implementar el verificador USER/AGENT transaccional y la autoridad de emisión/revocación; la emisión de contexto verificado queda condicionada a firma/verificación criptográfica y revalidación del Grant/identidad/binding en cada operación. No se afirmará atomicidad fuera de la UoW compartida.
+
+
+## 14. I3-2B.3B.1 — admisión y revalidación de identidad AGENT
+
+**Implementación publicada; pendiente de validación en Debian.**
+
+Se añade `VerifiedAgentIdentityContextService` en `src/atlas/identity/verified_agent_identity_context_service.py`, separado del servicio USER existente:
+- Consume el mismo formato de proof nativo one-shot, pero resuelve el sujeto exclusivamente mediante `native_agent_identity` y `agent_identity`.
+- Verifica issuer/realm y perfil nativo, audience del proof, binding AGENT activo, timestamp de verificación del binding, identidad canónica AGENT activa y revisiones exactas.
+- Proof consumption, binding lookup y resolución canónica ocurren dentro de una sola `SQLiteLocalAuthorityUnitOfWork`; los errores posteriores revierten el consumo.
+- Emite exclusivamente `VerifiedAgentIdentityContext`, sin UserId, con protocolo, realm y audience incluidos en el payload HMAC y en el dominio criptográfico `atlas.verified-agent-identity-context.v1`.
+- `verify(context)` revalida attestation, TTL, realm/audience, issuer, binding y revisión/estado de identidad en cada llamada; satisface el contrato de `VerifiedAgentIdentityContextVerifierPort`.
+- No amplía ni reutiliza `VerifiedIdentityContext` USER.
+
+Pruebas nuevas: `tests/unit/test_verified_agent_identity_context_service.py`, incluyendo admisión, replay, audience/realm, HMAC adulterado, clave distinta, binding revocado, identidad suspendida, proof anterior a la verificación del binding, rollback y expiración.
+
+### Límites pendientes
+
+Este slice no implementa la autoridad de delegación ni emite `VerifiedAgentDelegationContext`. La autenticación nativa que emite proofs sigue siendo un servicio separado y requiere composición/guardia de intentos; no se habilita endpoint/login AGENT. El siguiente paso es construir la autoridad de delegación sobre owner USER verificado + AGENT verificado y Grant exacto dentro de la misma UoW.
