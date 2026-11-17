@@ -1,15 +1,15 @@
 # Contrato de validación de privilegios para bootstrap LOCAL (candidato A)
 
-**Estado:** V1 aislada completada; implementación V2 de observación Linux publicada y pendiente de pruebas Debian del propietario. Contrato general abierto; candidato A no aprobado para ejecución privilegiada.  
+**Estado:** V1 y V2 completadas y validadas en Debian; V3 (observador diagnóstico de cadena sudo) implementada y pendiente de validación Debian. Contrato general abierto; candidato A no aprobado para ejecución privilegiada.  
 **Rama:** `feature/terminal-commands`.  
 **Fecha:** 16 de noviembre de 2026.  
-**Relacionado:** `local-bootstrap-privilege-boundary.md`, `local-pam-bootstrap-authenticator.md`, `local-pam-bootstrap-proof-protocol.md`, `local-bootstrap-coordination-architecture.md`.
+**Relacionado:** `local-bootstrap-privilege-boundary.md`, `local-pam-bootstrap-authenticator.md`, `local-pam-bootstrap-proof-protocol.md`, `local-bootstrap-coordination-architecture.md`, `local-bootstrap-chain-observer-v3-design.md`.
 
 ## 1. Propósito y decisión actual
 
 Este documento convierte las observaciones del prototipo C en requisitos verificables para evaluar el candidato A: helper C root-owned, ejecutado directamente mediante sudo, con autenticación PAM propia.
 
-El contrato no aprueba A ni autoriza implementar o instalar el helper privilegiado. Define las condiciones que deberán demostrarse antes de considerar ese candidato. Por decisión del propietario del 16-11-2026, el alcance V1 descrito en `local-bootstrap-validator-v1-design.md` quedó implementado y validado: parser/evaluador aislado basado en fixtures, sin recolector de procesos real, privilegios, PAM, claves, configuración protegida, SQLite ni CAM.
+El contrato no aprueba A ni autoriza implementar o instalar el helper privilegiado. Define las condiciones que deberán demostrarse antes de considerar ese candidato. V1 (parser/evaluador puro), V2 (observador Linux genérico) y V3 (observador diagnóstico de cadena sudo) son prototipos no privilegiados separados. La aprobación del propietario del 16-11-2026 para V3 cubre solo código diagnóstico, pruebas y documentación; no cubre PAM, claves, configuración protegida, SQLite, CAM, instalación ni ejecución privilegiada.
 
 **Decisión provisional:** A continúa como candidato preferido por su menor superficie operativa. B (servicio privilegiado con socket Unix, `SO_PEERCRED` y TTY transferido) permanece como alternativa. Si una condición obligatoria de A no puede demostrarse en el Debian real, no se debilita el requisito: A se descarta y se reevalúa B.
 
@@ -250,9 +250,9 @@ Condiciones obligatorias:
 
 V1 quedó validada mediante compilación estricta, suite ampliada y ejecución con AddressSanitizer/UndefinedBehaviorSanitizer en Debian, según los resultados comunicados por el propietario. La aprobación posterior y explícita del propietario del 16-11-2026 autoriza únicamente la V2 definida en `local-bootstrap-observer-v2-design.md`, bajo sus límites de solo observación, sin instalación ni cambios del host.
 
-### Etapa V2 — observador Linux de solo lectura (IMPLEMENTADA; VALIDACIÓN DEBIAN PENDIENTE)
+### Etapa V2 — observador Linux de solo lectura (COMPLETADA Y VALIDADA EN DEBIAN)
 
-El propietario aprobó expresamente el 16-11-2026 la implementación de V2 según `local-bootstrap-observer-v2-design.md`; el código y la documentación ya están publicados, pero la compilación y pruebas Debian del propietario siguen pendientes. El alcance incluye un adaptador Linux separado que observa el proceso actual y su padre directo mediante lecturas acotadas de procfs, pidfd, metadatos de `/proc/PID/exe` y consultas TTY. Reutiliza los parsers/evaluador puros V1, sin modificar su semántica.
+El propietario aprobó expresamente el 16-11-2026 la implementación de V2 según `local-bootstrap-observer-v2-design.md`. El propietario confirmó en Debian compilación estricta, suite automatizada y escenarios manuales local, sudo, SSH con PTY, shell intermediario, ausencia de PTY y cambios de foreground. V2 observa el proceso actual y su padre directo mediante lecturas acotadas de procfs, pidfd, metadatos de `/proc/PID/exe` y consultas TTY. Reutiliza los parsers/evaluador puros V1, sin modificar su semántica.
 
 La aprobación permite escribir y documentar el observador no privilegiado, su suite automatizada y comandos de pruebas manuales. No autoriza instalación, paquetes, cambios del host, PAM, claves, configuración protegida, sudoers, systemd, SSH, Broker, SQLite, CAM, red ni runtime. El programa no invoca sudo ni solicita privilegios; los escenarios sudo/SSH son decisiones manuales del propietario después de recibir el código.
 
@@ -266,7 +266,17 @@ Escenarios de integración previstos:
 
 No se cambia timestamp, no se habilita NOPASSWD, no se usa sudo -S y no se altera ninguna política. Los binarios se ejecutan desde `/tmp`. La salida nunca autoriza bootstrap ni prueba la procedencia del PTY.
 
-### Etapa V3 — pruebas negativas de autoridad
+### Etapa V3 — observador diagnóstico de cadena sudo (IMPLEMENTADO; VALIDACIÓN DEBIAN PENDIENTE)
+
+El propietario autorizó el 16-11-2026 desarrollar conjuntamente los puntos 1–7 como prototipo C no privilegiado. El diseño está en `local-bootstrap-chain-observer-v3-design.md` y el código en `tools/bootstrap-chain-observer/`.
+
+El prototipo observa el padre directo, clasifica metadatos compatibles con sudo setuid root, compara UID/GID, SID/PGID/TTY, recorre la cadena sudo contigua hasta el primer ancestro no sudo, verifica el TTY de origen contra el sudo monitor, abre pidfd para cada nodo y compara dos muestras. Un wrapper como padre directo se rechaza; la presencia de sudo más arriba no lo convierte en directo. Un TTY interno de sudo no debe ocultar que el ancestro de origen carece de TTY.
+
+Resultados limitados a `CHAIN_PATTERN_MATCHED_DIAGNOSTICALLY`, `CHAIN_MISMATCH` y `CHAIN_INCOMPLETE`, siempre con `AUTHORIZATION=NOT_PROVIDED`. La coincidencia no prueba identidad de paquete, política sudo efectiva, autenticidad SSH, presencia física ni autorización. No integra PAM, helper privilegiado, configuración protegida, claves, Broker, SQLite, CAM o runtime.
+
+El propietario debe ejecutar `sh tools/bootstrap-chain-observer/test_chain.sh` en Debian antes de considerar V3 validada. Después se ejecutarán los escenarios manuales documentados, sin alterar sudoers, timestamp, PAM, SSH ni configuración del host.
+
+### Etapa V4 — pruebas negativas de autoridad
 
 En entorno controlado, después de aprobar explícitamente:
 - ejecución directa por greed sin sudo;
@@ -281,7 +291,7 @@ En entorno controlado, después de aprobar explícitamente:
 
 No ejecutar esta etapa todavía. Requiere diseño y aprobación separados; no implica instalar el helper de producción.
 
-### Etapa V4 — decisión A/B
+### Etapa V5 — decisión A/B
 
 A solo puede aprobarse si:
 - el padre directo y la política sudo son verificables;
@@ -320,4 +330,4 @@ No:
 - conectar el helper con el runtime;
 - aceptar observaciones diagnósticas como autorización.
 
-**Estado:** V1 aislada completada y validada. V2 de observación Linux implementada y publicada según su diseño dedicado; las pruebas del propietario en Debian quedan pendientes. El contrato general permanece abierto y el candidato A no está aprobado. V3/V4, PAM, helper privilegiado o cambios del host requieren diseño, revisión y aprobación separados.
+**Estado:** V1 y V2 completadas y validadas en Debian. V3 de observación específica de la cadena sudo implementada y pendiente de validación Debian. El contrato general permanece abierto y el candidato A no está aprobado para ejecución privilegiada. Las pruebas negativas de autoridad, decisión A/B, PAM, helper privilegiado o cambios del host requieren diseño, revisión y aprobación separados.
