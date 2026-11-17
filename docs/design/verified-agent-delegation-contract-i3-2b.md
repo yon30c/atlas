@@ -436,3 +436,22 @@ El issuer persistido se toma del contexto USER ya verificado. La escritura del r
 Pruebas nuevas: `tests/unit/test_sqlite_agent_delegation_authority.py`. Incluyen emisión canónica, contexto manipulado/expirado, binding revocado, Grant revocado, scope expansion, tipo de recurso distinto, ventana inválida y rollback después de insertar.
 
 **Límite del slice:** solo se implementa emisión `create_for_grant`. No implementa revocación de autoridad, `verify_for_operation`, emisión de `VerifiedAgentDelegationContext`, CAM final, runtime/login AGENT ni renueva Grants. `GrantRenewalService.request_renewal` continúa fail-closed. La suite y compileall están pendientes de ejecución por el propietario en Debian.
+
+
+## 17. I3-2B.4B — revocación owner-verified de delegaciones
+
+Se implementó `SQLiteAgentDelegationAuthority.revoke_delegation` como operación owner-only:
+
+- Requiere `VerifiedIdentityContext` USER y `expected_revision` positivo; no acepta un timestamp de revocación suministrado por el caller.
+- Revalida la attestation USER, issuer, binding, identidad canónica y revisiones mediante `verify_in_unit_of_work` dentro de la misma `SQLiteLocalAuthorityUnitOfWork`.
+- Carga la delegación canónica en esa misma UoW y exige coincidencia exacta de `owner_user_id` y `owner_identity_id` con el propietario verificado.
+- Deriva `revoked_at` del reloj confiable inyectado después de adquirir la transacción.
+- Persiste la transición ACTIVE → REVOKED mediante el CAS ya implementado por `SQLiteAgentDelegationRepository.revoke`; el propietario de auditoría se deriva del `CanonicalUserIdentity`.
+- Commit ocurre solo después de la escritura. Una excepción posterior a la escritura provoca rollback de la misma UoW.
+- La revisión obsoleta, la delegación inexistente, evidencia inválida/expirada o un propietario distinto deniegan sin modificar el registro.
+
+La revocación no modifica el Grant, no reactiva ni edita claims, y no emite `VerifiedAgentDelegationContext`. `verify_for_operation`, CAM delegado, runtime AGENT y `GrantRenewalService.request_renewal` permanecen fuera de alcance/fail-closed.
+
+Tests añadidos en `tests/unit/test_sqlite_agent_delegation_authority.py`: revocación válida/auditoría, evidencia USER manipulada o expirada, owner distinto, CAS obsoleto, delegación ausente y rollback después de la escritura.
+
+**Validación Debian:** pendiente de ejecución por el propietario. No se afirma que las pruebas hayan pasado.
