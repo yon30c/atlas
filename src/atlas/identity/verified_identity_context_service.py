@@ -85,6 +85,19 @@ class VerifiedIdentityContextService:
         self._audience = audience
         self._context_ttl = context_ttl
 
+    def _attestation_payload(self, context: VerifiedIdentityContext) -> bytes:
+        # Domain-separate attestations by protocol version, realm and audience.
+        # This prevents a context minted for one internal consumer from being
+        # replayed against another consumer even when they share an HMAC key.
+        prefix = (
+            "atlas.verified-identity-context.v1\\0"
+            + self._realm
+            + "\\0"
+            + self._audience
+            + "\\0"
+        ).encode("ascii")
+        return prefix + context.attestation_payload()
+
     def _now(self) -> datetime:
         value = self._clock.now()
         if (
@@ -172,7 +185,7 @@ class VerifiedIdentityContextService:
                         # A valid-shaped placeholder is excluded from the payload.
                         attestation=secrets.token_urlsafe(32),
                     )
-                    signature = self._attestor.sign(provisional.attestation_payload())
+                    signature = self._attestor.sign(self._attestation_payload(provisional))
                     context = replace(provisional, attestation=signature)
                     unit.commit()
 
@@ -204,7 +217,7 @@ class VerifiedIdentityContextService:
             raise VerifiedIdentityContextRejected("contexto de identidad no válido")
         try:
             if not self._attestor.verify(
-                context.attestation_payload(), context.attestation
+                self._attestation_payload(context), context.attestation
             ):
                 raise VerifiedIdentityContextRejected(
                     "contexto de identidad no válido"
