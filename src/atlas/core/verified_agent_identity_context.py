@@ -95,6 +95,5 @@ class VerifiedAgentIdentityContext:
         return (
             "VerifiedAgentIdentityContext("
             f"context_id={self.context_id!r}, identity_id={self.identity_id!r}, "
-            f"binding_id={self.binding_id!r}, issuer_id={self.issuer_id!r}, "
-            "verification_ref=<redacted>, attestation=<redacted>)"
+            f"binding_id={self.binding_id!r}, issuer_id={self.issuer_id!r})"
         )
