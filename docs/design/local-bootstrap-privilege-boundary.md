@@ -324,6 +324,25 @@ La política aprobada sigue excluyendo SSH sin PTY. Sin embargo, el mecanismo co
 
 **Conclusión:** la integridad básica del ejecutable sudo y la configuración observada son compatibles con continuar evaluando A. No aprueban el diseño ni sustituyen el prototipo de validación C. La cuenta greed conserva autoridad administrativa irrestricta; el modelo no protege contra ese administrador actuando maliciosamente.
 
+
+## 4.6 Diagnóstico del TTY controlador del padre sudo (16-11-2026)
+
+Para investigar el efecto de `use_pty`, el probe diagnóstico se amplió para observar, sin tomar decisiones:
+
+- `/proc/<sudo-pid>/stat`: estado, PPID, PGID, SID, `tty_nr` y `tpgid` del padre directo.
+- destinos informativos de los descriptores 0, 1 y 2 del padre directo (`/proc/<sudo-pid>/fd/{0,1,2}`).
+- se mantienen las observaciones del ejecutable padre, UID/GID, pidfd y TTY controlador del helper.
+
+Hipótesis a contrastar, no asumida como hecho: si sudo crea un PTY separado para el comando, el helper podría tener un TTY controlador válido mientras el proceso sudo que lo lanzó conserva `tty_nr=0` cuando el cliente SSH no solicitó PTY. En SSH con PTY, se espera observar un TTY controlador en el padre sudo. Los resultados reales deben decidir si esta distinción existe y es estable en la versión/configuración instalada.
+
+Límites:
+- `tty_nr` y los enlaces de FD son observaciones de `/proc`, no una prueba criptográfica ni una instantánea atómica.
+- Un padre puede cerrar/reabrir descriptores; los enlaces pueden cambiar durante la lectura.
+- El diagnóstico no sigue procesos ancestros ni intenta atribuir origen físico/remoto.
+- La salida no autoriza bootstrap y no se utilizará como condición de seguridad hasta que se diseñe una validación robusta y se cubran carreras y casos negativos.
+
+**Prueba siguiente:** compilar el probe actualizado en `/tmp` y comparar la ejecución local interactiva, local con sudo y SSH con PTY. La prueba SSH sin PTY con sudo solo es informativa si sudo llega a ejecutar el probe; un rechazo por falta de terminal/credenciales no observa el proceso hijo ni permite concluir sobre `use_pty`. No alterar sudoers, timestamp policy ni PAM para forzar esa ejecución.
+
 ## 5. Entorno, argumentos y descriptores
 
 - Rechazar argc distinto del valor fijo esperado.
