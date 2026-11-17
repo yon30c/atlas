@@ -108,7 +108,7 @@ static void inspect_parent_session(pid_t pid) {
     printf("\n===== SESIÓN Y DESCRIPTORES DEL PADRE (DIAGNÓSTICO) =====\n");
 
     if (snprintf(path, sizeof(path), "/proc/%ld/stat", (long)pid) >= (int)sizeof(path)) {
-        fprintf(stderr, "Ruta /proc stat truncada\\n");
+        fprintf(stderr, "Ruta /proc stat truncada\n");
         return;
     }
 
@@ -120,24 +120,24 @@ static void inspect_parent_session(pid_t pid) {
     n = read(fd, buffer, sizeof(buffer) - 1);
     close(fd);
     if (n <= 0 || n >= (ssize_t)(sizeof(buffer) - 1)) {
-        fprintf(stderr, "stat del padre vacío o excede el límite\\n");
+        fprintf(stderr, "stat del padre vacío o excede el límite\n");
         return;
     }
-    buffer[n] = '\\0';
+    buffer[n] = '\0';
 
     /* comm puede contener espacios y paréntesis: separar por el último ')'. */
     close_paren = strrchr(buffer, ')');
     if (!close_paren ||
         sscanf(close_paren + 1, " %c %ld %ld %ld %d %ld",
                &state, &ppid, &pgrp, &session, &tty_nr, &tpgid) != 6) {
-        fprintf(stderr, "No se pudo parsear stat del padre\\n");
+        fprintf(stderr, "No se pudo parsear stat del padre\n");
         return;
     }
 
-    printf("Padre stat - estado: %c; PPID: %ld; PGID: %ld; SID: %ld\\n",
+    printf("Padre stat - estado: %c; PPID: %ld; PGID: %ld; SID: %ld\n",
            state, ppid, pgrp, session);
-    printf("Padre stat - tty_nr: %d; TPGID: %ld\\n", tty_nr, tpgid);
-    printf("Nota: tty_nr=0 suele indicar que el padre no tiene TTY controlador.\\n");
+    printf("Padre stat - tty_nr: %d; TPGID: %ld\n", tty_nr, tpgid);
+    printf("Nota: tty_nr=0 suele indicar que el padre no tiene TTY controlador.\n");
 
     for (int i = 0; i <= 2; i++) {
         char fd_path[96];
@@ -150,10 +150,10 @@ static void inspect_parent_session(pid_t pid) {
         }
         target_len = readlink(fd_path, target, sizeof(target) - 1);
         if (target_len < 0) {
-            printf("Padre fd %d: no disponible (%s)\\n", i, strerror(errno));
+            printf("Padre fd %d: no disponible (%s)\n", i, strerror(errno));
         } else {
-            target[target_len] = '\\0';
-            printf("Padre fd %d -> %s\\n", i, target);
+            target[target_len] = '\0';
+            printf("Padre fd %d -> %s\n", i, target);
         }
     }
 }
