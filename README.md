@@ -358,6 +358,7 @@ Estas son ejecuciones locales; no son resultados de GitHub Actions ni validació
 - [ME-D4O — bootstrap e integración de autoridad SQLite](docs/design/ME-D4O-sqlite-authority-bootstrap-and-integration.md)
 - [ME-D4O-A — bootstrap autenticado por perfil](docs/design/ME-D4O-A-authenticated-domain-bootstrap.md)
 - [Autenticador PAM local para bootstrap](docs/design/local-pam-bootstrap-authenticator.md)
+- [Protocolo de prueba para bootstrap LOCAL](docs/design/local-pam-bootstrap-proof-protocol.md)
 - [ME-D4O-B — admisión durable de lectura](docs/design/ME-D4O-B-durable-read-admission.md)
 - [ME-D4O-I C.2 — verificación y consumo de pruebas de revocación](docs/design/me-d4o-i-c2-proof-verification-and-one-shot-consumption.md)
 - [ME-D4O-I C.3 — coordinación de revocación de Grants](docs/design/me-d4o-i-c3-grant-revocation-coordination.md)
