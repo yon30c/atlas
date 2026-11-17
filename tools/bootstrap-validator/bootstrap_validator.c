@@ -274,11 +274,13 @@ bv_parse_result bv_parse_stat(const unsigned char *d, size_t n,
             } else {
                 v.tpgid = (int32_t)sv;
             }
-        } else if (field == 22) {
+        } else if ((field >= 9 && field <= 15) || field == 22) {
             if (!u64(d + st, e - st, UINT64_MAX, &uv)) {
                 return BV_RANGE;
             }
-            v.starttime = uv;
+            if (field == 22) {
+                v.starttime = uv;
+            }
         } else if (!i64(d + st, e - st, INT64_MIN, INT64_MAX, &sv)) {
             return BV_INVALID;
         }
