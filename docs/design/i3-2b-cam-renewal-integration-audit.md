@@ -201,8 +201,8 @@ La auditoría anterior se limitó incorrectamente a `SQLiteProjectEnvironmentRep
 ### Estado
 
 - I3-2B.6B/6C: checkpoint validado por el propietario con 1,396 tests y compileall 0.
-- I3-2B.6D: implementación publicada en la rama; validación pendiente.
-- Project-Environment association: no representada por el modelo canónico actual; decisión de diseño pendiente.
+- I3-2B.6D: validado por el propietario en Debian con 1,397 tests y compileall 0.
+- Project-Environment association: existe desde V18 y se exige en la ruta AGENT desde I3-2B.6E.
 - PR #16 continúa Draft, abierto y sin fusionar.
 
 
@@ -224,7 +224,7 @@ El servicio productivo `VerifiedIdentityContextService` ya implementa `verify_in
 
 **Estado de validación:** I3-2B.6B/6C y 6D están validados por el propietario en Debian. La evidencia se refiere al HEAD correspondiente a los cambios 6D reportados; confirmar SHA local/remoto antes de etiquetar releases o habilitar runtime.
 
-**Límites sin cambio:** no se ha modelado una asociación canónica Project-Environment; no se habilitan endpoints, login ni runtime AGENT. PR #16 permanece Draft, abierto y sin fusionar.
+**Límites sin cambio:** no se habilitan endpoints, login ni runtime AGENT. La asociación canónica Project-Environment sí existe desde V18; la omisión de su consulta en la renovación se corrigió en 6E. PR #16 permanece Draft, abierto y sin fusionar.
 
 
 ### I3-2B.6E — exigir la asociación canónica Project/Environment
@@ -237,4 +237,13 @@ El servicio productivo `VerifiedIdentityContextService` ya implementa `verify_in
 - No se añadió migración: se reutiliza el contrato y la tabla V18 existentes.
 - Se añadieron pruebas de servicio para asociación inexistente y suspendida, ambas sin escritura ni commit.
 
-**Validación I3-2B.6E pendiente:** ejecutar tests focalizados, suite completa y compileall en Debian sobre el HEAD que incluye 6E.
+**Validación I3-2B.6E confirmada por el propietario en Debian:** suite completa **1,400 tests en 21.235 s — OK**; `python -m compileall -q src tests` → **COMPILE_EXIT_CODE=0**. El propietario validó el HEAD `b98c091243475d3c660e8b67e3414d53c6b31d98`.
+
+
+### Seguimiento — I3-2B.6E validado por el propietario
+
+El propietario confirmó en Debian, sobre el HEAD `b98c091243475d3c660e8b67e3414d53c6b31d98`:
+- Suite completa: **1,400 tests en 21.235 s — OK**.
+- `python -m compileall -q src tests`: **COMPILE_EXIT_CODE=0**.
+
+La validación cubre la consulta transaccional de la asociación canónica Project/Environment y las denegaciones fail-closed añadidas para asociación inexistente, suspendida o autoridad ausente. No implica habilitar runtime AGENT, endpoints ni login.
