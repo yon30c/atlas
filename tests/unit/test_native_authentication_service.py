@@ -182,12 +182,12 @@ class NativeAuthenticationServiceTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["credential_revision"], 3)
 
-    def test_config_rejects_unbounded_proof_ttl(self):
+    def test_config_rejects_non_positive_proof_ttl(self):
         with self.assertRaises(ContractError):
             NativeAuthenticationConfig(
                 realm="atlas.primary",
                 audience="atlas.internal",
-                proof_ttl=timedelta(hours=1),
+                proof_ttl=timedelta(0),
             )
 
 
