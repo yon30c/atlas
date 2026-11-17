@@ -258,7 +258,7 @@ Implementado:
 
 La emisión de `VerifiedIdentityContext` pertenece a Identity Authority conforme B1-B-03D. Native Authentication Authority verifica credenciales y emite proofs; no resuelve bindings ni usuarios.
 
-**Estado:** contrato de implementación documentado; código I-2 pendiente.
+**Estado:** contrato documentado; primer slice de Authentication Authority implementado en revisión, todavía sin validación local.
 
 La inspección confirmó:
 - La persistencia C1 acepta un `NativeAuthenticationProof` ya construido; no verifica contraseña ni demuestra cómo se obtuvo.
@@ -277,4 +277,26 @@ Decisiones registradas:
 - La derivación de OperationContext queda limitada a USER directo y no concede autorización CAM.
 - No hay actualmente un puerto de throttling. Se exige un guard compartido, atómico y fail-closed; un contador en memoria no se acepta para producción.
 
-**Pendiente:** implementar los servicios, modelo, puertos, adaptador Argon2, guard contract, pruebas de rollback/replay/revisión/secret hygiene y validar suite completa. El diseño no habilita login operativo ni capacidades protegidas.
+**Pendiente:** completar Identity Authority proof admission + VerifiedIdentityContext + validación + derivación OperationContext; implementar un adaptador de guard compartido; ampliar pruebas de errores uniformes, issuer inactivo, estados suspendidos/revocados, CAS concurrente y secret hygiene; ejecutar suite completa y compileall. El diseño no habilita login operativo ni capacidades protegidas.
+
+## 13. I-2 — primer slice de Authentication Authority
+
+**Commits de implementación:** `0466f58` (puerto de guard), `1ee90b5` (servicio inicial), `84c57f3` (pruebas iniciales), `f5e6391` (perfil de issuer y TTL configurado) y `085c311` (ajuste de prueba TTL).
+
+Añadido:
+- `AuthenticationAttemptGuardPort`: interfaz de cuenta para `is_allowed`, `record_failure` y `record_success`. El contrato exige implementación atómica/compartida; todavía no existe adaptador productivo.
+- `NativeAuthenticationService`: servicio de aplicación que recibe UoW factory, hasher, guard, Clock y configuración confiable.
+- `NativeAuthenticationConfig`: realm, audience y TTL proceden de composición confiable; el TTL debe ser positivo y es el límite configurado para el proof.
+- Lookup del issuer por realm configurado y aceptación exclusiva de perfil `NATIVE_AUTHORITY_PROOF` activo.
+- Dummy Argon2id PHC generado al componer el servicio y verificado para handles desconocidos.
+- Verificación uniforme para handle inexistente, contraseña incorrecta y autenticador inactivo; el guard se consulta antes de ejecutar Argon2id y cualquier indisponibilidad del guard falla cerrado.
+- Relectura del autenticador y comparación de issuer, subject, estado y credential_revision.
+- Rehash condicional mediante CAS; el proof utiliza la revisión devuelta por el update.
+- Proof audience-bound y con expiración derivada de Clock; la referencia raw se devuelve solo después de salir de la UoW con commit, mientras SQLite conserva el digest.
+- `NativeAuthenticationGrant.__repr__` redacta la referencia raw.
+
+Pruebas añadidas en `tests/unit/test_native_authentication_service.py`: emisión correcta y persistencia digest-only; contraseña incorrecta y handle desconocido con dummy verify; bloqueo antes del hash; guard indisponible con fail-closed; rehash y revisión vinculada al proof; rechazo de TTL no positivo.
+
+**Validación:** aún no ejecutada en Debian. No declarar este slice validado ni operativo hasta que el usuario ejecute las pruebas focalizadas, la suite completa y `compileall`. El fake del guard existe solo en tests; no se ha creado un guard productivo ni se permite componer el servicio para un entrypoint operativo.
+
+**Límites:** no consume proofs, no emite `VerifiedIdentityContext`, no deriva `OperationContext`, no implementa endpoints/CLI/sesiones/bootstrap/CAM y no modifica migraciones, DB productiva ni infraestructura.
