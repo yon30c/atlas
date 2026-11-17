@@ -6,14 +6,13 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <poll.h>
-#include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <time.h>
 #include <unistd.h>
 #include <termios.h>
-#include <linux/limits.h>
 
 static int read_bounded_file(const char *path, unsigned char *buffer,
                              size_t maximum, size_t *length) {
@@ -433,8 +432,9 @@ int bo_collect(bo_report *report) {
           report->self_stat.tpgid != report->foreground_pgrp))) {
         report->result = BV_OBSERVATION_INCONSISTENT;
     }
-    if (!first_ok || !second_ok || !report->exe_first_available ||
-        !report->exe_second_available || !report->tty_available ||
+    if (!report->have_self_stat || !first_ok || !second_ok ||
+        !report->exe_first_available || !report->exe_second_available ||
+        !report->tty_available ||
         report->pidfd_state == BV_PIDFD_NOT_REQUESTED) {
         if (report->result != BV_OBSERVATION_INCONSISTENT) {
             report->result = BV_OBSERVATION_INCOMPLETE;
