@@ -1,6 +1,6 @@
 # Cycle 3.2-B — Trusted Workspace Mount Resolver y CAM Gate
 
-**Estado:** implementación inicial publicada; pruebas focalizadas y suite completa pendientes de ejecución local.
+**Estado:** implementación publicada y validada localmente en Debian por el propietario.
 **Base:** rama Cycle 3.2-A, commit `9ce3a4875b09888f6b3e9867df37fadd0875f55d`.
 **Rama de trabajo:** `feature/cycle-3-2-b-trusted-workspace-mount-cam-gate`.
 **No habilita la consola ni capacidades protegidas.**
@@ -113,8 +113,9 @@ No introducir llamadas de red, Broker, shell, runtime, Skills, escritura ni muta
 
 ### Integración
 - Pruebas unitarias focalizadas del resolver y del gate.
-- Suite completa: `python -m unittest discover -s tests -t tests -v`.
-- Compilación: `python -m compileall -q src tests`.
+- Suite completa: `python -m unittest discover -s tests -t tests -v` — **1,218 tests, OK**.
+- Compilación: `python -m compileall -q src tests` — **EXIT_CODE=0**.
+- Checkout validado: rama `feature/cycle-3-2-b-trusted-workspace-mount-cam-gate`, commit `260043ff16d0eb804691438354bf28491211bc48`, árbol de trabajo limpio.
 
 ## 7. Implementación inicial publicada
 
@@ -123,11 +124,11 @@ No introducir llamadas de red, Broker, shell, runtime, Skills, escritura ni muta
 - Se actualizaron pruebas de ejecución para crear asociación y workspace canónicos, y cubrir owner distinto, ámbito distinto, workspace suspendido, asociación suspendida y mount desconocido.
 - Se añadieron pruebas unitarias del resolver para configuración inválida, referencias inválidas, symlink de raíz y sustitución posterior.
 
-**Pendiente:** ejecutar pruebas focalizadas y suite completa en Debian. No declarar 3.2-B validada hasta recibir resultados del propietario.
+**Validación local recibida:** el propietario ejecutó la suite completa en Debian (`Ran 1218 tests in 12.409s`, `OK`) y `python -m compileall -q src tests` (`EXIT_CODE=0`). Las pruebas focalizadas no se reportaron por separado; la suite completa sí pasó.
 
 ## 8. Criterio de salida
 
-3.2-B solo se considera validada cuando todas las pruebas focalizadas y la suite completa pasan en el checkout local del propietario, y `compileall` finaliza sin errores.
+3.2-B se considera validada cuando la suite completa pasa en el checkout local del propietario y `compileall` finaliza sin errores. La validación recibida cumple ambos requisitos.
 
 La implementación de 3.2-B no habilita la consola. La activación de capacidades protegidas sigue bloqueada hasta que la autenticación nativa y la frontera de sesión verificada estén implementadas y probadas en 3.2-C.
 
