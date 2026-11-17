@@ -1,6 +1,6 @@
 # I-3 — inventario de consumidores de OperationContext y plan de cierre
 
-**Estado:** auditoría técnica inicial; no modifica código ni habilita operaciones.
+**Estado:** auditoría incremental; I3-1 validado en Debian. I3-2 en análisis de frontera; este documento no habilita operaciones.
 **Base:** `feature/verified-identity-i2-authentication-context` (I-2 validado).
 **Objetivo:** identificar cada frontera sensible que usa `OperationContext` y exigir evidencia verificable de identidad sin confundir actor, usuario contextual y autorización CAM.
 
@@ -132,7 +132,7 @@ No modificar DB productiva, migraciones, host, PAM, systemd, sudoers, usuarios, 
 
 ## 7. Estado de I3-1 — operaciones directas de propietario en Grants
 
-**Implementación en curso en PR de slice independiente; validación local pendiente.**
+**Implementado en PR #13; validado por el propietario en Debian.**
 
 Añadido en la rama de I3-1:
 - Puerto `VerifiedIdentityContextVerifierPort`, compatible estructuralmente con `VerifiedIdentityContextService.verify`.
@@ -142,6 +142,48 @@ Añadido en la rama de I3-1:
 - Se conservan la UoW transaccional, scope, comprobación de ownership y la evidencia CAM/proof/coordinador ya requerida para revocación.
 - Tests actualizados para usar IDs UUID distintos y un fake explícito de verificador limitado a tests; añadidos casos de evidencia ausente, identidad manipulada, mismatch actor/UserId y autoridad no disponible.
 
-**Validación:** pendiente de ejecución por el usuario en Debian. No declarar I3-1 validado hasta recibir suite completa y `compileall`.
+**Validación confirmada:** 31 tests específicos OK; suite completa 1,296/1,296 OK; `python -m compileall -q src tests` con exit code 0.
 
 **Límite:** este slice solo cubre operaciones directas de propietario en `GrantManagementService`. No cierra todavía renovación, Memory, Workspace, adaptadores, callers ni identidad sintética local. El fake de tests no es un adaptador productivo y no debe componerse en runtime.
+
+
+## 8. I3-2 — auditoría de renovación: hallazgos y límite de capacidad
+
+**Base de código inspeccionada:** rama `feature/verified-identity-i3-grant-owner-evidence`, que incorpora I-2 e I3-1.
+
+### 8.1 Decisiones directas del propietario
+
+`GrantRenewalService.approve_renewal` y `reject_renewal` actualmente:
+- Validan USER activo, pero usan la igualdad incorrecta `actor.identity_id == context.user_id`.
+- No reciben `VerifiedIdentityContext` ni verifican su attestation contra Identity Authority.
+- Ya conservan validaciones importantes que no deben eliminarse: owner de la solicitud y Grant, proyecto/entorno, vínculo entre renovación y Grant, estado PENDING, versión/CAS y UoW compartida.
+
+**Cambio previsto para I3-2A:** reutilizar `VerifiedIdentityContextVerifierPort` y `require_verified_owner_context` de I3-1. Exigir evidencia USER explícita para aprobar y rechazar. Ownership se resuelve con `canonical.user_id`; el actor debe coincidir con `canonical.identity`. No comparar ni igualar directamente UserId e IdentityId. Mantener todas las validaciones transaccionales actuales.
+
+### 8.2 Solicitud delegada por AGENT
+
+`GrantRenewalService.request_renewal` actualmente acepta:
+- `Identity(AGENT, ACTIVE)`;
+- `context.delegation == DelegationMode.DELEGATED`;
+- coincidencia entre `context.user_id`, el propietario del Grant y `context.actor.identity_id`, el sujeto del Grant.
+
+Esto no constituye evidencia verificable de autenticación ni de delegación. Todos esos valores provienen del `OperationContext` entregado por el caller.
+
+### 8.3 Límite confirmado en I-2
+
+La implementación I-2 actual no proporciona una ruta de autenticación AGENT:
+- `VerifiedIdentityContext` declara explícitamente que solo admite `IdentityKind.USER`.
+- `VerifiedIdentityContextService.admit_proof` resuelve el binding mediante `get_user_by_identity_id` y rechaza cualquier identidad que no sea USER.
+- `CanonicalUserIdentity` solo representa un par UserId + Identity(USER).
+- `NativeIdentityAuthorityPort` y `SQLiteNativeIdentityAuthority` describen y persisten bindings inmutables exclusivamente para Identity(USER).
+- No se encontró un contrato de autoridad de delegación que certifique emisor, agente, propietario, Grant, proyecto, entorno, acción, vigencia, revisión y revocación.
+
+Por tanto, no es correcto reutilizar la evidencia USER del propietario para autenticar al agente, ampliar el tipo USER mediante casts, ni aceptar `DelegationMode.DELEGATED` como sustituto de una prueba.
+
+### 8.4 Decisión de seguridad y slices
+
+1. **I3-2A — propietario:** implementar evidencia USER en `approve_renewal` y `reject_renewal`, conservando UoW, CAS, scope y binding de la solicitud.
+2. **I3-2B — agente/delegación:** mantener `request_renewal` bloqueado/fail-closed hasta diseñar e implementar contratos independientes para autenticación AGENT y delegación verificable. El contrato debe vincular, como mínimo, agente, propietario, Grant, proyecto, entorno, acciones permitidas, expiración, revisión y revocación.
+3. La habilitación futura de I3-2B requiere su propio slice, pruebas positivas y negativas, y revisión de persistencia/atomicidad. No forma parte implícita de I3-2A.
+
+**Estado de esta auditoría:** inspección de código completada. No se han modificado servicios ni se ha habilitado/deshabilitado una ruta en runtime en este commit documental.
