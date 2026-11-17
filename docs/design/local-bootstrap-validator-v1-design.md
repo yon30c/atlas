@@ -1,6 +1,6 @@
 # Diseño V1 del validador aislado de bootstrap LOCAL
 
-**Estado:** alcance V1 aprobado por el propietario el 16-11-2026 para implementación aislada sin privilegios; todavía no implementado. No aprobado para ejecución privilegiada.  
+**Estado:** V1 implementada y validada en Debian el 16-11-2026 dentro del alcance aislado, sin privilegios y basada en fixtures. No aprobado para ejecución privilegiada.  
 **Rama objetivo:** `feature/terminal-commands`.  
 **Fecha:** 16 de noviembre de 2026.  
 **Relacionado:** `local-bootstrap-privilege-validation-contract.md`, `local-bootstrap-privilege-boundary.md`, `tools/bootstrap-probe/README.md`.
@@ -185,20 +185,21 @@ Las pruebas con sanitizers pueden ejecutarse si el compilador ya los soporta; no
 
 ## 9. Criterios de cierre V1
 
-V1 se considera completo únicamente cuando:
+**Estado: cumplidos para el alcance aislado aprobado.** La implementación y la validación reportada por el propietario el 16-11-2026 acreditan:
 
-1. parsers puros implementados con límites y errores estrictos;
-2. matriz mínima de pruebas automatizada;
-3. evaluación pura con solo los tres estados no autoritativos definidos;
-4. pruebas negativas demuestran rechazo o indeterminación fail-closed;
-5. build estricto y suite V1 pasan en Debian;
-6. revisión confirma que no hay dependencia ni enlace con el probe diagnóstico;
-7. README y contrato principal reflejan el alcance real.
+1. parsers puros con límites explícitos, gramática estricta y detección de errores;
+2. pruebas automatizadas para campos ausentes/duplicados, límites numéricos, entradas truncadas/malformadas y contradicciones del evaluador;
+3. evaluación pura limitada a `OBSERVATION_CONSISTENT`, `OBSERVATION_INCONSISTENT` y `OBSERVATION_INCOMPLETE`;
+4. casos negativos que comprueban el estado exacto fail-closed;
+5. compilación estricta Debian con `-Wall -Wextra -Wpedantic -Werror` y suite V1 superadas;
+6. compilación y suite con AddressSanitizer y UndefinedBehaviorSanitizer superadas;
+7. separación de `tools/bootstrap-probe/` y ausencia de integración privilegiada;
+8. README y contrato principal actualizados para reflejar el cierre limitado.
 
-Cerrar V1 no aprueba A, no autoriza PAM ni helper privilegiado y no resuelve la procedencia de TTY. Después de V1 se decidirá si existe una vía técnicamente defendible para un recolector de observaciones V2 o si corresponde descartar A y reabrir el diseño de B.
+El cierre solo cubre parsers/evaluador fixture-only. No aprueba A, no autoriza PAM ni helper privilegiado y no resuelve la procedencia de TTY. V2 requiere diseño, revisión y aprobación independientes.
 
 ## 10. Decisión registrada
 
-El propietario aprobó este alcance el 16-11-2026. Queda autorizada únicamente la implementación del parser/evaluador aislado y sus pruebas sin privilegios, respetando todas las exclusiones de este documento.
+El propietario aprobó este alcance el 16-11-2026. La implementación aislada y sus pruebas sin privilegios quedaron validadas en Debian en esa fecha, respetando todas las exclusiones de este documento.
 
 La aprobación no autoriza recolector real de procesos, integración con procfs/TTY/pidfd, validación del sudo real, V2, PAM, helper privilegiado, claves, configuración protegida, cambios del host, SQLite/CAM ni integración con runtime. Cualquier ampliación requiere una propuesta separada y aprobación explícita.
