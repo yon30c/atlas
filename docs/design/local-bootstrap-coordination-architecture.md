@@ -118,6 +118,10 @@ La política de actualización y backup de esta configuración, así como el tra
 - OwnerDecisionVerifier de DM-01 fue definido para acciones de Memory. No se reutiliza directamente con acciones de bootstrap ni se altera su semántica. Puede servir como referencia conceptual de prueba no delegable y consumo único; el bootstrap requiere un contrato tipado específico.
 - El servicio de recuperación/gate actual no implementa la génesis inicial. No se abre el gate mediante create_local_domain, UPDATE manual ni restauración vacía.
 
+## 8.1 Frontera de privilegios
+
+La evaluación de invocación root-owned, sudo, TTY, entorno y alternativa de socket Unix está especificada en [Frontera de privilegios del bootstrap LOCAL](local-bootstrap-privilege-boundary.md). No se ha seleccionado ni instalado todavía el mecanismo. El candidato sudo solo se aceptará tras inspección de solo lectura del host; si no puede demostrarse la procedencia del invocador y la vinculación del TTY, se evaluará un servicio root de socket Unix con `SO_PEERCRED` y `SCM_RIGHTS`.
+
 ## 9. Decisiones que permanecen pendientes
 
 1. Mecanismo de invocación privilegiada del helper y prueba de TTY confiable; no setuid.
