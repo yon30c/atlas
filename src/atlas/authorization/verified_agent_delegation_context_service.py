@@ -25,6 +25,7 @@ from atlas.identity.verified_agent_identity_context_service import (
     VerifiedAgentIdentityContextRejected,
 )
 from atlas.ports.clock import Clock
+from atlas.ports.verified_agent_delegation_context_verifier import VerifiedAgentDelegationContextVerifierPort
 
 
 _REALM_RE = re.compile(r"[a-z0-9][a-z0-9._-]{1,63}", re.ASCII)
@@ -43,7 +44,7 @@ class _AgentVerifier(Protocol):
     def verify_in_unit_of_work(self, context: VerifiedAgentIdentityContext, unit): ...
 
 
-class VerifiedAgentDelegationContextService:
+class VerifiedAgentDelegationContextService(VerifiedAgentDelegationContextVerifierPort):
     """Issues and revalidates AGENT delegation evidence using trusted config.
 
     Realm, audience, clock, TTL and attestor are injected by the composition
