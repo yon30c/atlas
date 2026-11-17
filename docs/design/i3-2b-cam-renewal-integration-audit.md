@@ -425,3 +425,50 @@ Por seguridad, 7B no debe conceder la transición a cualquier USER autenticado n
 - No se afirma validación de tests ni CI para 7B.
 - 7A permanece validada por el propietario: 1,413 tests OK y compileall exit 0 sobre HEAD `8f65c3646987a2402ecd089f9b426568f60f2ec2`.
 - PR #16 permanece Draft, abierto y sin fusionar.
+
+
+## 15. I3-2B.7B — política de autoridad aprobada y prerequisite de provisioning
+
+**Decisión del propietario (17 de noviembre de 2026):** las transiciones ACTIVE ↔ SUSPENDED de una asociación Project/Environment corresponden exclusivamente a un USER con autoridad administrativa de plataforma explícita y verificable. La autorización debe ser específica para `association.suspend` o `association.reactivate`.
+
+### Política normativa aprobada
+
+- USER propietario del Project: no obtiene autoridad de lifecycle por ser propietario.
+- USER ordinario: denegado.
+- AGENT: siempre denegado.
+- USER administrador de plataforma: puede ejecutar únicamente las operaciones explícitamente concedidas y vigentes.
+- La identidad USER, la autoridad administrativa y la operación deben verificarse contra registros canónicos dentro de la misma UoW.
+- No se aceptan claims del cliente, flags, `origin`, pertenencia al Project ni Grants ordinarios como prueba de administración.
+- Se conserva el requisito de motivo obligatorio, reloj confiable, expected_revision/CAS y ledger inmutable.
+- La transición de estado y el evento de auditoría se confirman en una única transacción.
+- La ausencia de la autoridad administrativa, su repositorio o su implementación produce DENY. No hay fallback permisivo.
+- No se crean administradores por defecto ni se elevan privilegios de identidades existentes.
+
+### Hallazgo adicional: falta la autoridad canónica de administración
+
+La inspección de `src/atlas` no encontró un modelo, repositorio ni servicio de asignación de roles de administrador de plataforma. Las autoridades USER existentes verifican identidad y binding, pero no representan privilegios administrativos globales. `SQLiteAuthorityChangeStore` tampoco es una autoridad de roles ni un autorizador.
+
+Por tanto, no es seguro implementar un adaptador productivo que derive el privilegio de un atributo de `OperationContext`, del estado USER o de una tabla improvisada sin un contrato de provisioning y revocación. Un puerto aislado con un fake de tests no sería una implementación de producción.
+
+### Plan técnico adoptado para continuar sin ampliar privilegios
+
+1. Introducir una autoridad canónica dedicada para asignaciones administrativas de plataforma, con permisos separados para `association.suspend` y `association.reactivate`, estado/revisión y lectura dentro de la UoW.
+2. Mantener el registro inicialmente vacío: esta etapa no provisiona ni promueve ninguna identidad.
+3. Definir el provisioning inicial como una operación de bootstrap confiable, fuera de endpoints de usuario/AGENT y fuera de la API normal de lifecycle. El procedimiento deberá tener su propio contrato, evidencia, actor raíz y auditoría antes de habilitarse.
+4. Implementar el servicio de lifecycle para requerir tanto el verificador USER transaccional como el autorizador específico; sin ambos, toda transición queda denegada.
+5. Añadir ledger inmutable y triggers que exijan el evento correspondiente para cada cambio de estado; el cambio directo del repositorio no podrá omitir la auditoría.
+6. No habilitar runtime ni conceder autoridad administrativa hasta que exista y se valide el bootstrap explícito.
+
+### Decisión operativa pendiente antes de habilitar el primer administrador
+
+La recomendación es **bootstrap offline, explícito y controlado por el operador de plataforma**, separado del flujo normal de usuarios. No se debe insertar un administrador por defecto ni asumir que el propietario actual del sistema es automáticamente administrador de Atlas.
+
+El contrato y el diseño de la autoridad pueden prepararse sin conceder privilegios; la operación real permanecerá fail-closed hasta que se implemente y apruebe ese bootstrap.
+
+### Estado
+
+- Política de autorización aprobada por el propietario.
+- Ausencia de autoridad canónica de administrador confirmada por inspección estática del árbol `src/atlas`.
+- No se ha añadido código, migración ni asignación de privilegios en esta actualización.
+- No se afirma ejecución de tests ni CI para esta actualización.
+- PR #16 permanece Draft, abierto y sin fusionar.
