@@ -135,6 +135,7 @@ class VerifiedIdentityContextService:
                         binding is None
                         or binding.status is not NativeIdentityBindingStatus.ACTIVE
                         or binding.issuer_id != proof.issuer_id
+                        or proof.authenticated_at < binding.verified_at
                     ):
                         raise VerifiedIdentityContextRejected(
                             "prueba de identidad no válida"
