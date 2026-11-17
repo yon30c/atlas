@@ -1,6 +1,6 @@
 """Authority port for owner-issued AGENT delegation records."""
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Protocol
 
 from atlas.core.agent_delegation import (
@@ -52,15 +52,13 @@ class AgentDelegationAuthorityPort(Protocol):
         *,
         expected_revision: int,
         verified_agent_identity: VerifiedAgentIdentityContext,
-        verified_at: datetime,
-        realm: str,
-        audience: str,
-        maximum_context_ttl: timedelta,
     ) -> VerifiedAgentDelegationContext:
         """Revalidate the requesting AGENT and live delegation/Grant bindings.
 
         The AGENT context must resolve to the delegation's exact agent_identity_id;
-        possession of delegation_id alone is never sufficient. Implementations
-        must reject revoked delegations and stale Grant or
-        delegation revisions on every operation; this is not a CAM decision.
+        possession of delegation_id alone is never sufficient. Trusted clock,
+        realm, audience, attestor and context TTL are composition-root
+        dependencies, never caller-supplied values. Implementations must reject
+        revoked delegations and stale Grant or delegation revisions on every
+        operation; this is not a CAM decision.
         """
