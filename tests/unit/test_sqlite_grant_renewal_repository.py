@@ -100,6 +100,34 @@ class SQLiteGrantRenewalRepositoryTests(unittest.TestCase):
                     ),
                 )
 
+    def test_schema_rejects_agent_evidence_without_matching_canonical_delegation(self):
+        with self.database.connection() as connection:
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    """
+                    INSERT INTO authorization_grant_renewals (
+                        renewal_id, grant_id, owner_user_id, subject_identity_id,
+                        requested_by_identity_id, current_expires_at,
+                        proposed_expires_at, requested_at, status, decided_at,
+                        decided_by_user_id, version, grant_revision,
+                        delegation_id, delegation_revision
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', NULL, NULL, 1, ?, ?, ?)
+                    """,
+                    (
+                        "renewal-unbound-evidence",
+                        self.grant.grant_id,
+                        self.grant.owner_user_id,
+                        self.grant.subject_identity_id,
+                        self.grant.subject_identity_id,
+                        self.grant.expires_at.isoformat(timespec="microseconds"),
+                        (self.grant.expires_at + timedelta(days=1)).isoformat(timespec="microseconds"),
+                        NOW.isoformat(timespec="microseconds"),
+                        self.grant.revision,
+                        "22222222-2222-4222-8222-222222222222",
+                        1,
+                    ),
+                )
+
     def test_update_if_version_is_compare_and_swap(self):
         self.repository.create(self.request)
         approved = replace(
