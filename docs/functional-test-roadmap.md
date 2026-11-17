@@ -678,3 +678,36 @@ La decisión no invalida ni exige reescribir contratos Identity/CAM, Grants, Pro
 No se autoriza quitar `sudo` a `greed`, modificar sudoers/PAM/systemd/usuarios/grupos/SSH/Docker del host, cambiar sockets/permisos, instalar paquetes, mover Broker, montar directorios personales o migrar datos. Cualquier cambio de infraestructura requiere propuesta y autorización explícitas.
 
 **Estado de implementación:** decisión documental adoptada; inventario de dependencias, contrato de runtime, Dockerfile, persistencia, pruebas de aislamiento y migración controlada siguen pendientes.
+
+
+## 14. Autenticación nativa y portabilidad entre máquinas
+
+**Estado: DIRECCIÓN DE PRODUCTO Y REQUISITO ARQUITECTÓNICO ADOPTADOS el 17 de noviembre de 2026.** Documento: [Autenticación nativa y portabilidad entre máquinas](design/native-authentication-and-machine-portability-decision.md).
+
+Atlas debe poder instalarse en un host diferente sin depender de la cuenta Linux, UID/GID, hostname, hardware, rutas personales, servicios locales implícitos ni secretos de la máquina de desarrollo.
+
+Principios:
+- Atlas tendrá autenticación propia, separada de las cuentas del sistema operativo.
+- Authentication Authority verifica credenciales; Identity Authority resuelve el UserId/Identity(USER) canónico y la evidencia; CAM continúa autorizando cada operación.
+- El primer usuario se crea mediante bootstrap de un solo uso, generado fuera de la imagen. No se crea desde `getuser()`, UID/GID ni hostname.
+- El diseño soporta múltiples usuarios; el primer despliegue puede ser administrado por una sola persona.
+- Contraseñas con Argon2id y sesiones opacas, revocables y expirables; no almacenar secretos reutilizables en claro.
+- Imagen, configuración, datos persistentes y secretos son artefactos separados por instalación.
+- Los endpoints LLM, workspaces, rutas, persistencia y mounts son configurables; no se asume que Ollama o cualquier servicio esté en loopback.
+- La portabilidad de datos exige exportación, manifiesto, integridad, restauración, reconciliación de secretos/identidades y activación deliberada.
+- Las sesiones no se trasladan como credenciales reutilizables; se revocan al migrar por defecto.
+- La primera entrega no promete active-active, múltiples réplicas ni SQLite compartida entre hosts.
+
+### Impacto en Cycle 3.2
+
+Cycle 3.2 debe implementar contexto canónico sin depender de la máquina:
+- identidad autenticada desde Authentication Authority;
+- VerifiedIdentityContext emitido por Identity Authority;
+- proyecto y entorno resueltos desde fuentes canónicas;
+- workspace registrado con owner, proyecto, entorno y raíz lógica confiable;
+- mapeo explícito entre ruta lógica y mount físico de cada instalación;
+- denegación ante sesión, identidad, proyecto, entorno o workspace no verificables.
+
+La consola no puede fabricar identidad ni contexto verificado. La conversación sin login, si se permite, no habilita capacidades protegidas.
+
+**Estado de implementación:** decisión adoptada; contratos detallados, autenticación, bootstrap, portabilidad de datos, empaquetado, migración y pruebas siguen pendientes. No se autoriza cambiar el host ni migrar datos existentes.
