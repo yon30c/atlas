@@ -80,7 +80,7 @@ Se añadieron en el branch:
 - Integración `SQLiteLocalAuthorityUnitOfWork.native_authentication` compartiendo la transacción física.
 - Pruebas focalizadas añadidas para digest-only, audiencia, expiración, replay, revisión de credenciales, concurrencia y UoW.
 
-**Validación C1-5:** pendiente de ejecución en Debian. No afirmar la migración ni las pruebas como validadas hasta recibir los resultados del propietario.
+**Validación C1-5 reportada por el propietario en Debian:** suite completa `Ran 1262 tests in 12.863s — OK`; rama local alineada con `origin/feature/cycle-3-2-c1-native-credentials`; HEAD `7f251ca`. La salida compartida no incluye `compileall`, que permanece pendiente de confirmación.
 
 ## Límites y bloqueos de seguridad
 
