@@ -119,7 +119,7 @@ class SQLiteProjectEnvironmentRepository(
         environment_id: EnvironmentId,
     ) -> EnvironmentMetadata | None:
         key = self._required_id(environment_id, "environment_id")
-        with self._database.connection() as connection:
+        with self._read_connection() as connection:
             row = connection.execute(
                 """
                 SELECT environment_id, status, revision
