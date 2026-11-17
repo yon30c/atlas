@@ -32,7 +32,7 @@ sh tools/bootstrap-observer/test_v2.sh
 
 The script builds with `-std=c11 -Wall -Wextra -Wpedantic -Werror`, runs
 the V1 parser suite, runs the V2 classification/snapshot tests and a live
-collector smoke test, then builds the observer CLI. All binaries are placed in
+collector smoke test, builds the observer CLI, checks invalid arguments and runs a CLI smoke test. All binaries are placed in
 `/tmp`.
 
 Expected output:
