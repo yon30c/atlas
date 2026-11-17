@@ -78,6 +78,15 @@ static void valid_fixture(aco_report *report) {
     report->self_parent_pid = 200;
     report->self_sid = 200;
     report->self_pgrp = 300;
+    report->self_stat_available = true;
+    report->self_stat.pid = 300;
+    report->self_stat.state = 'R';
+    report->self_stat.ppid = 200;
+    report->self_stat.pgrp = 300;
+    report->self_stat.session = 200;
+    report->self_stat.tty_nr = 34818;
+    report->self_stat.tpgid = 300;
+    report->self_stat.starttime = 400U;
     report->tty_available = true;
     report->terminal_sid = 200;
     report->foreground_pgrp = 300;
@@ -149,6 +158,20 @@ static void test_missing_tty_is_incomplete(void) {
     valid_fixture(&report);
     report.tty_available = false;
     assert(aco_evaluate(&report) == ACO_CHAIN_INCOMPLETE);
+}
+
+static void test_missing_self_stat_is_incomplete(void) {
+    aco_report report;
+    valid_fixture(&report);
+    report.self_stat_available = false;
+    assert(aco_evaluate(&report) == ACO_CHAIN_INCOMPLETE);
+}
+
+static void test_self_tty_mismatch_rejected(void) {
+    aco_report report;
+    valid_fixture(&report);
+    report.self_stat.tty_nr = 34819;
+    assert(aco_evaluate(&report) == ACO_CHAIN_MISMATCH);
 }
 
 static void test_unstable_chain_is_incomplete(void) {
@@ -223,6 +246,8 @@ int main(void) {
     test_origin_foreground_mismatch_rejected();
     test_session_mismatch_rejected();
     test_missing_tty_is_incomplete();
+    test_missing_self_stat_is_incomplete();
+    test_self_tty_mismatch_rejected();
     test_unstable_chain_is_incomplete();
     test_missing_pidfd_is_incomplete();
     test_node_without_pidfd_is_incomplete();
