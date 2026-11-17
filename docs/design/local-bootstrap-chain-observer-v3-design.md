@@ -1,6 +1,6 @@
 # Diseño V3 — observador diagnóstico de la cadena sudo para bootstrap LOCAL
 
-**Estado:** prototipo diagnóstico publicado; compilación y pruebas Debian pendientes.  
+**Estado:** prototipo diagnóstico V3 implementado y validado en Debian; pruebas automatizadas y escenarios manuales documentados (16-11-2026).  
 **Aprobación:** el propietario autorizó trabajar conjuntamente los puntos 1–7 el 16-11-2026. La aprobación cubre únicamente el observador C no privilegiado, sus pruebas y documentación. No autoriza helper privilegiado, PAM, instalación, configuración del host ni ejecución de bootstrap.  
 **Rama:** feature/terminal-commands.  
 **Relacionado:** local-bootstrap-privilege-validation-contract.md, local-bootstrap-observer-v2-design.md, local-bootstrap-privilege-boundary.md.
@@ -131,7 +131,16 @@ Los binarios se crean en /tmp. Primero deben pasar fixtures y smoke test. Solo d
 5. SSH sin PTY ordinario (debe rechazar por padre no sudo/TTY ausente);
 6. opcionalmente SSH sin PTY con sudo solo si la política y timestamp existentes permiten ejecutarlo sin alterar nada; si sudo no lo ejecuta, queda no concluyente.
 
-Los resultados manuales son evidencia del host y de la versión actual de sudo, no una garantía para futuras actualizaciones.
+Resultados manuales reportados por el propietario el 16-11-2026:
+- Ejecución ordinaria: `CHAIN_MISMATCH`, padre directo `/usr/bin/bash`.
+- Sudo local directo: `CHAIN_PATTERN_MATCHED_DIAGNOSTICALLY`, dos ancestros sudo, `AUTHORIZATION=NOT_PROVIDED`.
+- SSH interactivo con PTY, entrando primero a una shell y ejecutando `sudo -- observer`: `CHAIN_PATTERN_MATCHED_DIAGNOSTICALLY`, dos ancestros sudo y primer ancestro no sudo `/usr/bin/bash` con TTY de origen vinculado al monitor sudo.
+- SSH con PTY ejecutando directamente `sudo -- observer` como comando remoto: `CHAIN_MISMATCH`, razón `ORIGINATING_TTY_NOT_BOUND_TO_SUDO_MONITOR`; el primer ancestro no sudo fue `sshd-session` con `tty_nr=0` y `tpgid=-1`.
+- SSH con PTY y `sudo -- sh -c observer`: `CHAIN_MISMATCH`, padre directo `/usr/bin/dash`.
+
+En una inspección separada de solo lectura, `sshd-session` conservaba descriptores `/dev/ptmx` cuyo `fdinfo` incluía `tty-index` coincidente con el PTY esclavo de la shell SSH (`/dev/pts/2`). Esto demuestra que `tty_nr=0` en `sshd-session` no equivale a que la conexión SSH carezca de PTY. No demuestra por sí solo una asociación segura y estable apta para el observador: V3 no inspecciona ni valida esa relación de descriptores y no se amplía el contrato con base únicamente en esta observación.
+
+Los resultados manuales son evidencia del host y de la versión/configuración actual de sudo, no una garantía para futuras actualizaciones.
 
 ## 5. Límites y decisiones todavía abiertas
 
@@ -150,8 +159,8 @@ Si el comportamiento real de sudo no coincide con el modelo de monitor/TTY, no s
 
 1. Build estricto y pruebas fixture negativas superadas por el propietario en Debian.
 2. Observación local ordinaria rechazada.
-3. Sudo local directo y SSH con PTY directo evaluados con salida completa.
-4. Shell intermediario rechazado por padre directo.
+3. Sudo local directo y SSH interactivo con PTY (shell de sesión seguida de sudo directo) evaluados con salida completa.
+4. SSH remoto directo con sudo y shell intermediario evaluados; ambos rechazos documentados según la topología observada.
 5. Ausencia de PTY de origen rechazada cuando el comando puede ejecutarse sin modificar políticas.
 6. Sanitizers ejecutados si están disponibles.
 7. Revisión de código independiente antes de cualquier propuesta de helper privilegiado.
