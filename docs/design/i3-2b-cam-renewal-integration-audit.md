@@ -318,3 +318,34 @@ El rechazo USER owner debe seguir disponible para cerrar una solicitud PENDING a
 - Hallazgos críticos F2 y F3 requieren resolver el gate de aprobación antes de considerar efectivo el lifecycle de revocación.
 - No se atribuyen pruebas ejecutadas ni validación Debian a esta auditoría.
 - PR #16 permanece Draft, abierto y sin fusionar.
+
+
+## 13. I3-2B.7A — revalidación al aprobar (17 de noviembre de 2026)
+
+Se implementó el cierre de los hallazgos F2/F3 para solicitudes AGENT:
+
+- `approve_renewal` detecta solicitudes con `delegation_id` y vuelve a leer la delegación canónica dentro de la misma UoW que actualiza Grant y solicitud.
+- Exige delegación ACTIVE, misma revisión registrada, ventana temporal vigente, mismo owner, AGENT, Grant/revisión, Project/Environment, resource type y conjunto exacto de recursos.
+- Exige `grant.renewal.request` tanto en la delegación como en el Grant.
+- Revalida identidad USER owner y AGENT canónicas, ambas ACTIVE, y binding nativo AGENT/issuer activo.
+- Revalida Project y Environment activos y la asociación exacta ACTIVE.
+- Para solicitudes AGENT usa el reloj confiable inyectado para la ventana temporal y `decided_at`; el parámetro legacy `now` no decide la autorización temporal.
+- Si falta cualquier autoridad o la revalidación falla, la aprobación falla cerrada antes de escribir.
+- La solicitud sigue PENDING ante una denegación; el rechazo USER owner no consulta asociación/delegación y permanece disponible.
+- La ruta de renovaciones históricas sin `delegation_id` conserva su comportamiento previo; la nueva revalidación estricta aplica a solicitudes AGENT identificadas por evidencia V24.
+
+Tests añadidos en `tests/unit/test_agent_renewal_approval_lifecycle.py`:
+- aprobación válida con autoridades activas;
+- asociación suspendida;
+- delegación revocada;
+- revisión de delegación cambiada;
+- binding nativo inactivo;
+- scope parcial/cambiado.
+
+**Validación pendiente del propietario en Debian:** ejecutar suite completa y compileall sobre el HEAD actualizado. No se afirma ejecución local de tests ni CI. Los tests nuevos todavía deben ejecutarse en el entorno del propietario.
+
+### Límites deliberados
+
+- No se propagan suspensiones a Workspaces existentes.
+- No se revocan Grants ni delegaciones automáticamente.
+- No se añade todavía autoridad de lifecycle para suspender/reactivar asociaciones ni un ledger de actor/motivo. Esa es la siguiente parte de I3-2B.7 y requiere un contrato explícito de autorización: el servicio no debe asumir que cualquier USER autenticado puede administrar asociaciones.
