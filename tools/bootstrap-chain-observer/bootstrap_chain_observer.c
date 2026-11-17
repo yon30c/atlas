@@ -145,6 +145,29 @@ static bool capture_node(pid_t pid, aco_node *node) {
     return true;
 }
 
+static bool capture_self_stat(pid_t pid, bv_stat *stat_value) {
+    unsigned char buffer[ATLAS_PROC_STAT_MAX + 1U];
+    char path[64];
+    size_t length;
+
+    if (proc_path(path, sizeof(path), pid, "stat") != 0 ||
+        read_bounded(path, buffer, ATLAS_PROC_STAT_MAX, &length) != 0 ||
+        bv_parse_stat(buffer, length, (int32_t)pid, stat_value) != BV_OK) {
+        return false;
+    }
+    return true;
+}
+
+static bool self_stat_equal(const bv_stat *left, const bv_stat *right) {
+    return left->pid == right->pid &&
+           left->ppid == right->ppid &&
+           left->pgrp == right->pgrp &&
+           left->session == right->session &&
+           left->tty_nr == right->tty_nr &&
+           left->tpgid == right->tpgid &&
+           left->starttime == right->starttime;
+}
+
 static bool tty_snapshot(int fd, int32_t *sid, int32_t *foreground) {
     pid_t terminal_sid;
     pid_t foreground_pgrp;
@@ -232,8 +255,9 @@ aco_result aco_evaluate(aco_report *report) {
     report->origin_index = ACO_MAX_NODES;
 
     if (!report->collection_complete || !report->chain_stable ||
-        !report->pidfds_stable || report->node_count == 0U ||
-        report->self_pid <= 0 || report->self_parent_pid <= 0) {
+        !report->pidfds_stable || !report->self_stat_available ||
+        report->node_count == 0U || report->self_pid <= 0 ||
+        report->self_parent_pid <= 0) {
         report->reason = "REQUIRED_OBSERVATION_UNAVAILABLE_OR_UNSTABLE";
         return report->result = ACO_CHAIN_INCOMPLETE;
     }
@@ -259,7 +283,13 @@ aco_result aco_evaluate(aco_report *report) {
     }
     if (direct->pid != report->self_parent_pid ||
         direct->stat.session != report->self_sid ||
-        direct->stat.tpgid != report->self_pgrp) {
+        direct->stat.tpgid != report->self_pgrp ||
+        report->self_stat.pid != report->self_pid ||
+        report->self_stat.ppid != report->self_parent_pid ||
+        report->self_stat.session != report->self_sid ||
+        report->self_stat.pgrp != report->self_pgrp ||
+        report->self_stat.tty_nr != direct->stat.tty_nr ||
+        report->self_stat.tpgid != report->foreground_pgrp) {
         report->reason = "DIRECT_PARENT_OR_SESSION_RELATION_MISMATCH";
         return report->result = ACO_CHAIN_MISMATCH;
     }
@@ -352,7 +382,12 @@ int aco_collect(aco_report *report) {
     report->self_parent_pid = initial_parent;
     report->self_sid = (int32_t)getsid(0);
     report->self_pgrp = (int32_t)getpgrp();
+    report->self_stat_available =
+        capture_self_stat(report->self_pid, &report->self_stat);
     report->chain_stable = true;
+    if (!report->self_stat_available) {
+        report->collection_complete = false;
+    }
     report->pidfds_stable = true;
     report->collection_complete = true;
 
@@ -432,6 +467,15 @@ int aco_collect(aco_report *report) {
         pause_time = remaining_time;
     }
 
+    {
+        bv_stat self_second;
+        if (!capture_self_stat(report->self_pid, &self_second)) {
+            report->collection_complete = false;
+        } else if (!self_stat_equal(&report->self_stat, &self_second)) {
+            report->chain_stable = false;
+        }
+    }
+
     if (getppid() != initial_parent ||
         (int32_t)getsid(0) != report->self_sid ||
         (int32_t)getpgrp() != report->self_pgrp) {
@@ -499,6 +543,16 @@ void aco_print_report(FILE *stream, const aco_report *report) {
     fprintf(stream, "observer_ppid=%ld\n", (long)report->self_parent_pid);
     fprintf(stream, "observer_sid=%" PRId32 "\n", report->self_sid);
     fprintf(stream, "observer_pgrp=%" PRId32 "\n", report->self_pgrp);
+    fprintf(stream, "observer_stat=%s\n",
+            report->self_stat_available ? "AVAILABLE" : "UNAVAILABLE");
+    if (report->self_stat_available) {
+        fprintf(stream, "observer_tty_nr=%" PRId64 "\n",
+                report->self_stat.tty_nr);
+        fprintf(stream, "observer_tpgid=%" PRId32 "\n",
+                report->self_stat.tpgid);
+        fprintf(stream, "observer_starttime=%" PRIu64 "\n",
+                report->self_stat.starttime);
+    }
     fprintf(stream, "result=%s\n", result_name(report->result));
     fprintf(stream, "reason=%s\n",
             report->reason == NULL ? "UNSPECIFIED" : report->reason);
