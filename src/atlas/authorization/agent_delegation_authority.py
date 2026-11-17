@@ -33,7 +33,13 @@ class SQLiteAgentDelegationAuthority:
     operation verification remain unavailable; this class is not a CAM engine.
     """
 
-    def __init__(self, *, unit_of_work_factory, owner_context_verifier: _OwnerContextVerifier, clock: Clock) -> None:
+    def __init__(
+        self,
+        *,
+        unit_of_work_factory,
+        owner_context_verifier: _OwnerContextVerifier,
+        clock: Clock,
+    ) -> None:
         if not callable(unit_of_work_factory):
             raise ContractError("unit_of_work_factory debe ser invocable")
         if not callable(getattr(owner_context_verifier, "verify_in_unit_of_work", None)):
@@ -89,7 +95,8 @@ class SQLiteAgentDelegationAuthority:
                 ):
                     raise AuthorizationError("la identidad AGENT no está activa")
                 if not unit.native_agent_identity.has_active_native_agent_binding(
-                    agent_identity_id, verified_owner_identity.issuer_id
+                    agent_identity_id,
+                    verified_owner_identity.issuer_id,
                 ):
                     raise AuthorizationError("el AGENT no tiene un binding nativo activo")
 
@@ -99,7 +106,8 @@ class SQLiteAgentDelegationAuthority:
                 if not isinstance(grant, Grant):
                     raise ContractError("el repositorio devolvió un Grant inválido")
                 if (
-                    grant.owner_user_id != owner.user_id
+                    grant.grant_id != grant_id
+                    or grant.owner_user_id != owner.user_id
                     or grant.subject_identity_id != agent_identity_id
                     or grant.revoked_at is not None
                     or grant.issued_at > now
