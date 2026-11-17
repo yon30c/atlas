@@ -460,7 +460,10 @@ class SQLiteIdentityAuthorityTests(unittest.TestCase):
 
         self.assertEqual(rerun_identity_rows, expected_identity_rows)
         self.assertEqual(rerun_user_row, expected_user_row)
-        self.assertEqual(rerun_versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17])
+        self.assertEqual(
+            rerun_versions,
+            list(range(1, len(SQLITE_MIGRATIONS) + 1)),
+        )
         self.assertEqual(rerun_violations, [])
         self.assertEqual(rerun_integrity, "ok")
 
