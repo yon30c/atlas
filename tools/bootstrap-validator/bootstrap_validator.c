@@ -76,6 +76,26 @@ static bool pidnum(const unsigned char *s, size_t n, int32_t *out) {
     return true;
 }
 
+static bool decimal_token(const unsigned char *s, size_t n) {
+    size_t i = 0;
+
+    if (n == 0) {
+        return false;
+    }
+    if (s[0] == '-') {
+        i = 1;
+    }
+    if (i == n) {
+        return false;
+    }
+    for (; i < n; i++) {
+        if (s[i] < '0' || s[i] > '9') {
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool buffer_ok(const unsigned char *d, size_t n, size_t max) {
     if (!d || !n || n > max) {
         return false;
@@ -300,8 +320,30 @@ bv_parse_result bv_parse_stat(const unsigned char *d, size_t n,
         }
     }
 
-    if (p < end) {
-        return BV_INVALID;
+    /*
+     * Linux /proc/<pid>/stat continues beyond field 22. V1 extracts through
+     * starttime, but the live file also contains later numeric fields. Accept
+     * those fields only as space-separated signed/unsigned decimal tokens.
+     */
+    while (p < end) {
+        size_t st;
+
+        if (d[p] != ' ') {
+            return BV_INVALID;
+        }
+        while (p < end && d[p] == ' ') {
+            p++;
+        }
+        if (p == end) {
+            break;
+        }
+        st = p;
+        while (p < end && d[p] != ' ') {
+            p++;
+        }
+        if (!decimal_token(d + st, p - st)) {
+            return BV_INVALID;
+        }
     }
     v.pid = parsed_pid;
     *out = v;
