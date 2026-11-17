@@ -23,7 +23,7 @@ static bool u64(const unsigned char *s, size_t n, uint64_t max, uint64_t *out) {
         }
         d = (unsigned)(s[i] - '0');
 
-        if (v > (max - d) / 10U) {
+        if ((uint64_t)d > max || v > (max - d) / 10U) {
             return false;
         }
         v = v * 10U + d;
@@ -202,6 +202,7 @@ bv_parse_result bv_parse_stat(const unsigned char *d, size_t n,
     size_t first = 0;
     size_t close;
     size_t p;
+    size_t end;
     int32_t parsed_pid;
     int64_t sv;
     uint64_t uv;
@@ -216,7 +217,15 @@ bv_parse_result bv_parse_stat(const unsigned char *d, size_t n,
         return BV_INVALID;
     }
 
-    while (first < n && d[first] != ' ') {
+    end = n;
+    if (d[end - 1] == '\n') {
+        end--;
+    }
+    if (end == 0) {
+        return BV_INVALID;
+    }
+
+    while (first < end && d[first] != ' ') {
         first++;
     }
     if (first == n || !pidnum(d, first, &parsed_pid) ||
@@ -224,7 +233,7 @@ bv_parse_result bv_parse_stat(const unsigned char *d, size_t n,
         return BV_INVALID;
     }
 
-    close = n;
+    close = end;
     while (close > first + 2 && d[close - 1] != ')') {
         close--;
     }
@@ -234,10 +243,10 @@ bv_parse_result bv_parse_stat(const unsigned char *d, size_t n,
     --close;
 
     p = close + 1;
-    if (p >= n || d[p] != ' ') {
+    if (p >= end || d[p] != ' ') {
         return BV_INVALID;
     }
-    while (p < n && d[p] == ' ') {
+    while (p < end && d[p] == ' ') {
         p++;
     }
 
@@ -245,7 +254,7 @@ bv_parse_result bv_parse_stat(const unsigned char *d, size_t n,
         size_t st = p;
         size_t e;
 
-        while (p < n && !ws(d[p])) {
+        while (p < end && d[p] != ' ') {
             p++;
         }
         e = p;
@@ -285,12 +294,12 @@ bv_parse_result bv_parse_stat(const unsigned char *d, size_t n,
             return BV_INVALID;
         }
 
-        while (p < n && ws(d[p])) {
+        while (p < end && d[p] == ' ') {
             p++;
         }
     }
 
-    if (p < n) {
+    if (p < end) {
         return BV_INVALID;
     }
     v.pid = parsed_pid;
