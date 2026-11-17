@@ -96,6 +96,25 @@ El helper debe abrir el terminal controlador por sí mismo (`/dev/tty`) y fallar
 
 Los checks exactos deben implementarse y probarse contra el comportamiento real de Debian/devpts. No basta con `isatty(0)` ni con comprobar que `/dev/tty` existe.
 
+
+
+## 4.1 Resultado de la primera prueba de invocación (16-11-2026)
+
+El propietario ejecutó una prueba inocua con `sudo python3` desde una shell interactiva:
+
+- UID real y efectivo del proceso: 0.
+- GID real y efectivo: 0.
+- `SUDO_UID=1000` y `SUDO_USER=greed`.
+- `/dev/tty` se pudo abrir y `isatty` devolvió verdadero.
+- La inspección de sesión no terminó: el módulo Python `os` disponible no expone `tcgetsid`; no se obtuvo todavía el SID del terminal ni se comparó con la sesión/grupo foreground.
+- La cuenta `greed` tiene sudo irrestricto `(ALL : ALL) ALL`.
+
+**Conclusión:** bajo sudo, `getuid()` y `geteuid()` no identifican al invocador original: ambos son 0. `SUDO_UID`/`SUDO_USER` son metadatos útiles para diagnóstico, pero no se aceptarán aisladamente como prueba criptográfica de identidad ni como defensa frente al administrador root. La prueba tampoco demuestra todavía la vinculación del TTY a la sesión.
+
+El modelo de amenaza ya excluye al propietario administrador actuando maliciosamente: `greed` puede obtener root por sudo. La frontera debe impedir que procesos Atlas sin privilegios (Assistant, Skills, `atlas`, `atlas-sandbox`) fabriquen o invoquen la prueba como si fueran el propietario. La reautenticación PAM del sujeto configurado sigue siendo obligatoria.
+
+**Siguiente comprobación:** repetir solo la inspección de TTY usando la función libc `tcgetsid(2)` mediante `ctypes`, además de `tcgetpgrp`, `getsid(0)`, `getpgrp` y `fstat` del descriptor. No cambiar sudoers ni instalar/configurar nada. Después se decidirá si el mecanismo A puede sostenerse con los metadatos efectivos de sudo y el modelo de amenaza, o si conviene B (socket Unix + `SO_PEERCRED` + TTY transferido).
+
 ## 5. Entorno, argumentos y descriptores
 
 - Rechazar argc distinto del valor fijo esperado.
