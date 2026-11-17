@@ -534,9 +534,13 @@ The transactional owner check compares the canonical USER kind/status/revision, 
 
 **Validated by the owner on Debian:** full suite **1,397 tests in 21.871s — OK**; `python -m compileall -q src tests` returned **COMPILE_EXIT_CODE=0**. This validates the USER owner shared-UoW hardening in I3-2B.6D.
 
-#### Project/Environment association boundary
+#### Project/Environment association — corrected inspection and I3-2B.6E
 
-The current canonical metadata adapter stores Project and Environment as independent records and exposes independent lookups. No Project-to-Environment relationship is represented in the current schema/port. Renewal therefore verifies both records are individually present and active and that their IDs match the Grant, but cannot assert membership. Do not infer or fabricate that relationship. If required, introduce an explicit canonical association contract and migration in a separately reviewed slice before enforcing it.
+A canonical Project/Environment association already exists in migration V18 as `atlas_project_environments`, represented by `ProjectEnvironmentAssociation` and managed by `SQLiteWorkspaceRegistryRepository`. It has a composite (project_id, environment_id) key, immutable identity, revision/CAS updates and active/suspended lifecycle. The previous audit overlooked this repository because it inspected only the separate Project/Environment metadata adapter.
+
+I3-2B.6E wires AGENT renewal to the existing authority: within the same shared UoW, the service now requires the exact association for the Grant's Project and Environment to exist and be ACTIVE. Missing or suspended associations fail closed before persistence. No new migration or duplicate relationship model is introduced.
+
+**Validation pending:** focused tests, full unit suite and compileall on Debian for the HEAD containing I3-2B.6E.
 
 
 #### 18.8 I3-2B.6D — validation follow-up
@@ -548,3 +552,12 @@ The owner confirmed the updated implementation on Debian:
 The production `VerifiedIdentityContextService` already implements the shared-UoW verifier contract and revalidates the USER attestation, TTL, issuer, native binding, canonical identity and revisions through the supplied unit of work without opening or committing it. The renewal service now uses this contract for both owner approval and rejection.
 
 No AGENT runtime, login or endpoint was enabled by this validation.
+
+
+#### 18.9 I3-2B.6E — canonical Project/Environment association enforcement
+
+The AGENT renewal request path now requires the existing `uow.workspaces` repository in its shared local-authority UoW. After independently resolving active Project and Environment records, it resolves the exact pair through `get_association(project_id, environment_id)` and requires ACTIVE status plus exact ID equality. A missing or suspended association denies the request before renewal persistence.
+
+This reuses schema V18 and its existing CAS/lifecycle contract. It deliberately does not add another table or association abstraction.
+
+Tests cover missing and suspended association denial with no renewal write/commit. **Owner validation on Debian is pending for the updated HEAD.**
