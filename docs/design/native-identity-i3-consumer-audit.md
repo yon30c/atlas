@@ -277,3 +277,12 @@ SQLiteLocalAuthorityUnitOfWork ahora expone USER identity, AGENT identity, USER/
 **Bloqueo explícito:** no existe todavía implementación productiva de los puertos VerifiedIdentityContextVerifierPort, VerifiedAgentIdentityContextVerifierPort y VerifiedAgentDelegationContextVerifierPort. El repositorio no prueba consentimiento del owner y no debe usarse como API de aplicación. I3-2B.3B debe implementar verificación transaccional y servicio de autoridad; no se emiten contextos verificados ni se habilitan operaciones delegated.
 
 **Validación del slice de persistencia:** suite completa del branch ejecutada por el propietario en Debian: 1,329/1,329 tests OK en 17.000s; `python -m compileall -q src tests` con `COMPILE_EXIT_CODE=0`. Esta validación no elimina el bloqueo de autoridad descrito arriba.
+
+
+### 14. I3-2B.3B.1 — servicio de contexto verificado AGENT
+
+Se añadió `VerifiedAgentIdentityContextService`, con admisión one-shot de proofs y revalidación canónica exclusivamente AGENT. La resolución usa `native_agent_identity` + `agent_identity`; no crea ni resuelve `atlas_users`. El contexto incluye realm/audience y attestation HMAC con domain separation distinto del protocolo USER. Proof consumption, binding lookup y canonical resolution comparten `SQLiteLocalAuthorityUnitOfWork`; cualquier fallo de binding/identidad revierte el consumo.
+
+El método `verify` vuelve a comprobar firma, TTL, issuer, binding activo/revisión y canonical AGENT activo/revisión, implementando el puerto `VerifiedAgentIdentityContextVerifierPort`.
+
+**Pendiente de validación Debian.** No se emite aún `VerifiedAgentDelegationContext`, no existe todavía autoridad de delegación y no se habilitan operaciones AGENT en runtime.
