@@ -1,9 +1,11 @@
-"""CAM-gated execution for the initial read-only workspace capabilities."""
+"""CAM-gated execution for canonical, registry-backed read-only workspaces."""
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import json
+from pathlib import Path
 
+from atlas.adapters.local_workspace import LocalWorkspaceAdapter
 from atlas.adapters.sqlite.local_authority_unit_of_work import (
     SQLiteLocalAuthorityUnitOfWorkFactory,
 )
@@ -25,6 +27,11 @@ from atlas.core.context import OperationContext
 from atlas.core.errors import AuthorizationError, ContractError
 from atlas.core.identity import IdentityKind, IdentityStatus
 from atlas.memory.models import EnvironmentId, ProjectId
+from atlas.ports.workspace_mounts import WorkspaceMountResolver
+from atlas.workspace.models import (
+    ProjectEnvironmentStatus,
+    WorkspaceStatus,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,31 +71,26 @@ class WorkspaceCapabilityExecutionResult:
 
 
 class WorkspaceCapabilityExecutionService:
-    """Ejecuta list/read con CAM y mantiene la UoW durante el acceso protegido.
+    """Ejecuta list/read desde el registro canónico y bajo CAM.
 
-    Política inicial: los workspaces de este perfil pertenecen al usuario
-    canónico autenticado. El modelo no proporciona owner, proyecto ni entorno.
-    La ejecución solo admite un paso READ_ONLY revisado explícitamente.
+    El resolver de mounts debe proceder de composición confiable. El caller
+    solo aporta workspace_id y, para lectura, una ruta relativa dentro de él.
     """
 
     def __init__(
         self,
         *,
         unit_of_work_factory: SQLiteLocalAuthorityUnitOfWorkFactory,
-        listing_service: WorkspaceListingService,
-        reading_service: WorkspaceFileReadingService,
+        mount_resolver: WorkspaceMountResolver,
         catalog: CapabilityCatalog | None = None,
         evaluator: AuthorizationEvaluator | None = None,
     ) -> None:
         if not callable(unit_of_work_factory):
             raise ContractError("unit_of_work_factory debe ser invocable")
-        if not callable(getattr(listing_service, "list", None)):
-            raise ContractError("listing_service debe implementar list")
-        if not callable(getattr(reading_service, "read", None)):
-            raise ContractError("reading_service debe implementar read")
+        if not callable(getattr(mount_resolver, "resolve", None)):
+            raise ContractError("mount_resolver debe implementar resolve(root_ref)")
         self._unit_of_work_factory = unit_of_work_factory
-        self._listing_service = listing_service
-        self._reading_service = reading_service
+        self._mount_resolver = mount_resolver
         self._catalog = catalog or build_default_capability_catalog()
         if not isinstance(self._catalog, CapabilityCatalog):
             raise ContractError("catalog debe ser CapabilityCatalog")
@@ -124,7 +126,7 @@ class WorkspaceCapabilityExecutionService:
         *,
         review_confirmed: bool,
     ) -> WorkspaceCapabilityExecutionResult:
-        """Autoriza y ejecuta un único paso de lectura dentro de la UoW CAM."""
+        """Revalida autoridad y Grant antes de resolver el mount y tocar disco."""
         if not isinstance(plan, AssistantPlan):
             raise ContractError("plan debe ser AssistantPlan")
         if not isinstance(context, OperationContext):
@@ -171,9 +173,8 @@ class WorkspaceCapabilityExecutionService:
         else:
             raise AuthorizationError("capacidad no admitida")
 
-        # The UoW uses BEGIN IMMEDIATE. Identity, Grant, Project and Environment
-        # are read from the same transaction, and remain fenced from SQLite
-        # writers while the protected filesystem read/list is performed.
+        # BEGIN IMMEDIATE fences canonical SQLite writers through the filesystem
+        # read. This is not a filesystem lock or a distributed consistency gate.
         with self._unit_of_work_factory() as unit:
             canonical = unit.identity.get_user(context.user_id)
             if (
@@ -183,14 +184,34 @@ class WorkspaceCapabilityExecutionService:
             ):
                 raise AuthorizationError("la identidad canónica no coincide con el contexto")
 
-            project = unit.project_environments.get_project(ProjectId(context.project_id))
+            workspace = unit.workspaces.get_workspace(workspace_id)
+            if workspace is None or workspace.status is not WorkspaceStatus.ACTIVE:
+                raise AuthorizationError("el workspace no existe o no está activo")
+            if workspace.owner_user_id != canonical.user_id:
+                raise AuthorizationError("el workspace no pertenece al usuario canónico")
+            if (
+                str(workspace.project_id) != context.project_id
+                or str(workspace.environment_id) != context.environment
+            ):
+                raise AuthorizationError("el workspace no coincide con el ámbito del contexto")
+
+            project = unit.project_environments.get_project(workspace.project_id)
             environment = unit.project_environments.get_environment(
-                EnvironmentId(context.environment)
+                workspace.environment_id
             )
             if project is None or project.status != "active":
                 raise AuthorizationError("el proyecto no existe o no está activo")
             if environment is None or environment.status != "active":
                 raise AuthorizationError("el entorno no existe o no está activo")
+
+            association = unit.workspaces.get_association(
+                workspace.project_id, workspace.environment_id
+            )
+            if (
+                association is None
+                or association.status is not ProjectEnvironmentStatus.ACTIVE
+            ):
+                raise AuthorizationError("la asociación Project/Environment no está activa")
 
             request = AuthorizationRequest(
                 context=context,
@@ -207,16 +228,29 @@ class WorkspaceCapabilityExecutionService:
             ):
                 raise AuthorizationError("CAM no autorizó el recurso y la acción exactos")
 
-            grant = evaluation.matched_grant
-            if plan.intent.kind is IntentKind.WORKSPACE_LIST:
-                result = self._listing_service.list(workspace_id)
-            else:
-                result = self._reading_service.read(workspace_id, parameters["path"])
+            # Resolve only registry-controlled root_ref after exact CAM ALLOW.
+            try:
+                root = self._mount_resolver.resolve(workspace.root_ref)
+            except (ContractError, OSError, ValueError) as exc:
+                raise AuthorizationError("el mount confiable no está disponible") from exc
+            if not isinstance(root, (str, Path)):
+                raise AuthorizationError("el resolver devolvió una raíz inválida")
 
+            adapter = LocalWorkspaceAdapter({workspace.workspace_id: root})
+            listing_service = WorkspaceListingService(adapter)
+            reading_service = WorkspaceFileReadingService(adapter)
+            if plan.intent.kind is IntentKind.WORKSPACE_LIST:
+                result = listing_service.list(workspace.workspace_id)
+            else:
+                result = reading_service.read(
+                    workspace.workspace_id, parameters["path"]
+                )
+
+            grant = evaluation.matched_grant
             return WorkspaceCapabilityExecutionResult(
                 plan_id=plan.plan_id,
                 capability=plan.intent.kind,
-                workspace_id=workspace_id,
+                workspace_id=workspace.workspace_id,
                 resource_id=resource_id,
                 grant_id=grant.grant_id,
                 grant_revision=grant.revision,
