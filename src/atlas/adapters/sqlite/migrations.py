@@ -2152,8 +2152,161 @@ CORE_SCHEMA_V22 = SQLiteMigration(
 )
 
 
+
+CORE_SCHEMA_V23 = SQLiteMigration(
+    version=23,
+    name="canonical_agent_delegations",
+    sql="""
+    CREATE TABLE agent_delegations (
+        delegation_id TEXT PRIMARY KEY CHECK (
+            length(delegation_id) = 36
+            AND delegation_id = lower(delegation_id)
+            AND length(replace(delegation_id, '-', '')) = 32
+            AND substr(delegation_id, 9, 1) = '-'
+            AND substr(delegation_id, 14, 1) = '-'
+            AND substr(delegation_id, 19, 1) = '-'
+            AND substr(delegation_id, 24, 1) = '-'
+            AND substr(delegation_id, 15, 1) = '4'
+            AND substr(delegation_id, 20, 1) IN ('8', '9', 'a', 'b')
+            AND delegation_id NOT GLOB '*[^0-9a-f-]*'
+        ),
+        owner_user_id TEXT NOT NULL,
+        owner_identity_id TEXT NOT NULL,
+        agent_identity_id TEXT NOT NULL,
+        grant_id TEXT NOT NULL,
+        grant_revision INTEGER NOT NULL CHECK (grant_revision > 0),
+        project_id TEXT NOT NULL CHECK (length(trim(project_id)) > 0),
+        environment TEXT NOT NULL CHECK (length(trim(environment)) > 0),
+        resource_type TEXT NOT NULL CHECK (length(trim(resource_type)) > 0),
+        resource_ids_json TEXT NOT NULL CHECK (length(trim(resource_ids_json)) > 2),
+        actions_json TEXT NOT NULL CHECK (length(trim(actions_json)) > 2),
+        issuer_id TEXT NOT NULL,
+        issued_at TEXT NOT NULL,
+        not_before TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        created_by_user_identity_id TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('active', 'revoked')),
+        revision INTEGER NOT NULL CHECK (revision > 0),
+        revoked_at TEXT,
+        revoked_by_user_id TEXT,
+        CHECK (owner_identity_id != agent_identity_id),
+        CHECK (created_by_user_identity_id = owner_identity_id),
+        CHECK (not_before >= issued_at),
+        CHECK (expires_at > not_before),
+        CHECK (
+            (status = 'active' AND revoked_at IS NULL AND revoked_by_user_id IS NULL)
+            OR
+            (status = 'revoked' AND revoked_at IS NOT NULL AND revoked_by_user_id IS NOT NULL)
+        ),
+        FOREIGN KEY (owner_user_id) REFERENCES atlas_users(user_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+        FOREIGN KEY (owner_identity_id) REFERENCES identity_records(identity_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+        FOREIGN KEY (agent_identity_id) REFERENCES identity_records(identity_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+        FOREIGN KEY (grant_id) REFERENCES authorization_grants(grant_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+        FOREIGN KEY (issuer_id) REFERENCES native_identity_issuers(issuer_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+        FOREIGN KEY (created_by_user_identity_id) REFERENCES identity_records(identity_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+        FOREIGN KEY (revoked_by_user_id) REFERENCES atlas_users(user_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE INDEX agent_delegations_owner ON agent_delegations(owner_user_id, status);
+    CREATE INDEX agent_delegations_agent ON agent_delegations(agent_identity_id, status);
+    CREATE INDEX agent_delegations_grant ON agent_delegations(grant_id, status);
+
+    CREATE TRIGGER agent_delegation_requires_canonical_claims
+    BEFORE INSERT ON agent_delegations
+    WHEN NOT EXISTS (
+        SELECT 1
+        FROM atlas_users u
+        JOIN identity_records owner_i
+          ON owner_i.identity_id = u.identity_id
+        JOIN identity_records agent_i
+          ON agent_i.identity_id = NEW.agent_identity_id
+        JOIN authorization_grants g
+          ON g.grant_id = NEW.grant_id
+        JOIN native_identity_issuers issuer
+          ON issuer.issuer_id = NEW.issuer_id
+        WHERE u.user_id = NEW.owner_user_id
+          AND owner_i.identity_id = NEW.owner_identity_id
+          AND owner_i.identity_kind = 'user'
+          AND owner_i.identity_status = 'active'
+          AND agent_i.identity_kind = 'agent'
+          AND agent_i.identity_status = 'active'
+          AND g.owner_user_id = NEW.owner_user_id
+          AND g.subject_identity_id = NEW.agent_identity_id
+          AND g.project_id = NEW.project_id
+          AND g.environment = NEW.environment
+          AND g.revision = NEW.grant_revision
+          AND g.revoked_at IS NULL
+          AND g.expires_at >= NEW.expires_at
+          AND issuer.status = 'ACTIVE'
+          AND EXISTS (
+              SELECT 1 FROM native_agent_identity_bindings b
+              WHERE b.identity_id = NEW.agent_identity_id
+                AND b.issuer_id = NEW.issuer_id
+                AND b.status = 'ACTIVE'
+          )
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'delegation claims do not match active canonical owner, agent, Grant and issuer');
+    END;
+
+    CREATE TRIGGER agent_delegation_identity_immutable
+    BEFORE UPDATE OF delegation_id, owner_user_id, owner_identity_id,
+        agent_identity_id, grant_id, grant_revision, project_id, environment,
+        resource_type, resource_ids_json, actions_json, issuer_id, issued_at,
+        not_before, expires_at, created_by_user_identity_id
+    ON agent_delegations
+    WHEN NEW.delegation_id != OLD.delegation_id
+      OR NEW.owner_user_id != OLD.owner_user_id
+      OR NEW.owner_identity_id != OLD.owner_identity_id
+      OR NEW.agent_identity_id != OLD.agent_identity_id
+      OR NEW.grant_id != OLD.grant_id
+      OR NEW.grant_revision != OLD.grant_revision
+      OR NEW.project_id != OLD.project_id
+      OR NEW.environment != OLD.environment
+      OR NEW.resource_type != OLD.resource_type
+      OR NEW.resource_ids_json != OLD.resource_ids_json
+      OR NEW.actions_json != OLD.actions_json
+      OR NEW.issuer_id != OLD.issuer_id
+      OR NEW.issued_at != OLD.issued_at
+      OR NEW.not_before != OLD.not_before
+      OR NEW.expires_at != OLD.expires_at
+      OR NEW.created_by_user_identity_id != OLD.created_by_user_identity_id
+    BEGIN
+        SELECT RAISE(ABORT, 'delegation claims are immutable');
+    END;
+
+    CREATE TRIGGER agent_delegation_revision_step
+    BEFORE UPDATE ON agent_delegations
+    WHEN NEW.revision != OLD.revision + 1
+    BEGIN
+        SELECT RAISE(ABORT, 'delegation revision must increase by exactly one');
+    END;
+
+    CREATE TRIGGER agent_delegation_revocation_terminal
+    BEFORE UPDATE OF status ON agent_delegations
+    WHEN OLD.status = 'revoked' AND NEW.status != 'revoked'
+    BEGIN
+        SELECT RAISE(ABORT, 'revoked delegation is terminal');
+    END;
+
+    CREATE TRIGGER agent_delegation_no_delete
+    BEFORE DELETE ON agent_delegations
+    BEGIN
+        SELECT RAISE(ABORT, 'delegations are retained as tombstones');
+    END;
+    """,
+)
+
+
 SQLITE_MIGRATIONS = (
     CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
     CORE_SCHEMA_V5, CORE_SCHEMA_V6, CORE_SCHEMA_V7, CORE_SCHEMA_V8,
-    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13, CORE_SCHEMA_V14, CORE_SCHEMA_V15, CORE_SCHEMA_V16, CORE_SCHEMA_V17, CORE_SCHEMA_V18, CORE_SCHEMA_V19, CORE_SCHEMA_V20, CORE_SCHEMA_V21, CORE_SCHEMA_V22,
+    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13, CORE_SCHEMA_V14, CORE_SCHEMA_V15, CORE_SCHEMA_V16, CORE_SCHEMA_V17, CORE_SCHEMA_V18, CORE_SCHEMA_V19, CORE_SCHEMA_V20, CORE_SCHEMA_V21, CORE_SCHEMA_V22, CORE_SCHEMA_V23,
 )
