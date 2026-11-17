@@ -232,6 +232,8 @@ El servicio productivo `VerifiedIdentityContextService` ya implementa `verify_in
 - `GrantRenewalService.request_renewal` exige ahora el repositorio `workspaces` en la UoW compartida.
 - Después de resolver Project y Environment activos, consulta la asociación exacta por ambos IDs mediante `uow.workspaces.get_association`.
 - La solicitud AGENT se deniega si la asociación no existe, está suspendida o sus IDs no coinciden exactamente.
+- El puerto mínimo `ProjectEnvironmentAssociationReaderPort` hace explícita la dependencia del servicio y declara `get_association` como lectura dentro de la UoW compartida.
+- Se prueba también que una UoW sin la autoridad `workspaces` falla cerrada.
 - No se añadió migración: se reutiliza el contrato y la tabla V18 existentes.
 - Se añadieron pruebas de servicio para asociación inexistente y suspendida, ambas sin escritura ni commit.
 
