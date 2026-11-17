@@ -246,6 +246,105 @@ No se aprueba todavía un esquema SQL definitivo. Antes de elegir tablas/índice
 
 La persistencia de tokens, proofs, bootstrap y tombstones debe incluir índices de unicidad, expiración y estados terminales suficientes para impedir replay y reutilización.
 
+## 7.1 Cierre de C0 — hallazgos físicos y decisiones vinculantes
+
+La inspección de código se realizó sobre el head exacto de PR #6:
+
+`feature/cycle-3-2-b-trusted-workspace-mount-cam-gate` @ `9a80ba3b8b9c5f8f5048f0ad98905faaf0b5bf7c`.
+
+### 7.1.1 Baseline real de identidad y schema
+
+Se confirma:
+
+- La migración v5 ya crea `identity_records` y `atlas_users`.
+- La migración v6 reconstruye ambas tablas con foreign keys recíprocas diferidas, haciendo que la relación USER↔UserId deba estar completa al commit.
+- La Identity Authority SQLite ya crea y consulta `CanonicalUserIdentity`, y aplica CAS de revisión y revocación terminal.
+- La cadena actual llega a schema v18. v7 añade Grants; v9 Project/Environment; v10–v14 coordinación multi-authority; v15–v17 inventario y admisiones de recovery evidence; v18 asociaciones Project–Environment y workspaces.
+- El diseño físico B1-B-03B inspeccionado documenta un baseline histórico v4/v5 y un primer incremento que ya fue superado por la evolución del repositorio. No se debe aplicar su propuesta antigua de migración v5 sobre la rama actual.
+
+**Decisión:** no se recrean ni alteran `identity_records` o `atlas_users`. La autenticación nativa requiere una migración nueva únicamente para los agregados y metadatos que realmente faltan (autenticadores, sesiones, proofs, bootstrap y binding/issuer nativo, según el esquema finalmente aprobado). El número de migración se seleccionará al integrar sobre la rama resultante de #5/#6; v19 es la siguiente versión esperada en el head actual, no una reserva inmutable ni permiso para migrar una base real.
+
+### 7.1.2 UoW y bootstrap local
+
+La inspección confirma que:
+
+- `SQLiteLocalAuthorityUnitOfWork` hereda de `SQLiteAuthorizationUnitOfWork`.
+- La UoW comparte un único `SQLiteUnitOfWork`/conexión/BEGIN IMMEDIATE.
+- Expone repositorios de Identity, Grants, Project/Environment, Workspaces, authority changes y recovery evidence.
+- `SQLiteIdentityAuthority` recibe esa misma unidad de trabajo y usa la conexión activa.
+- La unidad base exige `commit()` explícito; salir sin commit revierte la transacción.
+
+**Decisión:** para el primer perfil local de Atlas, el bootstrap será una sola transacción SQLite compartida, no una saga. El repositorio nuevo de Authentication Authority, el registro/binding nativo y el estado de bootstrap deberán recibir exactamente la misma unidad activa. Identity Authority crea Identity(USER)/UserId/binding; Authentication Authority crea subject/autenticador/bootstrap state; CAM crea el Grant inicial mediante su propio repositorio. Cada autoridad conserva propiedad exclusiva de sus agregados, aunque sus escrituras participen en una transacción física común.
+
+La transacción completa confirma todo o nada. El login inicial permanece bloqueado hasta el commit. Si el proceso falla antes del commit, no queda una cuenta parcialmente autenticable. Una saga solo se reconsiderará si una decisión futura separa estas autoridades en procesos o bases distintas; no forma parte del perfil local inicial.
+
+### 7.1.3 Consistency: contrato disponible, coordinador no disponible
+
+La rama contiene:
+
+- `AuthorityChangeCoordinatorPort` como contrato.
+- `SQLiteAuthorityChangeStore` y tablas de reserva/idempotencia/claims/evidencia multi-authority.
+- Un diseño explícito que advierte que el store no implementa por sí solo invalidación, fencing, mutación de fuentes ni reconciliación.
+- No se encontró un adaptador concreto completo de `AuthorityChangeCoordinatorPort` en la composición inspeccionada.
+
+**Decisión:** no se presentará el store como coordinador ni se declarará que la revocación de credenciales ya tiene fencing global. C1/C2 pueden implementar invalidación de sesiones y proofs dentro de la propiedad de Authentication Authority. C3/C4 no podrán prometer invalidación/fencing concurrente de operaciones protegidas frente a cambios de Identity/binding hasta que exista el coordinador real y su integración esté probada. La integración protegida queda fail-closed mientras ese requisito no esté satisfecho.
+
+### 7.1.4 Contrato de issuer y binding nativo
+
+B1-B-03A fija que la pareja exacta `(issuer_id, subject)` es única y no reasignable, y que el login handle no es subject. B1-B-03B físico existente contempla issuer externo con referencias de configuración/keyset y no define todavía un perfil nativo. La compatibilidad nativa ya aprobada exige un discriminador explícito.
+
+**Decisiones:**
+
+- Un issuer nativo representa el realm lógico de la instalación Atlas; nunca el host, hostname, UID/GID o proceso.
+- El perfil de issuer debe distinguir al menos `EXTERNAL_CRYPTOGRAPHIC` y `NATIVE_AUTHORITY_PROOF`. No se fabrican keysets ni firmas para el issuer nativo.
+- El subject nativo es aleatorio, opaco, estable y no reutilizable; no es login handle, UserId, identity_id ni secreto de sesión.
+- Identity Authority administra el binding canónico nativo bajo las mismas reglas de unicidad histórica, revocación terminal y tombstone de B1-B-03A.
+- Authentication Authority verifica credenciales y emite proof; Identity Authority valida la procedencia por puerto privado y resuelve el binding. No se aceptan claims de issuer/subject fabricados por el caller.
+- El almacenamiento de subject nativo no se implementará copiando sin análisis el diseño de subject externo: la entropía y el modelo de amenaza son distintos. El detalle de fingerprint/almacenamiento y rotación debe quedar en el contrato físico antes de la migración.
+
+### 7.1.5 Proof nativo
+
+Se adopta para el perfil local una referencia opaca respaldada por estado de servidor:
+
+- La referencia es aleatoria y no predecible.
+- Authentication Authority persiste únicamente su digest y los metadatos mínimos necesarios.
+- Su consumo por Identity Authority es privado, ligado al realm/audience y revisión del autenticador, expira y es atómico de un solo uso.
+- La referencia no transporta password, hash, token de sesión ni autorización.
+- La privacidad de constructores Python no se considera frontera de seguridad.
+- No se requiere firma de issuer externo para una prueba interna; la procedencia se verifica mediante el store/puerto privado y la misma frontera transaccional local.
+
+### 7.1.6 Decisiones de login, contraseña y sesiones
+
+- Login handle: ASCII lowercase canónico, longitud de 3 a 64 caracteres, patrón `[a-z0-9][a-z0-9._-]*`; no se usa email como identificador de acceso ni como subject. El valor normalizado tiene unicidad dentro del realm nativo. Los cambios de handle no cambian subject, UserId ni Identity.
+- Password: Argon2id con salt único por autenticador y parámetros/versionado almacenados junto al hash. Los parámetros de producción se fijan mediante benchmark en el hardware objetivo; no se codifican valores arbitrarios en este diseño.
+- El sistema impone una longitud mínima de 12 caracteres y un límite superior de entrada medido en bytes para proteger el proceso de hashing; el límite exacto se fija en el contrato de C1 y debe ser suficientemente alto para permitir frases de contraseña.
+- Login desconocido y password incorrecta producen respuesta externa indistinguible. Se aplica throttling que no cree un bloqueo permanente explotable para denegar servicio al propietario.
+- Session token: 32 bytes como mínimo de CSPRNG, representación opaca, sin claims ni permisos. Solo el digest SHA-256 del token se persiste; el valor original se entrega una sola vez.
+- La sesión está ligada a authenticator, native subject, credential revision y family. Expiración, revocación y rotación son obligatorias.
+- Rotación es atómica y CAS-protegida; solo existe un sucesor válido. Se conserva material de detección de tokens rotados durante la vida de la familia; su reutilización revoca la familia y exige login nuevo.
+- No se establece un TTL universal en C0. C1/C2 deben definir expiración absoluta, inactividad y reautenticación reciente por clase de operación antes de habilitar uso operativo.
+- Cada solicitud protegida obtiene proof nuevo y un VerifiedIdentityContext efímero. No se acepta un contexto suministrado por el cliente ni se conserva entre solicitudes.
+
+### 7.1.7 Límite de actor y contexto
+
+La especificación B1-B-03A y el contrato actual de OperationContext distinguen identidad autenticada, actor ejecutor y usuario contextual.
+
+**Decisión:** este ciclo solo autentica Identity(USER) y habilita la ruta directa en la que el actor es exactamente la Identity(USER) verificada y el UserId corresponde a esa misma identidad canónica. No se implementan ni se infieren AGENT, SERVICE, WATCHER, SYSTEM o delegación. `delegation=None` conserva su significado contractual y no se interpreta como INDEPENDENT. No se cambia el modelo de OperationContext para resolver autenticación.
+
+### 7.1.8 Resultado de C0
+
+C0 queda cerrado en el nivel de arquitectura e integración para el perfil local, con los siguientes límites:
+
+- No se duplican las tablas canónicas UserId/Identity.
+- La composición de bootstrap local será una UoW SQLite compartida.
+- El issuer nativo utiliza un perfil de prueba interna distinto del issuer externo.
+- El proof es opaco, de servidor, one-shot y consumido por Identity Authority.
+- Las sesiones pertenecen a Authentication Authority y se invalidan por revisión de credenciales.
+- No se declara Consistency/fencing operativo donde solo existe un port y un store.
+- No se habilitan capacidades protegidas hasta cerrar C3/C4 y demostrar la coordinación de revocación exigida.
+
+Pendientes de C1/C2 antes de implementación/activación: biblioteca Argon2id y benchmark, límite máximo exacto de bytes de contraseña, algoritmo de protección del subject nativo, política de rate limiting persistente/temporal, expiración de sesión por clase de operación y esquema SQL detallado. Estos puntos no bloquean el diseño de alto nivel, pero sí bloquean la migración final y la activación operativa.
+
 ## 8. Secuencia de implementación y gates
 
 ### 3.2-C0 — Cierre de contratos y baseline físico
