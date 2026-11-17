@@ -87,7 +87,7 @@ static bool read_process_snapshot(pid_t pid, bv_status *status,
     if (make_proc_path(path, sizeof(path), pid, "status") != 0 ||
         read_bounded_file(path, status_buffer, ATLAS_PROC_STATUS_MAX,
                           &length) != 0) {
-        *status_result = BV_TRUNCATED;
+        *status_result = errno == EOVERFLOW ? BV_TOO_LARGE : BV_TRUNCATED;
         return false;
     }
     *status_result = bv_parse_status(status_buffer, length, status);
@@ -98,7 +98,7 @@ static bool read_process_snapshot(pid_t pid, bv_status *status,
     if (make_proc_path(path, sizeof(path), pid, "stat") != 0 ||
         read_bounded_file(path, stat_buffer, ATLAS_PROC_STAT_MAX,
                           &length) != 0) {
-        *stat_result = BV_TRUNCATED;
+        *stat_result = errno == EOVERFLOW ? BV_TOO_LARGE : BV_TRUNCATED;
         return false;
     }
     *stat_result = bv_parse_stat(stat_buffer, length, (int32_t)pid,
