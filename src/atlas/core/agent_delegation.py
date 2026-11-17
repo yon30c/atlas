@@ -78,9 +78,9 @@ class AgentDelegation:
     issued_at: datetime
     not_before: datetime
     expires_at: datetime
+    created_by_user_identity_id: str
     status: AgentDelegationStatus = AgentDelegationStatus.ACTIVE
     revision: int = 1
-    created_by_user_identity_id: str = ""
     revoked_at: datetime | None = None
     revoked_by_user_id: str | None = None
 
@@ -90,6 +90,10 @@ class AgentDelegation:
             "agent_identity_id", "issuer_id", "created_by_user_identity_id",
         ):
             validate_canonical_uuid4(getattr(self, name), name)
+        if self.owner_identity_id == self.agent_identity_id:
+            raise ContractError("owner y agent deben ser identidades distintas")
+        if self.created_by_user_identity_id != self.owner_identity_id:
+            raise ContractError("la delegación debe ser creada por la identidad del propietario")
         for name in ("grant_id", "project_id", "environment"):
             _required(getattr(self, name), name)
         _revision(self.grant_revision, "grant_revision")
