@@ -221,11 +221,8 @@ class AgentRenewalApprovalLifecycleTests(unittest.TestCase):
         self.assertEqual(stored.decided_at, NOW)
 
     def test_suspended_association_blocks_pending_agent_approval(self):
-        self.association_state["value"] = replace(
-            self.association_state["value"],
-            status=ProjectEnvironmentStatus.SUSPENDED,
-            revision=2,
-        )
+        self.association_state["value"].status = ProjectEnvironmentStatus.SUSPENDED
+        self.association_state["value"].revision = 2
         self.assert_denied_without_mutation()
 
     def test_revoked_delegation_blocks_pending_agent_approval(self):
@@ -249,11 +246,8 @@ class AgentRenewalApprovalLifecycleTests(unittest.TestCase):
         self.assert_denied_without_mutation()
 
     def test_owner_can_reject_pending_request_after_association_suspension_and_revocation(self):
-        self.association_state["value"] = replace(
-            self.association_state["value"],
-            status=ProjectEnvironmentStatus.SUSPENDED,
-            revision=2,
-        )
+        self.association_state["value"].status = ProjectEnvironmentStatus.SUSPENDED
+        self.association_state["value"].revision = 2
         self.delegation_state["value"] = replace(
             self.delegation,
             status=AgentDelegationStatus.REVOKED,
