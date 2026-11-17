@@ -39,7 +39,7 @@ class PasswordPolicyTests(unittest.TestCase):
             validate_new_password("á" * 513)
 
     def test_rejects_nul_and_unpaired_surrogates(self):
-        for value in ("valid-password\\x00suffix", "valid-password\\ud800"):
+        for value in ("valid-password\x00suffix", "valid-password\ud800"):
             with self.subTest(value=repr(value)):
                 with self.assertRaises(ContractError):
                     validate_new_password(value)
