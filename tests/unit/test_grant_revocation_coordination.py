@@ -19,6 +19,10 @@ from atlas.core.context import OperationContext
 from atlas.core.errors import AuthorizationError
 from atlas.core.enums import DelegationMode
 from atlas.core.identity import Identity, IdentityKind, IdentityStatus
+from tests.fixtures.verified_identity import (
+    OWNER_USER_ID, OWNER_IDENTITY_ID, VERIFIED_OWNER,
+    FakeVerifiedIdentityContextVerifier,
+)
 from atlas.memory.authority_changes import (
     AuthorityChangeIntent,
     AuthorityChangeReservation,
@@ -204,7 +208,7 @@ class FakeAuthorityChangeCoordinator:
 class GrantRevocationCoordinationTests(unittest.TestCase):
     def setUp(self):
         self.actor = Identity(
-            identity_id="user-001",
+            identity_id=OWNER_IDENTITY_ID,
             kind=IdentityKind.USER,
             status=IdentityStatus.ACTIVE,
         )
@@ -212,7 +216,7 @@ class GrantRevocationCoordinationTests(unittest.TestCase):
             request_id="request-001",
             correlation_id="correlation-001",
             actor=self.actor,
-            user_id="user-001",
+            user_id=OWNER_USER_ID,
             origin="unit-test",
             delegation=None,
             project_id="atlas",
@@ -223,7 +227,7 @@ class GrantRevocationCoordinationTests(unittest.TestCase):
         )
         self.grant = Grant(
             grant_id="grant-001",
-            owner_user_id="user-001",
+            owner_user_id=OWNER_USER_ID,
             subject_identity_id="agent-001",
             project_id="atlas",
             environment="development",
@@ -235,6 +239,7 @@ class GrantRevocationCoordinationTests(unittest.TestCase):
         self.repository = InMemoryGrantRepository()
         self.repository.create(self.grant)
         self.coordinator = FakeAuthorityChangeCoordinator(self.repository)
+        self.identity_verifier = FakeVerifiedIdentityContextVerifier()
         self.service = GrantManagementService(
             self.repository,
             consumer_id="atlas-consumer-001",
@@ -242,7 +247,22 @@ class GrantRevocationCoordinationTests(unittest.TestCase):
             proof_authorization=FakeProofAuthorization(),
             change_coordinator=self.coordinator,
             clock=FakeClock(),
+            identity_verifier=self.identity_verifier,
         )
+
+    def revoke(self, context=None, grant_id=None, idempotency_key="idem-001", now=NOW, *, verified_identity=VERIFIED_OWNER):
+        return self.revoke(
+            context or self.context,
+            grant_id or self.grant.grant_id,
+            idempotency_key,
+            now,
+            verified_identity=verified_identity,
+        )
+
+    def test_revoke_fails_closed_without_verified_identity_evidence(self):
+        with self.assertRaises(AuthorizationError):
+            self.service.revoke(self.context, self.grant.grant_id, "idem-no-proof", NOW)
+        self.assertEqual(self.coordinator.reserve_calls, 0)
 
     def test_revoke_uses_coordinator_and_never_repository_update(self):
         result = self.service.revoke(
