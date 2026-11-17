@@ -270,7 +270,7 @@ No se cambia timestamp, no se habilita NOPASSWD, no se usa sudo -S y no se alter
 
 El propietario autorizó el 16-11-2026 desarrollar conjuntamente los puntos 1–7 como prototipo C no privilegiado. El diseño está en `local-bootstrap-chain-observer-v3-design.md` y el código en `tools/bootstrap-chain-observer/`.
 
-El prototipo observa el padre directo, clasifica metadatos compatibles con sudo setuid root, compara UID/GID, SID/PGID/TTY, recorre la cadena sudo contigua hasta el primer ancestro no sudo, verifica el TTY de origen contra el sudo monitor, abre pidfd para cada nodo y compara dos muestras. Un wrapper como padre directo se rechaza; la presencia de sudo más arriba no lo convierte en directo. Un TTY interno de sudo no debe ocultar que el ancestro de origen carece de TTY.
+El prototipo observa el padre directo, clasifica metadatos compatibles con sudo setuid root, compara UID/GID, SID/PGID/TTY y el stat propio, recorre la cadena sudo contigua hasta el primer ancestro no sudo, verifica el TTY de origen contra el sudo monitor, abre pidfd para cada nodo y compara dos muestras. Un wrapper como padre directo se rechaza; la presencia de sudo más arriba no lo convierte en directo. Un TTY interno de sudo no debe ocultar que el ancestro de origen carece de TTY.
 
 Resultados limitados a `CHAIN_PATTERN_MATCHED_DIAGNOSTICALLY`, `CHAIN_MISMATCH` y `CHAIN_INCOMPLETE`, siempre con `AUTHORIZATION=NOT_PROVIDED`. La coincidencia no prueba identidad de paquete, política sudo efectiva, autenticidad SSH, presencia física ni autorización. No integra PAM, helper privilegiado, configuración protegida, claves, Broker, SQLite, CAM o runtime.
 
