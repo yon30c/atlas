@@ -342,3 +342,19 @@ La emisión revalida el contexto AGENT dentro de la UoW compartida, enlaza ident
 La revalidación posterior verifica attestation, configuración confiable, TTL, claims, estado/revisión de delegación y Grant, propietario, identidad AGENT y binding nativo. La variante `verify_in_unit_of_work` no controla el commit del caller. Esta evidencia no es autorización CAM.
 
 **Límite preservado:** no se conecta a `GrantRenewalService.request_renewal`, no se habilita runtime AGENT, login ni endpoints. La ruta de renovación sigue fail-closed. Validación Debian pendiente del propietario; no se declaran pruebas aprobadas hasta recibir el resultado de la suite y compileall.
+
+
+## 19. I3-2B.5 validation and I3-2B.6 CAM renewal integration
+
+**Owner validation of I3-2B.5:** 1,369/1,369 tests passed on Debian; `python -m compileall -q src tests` returned exit code 0.
+
+I3-2B.6B/6C implementation now exists on the PR branch:
+- CAM action `grant.renewal.request` is explicit and checked against the exact Grant and delegated scope.
+- The first version requires exact resource-set equality because approval renews the whole Grant.
+- Each resource is evaluated by `AuthorizationEvaluator`; all must ALLOW against the same Grant ID and revision.
+- AGENT and delegation evidence are revalidated inside the same local SQLite UoW that reads Grant/Project/Environment and persists the renewal request.
+- The request stores immutable Grant/delegation revisions; CORE_SCHEMA_V24 enforces complete evidence, canonical delegation/Grant/binding/issuer match, and immutable audit claims.
+- Only USER owner evidence may approve/reject. Approval rejects a stale Grant revision.
+- Duplicate request ID is idempotent only for the same intent; only one PENDING request per Grant is allowed.
+
+**I3-2B.6B/6C Debian validation remains pending.** The implementation is not considered validated until the owner reports focused tests, full unit suite and compileall. No AGENT login, endpoint or runtime was enabled. PR #16 remains Draft/open/unmerged.
