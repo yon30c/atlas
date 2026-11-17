@@ -208,7 +208,7 @@ Para cada siguiente incremento:
 6. Revisar los resultados antes de continuar.
 7. Actualizar esta documentación con evidencia, commit y estado real.
 
-**Siguiente acción:** abordar el Ciclo 3.2 para resolver el contexto canónico de la consola y 
+**Siguiente acción:** abordar el Ciclo 3.2 para resolver el contexto canónico de la consola y la configuración confiable de workspaces antes de conectar planificación/ejecución al runtime. No se debe adaptar `LocalConsoleRequestFactory` actual como identidad autorizada: hoy genera una identidad sintética, sin UserId canónico ni proyecto.
 
 
 ### F2.3.3b — Inspección de autoridad y consistencia
