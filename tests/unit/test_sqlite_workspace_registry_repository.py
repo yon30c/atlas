@@ -168,6 +168,10 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
             replace(self.workspace, root_ref="/srv/atlas/workspace")
         with self.assertRaises(ContractError):
             replace(self.workspace, root_ref="file:///srv/atlas/workspace")
+        with self.assertRaises(ContractError):
+            replace(self.workspace, root_ref="../outside")
+        with self.assertRaises(ContractError):
+            replace(self.workspace, root_ref="mount:../outside")
 
 
 if __name__ == "__main__":
