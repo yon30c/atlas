@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
 
-from atlas.core.errors import ContractError
+from atlas.core.errors import AuthorizationError, ContractError
 from atlas.core.user_identity import validate_canonical_uuid4
 
 
@@ -113,14 +113,14 @@ def require_platform_admin_permission(
     _revision(user_identity_revision, "user_identity_revision")
     _utc(now, "now")
     if grant.status is not PlatformAdminGrantStatus.ACTIVE:
-        raise ContractError("la autoridad administrativa no está activa")
+        raise AuthorizationError("la autoridad administrativa no está activa")
     if (
         grant.user_id != user_id
         or grant.user_identity_id != user_identity_id
         or grant.user_identity_revision != user_identity_revision
     ):
-        raise ContractError("la autoridad administrativa no coincide con la identidad USER")
+        raise AuthorizationError("la autoridad administrativa no coincide con la identidad USER")
     if now < grant.not_before or now >= grant.expires_at:
-        raise ContractError("la autoridad administrativa está fuera de su ventana temporal")
+        raise AuthorizationError("la autoridad administrativa está fuera de su ventana temporal")
     if permission not in grant.permissions:
-        raise ContractError("la autoridad administrativa no concede la acción solicitada")
+        raise AuthorizationError("la autoridad administrativa no concede la acción solicitada")
