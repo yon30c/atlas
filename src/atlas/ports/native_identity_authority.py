@@ -31,6 +31,11 @@ class NativeIdentityAuthorityPort(Protocol):
     ) -> NativeIdentityBinding | None:
         """Resolve active or revoked binding, retaining tombstone visibility."""
 
+    def get_native_binding_by_id(
+        self, binding_id: str
+    ) -> NativeIdentityBinding | None:
+        """Resolve a binding by its immutable canonical identifier."""
+
     def create_native_binding(
         self,
         identity: CanonicalUserIdentity,
