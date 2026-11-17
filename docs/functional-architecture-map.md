@@ -119,7 +119,7 @@ La rama incorpora contratos y adaptadores de lectura independientes del runtime 
 
 ## 3.4 Gate CAM de ejecución read-only (Ciclo 3.1)
 
-**Estado: implementado en GitHub; pendiente de validación local.**
+**Estado: VALIDADO por el propietario; suite completa: 1,194 tests en 9.318 s, todos OK.**
 
 - `WorkspaceCapabilityExecutionService` valida un plan de un solo paso y exige confirmación explícita de revisión.
 - Revalida la identidad contra el par canónico UserId/Identity de `SQLiteLocalAuthorityUnitOfWork`; exige proyecto y entorno activos; consulta Grants del propietario canónico y evalúa el recurso/acción exactos con `AuthorizationEvaluator`.
@@ -544,3 +544,8 @@ La auditoría del inventario valida que `changed_at` sea no decreciente entre re
 La prueba de corrupción controlada confirma que una revisión posterior retrodatada se detecta sin reparar datos. La auditoría sigue siendo de solo lectura; no autentica el reloj ni habilita autoridad, recuperación o runtime.
 
 **Estado: VALIDADO por el propietario; suite completa: 1139 tests en 8.811 s, todos OK.**
+
+
+## Ciclo 3.1 — Validación del gate CAM read-only
+
+El propietario ejecutó la suite completa: **1,194 tests en 9.318 s, todos OK**. El gate local para `workspace.list`/`workspace.read` y la lectura dentro de la UoW SQLite quedan validados. No está conectado a CLI/runtime y no habilita escritura, shell ni ejecución multi-paso. El siguiente paso es diseñar el bootstrap confiable de consola, identidad canónica, proyecto/entorno y ownership de workspaces.
