@@ -245,6 +245,10 @@ class SQLiteAgentDelegationAuthorityTests(unittest.TestCase):
             self._create(scope=AgentDelegationScope(
                 "project", frozenset({"workspace-a"}), frozenset({"read"})
             ))
+        with self.assertRaises(AuthorizationError):
+            self._create(scope=AgentDelegationScope(
+                "workspace", frozenset({"workspace-a"}), frozenset({"delete"})
+            ))
 
     def test_delegation_window_must_fit_inside_current_grant(self):
         with self.assertRaises(AuthorizationError):
