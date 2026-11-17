@@ -165,6 +165,20 @@ static void test_missing_pidfd_is_incomplete(void) {
     assert(aco_evaluate(&report) == ACO_CHAIN_INCOMPLETE);
 }
 
+static void test_node_without_pidfd_is_incomplete(void) {
+    aco_report report;
+    valid_fixture(&report);
+    report.nodes[1].pidfd_open = false;
+    assert(aco_evaluate(&report) == ACO_CHAIN_INCOMPLETE);
+}
+
+static void test_origin_uid_mismatch_rejected(void) {
+    aco_report report;
+    valid_fixture(&report);
+    report.nodes[2].status.uid[0] = 2000U;
+    assert(aco_evaluate(&report) == ACO_CHAIN_MISMATCH);
+}
+
 static void test_parent_link_mismatch_rejected(void) {
     aco_report report;
     valid_fixture(&report);
@@ -211,6 +225,8 @@ int main(void) {
     test_missing_tty_is_incomplete();
     test_unstable_chain_is_incomplete();
     test_missing_pidfd_is_incomplete();
+    test_node_without_pidfd_is_incomplete();
+    test_origin_uid_mismatch_rejected();
     test_parent_link_mismatch_rejected();
     test_not_a_sudo_executable();
     test_output_does_not_claim_authority();
