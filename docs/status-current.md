@@ -93,10 +93,9 @@ En `tests/evaluation/phase3/` se añadió un contrato cerrado que permite al mod
 Se añadieron nueve casos estructurados que cubren propuestas válidas, negativas, acceso entre proyectos, inyección indirecta, herramientas desconocidas, autoridad falsificada y suplantación de administrador. La política y construcción de solicitudes son exclusivas del harness. No se ha ejecutado Gemma ni se han conectado herramientas reales.
 
 
-### Bootstrap LOCAL — validador V1 y observador V2
+### Bootstrap LOCAL — validador V1, observador V2 y cadena sudo V3
 
 - **V1:** validador aislado de fixtures completado y validado por el propietario en Debian el 16-11-2026. Compilación estricta, matriz ampliada y AddressSanitizer/UndefinedBehaviorSanitizer superados.
-- **V2:** implementación publicada en `tools/bootstrap-observer/`. Incluye lecturas acotadas y acumuladas de `/proc/PID/status` y `stat`, pidfd real con poll antes/después, doble muestra del padre, observación de `/proc/PID/exe` mediante `O_PATH`/fstat, consultas de TTY/foreground y muestreo temporal opcional.
-- Se añadió suite automatizada para clasificadores, comparación de snapshots, argumentos, smoke test del recolector y CLI, además del script `sh tools/bootstrap-observer/test_v2.sh`.
-- **Validación V2 pendiente:** el propietario aún no ha compilado ni ejecutado la versión publicada. No atribuir a V2 resultados de pruebas hasta recibir la salida de Debian.
-- Frontera: solo observación; sin instalación, cambios del host, PAM, claves, configuración protegida, sudoers, systemd, SSH, Broker, SQLite, CAM ni runtime. Una observación consistente no autentica al operador ni aprueba el candidato A. El contrato general sigue abierto y Recovery Gate permanece cerrado.
+- **V2:** observador Linux genérico en `tools/bootstrap-observer/`, validado por el propietario en Debian: build estricto, pruebas automatizadas, observación local y sostenida, detección de foreground, sudo local, SSH con PTY directo, shell intermediario y SSH sin PTY. El resultado genérico no autoriza ni valida cadenas de privilegios.
+- **V3:** observador diagnóstico específico de la cadena sudo en `tools/bootstrap-chain-observer/`, con diseño `docs/design/local-bootstrap-chain-observer-v3-design.md`. Implementa revisión del padre directo, metadatos sudo setuid root, UID/GID, cadena sudo contigua, TTY del ancestro de origen, pidfd y doble muestra. Incluye pruebas fixture negativas y smoke test. **Compilación y pruebas Debian del propietario pendientes.**
+- Frontera: V3 es solo lectura y no privilegiada; no instala ni ejecuta helper, no modifica PAM, sudoers, systemd, SSH, usuarios/grupos, claves o configuración protegida, y no se conecta a Broker, SQLite, CAM o runtime. `CHAIN_PATTERN_MATCHED_DIAGNOSTICALLY` no es autorización. Candidato A no aprobado para ejecución privilegiada; Recovery Gate permanece cerrado.
