@@ -128,6 +128,16 @@ class SQLiteGrantRenewalRepositoryTests(unittest.TestCase):
                     ),
                 )
 
+    def test_database_allows_only_one_pending_renewal_per_grant(self):
+        self.repository.create(self.request)
+        second = replace(self.request, renewal_id="renewal-002")
+        with self.assertRaises(ContractError):
+            self.repository.create(second)
+        self.assertEqual(
+            self.repository.list_by_grant(self.grant.grant_id),
+            (self.request,),
+        )
+
     def test_update_if_version_is_compare_and_swap(self):
         self.repository.create(self.request)
         approved = replace(
