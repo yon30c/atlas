@@ -387,3 +387,8 @@ Pruebas nuevas: `tests/unit/test_verified_agent_identity_context_service.py`, in
 ### Límites pendientes
 
 Este slice no implementa la autoridad de delegación ni emite `VerifiedAgentDelegationContext`. La autenticación nativa que emite proofs sigue siendo un servicio separado y requiere composición/guardia de intentos; no se habilita endpoint/login AGENT. El siguiente paso es construir la autoridad de delegación sobre owner USER verificado + AGENT verificado y Grant exacto dentro de la misma UoW.
+
+
+### Validación Debian — I3-2B.3B.1
+
+El propietario ejecutó la suite completa sobre el HEAD de esta fase: `Ran 1341 tests in 17.171s`, `OK`; `python -m compileall -q src tests` terminó con `COMPILE_EXIT_CODE=0`. Esta evidencia corresponde a la rama de diseño actual y no implica activación de autenticación AGENT en runtime ni habilitación de delegaciones.
