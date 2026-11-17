@@ -128,3 +128,20 @@ Archivo: `src/atlas/adapters/atlas_memory_authorization.py`.
 ## 6. Fuera de alcance
 
 No modificar DB productiva, migraciones, host, PAM, systemd, sudoers, usuarios, Docker ni privilegios. No fusionar PRs sin autorización explícita. No desplegar ni componer el servicio de autenticación mientras falte un guard de intentos compartido y fail-closed y la provisión segura de la clave HMAC.
+
+
+## 7. Estado de I3-1 — operaciones directas de propietario en Grants
+
+**Implementación en curso en PR de slice independiente; validación local pendiente.**
+
+Añadido en la rama de I3-1:
+- Puerto `VerifiedIdentityContextVerifierPort`, compatible estructuralmente con `VerifiedIdentityContextService.verify`.
+- Helper `require_verified_owner_context`: exige `VerifiedIdentityContext`, revalidación mediante autoridad confiable, par canónico `CanonicalUserIdentity`, actor exacto, UserId exacto, revisión exacta, USER activo y `delegation=None`. La indisponibilidad o excepción del verificador falla cerrado.
+- `GrantManagementService.issue` y `revoke` requieren ahora el argumento keyword-only `verified_identity` y un verificador inyectado. Sin evidencia o sin verificador, deniegan antes de acceder a la coordinación o persistencia.
+- Se eliminó la comparación incorrecta `actor.identity_id == context.user_id`. Ownership se compara con `canonical.user_id`; actor se compara con `canonical.identity`. No se igualan los UUIDs.
+- Se conservan la UoW transaccional, scope, comprobación de ownership y la evidencia CAM/proof/coordinador ya requerida para revocación.
+- Tests actualizados para usar IDs UUID distintos y un fake explícito de verificador limitado a tests; añadidos casos de evidencia ausente, identidad manipulada, mismatch actor/UserId y autoridad no disponible.
+
+**Validación:** pendiente de ejecución por el usuario en Debian. No declarar I3-1 validado hasta recibir suite completa y `compileall`.
+
+**Límite:** este slice solo cubre operaciones directas de propietario en `GrantManagementService`. No cierra todavía renovación, Memory, Workspace, adaptadores, callers ni identidad sintética local. El fake de tests no es un adaptador productivo y no debe componerse en runtime.

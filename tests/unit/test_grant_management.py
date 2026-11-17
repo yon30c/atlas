@@ -7,6 +7,12 @@ from atlas.authorization.models import Grant, GrantResourceScope
 from atlas.core.context import OperationContext
 from atlas.core.errors import AuthorizationError, ContractError
 from atlas.core.identity import Identity, IdentityKind, IdentityStatus
+from tests.fixtures.verified_identity import (
+    OWNER_IDENTITY_ID,
+    OWNER_USER_ID,
+    VERIFIED_OWNER,
+    FakeVerifiedIdentityContextVerifier,
+)
 
 
 NOW = datetime(2026, 11, 12, 15, 0, tzinfo=timezone.utc)
@@ -54,7 +60,7 @@ class InMemoryAuthorizationUnitOfWork:
 class GrantManagementTests(unittest.TestCase):
     def setUp(self):
         self.actor = Identity(
-            identity_id="user-001",
+            identity_id=OWNER_IDENTITY_ID,
             kind=IdentityKind.USER,
             status=IdentityStatus.ACTIVE,
         )
@@ -62,7 +68,7 @@ class GrantManagementTests(unittest.TestCase):
             request_id="request-001",
             correlation_id="correlation-001",
             actor=self.actor,
-            user_id="user-001",
+            user_id=OWNER_USER_ID,
             origin="unit-test",
             delegation=None,
             project_id="atlas",
@@ -73,7 +79,7 @@ class GrantManagementTests(unittest.TestCase):
         )
         self.grant = Grant(
             grant_id="grant-001",
-            owner_user_id="user-001",
+            owner_user_id=OWNER_USER_ID,
             subject_identity_id="agent-001",
             project_id="atlas",
             environment="development",
@@ -83,30 +89,84 @@ class GrantManagementTests(unittest.TestCase):
             expires_at=NOW + timedelta(days=7),
         )
         self.repository = InMemoryGrantRepository()
+        self.identity_verifier = FakeVerifiedIdentityContextVerifier()
         self.service = GrantManagementService(
             self.repository,
             unit_of_work_factory=lambda: InMemoryAuthorizationUnitOfWork(self.repository),
+            identity_verifier=self.identity_verifier,
         )
 
+    def issue(
+        self,
+        context=None,
+        grant=None,
+        now=NOW,
+        *,
+        service=None,
+        verified_identity=VERIFIED_OWNER,
+    ):
+        target = service or self.service
+        return target.issue(
+            context or self.context,
+            grant or self.grant,
+            now,
+            verified_identity=verified_identity,
+        )
+
+    def test_issue_fails_closed_without_verified_identity_evidence(self):
+        with self.assertRaises(AuthorizationError):
+            self.service.issue(self.context, self.grant, NOW)
+
     def test_issue_fails_closed_without_transactional_unit_of_work(self):
-        service = GrantManagementService(self.repository)
+        service = GrantManagementService(
+            self.repository, identity_verifier=self.identity_verifier
+        )
         with self.assertRaisesRegex(ContractError, "unidad de trabajo transaccional"):
-            service.issue(self.context, self.grant, NOW)
+            self.issue(service=service)
         self.assertIsNone(self.repository.get(self.grant.grant_id))
 
+    def test_issue_rejects_context_user_id_not_matching_verified_identity(self):
+        mismatched = replace(
+            self.context,
+            user_id="f6b2b66f-7c72-4d77-8d84-7d0a8c5a1006",
+        )
+        with self.assertRaises(AuthorizationError):
+            self.issue(context=mismatched)
+
+    def test_issue_rejects_tampered_verified_identity_context(self):
+        tampered = replace(
+            VERIFIED_OWNER,
+            user_id="f6b2b66f-7c72-4d77-8d84-7d0a8c5a1006",
+        )
+        with self.assertRaises(AuthorizationError):
+            self.issue(verified_identity=tampered)
+
+    def test_issue_fails_closed_when_identity_verifier_is_unavailable(self):
+        service = GrantManagementService(
+            self.repository,
+            unit_of_work_factory=lambda: InMemoryAuthorizationUnitOfWork(self.repository),
+        )
+        with self.assertRaises(AuthorizationError):
+            self.issue(service=service)
+
+    def test_issue_preserves_distinct_user_and_identity_ids(self):
+        self.assertNotEqual(self.context.user_id, self.context.actor.identity_id)
+        result = self.issue(self.context, self.grant, NOW)
+        self.assertEqual(result.owner_user_id, self.context.user_id)
+
     def test_issue_stores_and_returns_grant(self):
-        result = self.service.issue(self.context, self.grant, NOW)
+        result = self.issue(self.context, self.grant, NOW)
         self.assertEqual(result, self.grant)
         self.assertEqual(self.repository.get(self.grant.grant_id), self.grant)
         self.assertEqual(
-            self.repository.list_by_owner("user-001"),
+            self.repository.list_by_owner(OWNER_USER_ID),
             (self.grant,),
         )
 
     def test_issue_requires_active_user_matching_context_user(self):
         invalid_actors = (
             Identity(
-                identity_id="user-001",
+                identity_id=OWNER_IDENTITY_ID,
                 kind=IdentityKind.AGENT,
                 status=IdentityStatus.ACTIVE,
             ),
@@ -124,16 +184,16 @@ class GrantManagementTests(unittest.TestCase):
         for actor in invalid_actors:
             with self.subTest(actor=actor):
                 with self.assertRaises(AuthorizationError):
-                    self.service.issue(
+                    self.issue(
                         replace(self.context, actor=actor),
                         self.grant,
                         NOW,
                     )
 
     def test_issue_cannot_grant_for_another_owner(self):
-        grant = replace(self.grant, owner_user_id="user-002")
+        grant = replace(self.grant, owner_user_id="f6b2b66f-7c72-4d77-8d84-7d0a8c5a1006")
         with self.assertRaises(AuthorizationError):
-            self.service.issue(self.context, grant, NOW)
+            self.issue(self.context, grant, NOW)
 
     def test_issue_requires_matching_project_and_environment(self):
         mismatches = (
@@ -143,35 +203,28 @@ class GrantManagementTests(unittest.TestCase):
         for grant in mismatches:
             with self.subTest(grant=grant):
                 with self.assertRaises(AuthorizationError):
-                    self.service.issue(self.context, grant, NOW)
+                    self.issue(self.context, grant, NOW)
 
     def test_duplicate_grant_id_is_rejected(self):
-        self.service.issue(self.context, self.grant, NOW)
+        self.issue(self.context, self.grant, NOW)
         with self.assertRaises(ContractError):
-            self.service.issue(self.context, self.grant, NOW)
+            self.issue(self.context, self.grant, NOW)
 
     def test_issue_requires_utc_now_matching_issued_at(self):
         with self.assertRaises(ContractError):
-            self.service.issue(
-                self.context,
-                self.grant,
-                datetime(2026, 11, 12, 15, 0),
-            )
+            self.issue(now=datetime(2026, 11, 12, 15, 0))
         with self.assertRaises(ContractError):
-            self.service.issue(
-                self.context,
-                self.grant,
-                NOW + timedelta(seconds=1),
-            )
+            self.issue(now=NOW + timedelta(seconds=1))
 
     def test_revoke_fails_closed_without_coordinator_and_cam_ports(self):
-        self.service.issue(self.context, self.grant, NOW)
+        self.issue(self.context, self.grant, NOW)
         with self.assertRaises(ContractError):
             self.service.revoke(
                 self.context,
                 self.grant.grant_id,
                 "idem-001",
                 NOW + timedelta(seconds=1),
+                verified_identity=VERIFIED_OWNER,
             )
 
 

@@ -11,6 +11,7 @@ from atlas.authorization.grant_revocation import (
     GrantRevocationProofAuthorizationService,
     GrantRevocationResult,
 )
+from atlas.authorization.identity_evidence import require_verified_owner_context
 from atlas.authorization.models import (
     Grant,
     GrantRevocationAuthorizationRequest,
@@ -21,7 +22,11 @@ from atlas.core.errors import (
     ContractError,
     NotFoundError,
 )
-from atlas.core.identity import IdentityKind, IdentityStatus
+from atlas.core.user_identity import CanonicalUserIdentity
+from atlas.core.verified_identity_context import VerifiedIdentityContext
+from atlas.ports.verified_identity_context_verifier import (
+    VerifiedIdentityContextVerifierPort,
+)
 from atlas.memory.authority_changes import (
     AuthorityChangeIntent,
     AuthorityChangeReservation,
@@ -51,6 +56,7 @@ class GrantManagementService:
         change_coordinator: AuthorityChangeCoordinatorPort | None = None,
         clock: Clock | None = None,
         unit_of_work_factory: Callable[[], AuthorizationUnitOfWork] | None = None,
+        identity_verifier: VerifiedIdentityContextVerifierPort | None = None,
     ) -> None:
         configured = (
             consumer_id is not None,
@@ -71,6 +77,7 @@ class GrantManagementService:
             raise ContractError("unit_of_work_factory debe ser invocable")
         self._repository = repository
         self._unit_of_work_factory = unit_of_work_factory
+        self._identity_verifier = identity_verifier
         self._consumer_id = cast(str, consumer_id)
         self._revocation_authorizer = cast(
             GrantRevocationAuthorizationPort, revocation_authorizer
@@ -88,13 +95,15 @@ class GrantManagementService:
         context: OperationContext,
         grant: Grant,
         now: datetime,
+        *,
+        verified_identity: VerifiedIdentityContext | None = None,
     ) -> Grant:
-        """Emite un Grant si el actor es su propietario."""
-        self._validate_owner_context(context)
+        """Emite un Grant solo con evidencia vigente del propietario."""
+        canonical = self._validate_owner_context(context, verified_identity)
         self._validate_utc(now)
         if not isinstance(grant, Grant):
             raise ContractError("grant debe ser Grant")
-        if grant.owner_user_id != context.user_id:
+        if grant.owner_user_id != canonical.user_id:
             raise AuthorizationError(
                 "No se pueden emitir Grants para otro propietario"
             )
@@ -131,9 +140,11 @@ class GrantManagementService:
         grant_id: str,
         idempotency_key: str,
         now: datetime,
+        *,
+        verified_identity: VerifiedIdentityContext | None = None,
     ) -> GrantRevocationResult:
-        """Solicita autorización CAM y delega el cambio al coordinador durable."""
-        self._validate_owner_context(context)
+        """Revoca solo tras verificar al propietario y obtener autorización CAM."""
+        canonical = self._validate_owner_context(context, verified_identity)
         if any(
             dependency is None
             for dependency in (
@@ -160,7 +171,7 @@ class GrantManagementService:
             raise NotFoundError("Grant no encontrado")
         if not isinstance(grant, Grant):
             raise ContractError("El repositorio debe devolver un Grant")
-        if grant.owner_user_id != context.user_id:
+        if grant.owner_user_id != canonical.user_id:
             raise AuthorizationError(
                 "No se pueden revocar Grants de otro propietario"
             )
@@ -520,21 +531,16 @@ class GrantManagementService:
             proposed_revision=reservation.intent.proposed_revision,
         )
 
-    @staticmethod
-    def _validate_owner_context(context: OperationContext) -> None:
-        if not isinstance(context, OperationContext):
-            raise ContractError("context debe ser OperationContext")
-
-        actor = context.actor
-        if (
-            actor.kind is not IdentityKind.USER
-            or actor.status is not IdentityStatus.ACTIVE
-            or actor.identity_id != context.user_id
-            or context.delegation is not None
-        ):
-            raise AuthorizationError(
-                "Se requiere una acción directa de un usuario propietario activo"
-            )
+    def _validate_owner_context(
+        self,
+        context: OperationContext,
+        verified_identity: VerifiedIdentityContext | None,
+    ) -> CanonicalUserIdentity:
+        return require_verified_owner_context(
+            context,
+            verified_identity,
+            self._identity_verifier,
+        )
 
     @staticmethod
     def _validate_utc(value: datetime) -> None:

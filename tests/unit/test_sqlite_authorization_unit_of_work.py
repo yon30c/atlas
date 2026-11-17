@@ -15,6 +15,12 @@ from atlas.adapters.sqlite.authorization_unit_of_work import (
 from atlas.adapters.sqlite.migrations import SQLITE_MIGRATIONS
 from atlas.authorization.grant_management import GrantManagementService
 from atlas.authorization.renewal_service import GrantRenewalService
+from tests.fixtures.verified_identity import (
+    OWNER_IDENTITY_ID,
+    OWNER_USER_ID,
+    VERIFIED_OWNER,
+    FakeVerifiedIdentityContextVerifier,
+)
 from atlas.core.context import OperationContext
 from atlas.core.enums import DelegationMode
 from atlas.core.identity import Identity, IdentityKind, IdentityStatus
@@ -163,8 +169,9 @@ class SQLiteAuthorizationUnitOfWorkTests(unittest.TestCase):
         )
 
     def test_grant_issue_service_uses_atomic_shared_unit_of_work(self):
+        grant = replace(self.grant, owner_user_id=OWNER_USER_ID)
         actor = Identity(
-            identity_id="user-001",
+            identity_id=OWNER_IDENTITY_ID,
             kind=IdentityKind.USER,
             status=IdentityStatus.ACTIVE,
         )
@@ -172,7 +179,7 @@ class SQLiteAuthorizationUnitOfWorkTests(unittest.TestCase):
             request_id="request-issue",
             correlation_id="correlation-issue",
             actor=actor,
-            user_id="user-001",
+            user_id=OWNER_USER_ID,
             origin="unit-test",
             delegation=None,
             project_id="atlas",
@@ -184,11 +191,15 @@ class SQLiteAuthorizationUnitOfWorkTests(unittest.TestCase):
         service = GrantManagementService(
             SQLiteGrantRepository(self.database),
             unit_of_work_factory=self.factory,
+            identity_verifier=FakeVerifiedIdentityContextVerifier(),
         )
-        self.assertEqual(service.issue(context, self.grant, NOW), self.grant)
+        self.assertEqual(
+            service.issue(context, grant, NOW, verified_identity=VERIFIED_OWNER),
+            grant,
+        )
         with self.assertRaises(ContractError):
-            service.issue(context, self.grant, NOW)
-        self.assertEqual(SQLiteGrantRepository(self.database).get(self.grant.grant_id), self.grant)
+            service.issue(context, grant, NOW, verified_identity=VERIFIED_OWNER)
+        self.assertEqual(SQLiteGrantRepository(self.database).get(grant.grant_id), grant)
 
     def test_grant_renewal_service_runs_on_sqlite_unit_of_work(self):
         with self.factory() as uow:
