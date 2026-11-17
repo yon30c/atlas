@@ -45,6 +45,18 @@ typedef struct {
     bool tty_changed;
 } bo_report;
 
+bv_parse_result bo_classify_read(size_t bytes_read, size_t maximum,
+                                 int read_error);
+bv_pidfd_state bo_pidfd_state_from_poll(int poll_result, int revents);
+bool bo_parent_samples_match(const bv_status *status_a,
+                             const bv_stat *stat_a,
+                             const bv_status *status_b,
+                             const bv_stat *stat_b);
+bool bo_executable_samples_match(uint64_t device_a, uint64_t inode_a,
+                                 uint32_t mode_a, uint32_t uid_a,
+                                 uint32_t gid_a, uint64_t device_b,
+                                 uint64_t inode_b, uint32_t mode_b,
+                                 uint32_t uid_b, uint32_t gid_b);
 int bo_collect(bo_report *report);
 bool bo_parse_hold_ms(const char *value, unsigned *milliseconds);
 int bo_run_hold(bo_report *report, unsigned milliseconds);
