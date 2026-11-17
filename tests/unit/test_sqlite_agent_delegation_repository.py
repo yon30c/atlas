@@ -175,6 +175,32 @@ class SQLiteAgentDelegationRepositoryTests(unittest.TestCase):
                 revoked_by_user_id=self.owner.user_id,
             )
 
+    def test_database_triggers_reject_scope_expansion_even_if_repository_is_bypassed(self):
+        delegation = self._delegation(
+            scope=AgentDelegationScope(
+                "workspace",
+                frozenset({"workspace-a", "workspace-outside-grant"}),
+                frozenset({"read"}),
+            )
+        )
+        values = self.repository._values(delegation)
+        with self.database.connection() as connection:
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    """
+                    INSERT INTO agent_delegations (
+                        delegation_id, owner_user_id, owner_identity_id,
+                        agent_identity_id, grant_id, grant_revision, project_id,
+                        environment, resource_type, resource_ids_json, actions_json,
+                        issuer_id, issued_at, not_before, expires_at,
+                        created_by_user_identity_id, status, revision, revoked_at,
+                        revoked_by_user_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    values,
+                )
+        self.assertIsNone(self.repository.get(delegation.delegation_id))
+
     def test_database_prevents_direct_claim_mutation_and_deletion(self):
         delegation = self._delegation()
         self.repository.create(delegation)
