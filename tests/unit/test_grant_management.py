@@ -7,6 +7,10 @@ from atlas.authorization.models import Grant, GrantResourceScope
 from atlas.core.context import OperationContext
 from atlas.core.errors import AuthorizationError, ContractError
 from atlas.core.identity import Identity, IdentityKind, IdentityStatus
+from tests.fixtures.verified_identity import (
+    OWNER_USER_ID, OWNER_IDENTITY_ID, VERIFIED_OWNER,
+    FakeVerifiedIdentityContextVerifier,
+)
 
 
 NOW = datetime(2026, 11, 12, 15, 0, tzinfo=timezone.utc)
@@ -54,7 +58,7 @@ class InMemoryAuthorizationUnitOfWork:
 class GrantManagementTests(unittest.TestCase):
     def setUp(self):
         self.actor = Identity(
-            identity_id="user-001",
+            identity_id=OWNER_IDENTITY_ID,
             kind=IdentityKind.USER,
             status=IdentityStatus.ACTIVE,
         )
@@ -62,7 +66,7 @@ class GrantManagementTests(unittest.TestCase):
             request_id="request-001",
             correlation_id="correlation-001",
             actor=self.actor,
-            user_id="user-001",
+            user_id=OWNER_USER_ID,
             origin="unit-test",
             delegation=None,
             project_id="atlas",
@@ -73,7 +77,7 @@ class GrantManagementTests(unittest.TestCase):
         )
         self.grant = Grant(
             grant_id="grant-001",
-            owner_user_id="user-001",
+            owner_user_id=OWNER_USER_ID,
             subject_identity_id="agent-001",
             project_id="atlas",
             environment="development",
@@ -83,23 +87,40 @@ class GrantManagementTests(unittest.TestCase):
             expires_at=NOW + timedelta(days=7),
         )
         self.repository = InMemoryGrantRepository()
+        self.identity_verifier = FakeVerifiedIdentityContextVerifier()
         self.service = GrantManagementService(
             self.repository,
             unit_of_work_factory=lambda: InMemoryAuthorizationUnitOfWork(self.repository),
+            identity_verifier=self.identity_verifier,
         )
 
+    def issue(self, context=None, grant=None, *, service=None, verified_identity=VERIFIED_OWNER, now=NOW):
+        target = service or self.service
+        return target.issue(
+            context or self.context,
+            grant or self.grant,
+            now,
+            verified_identity=verified_identity,
+        )
+
+    def test_issue_fails_closed_without_verified_identity_evidence(self):
+        with self.assertRaises(AuthorizationError):
+            self.service.issue(self.context, self.grant, NOW)
+
     def test_issue_fails_closed_without_transactional_unit_of_work(self):
-        service = GrantManagementService(self.repository)
+        service = GrantManagementService(
+            self.repository, identity_verifier=self.identity_verifier
+        )
         with self.assertRaisesRegex(ContractError, "unidad de trabajo transaccional"):
-            service.issue(self.context, self.grant, NOW)
+            self.issue(service=service)
         self.assertIsNone(self.repository.get(self.grant.grant_id))
 
     def test_issue_stores_and_returns_grant(self):
-        result = self.service.issue(self.context, self.grant, NOW)
+        result = self.issue(self.context, self.grant, NOW)
         self.assertEqual(result, self.grant)
         self.assertEqual(self.repository.get(self.grant.grant_id), self.grant)
         self.assertEqual(
-            self.repository.list_by_owner("user-001"),
+            self.repository.list_by_owner(OWNER_USER_ID),
             (self.grant,),
         )
 
