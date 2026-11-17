@@ -14,6 +14,11 @@ class IdentityAuthorityPort(Protocol):
     def get_user(self, user_id: str) -> CanonicalUserIdentity | None:
         """Resolve a canonical UserId, returning None when it does not exist."""
 
+    def get_user_by_identity_id(
+        self, identity_id: str
+    ) -> CanonicalUserIdentity | None:
+        """Resolve the canonical UserId/Identity(USER) pair by identity UUID."""
+
     def update_user_status(
         self,
         user_id: str,
