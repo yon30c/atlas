@@ -19,7 +19,7 @@ static void test_stat(void){
  assert(bv_parse_stat(stat_ok,sizeof(stat_ok)-1,124,&o)==BV_INVALID);
  const char *shortline="123 (x) S 10 11 12 0 0"; assert(bv_parse_stat((const unsigned char*)shortline,strlen(shortline),123,&o)==BV_TRUNCATED);
  const char *bad="123 (x) S 10 11 12 0 0 0 0 0 0 0 0 0 0 0 0 0 0 nope"; assert(bv_parse_stat((const unsigned char*)bad,strlen(bad),123,&o)!=BV_OK);
- const char *tail="123 (x) S 10 11 12 0 0 0 0 0 0 0 0 0 0 0 0 0 0 10 extra"; assert(bv_parse_stat((const unsigned char*)tail,strlen(tail),123,&o)==BV_INVALID);
+ const char *tail="123 (x) S 10 11 12 0 0 0 0 0 0 0 0 0 0 0 0 0 0 10 11 extra"; assert(bv_parse_stat((const unsigned char*)tail,strlen(tail),123,&o)==BV_INVALID);
 }
 static bv_observation complete(void){
  bv_observation o={0}; o.has_requested_pid=true;o.requested_pid=123;o.has_helper_pid=true;o.helper_pid=200;
