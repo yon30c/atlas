@@ -43,7 +43,10 @@ Se comprueba:
 - PPID del observador igual al PID del padre capturado;
 - SID del sudo ejecutor igual al SID del observador;
 - TPGID del sudo ejecutor igual al PGID del observador;
+- stat propio del observador coherente con PID/PPID/SID/PGID obtenidos por syscalls;
 - TTY controlador del observador disponible;
+- tty_nr del observador igual al tty_nr del padre sudo directo;
+- TPGID propio igual al foreground PGID del terminal;
 - SID del terminal igual al SID del observador;
 - foreground PGID del terminal igual al PGID del observador.
 
@@ -67,7 +70,7 @@ El prototipo no intenta convertir wrappers en una cadena aceptable buscando ance
 - Se comparan PID, PPID, UID/GID, estado, PGRP, SID, TTY, TPGID, starttime y metadatos del objeto ejecutable.
 - Se comprueba liveness del pidfd antes/después.
 - Se comprueban los enlaces PPID entre nodos.
-- Se vuelve a comprobar PPID, SID, PGID y TTY del observador.
+- Se vuelve a comprobar stat propio, PPID, SID, PGID y TTY del observador.
 
 Las lecturas procfs no son atómicas. pidfd no congela credenciales, PPID, execve, SID, PGID ni TTY. La doble muestra reduce ventanas de confusión, pero no resuelve todas las carreras. Una transición detectada rechaza o deja incompleta la observación.
 
@@ -100,7 +103,7 @@ Las pruebas fixture cubren:
 Código separado en tools/bootstrap-chain-observer/; reutiliza únicamente los parsers puros V1. No reutiliza el probe diagnóstico ni cambia el observador V2.
 
 El recolector:
-1. captura PID/PPID/SID/PGID del observador;
+1. captura PID/PPID/SID/PGID y stat propio del observador;
 2. abre /dev/tty sin adquirir uno nuevo y conserva el descriptor;
 3. camina una cadena de ascendencia acotada hasta el primer ancestro no sudo;
 4. abre pidfd para cada nodo;
