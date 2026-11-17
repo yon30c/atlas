@@ -5,6 +5,9 @@ from typing import Protocol
 
 from atlas.ports.grant_renewals import GrantRenewalRepository
 from atlas.ports.grants import GrantRepository
+from atlas.ports.project_environment_associations import (
+    ProjectEnvironmentAssociationReaderPort,
+)
 
 
 class AuthorizationUnitOfWork(Protocol):
@@ -12,6 +15,7 @@ class AuthorizationUnitOfWork(Protocol):
 
     grants: GrantRepository
     renewals: GrantRenewalRepository
+    workspaces: ProjectEnvironmentAssociationReaderPort
 
     def __enter__(self) -> "AuthorizationUnitOfWork":
         """Inicia la unidad de trabajo."""
