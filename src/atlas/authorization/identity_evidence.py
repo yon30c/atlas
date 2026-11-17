@@ -1,13 +1,13 @@
 """Validación común de operaciones directas del propietario USER."""
 
-from atlas.ports.verified_identity_context_verifier import (
-    VerifiedIdentityContextVerifierPort,
-)
 from atlas.core.context import OperationContext
 from atlas.core.errors import AuthorizationError, ContractError
 from atlas.core.identity import IdentityKind, IdentityStatus
 from atlas.core.user_identity import CanonicalUserIdentity
 from atlas.core.verified_identity_context import VerifiedIdentityContext
+from atlas.ports.verified_identity_context_verifier import (
+    VerifiedIdentityContextVerifierPort,
+)
 
 
 def require_verified_owner_context(
