@@ -219,6 +219,12 @@ bv_parse_result bv_parse_stat(const unsigned char *d, size_t n,
     if (end == 0) {
         return BV_INVALID;
     }
+    for (size_t i = 0; i < end; i++) {
+        if (d[i] == '\n' || d[i] == '\r' || d[i] == '\t' ||
+            d[i] == '\v' || d[i] == '\f') {
+            return BV_INVALID;
+        }
+    }
 
     while (first < end && d[first] != ' ') {
         first++;
