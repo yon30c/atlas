@@ -5,6 +5,7 @@ from enum import Enum
 
 from atlas.core.context import OperationContext
 from atlas.core.errors import ContractError
+from atlas.core.user_identity import validate_canonical_uuid4
 from atlas.memory.consistency import AuthorizationSnapshot
 
 
@@ -218,6 +219,7 @@ class GrantRenewalRequest:
                 raise ContractError("las revisiones de auditoría deben ser enteros positivos")
             if not isinstance(self.delegation_id, str) or not self.delegation_id.strip():
                 raise ContractError("delegation_id debe ser texto no vacío")
+            validate_canonical_uuid4(self.delegation_id, "delegation_id")
         if (
             isinstance(self.version, bool)
             or not isinstance(self.version, int)
