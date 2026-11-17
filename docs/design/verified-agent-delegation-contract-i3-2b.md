@@ -560,4 +560,4 @@ The AGENT renewal request path now requires the existing `uow.workspaces` reposi
 
 This reuses schema V18 and its existing CAS/lifecycle contract. It deliberately does not add another table or association abstraction.
 
-Tests cover missing and suspended association denial with no renewal write/commit. **Owner validation on Debian is pending for the updated HEAD.**
+Tests cover missing and suspended association denial with no renewal write/commit, and fail closed when the association authority is absent. The minimal `ProjectEnvironmentAssociationReaderPort` makes the transaction-bound read contract explicit. **Owner validation on Debian is pending for the updated HEAD.**
