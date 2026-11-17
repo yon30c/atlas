@@ -1,6 +1,6 @@
 # Diseño V2 del observador LOCAL de procesos
 
-**Estado:** alcance V2 aprobado por el propietario el 16-11-2026 para implementación de solo observación, sin instalación ni cambios del host. No es un autenticador ni un componente de autorización.  
+**Estado:** implementación V2 publicada en `feature/terminal-commands`; compilación y pruebas Debian del propietario pendientes. Alcance aprobado el 16-11-2026 para solo observación, sin instalación ni cambios del host. No es autenticador ni componente de autorización.  
 **Rama:** `feature/terminal-commands`.  
 **Relacionado:** `local-bootstrap-validator-v1-design.md`, `local-bootstrap-privilege-validation-contract.md`, `local-bootstrap-privilege-boundary.md`.
 
@@ -114,4 +114,4 @@ No habilitar NOPASSWD, no cambiar timestamp, no usar sudo -S ni alterar sudoers/
 8. build estricto y suite automatizada en Debian por el propietario, incluyendo el smoke test del recolector real.
 9. documentación con comandos exactos y límites.
 
-El cierre de implementación no se declarará validado en el host hasta que el propietario ejecute y comparta las pruebas Debian. Completar V2 no aprueba A, no autoriza PAM, helper privilegiado ni V3/V4.
+La implementación y documentación están publicadas. El cierre de validación no se declarará hasta que el propietario ejecute `sh tools/bootstrap-observer/test_v2.sh`, las pruebas manuales documentadas y comparta sus resultados en Debian. Completar V2 no aprueba A, no autoriza PAM, helper privilegiado ni V3/V4.
