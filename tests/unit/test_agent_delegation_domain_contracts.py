@@ -209,6 +209,8 @@ class AgentDelegationDomainContractTests(unittest.TestCase):
         context = self._delegation_context()
         with self.assertRaises(ContractError):
             replace(context, agent_identity_id="not-a-canonical-uuid")
+        with self.assertRaises(ContractError):
+            replace(context, agent_identity_id=context.owner_identity_id)
 
 
 if __name__ == "__main__":
