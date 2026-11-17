@@ -64,7 +64,6 @@ class GrantRenewalService:
         *,
         verified_agent_identity: VerifiedAgentIdentityContext | None = None,
         verified_delegation: VerifiedAgentDelegationContext | None = None,
-        expected_delegation_revision: int | None = None,
     ) -> GrantRenewalRequest:
         """Create an AGENT renewal request after same-UoW evidence and CAM checks.
 
@@ -76,9 +75,6 @@ class GrantRenewalService:
         if (
             not isinstance(verified_agent_identity, VerifiedAgentIdentityContext)
             or not isinstance(verified_delegation, VerifiedAgentDelegationContext)
-            or isinstance(expected_delegation_revision, bool)
-            or not isinstance(expected_delegation_revision, int)
-            or expected_delegation_revision < 1
         ):
             raise AuthorizationError(
                 "Solicitud AGENT requiere evidencia de identidad y delegación verificable"
@@ -119,7 +115,6 @@ class GrantRenewalService:
             if (
                 canonical_agent.identity != context.actor
                 or canonical_delegation.delegation_id != verified_delegation.delegation_id
-                or canonical_delegation.revision != expected_delegation_revision
                 or canonical_delegation.revision != verified_delegation.delegation_revision
             ):
                 raise AuthorizationError("la evidencia AGENT/delegación no coincide con el estado canónico")
