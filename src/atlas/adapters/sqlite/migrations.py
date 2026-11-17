@@ -1578,8 +1578,95 @@ CORE_SCHEMA_V17 = SQLiteMigration(
 )
 
 
+# v18 adds explicit Project/Environment associations and canonical workspace
+# ownership/scope records. No legacy associations or workspaces are synthesized.
+CORE_SCHEMA_V18 = SQLiteMigration(
+    version=18,
+    name="canonical_project_environment_associations_and_workspaces",
+    sql="""
+    CREATE TABLE atlas_project_environments (
+        project_id TEXT NOT NULL,
+        environment_id TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('active', 'suspended')),
+        revision INTEGER NOT NULL CHECK (revision > 0),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (project_id, environment_id),
+        FOREIGN KEY (project_id) REFERENCES atlas_projects(project_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+        FOREIGN KEY (environment_id) REFERENCES atlas_environments(environment_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE INDEX atlas_project_environments_by_environment
+        ON atlas_project_environments(environment_id, status, project_id);
+
+    CREATE TRIGGER atlas_project_environment_revision_step
+    BEFORE UPDATE ON atlas_project_environments
+    WHEN NEW.revision != OLD.revision + 1
+    BEGIN
+        SELECT RAISE(ABORT, 'Project/Environment association revision must increase by exactly one');
+    END;
+
+    CREATE TRIGGER atlas_project_environment_no_delete
+    BEFORE DELETE ON atlas_project_environments
+    BEGIN
+        SELECT RAISE(ABORT, 'Project/Environment associations are retained as tombstones');
+    END;
+
+    CREATE TABLE atlas_workspaces (
+        workspace_id TEXT PRIMARY KEY CHECK (length(trim(workspace_id)) > 0),
+        owner_user_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        environment_id TEXT NOT NULL,
+        root_ref TEXT NOT NULL CHECK (length(trim(root_ref)) > 0),
+        status TEXT NOT NULL CHECK (status IN ('active', 'suspended', 'disabled')),
+        revision INTEGER NOT NULL CHECK (revision > 0),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (workspace_id, owner_user_id),
+        FOREIGN KEY (owner_user_id) REFERENCES atlas_users(user_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+        FOREIGN KEY (project_id, environment_id)
+            REFERENCES atlas_project_environments(project_id, environment_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE INDEX atlas_workspaces_by_owner
+        ON atlas_workspaces(owner_user_id, status, workspace_id);
+    CREATE INDEX atlas_workspaces_by_project_environment
+        ON atlas_workspaces(project_id, environment_id, status);
+
+    CREATE TRIGGER atlas_workspace_identity_immutable
+    BEFORE UPDATE OF workspace_id, owner_user_id, project_id, environment_id, root_ref
+    ON atlas_workspaces
+    WHEN NEW.workspace_id != OLD.workspace_id
+      OR NEW.owner_user_id != OLD.owner_user_id
+      OR NEW.project_id != OLD.project_id
+      OR NEW.environment_id != OLD.environment_id
+      OR NEW.root_ref != OLD.root_ref
+    BEGIN
+        SELECT RAISE(ABORT, 'Workspace identity, owner, scope and root_ref are immutable');
+    END;
+
+    CREATE TRIGGER atlas_workspace_revision_step
+    BEFORE UPDATE ON atlas_workspaces
+    WHEN NEW.revision != OLD.revision + 1
+    BEGIN
+        SELECT RAISE(ABORT, 'Workspace revision must increase by exactly one');
+    END;
+
+    CREATE TRIGGER atlas_workspace_no_delete
+    BEFORE DELETE ON atlas_workspaces
+    BEGIN
+        SELECT RAISE(ABORT, 'Workspaces are retained as authority tombstones');
+    END;
+    """,
+)
+
+
 SQLITE_MIGRATIONS = (
     CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
     CORE_SCHEMA_V5, CORE_SCHEMA_V6, CORE_SCHEMA_V7, CORE_SCHEMA_V8,
-    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13, CORE_SCHEMA_V14, CORE_SCHEMA_V15, CORE_SCHEMA_V16, CORE_SCHEMA_V17,
+    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13, CORE_SCHEMA_V14, CORE_SCHEMA_V15, CORE_SCHEMA_V16, CORE_SCHEMA_V17, CORE_SCHEMA_V18,
 )
