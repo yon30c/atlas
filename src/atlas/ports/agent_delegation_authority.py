@@ -37,7 +37,13 @@ class AgentDelegationAuthorityPort(Protocol):
         verified_owner_identity: VerifiedIdentityContext,
         revoked_at: datetime,
     ) -> AgentDelegation:
-        """Owner-only terminal revocation guarded by compare-and-swap."""
+        """Owner-only terminal revocation guarded by compare-and-swap.
+
+        Implementations must load the canonical current row, apply
+        validate_agent_delegation_transition(current, updated), and persist
+        within one transaction/fencing boundary. A revoked row is terminal;
+        callers cannot reactivate it by submitting a replacement snapshot.
+        """
 
     def verify_for_operation(
         self,
@@ -49,4 +55,8 @@ class AgentDelegationAuthorityPort(Protocol):
         audience: str,
         maximum_context_ttl: timedelta,
     ) -> VerifiedAgentDelegationContext:
-        """Revalidate live delegation/Grant bindings and issue short-lived evidence."""
+        """Revalidate live delegation/Grant bindings and issue short-lived evidence.
+
+        Implementations must reject revoked delegations and stale Grant or
+        delegation revisions on every operation; this is not a CAM decision.
+        """
