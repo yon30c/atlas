@@ -426,7 +426,7 @@ Se añadió `SQLiteAgentDelegationAuthority.create_for_grant` como autoridad de 
 
 Antes de insertar, la autoridad exige:
 - propietario USER canónico ACTIVE; los IDs de propietario y `created_by_user_identity_id` proceden exclusivamente del resultado canónico del verificador;
-- AGENT canónico ACTIVE y al menos un native binding AGENT ACTIVE cuyo issuer también esté ACTIVE;
+- AGENT canónico ACTIVE y un native binding AGENT ACTIVE asociado al mismo issuer USER verificado, cuyo issuer también esté ACTIVE;
 - Grant exacto, vigente, no revocado, cuyo owner coincide con el USER autenticado y cuyo subject coincide con el AGENT solicitado;
 - `resource_type`, `resource_ids` y `actions` solicitados estrictamente dentro del Grant;
 - ventana UTC con `issued_at` tomado después de adquirir la transacción, `not_before >= issued_at` y `expires_at <= grant.expires_at`.
