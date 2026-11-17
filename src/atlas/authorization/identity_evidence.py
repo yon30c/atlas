@@ -33,6 +33,7 @@ def require_verified_owner_context(
         not isinstance(canonical, CanonicalUserIdentity)
         or canonical.identity.kind is not IdentityKind.USER
         or canonical.identity.status is not IdentityStatus.ACTIVE
+        or verified_identity.identity_type is not IdentityKind.USER
         or verified_identity.identity_id != canonical.identity.identity_id
         or verified_identity.identity_revision != canonical.identity.revision
         or verified_identity.user_id != canonical.user_id
