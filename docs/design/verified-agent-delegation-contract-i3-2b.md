@@ -404,3 +404,12 @@ A focused domain-contract test asserts that this argument is mandatory and typed
 ### Validación Debian — I3-2B.3B.2
 
 El propietario ejecutó `test_agent_delegation_domain_contracts.py`: `Ran 12 tests in 0.486s`, `OK`; `python -m compileall -q src tests` devolvió `COMPILE_EXIT_CODE=0`.
+
+
+## 16. I3-2B.3B.3 — verificadores compatibles con UoW compartida
+
+Los servicios `VerifiedIdentityContextService` y `VerifiedAgentIdentityContextService` exponen ahora `verify_in_unit_of_work(context, unit)`. El método revalida attestation, TTL, issuer, binding, identidad canónica y revisiones usando los repositorios asociados a la UoW recibida. No abre, confirma ni cierra transacciones; la autoridad llamadora conserva el control de commit/rollback.
+
+Los métodos existentes `verify(context)` mantienen su contrato y delegan en la nueva ruta abriendo su propia UoW, por lo que los consumidores actuales no necesitan cambiar.
+
+Se añadieron pruebas para ambos protocolos que llaman al verificador dentro de una UoW ya activa y comprueban que no se abre una transacción anidada. Esto permite que la futura autoridad valide owner USER, AGENT, Grant y delegación dentro de una sola transacción SQLite.
