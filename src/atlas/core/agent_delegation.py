@@ -217,13 +217,7 @@ def validate_agent_delegation_transition(
     if updated.revision != current.revision + 1:
         raise ContractError("la revisión debe avanzar exactamente en una unidad")
     if current.status is AgentDelegationStatus.REVOKED:
-        if updated.status is not AgentDelegationStatus.REVOKED:
-            raise ContractError("una delegación revocada no puede reactivarse")
-        if (
-            updated.revoked_at != current.revoked_at
-            or updated.revoked_by_user_id != current.revoked_by_user_id
-        ):
-            raise ContractError("la auditoría de revocación es inmutable")
+        raise ContractError("una delegación revocada es terminal e inmutable")
     if current.status is AgentDelegationStatus.ACTIVE and updated.status is AgentDelegationStatus.REVOKED:
         if updated.revoked_at is None or updated.revoked_by_user_id is None:
             raise ContractError("la revocación requiere auditoría completa")
