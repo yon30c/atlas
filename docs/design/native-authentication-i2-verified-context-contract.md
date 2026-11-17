@@ -92,7 +92,7 @@ Dentro de una única `SQLiteLocalAuthorityUnitOfWork`:
 2. Si no se consume exactamente un proof PENDING, DENY.
 3. Resolver issuer por realm configurado; exigir issuer_id igual al proof y estado ACTIVE.
 4. Calcular `subject_digest` desde el NativeSubject del proof; no aceptar digest del caller.
-5. Resolver binding por `(issuer_id, subject_digest)`; exigir ACTIVE y coincidencia exacta de issuer.
+5. Resolver binding por `(issuer_id, subject_digest)`; exigir ACTIVE, coincidencia exacta de issuer y que `proof.authenticated_at >= binding.verified_at`.
 6. Exigir `binding.identity_id` coherente con el issuer/subject del proof.
 7. Resolver con I-1 `identity_id -> CanonicalUserIdentity`.
 8. Exigir identidad USER y ACTIVE; conservar UserId e identity_id separados.
@@ -121,7 +121,7 @@ Modelo frozen, efímero y sin secretos. Campos obligatorios conforme B1-B-03D:
 
 No contiene password, PHC, NativeSubject raw, NativeProofReference, tokens, Grant, Project, Environment, rol ni acciones.
 
-La construcción pública del dataclass no es una frontera de seguridad en Python. Por eso el contexto incluye una attestation HMAC-SHA256 calculada sobre todos sus claims, verificada en tiempo constante por un adaptador cuya clave de al menos 256 bits procede de la composición confiable y se comparte de forma segura entre workers autorizados. La clave nunca se persiste junto al contexto ni se acepta del caller. La rotación invalida los contextos emitidos con la clave anterior; no hay refresh automático. La attestation no reemplaza las relecturas de autoridad. No usar booleanos/sellos declarativos como prueba criptográfica.
+La construcción pública del dataclass no es una frontera de seguridad en Python. Por eso el contexto incluye una attestation HMAC-SHA256 calculada sobre todos sus claims, verificada en tiempo constante por un adaptador cuya clave de al menos 256 bits procede de la composición confiable y se comparte de forma segura entre workers autorizados. La clave nunca se persiste junto al contexto ni se acepta del caller. La firma incluye separación de dominio por versión de protocolo, realm y audience configurados, por lo que un contexto no puede reutilizarse entre consumers aunque compartan clave. La rotación invalida los contextos emitidos con la clave anterior; no hay refresh automático. La attestation no reemplaza las relecturas de autoridad. No usar booleanos/sellos declarativos como prueba criptográfica.
 
 ## 5. Validación del contexto
 
@@ -202,7 +202,7 @@ Para revalidar un contexto sin incluir `NativeSubject` ni `subject_digest` en é
 Implementado en revisión:
 - `VerifiedIdentityContext` frozen con UUIDs canónicos, USER fijo, revisiones positivas, timestamps UTC, referencia aleatoria y attestation HMAC.
 - `HmacVerifiedIdentityContextAttestor` y su puerto. La firma usa HMAC-SHA256 y la verificación es constant-time.
-- `VerifiedIdentityContextService.admit_proof`: consume proof, resuelve issuer por realm confiable, binding por issuer + subject digest derivado del proof y usuario canónico por I-1; crea el contexto y confirma todo dentro de la misma `SQLiteLocalAuthorityUnitOfWork`.
+- `VerifiedIdentityContextService.admit_proof`: consume proof, resuelve issuer por realm confiable, binding por issuer + subject digest derivado del proof y usuario canónico por I-1; exige que la autenticación no preceda la verificación del binding; crea el contexto y confirma todo dentro de la misma `SQLiteLocalAuthorityUnitOfWork`.
 - Si la resolución de issuer, binding o usuario falla después de consumir el proof, la excepción revierte la transacción y el proof permanece pendiente. Los estados terminales que el adaptador marca al no admitir un proof se confirman antes de devolver DENY.
 - `VerifiedIdentityContextService.verify`: verifica HMAC, TTL, issuer, binding por ID, identidad USER, estado y revisiones actuales.
 - `VerifiedOperationContextFactory`: deriva `OperationContext` con actor y user_id canónicos, delegation/project/environment en None. No acepta actor ni user_id del caller.
