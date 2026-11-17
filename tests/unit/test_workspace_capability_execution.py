@@ -25,7 +25,6 @@ from atlas.assistant.planning import (
 from atlas.authorization.models import Grant, GrantResourceScope
 from atlas.core.context import OperationContext
 from atlas.core.errors import AuthorizationError, ContractError
-from atlas.core.enums import DelegationMode
 from atlas.memory.metadata import EnvironmentMetadata, ProjectMetadata
 from atlas.memory.models import EnvironmentId, ProjectId
 
