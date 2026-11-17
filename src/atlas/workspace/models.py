@@ -60,7 +60,7 @@ class WorkspaceRecord:
         _required(self.project_id, "project_id")
         _required(self.environment_id, "environment_id")
         _required(self.root_ref, "root_ref")
-        if "://" in self.root_ref or self.root_ref.startswith(("/", "\\\\")):
+        if "://" in self.root_ref or self.root_ref.startswith(("/", "\\\\")) or "\\\\" in self.root_ref:
             raise ContractError("root_ref debe ser una referencia simbólica, no una ruta")
         if not isinstance(self.status, WorkspaceStatus):
             raise ContractError("status debe ser WorkspaceStatus")
