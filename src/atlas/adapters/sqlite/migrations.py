@@ -1694,6 +1694,7 @@ CORE_SCHEMA_V19 = SQLiteMigration(
         issuer_id TEXT PRIMARY KEY CHECK (
             length(issuer_id) = 36
             AND issuer_id = lower(issuer_id)
+            AND length(replace(issuer_id, '-', '')) = 32
             AND substr(issuer_id, 9, 1) = '-'
             AND substr(issuer_id, 14, 1) = '-'
             AND substr(issuer_id, 19, 1) = '-'
@@ -1748,6 +1749,7 @@ CORE_SCHEMA_V19 = SQLiteMigration(
         binding_id TEXT PRIMARY KEY CHECK (
             length(binding_id) = 36
             AND binding_id = lower(binding_id)
+            AND length(replace(binding_id, '-', '')) = 32
             AND substr(binding_id, 9, 1) = '-'
             AND substr(binding_id, 14, 1) = '-'
             AND substr(binding_id, 19, 1) = '-'
