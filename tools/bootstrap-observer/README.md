@@ -110,7 +110,7 @@ If the installed compiler supports them:
 
 ```sh
 cc -std=c11 -O1 -g -Wall -Wextra -Wpedantic -Werror \
-  -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -Itools/bootstrap-validator -fsanitize=address,undefined -fno-omit-frame-pointer \
   -o /tmp/atlas-bootstrap-observer-sanitized \
   tools/bootstrap-validator/bootstrap_validator.c \
   tools/bootstrap-observer/bootstrap_observer_linux.c \
