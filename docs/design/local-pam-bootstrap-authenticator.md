@@ -127,6 +127,10 @@ No se debe escribir el helper ejecutable hasta cerrar estos puntos. En particula
 - rebootstrap y descriptor distinto se rechazan;
 - cualquier fallo deja Recovery Gate cerrado.
 
+## 8.1 Protocolo de desafío y prueba
+
+El contrato detallado de desafío autenticado, presentación del descriptor, confirmación directa, prueba firmada, verificación y consumo atómico está en [Protocolo de prueba para bootstrap LOCAL](local-pam-bootstrap-proof-protocol.md). Ese documento es una propuesta contractual; sus decisiones pendientes deben cerrarse antes de escribir el helper ejecutable.
+
 ## 9. Estado actual
 
 **Aprobado:** helper C separado con libpam como proveedor local candidato; cuenta operativa inicial `greed`; servicio PAM exclusivo; no modificar PAM global.
