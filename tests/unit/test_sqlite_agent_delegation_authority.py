@@ -21,7 +21,7 @@ from atlas.authentication.native import NativeAuthenticationProof, NativeAuthent
 from atlas.authorization.agent_delegation_authority import SQLiteAgentDelegationAuthority
 from atlas.authorization.models import Grant, GrantResourceScope
 from atlas.core.agent_delegation import AgentDelegationScope
-from atlas.core.errors import AuthorizationError, ContractError
+from atlas.core.errors import AuthorizationError, ConcurrencyError, ContractError, NotFoundError
 from atlas.identity.verified_identity_context_service import (
     VerifiedIdentityContextRejected,
     VerifiedIdentityContextService,
@@ -280,6 +280,111 @@ class SQLiteAgentDelegationAuthorityTests(unittest.TestCase):
                 "SELECT COUNT(*) AS total FROM agent_delegations"
             ).fetchone()["total"]
         self.assertEqual(count, 0)
+
+    def test_owner_can_revoke_delegation_with_canonical_audit_and_revision_cas(self):
+        delegation = self._create()
+        revoked = self.authority.revoke_delegation(
+            delegation.delegation_id,
+            expected_revision=1,
+            verified_owner_identity=self.owner_context,
+        )
+        self.assertEqual(revoked.status.value, "revoked")
+        self.assertEqual(revoked.revision, 2)
+        self.assertEqual(revoked.revoked_by_user_id, self.owner.user_id)
+        self.assertEqual(revoked.revoked_at, self.clock.now())
+        self.assertEqual(self._stored(delegation.delegation_id), revoked)
+
+    def test_revocation_rejects_forged_or_expired_owner_evidence(self):
+        delegation = self._create()
+        forged = replace(self.owner_context, user_id=str(uuid4()))
+        with self.assertRaises(VerifiedIdentityContextRejected):
+            self.authority.revoke_delegation(
+                delegation.delegation_id,
+                expected_revision=1,
+                verified_owner_identity=forged,
+            )
+        self.clock.value += timedelta(minutes=3)
+        with self.assertRaises(VerifiedIdentityContextRejected):
+            self.authority.revoke_delegation(
+                delegation.delegation_id,
+                expected_revision=1,
+                verified_owner_identity=self.owner_context,
+            )
+        self.assertEqual(self._stored(delegation.delegation_id), delegation)
+
+    def test_different_verified_owner_cannot_revoke_delegation(self):
+        delegation = self._create()
+        with self.factory() as unit:
+            other_owner = unit.identity.create_user()
+            other_subject = NativeSubject.generate()
+            unit.native_identity.create_native_binding(
+                other_owner, self.issuer.issuer_id, other_subject.digest,
+                verified_at=self.clock.now() - timedelta(seconds=2),
+            )
+            other_authenticator = NativeAuthenticator(
+                authenticator_id=str(uuid4()),
+                issuer_id=self.issuer.issuer_id,
+                native_subject=other_subject,
+                login_handle=LoginHandle("atlas.other-revoker"),
+                password_hash_phc=_PHC,
+            )
+            unit.native_authentication.create_native_authenticator(other_authenticator)
+            other_reference = NativeProofReference.generate()
+            unit.native_authentication.create_native_authentication_proof(
+                NativeAuthenticationProof(
+                    proof_id=str(uuid4()),
+                    reference_digest=other_reference.digest,
+                    issuer_id=self.issuer.issuer_id,
+                    native_subject=other_subject,
+                    authenticator_id=other_authenticator.authenticator_id,
+                    credential_revision=1,
+                    authenticated_at=self.clock.now() - timedelta(seconds=1),
+                    expires_at=self.clock.now() + timedelta(minutes=1),
+                    audience="atlas.internal",
+                )
+            )
+            unit.commit()
+        other_context = self.owner_context_service.admit_proof(other_reference)
+        with self.assertRaises(AuthorizationError):
+            self.authority.revoke_delegation(
+                delegation.delegation_id,
+                expected_revision=1,
+                verified_owner_identity=other_context,
+            )
+        self.assertEqual(self._stored(delegation.delegation_id), delegation)
+
+    def test_revocation_rejects_stale_revision_and_missing_delegation(self):
+        delegation = self._create()
+        with self.assertRaises(ConcurrencyError):
+            self.authority.revoke_delegation(
+                delegation.delegation_id,
+                expected_revision=2,
+                verified_owner_identity=self.owner_context,
+            )
+        with self.assertRaises(NotFoundError):
+            self.authority.revoke_delegation(
+                str(uuid4()),
+                expected_revision=1,
+                verified_owner_identity=self.owner_context,
+            )
+        self.assertEqual(self._stored(delegation.delegation_id), delegation)
+
+    def test_revocation_rolls_back_when_persistence_fails_after_cas_write(self):
+        delegation = self._create()
+        original = SQLiteAgentDelegationRepository.revoke
+
+        def revoke_then_fail(repository, *args, **kwargs):
+            original(repository, *args, **kwargs)
+            raise RuntimeError("injected failure after revocation")
+
+        with patch.object(SQLiteAgentDelegationRepository, "revoke", revoke_then_fail):
+            with self.assertRaisesRegex(RuntimeError, "injected failure"):
+                self.authority.revoke_delegation(
+                    delegation.delegation_id,
+                    expected_revision=1,
+                    verified_owner_identity=self.owner_context,
+                )
+        self.assertEqual(self._stored(delegation.delegation_id), delegation)
 
 
 if __name__ == "__main__":
