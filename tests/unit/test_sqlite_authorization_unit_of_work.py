@@ -30,7 +30,7 @@ from atlas.authorization.models import (
     GrantResourceScope,
     RenewalStatus,
 )
-from atlas.core.errors import ContractError
+from atlas.core.errors import AuthorizationError, ContractError
 
 
 NOW = datetime(2026, 11, 16, 12, 0, tzinfo=timezone.utc)
@@ -201,9 +201,10 @@ class SQLiteAuthorizationUnitOfWorkTests(unittest.TestCase):
             service.issue(context, grant, NOW, verified_identity=VERIFIED_OWNER)
         self.assertEqual(SQLiteGrantRepository(self.database).get(grant.grant_id), grant)
 
-    def test_grant_renewal_service_runs_on_sqlite_unit_of_work(self):
+    def test_grant_renewal_service_requires_verified_owner_and_blocks_agent_requests(self):
+        grant = replace(self.grant, owner_user_id=OWNER_USER_ID)
         with self.factory() as uow:
-            uow.grants.create(self.grant)
+            uow.grants.create(grant)
             uow.commit()
 
         agent = Identity(
@@ -215,7 +216,7 @@ class SQLiteAuthorizationUnitOfWorkTests(unittest.TestCase):
             request_id="request-renew",
             correlation_id="correlation-renew",
             actor=agent,
-            user_id="user-001",
+            user_id=OWNER_USER_ID,
             origin="unit-test",
             delegation=DelegationMode.DELEGATED,
             project_id="atlas",
@@ -224,34 +225,64 @@ class SQLiteAuthorizationUnitOfWorkTests(unittest.TestCase):
             classification="internal",
             created_at=NOW,
         )
-        service = GrantRenewalService(self.factory)
-        request = service.request_renewal(
-            subject_context,
-            "renewal-service",
-            self.grant.grant_id,
-            self.grant.expires_at + timedelta(days=7),
-            NOW + timedelta(hours=1),
+        service = GrantRenewalService(
+            self.factory,
+            identity_verifier=FakeVerifiedIdentityContextVerifier(),
         )
+        with self.assertRaises(AuthorizationError):
+            service.request_renewal(
+                subject_context,
+                "renewal-service",
+                grant.grant_id,
+                grant.expires_at + timedelta(days=7),
+                NOW + timedelta(hours=1),
+            )
+        self.assertIsNone(
+            SQLiteGrantRenewalRepository(self.database).get("renewal-service")
+        )
+
+        renewal = GrantRenewalRequest(
+            renewal_id="renewal-service",
+            grant_id=grant.grant_id,
+            owner_user_id=grant.owner_user_id,
+            subject_identity_id=grant.subject_identity_id,
+            requested_by_identity_id=grant.subject_identity_id,
+            current_expires_at=grant.expires_at,
+            proposed_expires_at=grant.expires_at + timedelta(days=7),
+            requested_at=NOW + timedelta(hours=1),
+        )
+        with self.factory() as uow:
+            uow.renewals.create(renewal)
+            uow.commit()
+
         owner = Identity(
-            identity_id="user-001",
+            identity_id=OWNER_IDENTITY_ID,
             kind=IdentityKind.USER,
             status=IdentityStatus.ACTIVE,
         )
-        owner_context = replace(
-            subject_context,
-            actor=owner,
-            delegation=None,
+        owner_context = OperationContext(
             request_id="request-approve",
+            correlation_id="correlation-approve",
+            actor=owner,
+            user_id=OWNER_USER_ID,
+            origin="unit-test",
+            delegation=None,
+            project_id="atlas",
+            environment="test",
+            purpose="approve grant renewal",
+            classification="internal",
+            created_at=NOW,
         )
         updated = service.approve_renewal(
             owner_context,
-            request.renewal_id,
+            renewal.renewal_id,
             NOW + timedelta(hours=2),
+            verified_identity=VERIFIED_OWNER,
         )
         self.assertEqual(updated.revision, 2)
-        self.assertEqual(updated.expires_at, request.proposed_expires_at)
+        self.assertEqual(updated.expires_at, renewal.proposed_expires_at)
         self.assertEqual(
-            SQLiteGrantRenewalRepository(self.database).get(request.renewal_id).status,
+            SQLiteGrantRenewalRepository(self.database).get(renewal.renewal_id).status,
             RenewalStatus.APPROVED,
         )
 
