@@ -187,3 +187,17 @@ Por tanto, no es correcto reutilizar la evidencia USER del propietario para aute
 3. La habilitación futura de I3-2B requiere su propio slice, pruebas positivas y negativas, y revisión de persistencia/atomicidad. No forma parte implícita de I3-2A.
 
 **Estado de esta auditoría:** inspección de código completada. No se han modificado servicios ni se ha habilitado/deshabilitado una ruta en runtime en este commit documental.
+
+
+## 9. I3-2A — evidencia del propietario y bloqueo de solicitudes AGENT
+
+**Implementación propuesta en PR #15; validación Debian pendiente.**
+
+- `GrantRenewalService` recibe un `VerifiedIdentityContextVerifierPort` opcional. La ausencia del verificador o de la evidencia produce DENY mediante `require_verified_owner_context`.
+- `approve_renewal` y `reject_renewal` requieren `verified_identity` explícito. El actor debe coincidir con la Identity USER canónica y `context.user_id` con el UserId canónico; los IDs permanecen distintos.
+- La decisión se atribuye a `canonical.user_id`, nunca al valor sin verificar del contexto.
+- Se conservan UoW, ownership del Grant y la solicitud, proyecto/entorno, binding, estado PENDING, CAS, revisión y rollback.
+- `request_renewal` ahora deniega siempre antes de acceder a repositorios: no existe todavía autenticación AGENT ni autoridad verificable de delegación. No hay bypass basado en `Identity(ACTIVE)` o `DelegationMode.DELEGATED`.
+- Los tests usan un fake explícito para evidencia USER, crean solicitudes pendientes directamente como fixtures de dominio y comprueban que la ruta AGENT no persiste ninguna solicitud.
+
+**Límite:** el bloqueo de `request_renewal` es deliberado y temporal hasta I3-2B. No se ha creado autenticación AGENT, autoridad de delegación, wiring productivo ni endpoint. Los tests aún deben ejecutarse en Debian; no declarar I3-2A validado antes de recibir resultados.
