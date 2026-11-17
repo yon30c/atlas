@@ -168,6 +168,22 @@ class SQLiteAgentDelegationAuthorityTests(unittest.TestCase):
             ).fetchone()
         return row["binding_id"]
 
+
+    def test_agent_binding_from_different_issuer_does_not_satisfy_delegation(self):
+        with self.factory() as unit:
+            unit.native_agent_identity.revoke_native_agent_binding(
+                self._active_binding_id(), expected_revision=1,
+                revoked_at=self.clock.now(),
+            )
+            other_issuer = unit.native_identity.create_native_issuer("atlas.agent-other")
+            unit.native_agent_identity.create_native_agent_binding(
+                self.agent, other_issuer.issuer_id, "c" * 64,
+                verified_at=self.clock.now(),
+            )
+            unit.commit()
+        with self.assertRaises(AuthorizationError):
+            self._create()
+
     def test_revoked_grant_is_rejected(self):
         changed = replace(self.grant, revoked_at=self.clock.now(), revision=2)
         SQLiteGrantRepository(self.database).update(changed)
