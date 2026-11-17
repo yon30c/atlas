@@ -472,3 +472,86 @@ El contrato y el diseño de la autoridad pueden prepararse sin conceder privileg
 - No se ha añadido código, migración ni asignación de privilegios en esta actualización.
 - No se afirma ejecución de tests ni CI para esta actualización.
 - PR #16 permanece Draft, abierto y sin fusionar.
+
+## 15. I3-2B.7B — política de administración y bootstrap offline (decisión aprobada)
+
+**Estado:** política aprobada por el propietario; contrato de implementación documentado. La implementación de código y su validación todavía no se declaran completadas.
+
+### 15.1 Autoridad administrativa
+
+Solo una identidad canónica USER que posea una concesión administrativa de plataforma vigente y verificable podrá ejecutar transiciones de asociaciones Project/Environment.
+
+La concesión debe autorizar explícitamente cada acción:
+- `association.suspend`
+- `association.reactivate`
+
+No se infiere autoridad administrativa de:
+- ser propietario del Project;
+- estar autenticado como USER;
+- pertenecer al Project o tener un Grant;
+- campos de contexto enviados por el caller;
+- roles o booleanos declarados por el cliente;
+- identidad AGENT o delegación.
+
+La ausencia, revocación, expiración, revisión obsoleta o imposibilidad de verificar la autoridad produce DENY. No existe fallback permisivo.
+
+### 15.2 Bootstrap del primer administrador
+
+El propietario confirma que el primer administrador se provisionará mediante un procedimiento **offline, explícito y controlado por el operador**.
+
+El bootstrap:
+- se ejecuta fuera de endpoints y flujos de usuario ordinarios;
+- requiere acceso operativo local al entorno de confianza y una identidad USER canónica ya existente y activa;
+- no crea una identidad USER ni cambia su identidad, autenticación o estado;
+- no usa un endpoint público, una petición de cliente, una variable booleana ni una cuenta predeterminada;
+- crea una concesión administrativa auditable y limitada a las acciones explícitas autorizadas;
+- es idempotente para el mismo sujeto/alcance y rechaza conflictos;
+- no expone secretos ni credenciales administrativas en logs, argumentos de proceso o archivos versionados;
+- no se ejecuta automáticamente durante el arranque, migraciones, instalación o composición normal;
+- requiere validación operativa separada antes de habilitar cualquier composición que dependa de esa autoridad.
+
+El procedimiento concreto de bootstrap y su interfaz operativa deben definirse antes de habilitarlo. No se ejecutará sobre la base productiva como parte de esta PR.
+
+### 15.3 Contrato de transición
+
+Una futura operación de lifecycle debe recibir únicamente intención:
+- ProjectId y EnvironmentId;
+- estado objetivo ACTIVE/SUSPENDED;
+- expected_revision;
+- motivo obligatorio normalizado;
+- OperationContext y VerifiedIdentityContext como evidencia, nunca como claims autoautenticados.
+
+Dentro de una sola SQLiteLocalAuthorityUnitOfWork debe:
+1. revalidar identidad USER canónica con `verify_in_unit_of_work`;
+2. rechazar AGENT, delegación presente, identidad inactiva o discrepancias actor/UserId;
+3. leer la asociación canónica y comprobar IDs, estado y expected_revision;
+4. consultar una autoridad administrativa canónica dentro de la misma UoW;
+5. exigir el permiso exacto `association.suspend` o `association.reactivate`;
+6. obtener tiempo UTC exclusivamente de Clock inyectado;
+7. aplicar transición no redundante con revisión exactamente +1 mediante CAS;
+8. insertar el evento inmutable con actor USER canónico, estado anterior/nuevo, revisiones anterior/nueva, motivo, timestamp confiable y referencia de contexto;
+9. confirmar asociación y evento en la misma transacción.
+
+Cualquier ausencia de repositorio, autoridad, verificador, reloj o evidencia, cualquier discrepancia o cualquier error de persistencia debe abortar la transacción completa.
+
+### 15.4 Ledger y protección de persistencia
+
+La migración siguiente a V24 debe añadir un ledger dedicado de lifecycle, no reutilizar `authority_changes` como coordinador de autorización.
+
+El ledger debe:
+- referenciar la asociación mediante su clave compuesta;
+- referenciar la identidad USER canónica;
+- registrar transición, revisiones consecutivas, motivo normalizado y timestamp UTC;
+- imponer unicidad por asociación/revisión;
+- impedir UPDATE y DELETE de eventos;
+- imponer que toda transición de estado de asociación tenga exactamente un evento compatible dentro de la transacción.
+
+La semántica de creación inicial de asociaciones se mantiene separada: no se inventará actor ni motivo retrospectivo para asociaciones preexistentes. El ledger registra transiciones posteriores a la migración.
+
+### 15.5 Límite de seguridad y alcance
+
+El bootstrap offline no es una API administrativa ni una operación de runtime. La concesión de administrador no se autoconcede, no se amplía por defecto y no se hereda desde propiedad o Grants. La revocación administrativa deberá ser explícita, auditable y protegida por un procedimiento de gobernanza separado.
+
+No se añade cascada automática a Grants, delegaciones ni Workspaces. Los consumidores protegidos deben continuar comprobando asociación ACTIVE en su propia frontera transaccional.
+
+**Checkpoint:** decisión del propietario recibida. Aún no hay implementación, migración, pruebas ni validación Debian para I3-2B.7B.
