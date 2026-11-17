@@ -80,7 +80,10 @@ class GrantRenewalServiceTests(unittest.TestCase):
         )
         self.proposed_expires_at = NOW + timedelta(days=9)
 
-    def seed_pending_renewal(self, renewal_id="renewal-001"):
+    def seed_pending_renewal(
+        self, renewal_id="renewal-001", *, grant_revision=None,
+        delegation_id=None, delegation_revision=None,
+    ):
         request = GrantRenewalRequest(
             renewal_id=renewal_id,
             grant_id=self.grant.grant_id,
@@ -90,6 +93,9 @@ class GrantRenewalServiceTests(unittest.TestCase):
             current_expires_at=self.grant.expires_at,
             proposed_expires_at=self.proposed_expires_at,
             requested_at=NOW,
+            grant_revision=grant_revision,
+            delegation_id=delegation_id,
+            delegation_revision=delegation_revision,
         )
         self.renewal_repository.create(request)
         return request
@@ -220,6 +226,28 @@ class GrantRenewalServiceTests(unittest.TestCase):
             self.approve(
                 self.owner_context(), request.renewal_id, self.grant.expires_at
             )
+
+    def test_agent_renewal_approval_rejects_stale_grant_revision(self):
+        request = self.seed_pending_renewal(
+            grant_revision=self.grant.revision,
+            delegation_id="22222222-2222-4222-8222-222222222222",
+            delegation_revision=3,
+        )
+        changed_grant = replace(
+            self.grant,
+            revision=self.grant.revision + 1,
+        )
+        self.grant_repository.update(changed_grant)
+        with self.assertRaises(ContractError):
+            self.approve(
+                self.owner_context(),
+                request.renewal_id,
+                NOW + timedelta(hours=1),
+            )
+        self.assertEqual(
+            self.renewal_repository.get(request.renewal_id).status,
+            RenewalStatus.PENDING,
+        )
 
     def test_rejection_records_decision_without_changing_grant(self):
         request = self.seed_pending_renewal()
