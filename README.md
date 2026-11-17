@@ -53,6 +53,7 @@ Atlas Terminal ya es una superficie funcional en `feature/terminal-commands`: in
 - [Mapa de composición funcional F0](docs/functional-architecture-map.md)
 - [Atlas Workstation — entorno operativo aislado](docs/design/atlas-workstation.md)
 - [Validador bootstrap LOCAL V1](tools/bootstrap-validator/README.md)
+- [Observador bootstrap LOCAL V2](tools/bootstrap-observer/README.md)
 - [Diseño V1 del validador bootstrap](docs/design/local-bootstrap-validator-v1-design.md)
 - [Diseño V2 del observador LOCAL de procesos](docs/design/local-bootstrap-observer-v2-design.md)
 - [Hoja de ruta general por fases](docs/roadmap.md)
