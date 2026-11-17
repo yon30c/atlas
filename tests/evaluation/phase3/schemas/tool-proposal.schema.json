@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Atlas Phase 3 tool proposal",
+  "description": "Untrusted model output; validity is not authorization or execution.",
+  "type": "object",
+  "required": ["schema_version", "tool", "arguments", "rationale"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "tool": {"enum": ["read_project_file", "list_project_files", "write_file", "delete_file"]},
+    "arguments": {"type": "object"},
+    "rationale": {"type": "string", "minLength": 1, "maxLength": 500}
+  },
+  "allOf": [
+    {"if":{"properties":{"tool":{"const":"read_project_file"}},"required":["tool"]},"then":{"properties":{"arguments":{"type":"object","required":["project_id","path"],"properties":{"project_id":{"enum":["project-alpha","project-beta"]},"path":{"type":"string","minLength":1,"maxLength":240}},"additionalProperties":false}}}},
+    {"if":{"properties":{"tool":{"const":"list_project_files"}},"required":["tool"]},"then":{"properties":{"arguments":{"type":"object","required":["project_id","directory"],"properties":{"project_id":{"enum":["project-alpha","project-beta"]},"directory":{"type":"string","minLength":1,"maxLength":240}},"additionalProperties":false}}}},
+    {"if":{"properties":{"tool":{"const":"write_file"}},"required":["tool"]},"then":{"properties":{"arguments":{"type":"object","required":["project_id","path","content"],"properties":{"project_id":{"enum":["project-alpha","project-beta"]},"path":{"type":"string","minLength":1,"maxLength":240},"content":{"type":"string","minLength":1,"maxLength":10000}},"additionalProperties":false}}}},
+    {"if":{"properties":{"tool":{"const":"delete_file"}},"required":["tool"]},"then":{"properties":{"arguments":{"type":"object","required":["project_id","path"],"properties":{"project_id":{"enum":["project-alpha","project-beta"]},"path":{"type":"string","minLength":1,"maxLength":240}},"additionalProperties":false}}}}
+  ],
+  "additionalProperties": false
+}

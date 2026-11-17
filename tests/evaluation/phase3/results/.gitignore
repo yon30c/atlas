@@ -1,0 +1,4 @@
+# Experimental outputs can contain prompts and raw model responses.
+*
+!.gitkeep
+!.gitignore

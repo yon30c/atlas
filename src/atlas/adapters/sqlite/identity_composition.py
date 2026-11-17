@@ -27,18 +27,32 @@ class SQLiteIdentityComposition:
             )
 
 
+def compose_sqlite_identity_on_database(
+    database: SQLiteDatabase,
+) -> SQLiteIdentityComposition:
+    """Compose Identity on an existing database owned by a higher-level root.
+
+    This is the supported seam for a future shared local authority composition.
+    It never creates or substitutes a database instance. Schema migration errors
+    propagate before the authority is exposed.
+    """
+    if not isinstance(database, SQLiteDatabase):
+        raise ContractError("database debe ser SQLiteDatabase")
+    database.apply_migrations(SQLITE_MIGRATIONS)
+    authority = SQLiteIdentityAuthority(database)
+    return SQLiteIdentityComposition(database=database, authority=authority)
+
+
 def compose_sqlite_identity(
     path: str | Path,
     *,
     busy_timeout_ms: int = 5000,
 ) -> SQLiteIdentityComposition:
-    """Initialize the complete schema before exposing the identity authority.
+    """Initialize a dedicated Identity database for standalone callers.
 
     The parent directory must already exist, as required by SQLiteDatabase.
-    Migration errors propagate and no partially initialized composition is
-    returned to the caller.
+    Shared application compositions should use
+    compose_sqlite_identity_on_database instead.
     """
     database = SQLiteDatabase(path, busy_timeout_ms=busy_timeout_ms)
-    database.apply_migrations(SQLITE_MIGRATIONS)
-    authority = SQLiteIdentityAuthority(database)
-    return SQLiteIdentityComposition(database=database, authority=authority)
+    return compose_sqlite_identity_on_database(database)

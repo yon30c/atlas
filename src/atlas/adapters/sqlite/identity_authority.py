@@ -1,9 +1,11 @@
 """SQLite persistence adapter for the canonical internal Identity Authority."""
 from datetime import datetime, timezone
 import sqlite3
+from contextlib import contextmanager
+from typing import Iterator
 from uuid import uuid4
 
-from atlas.adapters.sqlite.database import SQLiteDatabase
+from atlas.adapters.sqlite.database import SQLiteDatabase, SQLiteUnitOfWork
 from atlas.core.errors import (
     ConcurrencyError,
     ContractError,
@@ -29,10 +31,34 @@ class SQLiteIdentityAuthority(IdentityAuthorityPort):
     recovery, or authorization responsibilities.
     """
 
-    def __init__(self, database: SQLiteDatabase) -> None:
+    def __init__(
+        self,
+        database: SQLiteDatabase,
+        *,
+        unit_of_work: SQLiteUnitOfWork | None = None,
+    ) -> None:
         if not isinstance(database, SQLiteDatabase):
             raise ContractError("database debe ser SQLiteDatabase")
+        if unit_of_work is not None and not isinstance(unit_of_work, SQLiteUnitOfWork):
+            raise ContractError("unit_of_work debe ser SQLiteUnitOfWork")
         self._database = database
+        self._unit_of_work = unit_of_work
+
+    @contextmanager
+    def _read_connection(self) -> Iterator[sqlite3.Connection]:
+        if self._unit_of_work is not None:
+            yield self._unit_of_work._connection_for(self._database)
+        else:
+            with self._database.connection() as connection:
+                yield connection
+
+    @contextmanager
+    def _write_connection(self) -> Iterator[sqlite3.Connection]:
+        if self._unit_of_work is not None:
+            yield self._unit_of_work._connection_for(self._database)
+        else:
+            with self._database.unit_of_work() as unit:
+                yield unit._connection_for(self._database)
 
     @staticmethod
     def _from_row(row: sqlite3.Row) -> CanonicalUserIdentity:
@@ -65,8 +91,7 @@ class SQLiteIdentityAuthority(IdentityAuthorityPort):
         identity_id = str(uuid4())
         now = _utc_now_text()
         try:
-            with self._database.unit_of_work() as unit:
-                connection = unit._connection_for(self._database)
+            with self._write_connection() as connection:
                 connection.execute(
                     """
                     INSERT INTO identity_records (
@@ -97,7 +122,7 @@ class SQLiteIdentityAuthority(IdentityAuthorityPort):
 
     def get_user(self, user_id: str) -> CanonicalUserIdentity | None:
         validate_canonical_uuid4(user_id, "user_id")
-        with self._database.connection() as connection:
+        with self._read_connection() as connection:
             row = self._select_user(connection, user_id)
             return None if row is None else self._from_row(row)
 
@@ -118,8 +143,7 @@ class SQLiteIdentityAuthority(IdentityAuthorityPort):
         if not isinstance(status, IdentityStatus):
             raise ContractError("status debe ser IdentityStatus")
 
-        with self._database.unit_of_work() as unit:
-            connection = unit._connection_for(self._database)
+        with self._write_connection() as connection:
             row = self._select_user(connection, user_id)
             if row is None:
                 raise NotFoundError("usuario canónico no encontrado")

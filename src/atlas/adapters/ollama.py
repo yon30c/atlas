@@ -148,7 +148,16 @@ class OllamaProvider:
         base_url: str = "http://127.0.0.1:11434",
         timeout: float = 30.0,
         transport: JsonHttpTransport | None = None,
+        *,
+        think: bool | None = None,
+        response_format: str | None = None,
     ) -> None:
+        if think is not None and not isinstance(think, bool):
+            raise ContractError("think debe ser bool o None")
+        if response_format not in (None, "json"):
+            raise ContractError("response_format debe ser None o 'json'")
+        self._think = think
+        self._response_format = response_format
         self._base_url = self._validate_base_url(base_url)
         try:
             valid_timeout = (
@@ -206,8 +215,7 @@ class OllamaProvider:
             raise ContractError("El puerto de base_url está fuera de rango")
         return f"http://{parsed.netloc}"
 
-    @staticmethod
-    def _payload(request: LLMRequest, *, stream: bool) -> dict[str, object]:
+    def _payload(self, request: LLMRequest, *, stream: bool) -> dict[str, object]:
         if not isinstance(request, LLMRequest):
             raise ContractError("request debe ser LLMRequest")
         payload: dict[str, object] = {
@@ -218,6 +226,10 @@ class OllamaProvider:
             ],
             "stream": stream,
         }
+        if self._think is not None:
+            payload["think"] = self._think
+        if self._response_format is not None:
+            payload["format"] = self._response_format
         options: dict[str, object] = {}
         if request.temperature is not None:
             options["temperature"] = request.temperature

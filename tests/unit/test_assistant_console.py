@@ -24,7 +24,7 @@ class ConsoleAdapterTests(unittest.TestCase):
         def input_fn(prompt):
             prompts.append(prompt)
             value = next(pending)
-            if isinstance(value, Exception):
+            if isinstance(value, BaseException):
                 raise value
             return value
 
@@ -61,11 +61,77 @@ class ConsoleAdapterTests(unittest.TestCase):
         self.assertEqual(runtime.contents, [])
         self.assertEqual(output[-1], "Atlas: hasta luego.")
 
+    def test_slash_exit_command(self):
+        runtime, _, output = self.run_with_inputs(["/EXIT"])
+
+        self.assertEqual(runtime.contents, [])
+        self.assertEqual(output[-1], "Atlas: hasta luego.")
+
+    def test_help_command_is_case_insensitive_and_does_not_call_runtime(self):
+        runtime, _, output = self.run_with_inputs(["/HELP", "/exit"])
+
+        self.assertEqual(runtime.contents, [])
+        self.assertIn("/help", output[1])
+        self.assertIn("/clear", output[1])
+        self.assertIn("/exit", output[1])
+
+    def test_clear_clears_screen_without_clearing_conversation(self):
+        pending = iter(["Hola", "/clear", "¿Recuerdas mi mensaje?", "/exit"])
+        output = []
+        writes = []
+        runtime = FakeRuntime()
+
+        run_console(
+            runtime,
+            input_fn=lambda prompt: next(pending),
+            output_fn=output.append,
+            write_fn=writes.append,
+        )
+
+        self.assertEqual(writes, ["\033[2J\033[H"])
+        self.assertEqual(
+            runtime.contents,
+            ["Hola", "¿Recuerdas mi mensaje?"],
+        )
+        self.assertIn("Atlas> respuesta: Hola", output)
+        self.assertIn("Atlas> respuesta: ¿Recuerdas mi mensaje?", output)
+
     def test_finishes_gracefully_on_eof(self):
         runtime, _, output = self.run_with_inputs([EOFError()])
 
         self.assertEqual(runtime.contents, [])
         self.assertEqual(output[-1], "Atlas: sesión finalizada.")
+
+    def test_finishes_gracefully_on_keyboard_interrupt(self):
+        runtime, _, output = self.run_with_inputs([KeyboardInterrupt()])
+
+        self.assertEqual(runtime.contents, [])
+        self.assertEqual(
+            output[-1],
+            "Atlas: interrupción recibida. Sesión finalizada.",
+        )
+
+    def test_finishes_gracefully_when_runtime_is_interrupted(self):
+        class InterruptingRuntime:
+            def respond(self, content):
+                raise KeyboardInterrupt()
+
+        pending = iter(["Hola"])
+        output = []
+        writes = []
+
+        run_console(
+            InterruptingRuntime(),
+            input_fn=lambda prompt: next(pending),
+            output_fn=output.append,
+            write_fn=writes.append,
+        )
+
+        self.assertEqual(writes, ["\n"])
+        self.assertEqual(
+            output[-1],
+            "Atlas: interrupción recibida. Sesión finalizada.",
+        )
 
 
 if __name__ == "__main__":

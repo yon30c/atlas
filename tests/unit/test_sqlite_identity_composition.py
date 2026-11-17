@@ -12,6 +12,7 @@ from atlas.adapters.sqlite.identity_authority import SQLiteIdentityAuthority
 from atlas.adapters.sqlite.identity_composition import (
     SQLiteIdentityComposition,
     compose_sqlite_identity,
+    compose_sqlite_identity_on_database,
 )
 from atlas.core.errors import ContractError
 
@@ -55,7 +56,7 @@ class SQLiteIdentityCompositionTests(unittest.TestCase):
             versions = connection.execute(
                 "SELECT version FROM schema_migrations ORDER BY version"
             ).fetchall()
-        self.assertEqual([row["version"] for row in versions], [1, 2, 3, 4, 5, 6])
+        self.assertEqual([row["version"] for row in versions], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17])
 
     def test_composed_authority_can_create_and_read_canonical_user(self):
         composition = compose_sqlite_identity(self.database_path)
@@ -74,10 +75,24 @@ class SQLiteIdentityCompositionTests(unittest.TestCase):
             count = connection.execute(
                 "SELECT COUNT(*) AS count FROM schema_migrations"
             ).fetchone()["count"]
-        self.assertEqual(count, 6)
+        self.assertEqual(count, 17)
 
         user = first.authority.create_user()
         self.assertEqual(second.authority.get_user(user.user_id), user)
+
+    def test_composition_can_reuse_exact_database_from_parent_composition(self):
+        database = SQLiteDatabase(self.database_path)
+
+        composition = compose_sqlite_identity_on_database(database)
+
+        self.assertIs(composition.database, database)
+        self.assertIs(composition.authority._database, database)
+        user = composition.authority.create_user()
+        self.assertEqual(composition.authority.get_user(user.user_id), user)
+
+    def test_shared_database_composition_rejects_non_database_input(self):
+        with self.assertRaises(ContractError):
+            compose_sqlite_identity_on_database(self.database_path)
 
     def test_composition_rejects_a_relative_database_path(self):
         with self.assertRaises(ContractError):
@@ -143,7 +158,7 @@ class SQLiteIdentityCompositionTests(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertEqual(len(outcomes), 2)
         for outcome in outcomes:
-            self.assertEqual(outcome[1], [1, 2, 3, 4, 5, 6])
+            self.assertEqual(outcome[1], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17])
             self.assertEqual(outcome[2], "ok")
             self.assertEqual(outcome[3], 0)
 

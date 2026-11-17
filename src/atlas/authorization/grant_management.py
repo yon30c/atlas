@@ -1,5 +1,6 @@
 """Servicio de administración de Grants y orquestación de revocaciones."""
 
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import cast
 
@@ -34,6 +35,7 @@ from atlas.ports.grant_revocation_authorization import (
 )
 from atlas.ports.clock import Clock
 from atlas.ports.grants import GrantRepository
+from atlas.ports.authorization_unit_of_work import AuthorizationUnitOfWork
 
 
 class GrantManagementService:
@@ -48,6 +50,7 @@ class GrantManagementService:
         proof_authorization: GrantRevocationProofAuthorizationService | None = None,
         change_coordinator: AuthorityChangeCoordinatorPort | None = None,
         clock: Clock | None = None,
+        unit_of_work_factory: Callable[[], AuthorizationUnitOfWork] | None = None,
     ) -> None:
         configured = (
             consumer_id is not None,
@@ -64,7 +67,10 @@ class GrantManagementService:
             not isinstance(consumer_id, str) or not consumer_id.strip()
         ):
             raise ContractError("consumer_id debe ser una cadena no vacía")
+        if unit_of_work_factory is not None and not callable(unit_of_work_factory):
+            raise ContractError("unit_of_work_factory debe ser invocable")
         self._repository = repository
+        self._unit_of_work_factory = unit_of_work_factory
         self._consumer_id = cast(str, consumer_id)
         self._revocation_authorizer = cast(
             GrantRevocationAuthorizationPort, revocation_authorizer
@@ -106,9 +112,17 @@ class GrantManagementService:
             raise ContractError(
                 "issued_at debe coincidir con el momento de emisión"
             )
-        if self._repository.get(grant.grant_id) is not None:
-            raise ContractError("El grant_id ya existe")
-        self._repository.create(grant)
+        if self._unit_of_work_factory is None:
+            raise ContractError(
+                "emisión deshabilitada: requiere una unidad de trabajo transaccional"
+            )
+
+        # The uniqueness check and insert must share one immediate transaction.
+        with self._unit_of_work_factory() as uow:
+            if uow.grants.get(grant.grant_id) is not None:
+                raise ContractError("El grant_id ya existe")
+            uow.grants.create(grant)
+            uow.commit()
         return grant
 
     def revoke(

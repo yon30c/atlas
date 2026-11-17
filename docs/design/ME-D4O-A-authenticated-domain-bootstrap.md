@@ -1,7 +1,7 @@
 # ME-D4O-A — Contrato de bootstrap de dominio por perfil
 
 **Estado:** diseño contractual corregido; no implementado.  
-**Rama:** `feature/atlas-functional-f1`.  
+**Rama:** `feature/terminal-commands`.  
 **Alcance:** definir la activación inicial de un dominio SQLite sin confundir autenticidad local con anti-rollback externo.
 
 ## 1. Decisión de arquitectura
@@ -31,6 +31,24 @@ La activación requiere:
 La autorización del propietario no equivale a Trust Anchor. Una credencial local puede demostrar quién autorizó la activación conforme al mecanismo implementado, pero no demuestra que el conjunto SQLite restaurado sea el más reciente.
 
 El formato de evidencia de acción directa del propietario sigue sujeto al contrato de identidad/CAM y a la decisión pendiente registrada en `docs/contracts/memory.md` §8. No se inventará un bypass ni se tratará UID, variable de entorno, flag o fila SQLite como aprobación por sí solos.
+
+## 2.1 Procedimiento interactivo LOCAL aprobado
+
+**Decisión aprobada por el propietario del proyecto:** el bootstrap inicial se realizará mediante un procedimiento local interactivo, autenticado y de una sola ejecución, independiente de Atlas Assistant.
+
+Requisitos del procedimiento:
+
+1. Se inicia explícitamente desde una sesión administrativa local y presenta el descriptor canónico exacto que se pretende activar.
+2. Antes de aceptar la decisión, exige una autenticación reciente del operador mediante un mecanismo confiable del sistema operativo. La autenticación de la sesión ya abierta, la pertenencia a un grupo, el UID del proceso, una variable de entorno o la ejecución con `sudo` sin reautenticación no bastan por sí solos.
+3. La identidad autenticada debe estar vinculada a la identidad de propietario que se está estableciendo mediante una configuración/procedencia verificable; no se infiere que el usuario del servicio `atlas`, el usuario del Broker o el usuario que ejecuta la CLI sea automáticamente el propietario.
+4. Muestra la acción, el dominio, la época, el perfil LOCAL y el compromiso que se autorizarán. La confirmación debe ser explícita y vinculada a esos valores exactos.
+5. Produce una prueba tipada, de un solo uso, con identificador de solicitud, sujeto autenticado, acción y descriptor/recursos exactos. El verificador valida y consume esa prueba; el caller no puede construir un resultado verificado.
+6. El procedimiento no pasa por el modelo, la conversación, una Skill ni una decisión del Assistant.
+7. Tras el consumo exitoso, el bootstrap aplica el evento de génesis y su estado materializado de forma atómica. Un reintento exacto devuelve el resultado previo; un descriptor distinto o una prueba consumida se rechazan.
+
+La integración de autenticación del sistema operativo (por ejemplo, mediante PAM en Linux) se debe evaluar como proveedor local concreto. No se declara implementada ni se acepta una implementación que solo compruebe UID, grupo, variable de entorno, flag, texto de confirmación o caché de autenticación de una sesión anterior.
+
+Este procedimiento no introduce Trust Anchor externo, no ofrece anti-rollback y no convierte al principal técnico `atlas` en propietario. El mapeo entre el sujeto autenticado y el propietario canónico debe quedar explícito y auditable.
 
 ## 3. Descriptor canónico
 
@@ -127,4 +145,51 @@ Ninguna fase puede afirmar anti-rollback externo ni permitir restauraciones de m
 
 ## 9. Estado
 
+La elección del procedimiento interactivo LOCAL de una sola ejecución queda aprobada. El proveedor de autenticación local, el binding verificable entre sujeto autenticado y propietario canónico, la prueba consumible y el flujo de génesis siguen sin implementar.
+
 ME-D4O-A queda corregido para reflejar los perfiles aprobados. No se añadió código, evento, migración, proveedor externo, autorización local concreta ni apertura del gate. El baseline LOCAL puede continuar por etapas; la habilitación operativa queda condicionada a su bootstrap autenticado, atomicidad y validación. El perfil ANCHORED permanece postergado.
+
+## 2.2 Identidad operativa inicial y binding local aprobado
+
+**Decisión aprobada por el propietario: 16 de noviembre de 2026.**
+
+La cuenta Linux `greed` será el sujeto local que autentique la acción administrativa inicial de bootstrap. Esta decisión identifica al operador local del procedimiento; no convierte el nombre Unix en identidad canónica de Atlas ni hace de la cuenta una autoridad autónoma.
+
+Reglas del binding:
+
+1. El proveedor local de autenticación deberá producir evidencia verificable del sujeto autenticado en el host y de la reautenticación reciente. El identificador del sujeto debe estar cualificado por el dominio/host de autenticación para evitar interpretar un nombre Unix aislado como identidad global.
+2. Una configuración de bootstrap explícita y protegida vinculará ese sujeto local autenticado con el propietario canónico que se está estableciendo. La configuración no podrá ser modificada por el proceso de Atlas Assistant ni por el principal técnico.
+3. La autoridad de identidad generará el `UserId` canónico y la `Identity(USER)` mediante el mecanismo autoritativo existente. No se derivarán UUID, `UserId` ni `identity_id` del texto `greed`, del UID 1000 (o cualquier UID supuesto), de nombres de grupo ni de variables de entorno.
+4. La evidencia de bootstrap deberá enlazar la identidad local autenticada, el binding aprobado, la decisión directa del propietario y el descriptor exacto del dominio. El caller no podrá declarar por sí mismo que el sujeto es el propietario.
+5. La cuenta Unix `atlas` (UID técnico 999 en el entorno inspeccionado) y la cuenta de servicio `atlas-sandbox` permanecen separadas del propietario. No pueden realizar el bootstrap ni heredar su autoridad por pertenecer a grupos, ejecutar servicios o acceder al Broker.
+6. El proceso de servicio central no obtiene privilegios del operador interactivo. La autenticación local de bootstrap es un flujo administrativo explícito, no una sesión permanente ni un permiso implícito para todas las operaciones.
+7. Una vez establecido el propietario canónico, el acceso desde móvil, portátil y web deberá autenticarse mediante el futuro gateway de acceso del servicio central y resolverse a ese mismo `UserId`/Identity(USER). Las sesiones remotas y el registro de dispositivos serán independientes de las cuentas Unix.
+8. La pérdida, cambio o revocación del sujeto local no debe reasignar automáticamente la propiedad canónica. Cualquier sustitución del mecanismo de recuperación o del operador bootstrap requerirá un procedimiento de cambio de autoridad explícito y auditable.
+
+La cuenta `greed` queda seleccionada como sujeto operativo inicial; esto no selecciona todavía PAM ni otro proveedor concreto, no crea el binding en el sistema, no crea la identidad canónica y no inicializa CAM. La implementación deberá verificar primero qué mecanismo de reautenticación local está disponible y cómo puede emitir una prueba no falsificable por el caller.
+
+
+## 2.3 Proveedor local aprobado: helper C con libpam
+
+**Decisión aprobada por el propietario: 16 de noviembre de 2026.**
+
+El proveedor candidato seleccionado para la autenticación reciente del bootstrap LOCAL será un helper pequeño en C que utilice la API de PAM del sistema. El helper será un componente separado del proceso Python de Atlas. Esta selección no significa que el proveedor esté implementado, instalado ni habilitado.
+
+El contrato de seguridad y los límites de implementación se detallan en [Diseño del autenticador PAM local](local-pam-bootstrap-authenticator.md).
+
+Reglas obligatorias:
+
+1. Utilizar un servicio PAM dedicado de Atlas; no modificar ni incluir cambios en `common-auth`, `login`, `sshd`, `sudo` ni otros servicios PAM generales.
+2. Autenticar exclusivamente al sujeto local aprobado para el bootstrap inicial (`greed` en el host actual). El nombre y UID se verificarán contra una configuración protegida; no serán parámetros libres del caller.
+3. Ejecutar autenticación y comprobación de cuenta PAM; no interpretar solo `pam_authenticate` como autorización.
+4. La contraseña se solicita mediante una conversación PAM interactiva y nunca se acepta por argv, variables de entorno, archivos, stdin redirigido ni argumentos de IPC. No se registra ni persiste.
+5. El helper no inicializa CAM, no crea Users/Grants, no modifica el binding de propietario y no ejecuta operaciones de Atlas.
+6. Una prueba emitida debe vincularse al desafío/request_id, acción bootstrap exacta, descriptor canónico y sujeto autenticado. Debe expirar y ser consumible una sola vez por un verificador confiable.
+7. El caller no puede proporcionar un resultado PAM exitoso, firmar pruebas, seleccionar una identidad canónica ni alterar el binding protegido.
+8. El material privado de firma, si se utiliza, será accesible únicamente al componente autenticador privilegiado. El verificador de Atlas utilizará material público o un canal autenticado equivalente; no compartirá el secreto de emisión con el proceso ordinario de Assistant.
+9. El helper debe fallar cerrado ante ausencia de TTY confiable, error PAM, cuenta bloqueada/inactiva, configuración inválida, descriptor no canónico, prueba expirada o fallo de emisión.
+10. El bloqueo por intentos fallidos se configurará exclusivamente en el stack dedicado. La política (umbral, intervalo y duración) debe quedar documentada antes de habilitarlo; no se alterará la política PAM general del host.
+
+La frontera de privilegios para instalar y ejecutar el helper, el formato criptográfico de la prueba, el transporte entre helper y verificador, y la política exacta de bloqueo siguen pendientes de diseño detallado. No se implementará un binario setuid ni se concederá privilegio mediante una decisión implícita. La implementación deberá justificar y probar su mecanismo de invocación privilegiada antes de instalarlo.
+
+La selección de C/libpam no sustituye el binding sujeto-local/propietario-canónico, la decisión directa del propietario ni la atomicidad de génesis descritos en las secciones anteriores.

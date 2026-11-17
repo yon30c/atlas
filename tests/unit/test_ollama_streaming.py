@@ -1,6 +1,8 @@
 """Pruebas de streaming Ollama hasta la interfaz de consola."""
 
 from datetime import datetime, timezone
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -122,18 +124,20 @@ class OllamaStreamingTests(unittest.TestCase):
         output = []
         written = []
 
-        with patch.dict("os.environ", {"ATLAS_MODE": "", "ATLAS_MODEL": ""}):
-            main(
-                input_fn=lambda _prompt: next(inputs),
-                output_fn=output.append,
-                write_fn=written.append,
-                user_id="stream-test",
-                provider=provider,
-            )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict("os.environ", {"ATLAS_MODE": "", "ATLAS_MODEL": ""}):
+                main(
+                    input_fn=lambda _prompt: next(inputs),
+                    output_fn=output.append,
+                    write_fn=written.append,
+                    user_id="stream-test",
+                    provider=provider,
+                    conversation_db_path=Path(temp_dir) / "conversations.sqlite3",
+                )
 
         self.assertEqual(provider.request.model, DEFAULT_MODEL)
         self.assertEqual("".join(written), "Atlas> Hola, Atlas.\n")
-        self.assertIn("Atlas está listo. Escribe 'salir' para terminar.", output)
+        self.assertIn("Atlas está listo. Escribe '/help' para ver los comandos.", output)
         self.assertEqual(output[-1], "Atlas: hasta luego.")
 
     def test_cli_includes_previous_turn_in_the_next_model_request(self):
@@ -142,14 +146,16 @@ class OllamaStreamingTests(unittest.TestCase):
         output = []
         written = []
 
-        with patch.dict("os.environ", {"ATLAS_MODE": "", "ATLAS_MODEL": ""}):
-            main(
-                input_fn=lambda _prompt: next(inputs),
-                output_fn=output.append,
-                write_fn=written.append,
-                user_id="context-test",
-                provider=provider,
-            )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict("os.environ", {"ATLAS_MODE": "", "ATLAS_MODEL": ""}):
+                main(
+                    input_fn=lambda _prompt: next(inputs),
+                    output_fn=output.append,
+                    write_fn=written.append,
+                    user_id="context-test",
+                    provider=provider,
+                    conversation_db_path=Path(temp_dir) / "conversations.sqlite3",
+                )
 
         self.assertEqual(len(provider.requests), 2)
         second_messages = provider.requests[1].messages

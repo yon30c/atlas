@@ -694,7 +694,892 @@ CORE_SCHEMA_V6 = SQLiteMigration(
 )
 
 
+# v7 introduces the canonical local Grant source. Permission scopes are stored
+# as canonical JSON in one row so each Grant revision changes atomically.
+CORE_SCHEMA_V7 = SQLiteMigration(
+    version=7,
+    name="canonical_sqlite_grants",
+    sql="""
+    CREATE TABLE authorization_grants (
+        grant_id TEXT PRIMARY KEY CHECK (length(trim(grant_id)) > 0),
+        owner_user_id TEXT NOT NULL CHECK (length(trim(owner_user_id)) > 0),
+        subject_identity_id TEXT NOT NULL CHECK (length(trim(subject_identity_id)) > 0),
+        project_id TEXT NOT NULL CHECK (length(trim(project_id)) > 0),
+        environment TEXT NOT NULL CHECK (length(trim(environment)) > 0),
+        resource_type TEXT NOT NULL CHECK (length(trim(resource_type)) > 0),
+        resource_ids_json TEXT NOT NULL CHECK (length(trim(resource_ids_json)) > 2),
+        actions_json TEXT NOT NULL CHECK (length(trim(actions_json)) > 2),
+        issued_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        revoked_at TEXT,
+        revision INTEGER NOT NULL CHECK (revision > 0),
+        CHECK (expires_at > issued_at),
+        CHECK (revoked_at IS NULL OR revoked_at >= issued_at)
+    );
+
+    CREATE INDEX authorization_grants_owner
+        ON authorization_grants(owner_user_id, grant_id);
+    CREATE INDEX authorization_grants_subject_scope
+        ON authorization_grants(
+            subject_identity_id, project_id, environment, resource_type
+        );
+
+    CREATE TRIGGER authorization_grants_identity_immutable
+    BEFORE UPDATE OF grant_id, owner_user_id, subject_identity_id,
+                     project_id, environment, resource_type, resource_ids_json,
+                     actions_json, issued_at
+    ON authorization_grants
+    WHEN NEW.grant_id != OLD.grant_id
+      OR NEW.owner_user_id != OLD.owner_user_id
+      OR NEW.subject_identity_id != OLD.subject_identity_id
+      OR NEW.project_id != OLD.project_id
+      OR NEW.environment != OLD.environment
+      OR NEW.resource_type != OLD.resource_type
+      OR NEW.resource_ids_json != OLD.resource_ids_json
+      OR NEW.actions_json != OLD.actions_json
+      OR NEW.issued_at != OLD.issued_at
+    BEGIN
+        SELECT RAISE(ABORT, 'Grant identity and authority scope are immutable');
+    END;
+
+    CREATE TRIGGER authorization_grants_revision_step
+    BEFORE UPDATE ON authorization_grants
+    WHEN NEW.revision != OLD.revision + 1
+    BEGIN
+        SELECT RAISE(ABORT, 'Grant revision must increase by exactly one');
+    END;
+
+    CREATE TRIGGER authorization_grants_revocation_terminal
+    BEFORE UPDATE OF revoked_at ON authorization_grants
+    WHEN OLD.revoked_at IS NOT NULL AND NEW.revoked_at IS NOT OLD.revoked_at
+    BEGIN
+        SELECT RAISE(ABORT, 'Grant revocation is terminal');
+    END;
+
+    CREATE TRIGGER authorization_grants_no_delete
+    BEFORE DELETE ON authorization_grants
+    BEGIN
+        SELECT RAISE(ABORT, 'Grants are retained as authority tombstones');
+    END;
+    """,
+)
+
+# v8 adds durable Grant renewal requests to the same local authority database.
+CORE_SCHEMA_V8 = SQLiteMigration(
+    version=8,
+    name="canonical_sqlite_grant_renewals",
+    sql="""
+    CREATE TABLE authorization_grant_renewals (
+        renewal_id TEXT PRIMARY KEY CHECK (length(trim(renewal_id)) > 0),
+        grant_id TEXT NOT NULL CHECK (length(trim(grant_id)) > 0),
+        owner_user_id TEXT NOT NULL CHECK (length(trim(owner_user_id)) > 0),
+        subject_identity_id TEXT NOT NULL CHECK (length(trim(subject_identity_id)) > 0),
+        requested_by_identity_id TEXT NOT NULL CHECK (length(trim(requested_by_identity_id)) > 0),
+        current_expires_at TEXT NOT NULL,
+        proposed_expires_at TEXT NOT NULL,
+        requested_at TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
+        decided_at TEXT,
+        decided_by_user_id TEXT,
+        version INTEGER NOT NULL CHECK (version > 0),
+        CHECK (proposed_expires_at > current_expires_at),
+        CHECK (
+            (status = 'pending' AND decided_at IS NULL AND decided_by_user_id IS NULL)
+            OR
+            (status IN ('approved', 'rejected')
+             AND decided_at IS NOT NULL
+             AND decided_by_user_id IS NOT NULL
+             AND length(trim(decided_by_user_id)) > 0)
+        ),
+        FOREIGN KEY (grant_id) REFERENCES authorization_grants(grant_id)
+            ON UPDATE NO ACTION ON DELETE NO ACTION
+    );
+
+    CREATE INDEX authorization_grant_renewals_grant
+        ON authorization_grant_renewals(grant_id, requested_at, renewal_id);
+    CREATE INDEX authorization_grant_renewals_owner
+        ON authorization_grant_renewals(owner_user_id, status, requested_at);
+
+    CREATE TRIGGER authorization_grant_renewals_binding_immutable
+    BEFORE UPDATE OF renewal_id, grant_id, owner_user_id, subject_identity_id,
+                     requested_by_identity_id, current_expires_at,
+                     proposed_expires_at, requested_at
+    ON authorization_grant_renewals
+    WHEN NEW.renewal_id != OLD.renewal_id
+      OR NEW.grant_id != OLD.grant_id
+      OR NEW.owner_user_id != OLD.owner_user_id
+      OR NEW.subject_identity_id != OLD.subject_identity_id
+      OR NEW.requested_by_identity_id != OLD.requested_by_identity_id
+      OR NEW.current_expires_at != OLD.current_expires_at
+      OR NEW.proposed_expires_at != OLD.proposed_expires_at
+      OR NEW.requested_at != OLD.requested_at
+    BEGIN
+        SELECT RAISE(ABORT, 'Grant renewal request binding is immutable');
+    END;
+
+    CREATE TRIGGER authorization_grant_renewals_version_step
+    BEFORE UPDATE ON authorization_grant_renewals
+    WHEN NEW.version != OLD.version + 1
+    BEGIN
+        SELECT RAISE(ABORT, 'Grant renewal version must increase by exactly one');
+    END;
+
+    CREATE TRIGGER authorization_grant_renewals_decision_terminal
+    BEFORE UPDATE OF status ON authorization_grant_renewals
+    WHEN OLD.status != 'pending' AND NEW.status != OLD.status
+    BEGIN
+        SELECT RAISE(ABORT, 'Grant renewal decision is terminal');
+    END;
+
+    CREATE TRIGGER authorization_grant_renewals_decision_immutable
+    BEFORE UPDATE OF decided_at, decided_by_user_id ON authorization_grant_renewals
+    WHEN OLD.status != 'pending'
+      AND (
+          NEW.decided_at IS NOT OLD.decided_at
+          OR NEW.decided_by_user_id IS NOT OLD.decided_by_user_id
+      )
+    BEGIN
+        SELECT RAISE(ABORT, 'Grant renewal decision evidence is immutable');
+    END;
+
+    CREATE TRIGGER authorization_grant_renewals_no_delete
+    BEFORE DELETE ON authorization_grant_renewals
+    BEGIN
+        SELECT RAISE(ABORT, 'Grant renewal requests are retained as tombstones');
+    END;
+    """,
+)
+
+
+# v9 establishes canonical, revisioned Project and Environment metadata.
+CORE_SCHEMA_V9 = SQLiteMigration(
+    version=9,
+    name="canonical_sqlite_project_environment_authorities",
+    sql="""
+    CREATE TABLE atlas_projects (
+        project_id TEXT PRIMARY KEY CHECK (length(trim(project_id)) > 0),
+        status TEXT NOT NULL CHECK (length(trim(status)) > 0),
+        revision INTEGER NOT NULL CHECK (revision > 0)
+    );
+
+    CREATE TABLE atlas_environments (
+        environment_id TEXT PRIMARY KEY CHECK (length(trim(environment_id)) > 0),
+        status TEXT NOT NULL CHECK (length(trim(status)) > 0),
+        revision INTEGER NOT NULL CHECK (revision > 0)
+    );
+
+    CREATE TRIGGER atlas_projects_identity_immutable
+    BEFORE UPDATE OF project_id ON atlas_projects
+    WHEN NEW.project_id != OLD.project_id
+    BEGIN
+        SELECT RAISE(ABORT, 'Project identity is immutable');
+    END;
+
+    CREATE TRIGGER atlas_projects_revision_step
+    BEFORE UPDATE ON atlas_projects
+    WHEN NEW.revision != OLD.revision + 1
+    BEGIN
+        SELECT RAISE(ABORT, 'Project revision must increase by exactly one');
+    END;
+
+    CREATE TRIGGER atlas_projects_no_delete
+    BEFORE DELETE ON atlas_projects
+    BEGIN
+        SELECT RAISE(ABORT, 'Projects are retained as authority tombstones');
+    END;
+
+    CREATE TRIGGER atlas_environments_identity_immutable
+    BEFORE UPDATE OF environment_id ON atlas_environments
+    WHEN NEW.environment_id != OLD.environment_id
+    BEGIN
+        SELECT RAISE(ABORT, 'Environment identity is immutable');
+    END;
+
+    CREATE TRIGGER atlas_environments_revision_step
+    BEFORE UPDATE ON atlas_environments
+    WHEN NEW.revision != OLD.revision + 1
+    BEGIN
+        SELECT RAISE(ABORT, 'Environment revision must increase by exactly one');
+    END;
+
+    CREATE TRIGGER atlas_environments_no_delete
+    BEFORE DELETE ON atlas_environments
+    BEGIN
+        SELECT RAISE(ABORT, 'Environments are retained as authority tombstones');
+    END;
+    """,
+)
+
+
+# v10 stores multi-authority operation identity and its complete target set.
+# It is separate from the legacy single-authority ledger to preserve its
+# NOT NULL contract and historical rows without synthetic placeholder targets.
+CORE_SCHEMA_V10 = SQLiteMigration(
+    version=10,
+    name="durable_multi_authority_change_reservations",
+    sql="""
+    CREATE TABLE multi_authority_change_operations (
+        operation_id TEXT PRIMARY KEY CHECK (length(trim(operation_id)) > 0),
+        consumer_id TEXT NOT NULL CHECK (length(trim(consumer_id)) > 0),
+        action TEXT NOT NULL CHECK (length(trim(action)) > 0),
+        actor_identity_id TEXT NOT NULL CHECK (length(trim(actor_identity_id)) > 0),
+        owner_id TEXT NOT NULL CHECK (length(trim(owner_id)) > 0),
+        project_id TEXT,
+        environment_id TEXT,
+        request_context_ref TEXT NOT NULL CHECK (length(trim(request_context_ref)) > 0),
+        requested_at TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (
+            status IN (
+                'REQUESTED', 'INVALIDATION_PENDING', 'SOURCE_PENDING',
+                'SOURCE_CONFIRMED', 'RECONCILING', 'COMPLETED',
+                'ABORTED', 'BLOCKED'
+            )
+        ),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE multi_authority_change_idempotency (
+        consumer_id TEXT NOT NULL CHECK (length(trim(consumer_id)) > 0),
+        idempotency_key TEXT NOT NULL CHECK (length(trim(idempotency_key)) > 0),
+        operation_id TEXT NOT NULL UNIQUE,
+        intent_digest TEXT NOT NULL CHECK (length(intent_digest) = 64),
+        intent_canonical BLOB NOT NULL CHECK (length(intent_canonical) > 0),
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (consumer_id, idempotency_key),
+        FOREIGN KEY (operation_id)
+            REFERENCES multi_authority_change_operations(operation_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE TABLE multi_authority_change_targets (
+        operation_id TEXT NOT NULL,
+        authority_kind TEXT NOT NULL CHECK (
+            authority_kind IN (
+                'memory', 'memory_version', 'identity', 'project',
+                'environment', 'grant', 'grant_renewal', 'consistency'
+            )
+        ),
+        authority_id TEXT NOT NULL CHECK (length(trim(authority_id)) > 0),
+        expected_revision INTEGER NOT NULL CHECK (expected_revision > 0),
+        proposed_revision INTEGER NOT NULL CHECK (
+            proposed_revision = expected_revision + 1
+        ),
+        PRIMARY KEY (operation_id, authority_kind, authority_id),
+        FOREIGN KEY (operation_id)
+            REFERENCES multi_authority_change_operations(operation_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE INDEX multi_authority_change_targets_resource
+        ON multi_authority_change_targets(authority_kind, authority_id);
+
+    CREATE TRIGGER multi_authority_change_idempotency_requires_complete_targets
+    BEFORE INSERT ON multi_authority_change_idempotency
+    WHEN (
+        SELECT COUNT(*) FROM multi_authority_change_targets
+        WHERE operation_id = NEW.operation_id
+    ) < 2
+    BEGIN
+        SELECT RAISE(ABORT, 'Multi-authority operation requires at least two targets');
+    END;
+
+    CREATE TRIGGER multi_authority_change_operation_identity_immutable
+    BEFORE UPDATE OF operation_id, consumer_id, action, actor_identity_id,
+                     owner_id, project_id, environment_id, request_context_ref,
+                     requested_at
+    ON multi_authority_change_operations
+    WHEN NEW.operation_id != OLD.operation_id
+      OR NEW.consumer_id != OLD.consumer_id
+      OR NEW.action != OLD.action
+      OR NEW.actor_identity_id != OLD.actor_identity_id
+      OR NEW.owner_id != OLD.owner_id
+      OR NEW.project_id IS NOT OLD.project_id
+      OR NEW.environment_id IS NOT OLD.environment_id
+      OR NEW.request_context_ref != OLD.request_context_ref
+      OR NEW.requested_at != OLD.requested_at
+    BEGIN
+        SELECT RAISE(ABORT, 'Multi-authority operation identity is immutable');
+    END;
+
+    CREATE TRIGGER multi_authority_change_targets_no_late_insert
+    BEFORE INSERT ON multi_authority_change_targets
+    WHEN EXISTS (
+        SELECT 1 FROM multi_authority_change_idempotency
+        WHERE operation_id = NEW.operation_id
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'Multi-authority target set is already sealed');
+    END;
+
+    CREATE TRIGGER multi_authority_change_targets_no_update
+    BEFORE UPDATE ON multi_authority_change_targets
+    BEGIN
+        SELECT RAISE(ABORT, 'Multi-authority targets are immutable');
+    END;
+
+    CREATE TRIGGER multi_authority_change_targets_no_delete
+    BEFORE DELETE ON multi_authority_change_targets
+    BEGIN
+        SELECT RAISE(ABORT, 'Multi-authority targets are retained');
+    END;
+
+    CREATE TRIGGER multi_authority_change_idempotency_no_update
+    BEFORE UPDATE ON multi_authority_change_idempotency
+    BEGIN
+        SELECT RAISE(ABORT, 'Multi-authority idempotency binding is immutable');
+    END;
+
+    CREATE TRIGGER multi_authority_change_idempotency_no_delete
+    BEFORE DELETE ON multi_authority_change_idempotency
+    BEGIN
+        SELECT RAISE(ABORT, 'Multi-authority idempotency is retained');
+    END;
+    """,
+)
+
+
+# v11 adds exclusive resource claims for multi-authority operations. Claims are
+# acquired as a complete target set under BEGIN IMMEDIATE. They are retained
+# conservatively; release is intentionally unavailable until terminal
+# reconciliation evidence is implemented by the consistency coordinator.
+CORE_SCHEMA_V11 = SQLiteMigration(
+    version=11,
+    name="exclusive_multi_authority_resource_claims",
+    sql="""
+    CREATE TABLE multi_authority_change_claims (
+        authority_kind TEXT NOT NULL CHECK (
+            authority_kind IN (
+                'memory', 'memory_version', 'identity', 'project',
+                'environment', 'grant', 'grant_renewal', 'consistency'
+            )
+        ),
+        authority_id TEXT NOT NULL CHECK (length(trim(authority_id)) > 0),
+        operation_id TEXT NOT NULL,
+        acquired_at TEXT NOT NULL,
+        PRIMARY KEY (authority_kind, authority_id),
+        UNIQUE (operation_id, authority_kind, authority_id),
+        FOREIGN KEY (operation_id)
+            REFERENCES multi_authority_change_operations(operation_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE INDEX multi_authority_change_claims_operation
+        ON multi_authority_change_claims(operation_id);
+
+    CREATE TRIGGER multi_authority_change_claims_require_target
+    BEFORE INSERT ON multi_authority_change_claims
+    WHEN NOT EXISTS (
+        SELECT 1
+        FROM multi_authority_change_targets AS t
+        JOIN multi_authority_change_operations AS o
+          ON o.operation_id = t.operation_id
+        WHERE t.operation_id = NEW.operation_id
+          AND t.authority_kind = NEW.authority_kind
+          AND t.authority_id = NEW.authority_id
+          AND o.status = 'REQUESTED'
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'claim must match a requested operation target');
+    END;
+
+    CREATE TRIGGER multi_authority_change_claims_no_update
+    BEFORE UPDATE ON multi_authority_change_claims
+    BEGIN
+        SELECT RAISE(ABORT, 'resource claims are immutable');
+    END;
+
+    CREATE TRIGGER multi_authority_change_claims_no_delete
+    BEFORE DELETE ON multi_authority_change_claims
+    BEGIN
+        SELECT RAISE(ABORT, 'resource claims cannot be released before reconciliation support');
+    END;
+    """,
+)
+
+
+# v12 persists the complete terminal reconciliation receipt and gates terminal
+# operation status transitions on that receipt. Claims remain retained.
+CORE_SCHEMA_V12 = SQLiteMigration(
+    version=12,
+    name="durable_multi_authority_terminal_evidence",
+    sql="""
+    CREATE TABLE multi_authority_change_terminal_evidence (
+        operation_id TEXT PRIMARY KEY,
+        evidence_id TEXT NOT NULL UNIQUE CHECK (length(trim(evidence_id)) > 0),
+        outcome TEXT NOT NULL CHECK (outcome IN ('COMPLETED', 'ABORTED')),
+        evidence_ref TEXT NOT NULL CHECK (length(trim(evidence_ref)) > 0),
+        recorded_by TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at TEXT NOT NULL,
+        evidence_digest TEXT NOT NULL CHECK (length(evidence_digest) = 64),
+        evidence_canonical BLOB NOT NULL CHECK (length(evidence_canonical) > 0),
+        FOREIGN KEY (operation_id)
+            REFERENCES multi_authority_change_operations(operation_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE TABLE multi_authority_change_terminal_targets (
+        operation_id TEXT NOT NULL,
+        authority_kind TEXT NOT NULL,
+        authority_id TEXT NOT NULL,
+        expected_revision INTEGER NOT NULL CHECK (expected_revision > 0),
+        proposed_revision INTEGER NOT NULL CHECK (
+            proposed_revision = expected_revision + 1
+        ),
+        observed_revision INTEGER NOT NULL CHECK (observed_revision > 0),
+        PRIMARY KEY (operation_id, authority_kind, authority_id),
+        FOREIGN KEY (operation_id)
+            REFERENCES multi_authority_change_terminal_evidence(operation_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+        FOREIGN KEY (operation_id, authority_kind, authority_id)
+            REFERENCES multi_authority_change_targets(
+                operation_id, authority_kind, authority_id
+            )
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE TRIGGER multi_terminal_evidence_requires_reconciling_claimed_operation
+    BEFORE INSERT ON multi_authority_change_terminal_evidence
+    WHEN NOT EXISTS (
+        SELECT 1 FROM multi_authority_change_operations
+        WHERE operation_id = NEW.operation_id AND status = 'RECONCILING'
+    )
+    OR (
+        SELECT COUNT(*) FROM multi_authority_change_claims
+        WHERE operation_id = NEW.operation_id
+    ) != (
+        SELECT COUNT(*) FROM multi_authority_change_targets
+        WHERE operation_id = NEW.operation_id
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'terminal evidence requires a reconciling operation with complete claims');
+    END;
+
+    CREATE TRIGGER multi_terminal_target_requires_matching_reserved_revision
+    BEFORE INSERT ON multi_authority_change_terminal_targets
+    WHEN NOT EXISTS (
+        SELECT 1
+        FROM multi_authority_change_targets AS t
+        JOIN multi_authority_change_terminal_evidence AS e
+          ON e.operation_id = t.operation_id
+        WHERE t.operation_id = NEW.operation_id
+          AND t.authority_kind = NEW.authority_kind
+          AND t.authority_id = NEW.authority_id
+          AND t.expected_revision = NEW.expected_revision
+          AND t.proposed_revision = NEW.proposed_revision
+          AND (
+              (e.outcome = 'COMPLETED'
+               AND NEW.observed_revision = t.proposed_revision)
+              OR
+              (e.outcome = 'ABORTED'
+               AND NEW.observed_revision = t.expected_revision)
+          )
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'terminal target does not match reserved revisions and outcome');
+    END;
+
+    CREATE TRIGGER multi_terminal_evidence_no_update
+    BEFORE UPDATE ON multi_authority_change_terminal_evidence
+    BEGIN
+        SELECT RAISE(ABORT, 'terminal evidence is immutable');
+    END;
+
+    CREATE TRIGGER multi_terminal_evidence_no_delete
+    BEFORE DELETE ON multi_authority_change_terminal_evidence
+    BEGIN
+        SELECT RAISE(ABORT, 'terminal evidence is retained');
+    END;
+
+    CREATE TRIGGER multi_terminal_targets_no_update
+    BEFORE UPDATE ON multi_authority_change_terminal_targets
+    BEGIN
+        SELECT RAISE(ABORT, 'terminal evidence targets are immutable');
+    END;
+
+    CREATE TRIGGER multi_terminal_targets_no_delete
+    BEFORE DELETE ON multi_authority_change_terminal_targets
+    BEGIN
+        SELECT RAISE(ABORT, 'terminal evidence targets are retained');
+    END;
+
+    CREATE TRIGGER multi_operation_terminal_status_requires_evidence
+    BEFORE UPDATE OF status ON multi_authority_change_operations
+    WHEN NEW.status IN ('COMPLETED', 'ABORTED')
+    AND (
+        OLD.status != 'RECONCILING'
+        OR NOT EXISTS (
+            SELECT 1
+            FROM multi_authority_change_terminal_evidence AS e
+            WHERE e.operation_id = NEW.operation_id
+              AND e.outcome = NEW.status
+        )
+        OR (
+            SELECT COUNT(*) FROM multi_authority_change_terminal_targets
+            WHERE operation_id = NEW.operation_id
+        ) != (
+            SELECT COUNT(*) FROM multi_authority_change_targets
+            WHERE operation_id = NEW.operation_id
+        )
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'terminal status requires complete matching terminal evidence');
+    END;
+
+    CREATE TRIGGER multi_operation_terminal_status_is_final
+    BEFORE UPDATE OF status ON multi_authority_change_operations
+    WHEN OLD.status IN ('COMPLETED', 'ABORTED') AND NEW.status != OLD.status
+    BEGIN
+        SELECT RAISE(ABORT, 'terminal operation status is final');
+    END;
+    """,
+)
+
+
+
+# v13 records verified terminal claim releases while retaining an immutable audit
+# receipt. Claim rows are deleted only in the same transaction as this receipt.
+CORE_SCHEMA_V13 = SQLiteMigration(
+    version=13,
+    name="audited_terminal_multi_authority_claim_release",
+    sql="""
+    CREATE TABLE multi_authority_change_claim_releases (
+        operation_id TEXT PRIMARY KEY,
+        evidence_digest TEXT NOT NULL CHECK (length(evidence_digest) = 64),
+        released_at TEXT NOT NULL,
+        FOREIGN KEY (operation_id)
+            REFERENCES multi_authority_change_terminal_evidence(operation_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE TRIGGER multi_claim_release_requires_verified_terminal_set
+    BEFORE INSERT ON multi_authority_change_claim_releases
+    WHEN NOT EXISTS (
+        SELECT 1
+        FROM multi_authority_change_operations AS o
+        JOIN multi_authority_change_terminal_evidence AS e
+          ON e.operation_id = o.operation_id
+        WHERE o.operation_id = NEW.operation_id
+          AND o.status IN ('COMPLETED', 'ABORTED')
+          AND e.outcome = o.status
+          AND e.evidence_digest = NEW.evidence_digest
+          AND (
+              SELECT COUNT(*) FROM multi_authority_change_targets
+              WHERE operation_id = o.operation_id
+          ) >= 2
+          AND (
+              SELECT COUNT(*) FROM multi_authority_change_claims
+              WHERE operation_id = o.operation_id
+          ) = (
+              SELECT COUNT(*) FROM multi_authority_change_targets
+              WHERE operation_id = o.operation_id
+          )
+          AND (
+              SELECT COUNT(*) FROM multi_authority_change_terminal_targets
+              WHERE operation_id = o.operation_id
+          ) = (
+              SELECT COUNT(*) FROM multi_authority_change_targets
+              WHERE operation_id = o.operation_id
+          )
+          AND NOT EXISTS (
+              SELECT 1
+              FROM multi_authority_change_targets AS t
+              LEFT JOIN multi_authority_change_claims AS c
+                ON c.operation_id = t.operation_id
+               AND c.authority_kind = t.authority_kind
+               AND c.authority_id = t.authority_id
+              LEFT JOIN multi_authority_change_terminal_targets AS tt
+                ON tt.operation_id = t.operation_id
+               AND tt.authority_kind = t.authority_kind
+               AND tt.authority_id = t.authority_id
+               AND tt.expected_revision = t.expected_revision
+               AND tt.proposed_revision = t.proposed_revision
+              WHERE t.operation_id = o.operation_id
+                AND (c.operation_id IS NULL OR tt.operation_id IS NULL)
+          )
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'claim release requires complete matching terminal evidence and claims');
+    END;
+
+    CREATE TRIGGER multi_claim_release_no_update
+    BEFORE UPDATE ON multi_authority_change_claim_releases
+    BEGIN
+        SELECT RAISE(ABORT, 'claim release receipts are immutable');
+    END;
+
+    CREATE TRIGGER multi_claim_release_no_delete
+    BEFORE DELETE ON multi_authority_change_claim_releases
+    BEGIN
+        SELECT RAISE(ABORT, 'claim release receipts are retained');
+    END;
+
+    DROP TRIGGER multi_authority_change_claims_no_delete;
+
+    CREATE TRIGGER multi_authority_change_claims_no_delete
+    BEFORE DELETE ON multi_authority_change_claims
+    WHEN NOT EXISTS (
+        SELECT 1
+        FROM multi_authority_change_claim_releases AS r
+        WHERE r.operation_id = OLD.operation_id
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'claims require a durable terminal release receipt');
+    END;
+    """,
+)
+
+
+# v14 constrains multi-authority lifecycle transitions to a strict forward graph.
+# Intermediate progression requires the complete exclusive claim set; terminal
+# transitions remain separately gated by the immutable reconciliation receipt.
+CORE_SCHEMA_V14 = SQLiteMigration(
+    version=14,
+    name="constrained_multi_authority_operation_lifecycle",
+    sql="""
+    CREATE TRIGGER multi_authority_operation_status_forward_only
+    BEFORE UPDATE OF status ON multi_authority_change_operations
+    WHEN NEW.status != OLD.status
+    AND NOT (
+        (OLD.status = 'REQUESTED' AND NEW.status = 'INVALIDATION_PENDING')
+        OR
+        (OLD.status = 'INVALIDATION_PENDING' AND NEW.status = 'SOURCE_PENDING')
+        OR
+        (OLD.status = 'SOURCE_PENDING' AND NEW.status = 'SOURCE_CONFIRMED')
+        OR
+        (OLD.status = 'SOURCE_CONFIRMED' AND NEW.status = 'RECONCILING')
+        OR
+        (OLD.status = 'RECONCILING' AND NEW.status IN ('COMPLETED', 'ABORTED'))
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'invalid multi-authority operation status transition');
+    END;
+
+    CREATE TRIGGER multi_authority_operation_progress_requires_complete_claims
+    BEFORE UPDATE OF status ON multi_authority_change_operations
+    WHEN NEW.status != OLD.status
+    AND NEW.status IN (
+        'INVALIDATION_PENDING', 'SOURCE_PENDING',
+        'SOURCE_CONFIRMED', 'RECONCILING'
+    )
+    AND (
+        (SELECT COUNT(*) FROM multi_authority_change_targets
+         WHERE operation_id = OLD.operation_id) < 2
+        OR
+        (SELECT COUNT(*) FROM multi_authority_change_claims
+         WHERE operation_id = OLD.operation_id)
+        !=
+        (SELECT COUNT(*) FROM multi_authority_change_targets
+         WHERE operation_id = OLD.operation_id)
+        OR EXISTS (
+            SELECT 1
+            FROM multi_authority_change_targets AS t
+            LEFT JOIN multi_authority_change_claims AS c
+              ON c.operation_id = t.operation_id
+             AND c.authority_kind = t.authority_kind
+             AND c.authority_id = t.authority_id
+            WHERE t.operation_id = OLD.operation_id
+              AND c.operation_id IS NULL
+        )
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'multi-authority progression requires the complete claim set');
+    END;
+    """,
+)
+
+
+
+# v15 stores immutable, revisioned issuer trust-policy snapshots. A policy
+# change appends a new revision; historical policy rows are never overwritten.
+CORE_SCHEMA_V15 = SQLiteMigration(
+    version=15,
+    name="immutable_recovery_evidence_issuer_trust_policies",
+    sql="""
+    CREATE TABLE recovery_evidence_issuer_trust_policies (
+        issuer_id TEXT NOT NULL CHECK (length(trim(issuer_id)) > 0),
+        policy_revision INTEGER NOT NULL CHECK (policy_revision > 0),
+        enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+        allowed_evidence_kinds_json TEXT NOT NULL
+            CHECK (length(trim(allowed_evidence_kinds_json)) > 0),
+        valid_from TEXT NOT NULL CHECK (length(trim(valid_from)) > 0),
+        valid_until TEXT,
+        max_evidence_lifetime_seconds INTEGER NOT NULL
+            CHECK (max_evidence_lifetime_seconds > 0),
+        PRIMARY KEY (issuer_id, policy_revision),
+        CHECK (valid_until IS NULL OR valid_until > valid_from)
+    );
+
+    CREATE INDEX recovery_evidence_trust_policy_current
+        ON recovery_evidence_issuer_trust_policies(issuer_id, policy_revision DESC);
+
+    CREATE TRIGGER recovery_evidence_trust_policy_revision_sequential
+    BEFORE INSERT ON recovery_evidence_issuer_trust_policies
+    WHEN NEW.policy_revision != COALESCE(
+        (SELECT MAX(policy_revision) + 1
+         FROM recovery_evidence_issuer_trust_policies
+         WHERE issuer_id = NEW.issuer_id),
+        1
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'issuer trust policy revision must increase by exactly one');
+    END;
+
+    CREATE TRIGGER recovery_evidence_trust_policy_no_update
+    BEFORE UPDATE ON recovery_evidence_issuer_trust_policies
+    BEGIN
+        SELECT RAISE(ABORT, 'issuer trust policy history is immutable');
+    END;
+
+    CREATE TRIGGER recovery_evidence_trust_policy_no_delete
+    BEFORE DELETE ON recovery_evidence_issuer_trust_policies
+    BEGIN
+        SELECT RAISE(ABORT, 'issuer trust policy history is retained');
+    END;
+    """,
+)
+
+
+
+# v16 stores the authoritative inventory of recovery-evidence issuers as
+# append-only revisioned snapshots. Registration is separate from trust policy:
+# an inventory entry never authenticates an issuer or grants evidence trust.
+CORE_SCHEMA_V16 = SQLiteMigration(
+    version=16,
+    name="immutable_recovery_evidence_issuer_registry",
+    sql="""
+    CREATE TABLE recovery_evidence_issuer_registry (
+        issuer_id TEXT NOT NULL CHECK (length(trim(issuer_id)) > 0),
+        registry_revision INTEGER NOT NULL CHECK (registry_revision > 0),
+        enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+        changed_at TEXT NOT NULL CHECK (length(trim(changed_at)) > 0),
+        PRIMARY KEY (issuer_id, registry_revision)
+    );
+
+    CREATE INDEX recovery_evidence_issuer_registry_current
+        ON recovery_evidence_issuer_registry(issuer_id, registry_revision DESC);
+
+    CREATE TRIGGER recovery_evidence_issuer_registry_revision_sequential
+    BEFORE INSERT ON recovery_evidence_issuer_registry
+    WHEN NEW.registry_revision != COALESCE(
+        (SELECT MAX(registry_revision) + 1
+         FROM recovery_evidence_issuer_registry
+         WHERE issuer_id = NEW.issuer_id),
+        1
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'issuer registry revision must increase by exactly one');
+    END;
+
+    CREATE TRIGGER recovery_evidence_issuer_registry_no_update
+    BEFORE UPDATE ON recovery_evidence_issuer_registry
+    BEGIN
+        SELECT RAISE(ABORT, 'issuer registry history is immutable');
+    END;
+
+    CREATE TRIGGER recovery_evidence_issuer_registry_no_delete
+    BEFORE DELETE ON recovery_evidence_issuer_registry
+    BEGIN
+        SELECT RAISE(ABORT, 'issuer registry history is retained');
+    END;
+    """,
+)
+
+
+# v17 stores one-time admission receipts bound to exact evidence, issuer
+# inventory revision, operation and complete claimed target set. Admissions are
+# immutable evidence records and never grant permission to perform an effect.
+CORE_SCHEMA_V17 = SQLiteMigration(
+    version=17,
+    name="immutable_recovery_evidence_admissions",
+    sql="""
+    CREATE TABLE recovery_evidence_admissions (
+        admission_id TEXT PRIMARY KEY CHECK (length(trim(admission_id)) > 0),
+        evidence_id TEXT NOT NULL UNIQUE CHECK (length(trim(evidence_id)) > 0),
+        evidence_digest TEXT NOT NULL CHECK (length(evidence_digest) = 64),
+        operation_id TEXT NOT NULL,
+        issuer_id TEXT NOT NULL CHECK (length(trim(issuer_id)) > 0),
+        issuer_registry_revision INTEGER NOT NULL CHECK (issuer_registry_revision > 0),
+        evidence_kind TEXT NOT NULL CHECK (length(trim(evidence_kind)) > 0),
+        target_count INTEGER NOT NULL CHECK (target_count >= 2),
+        command_digest TEXT NOT NULL CHECK (length(command_digest) = 64),
+        command_canonical BLOB NOT NULL CHECK (length(command_canonical) > 0),
+        requested_at TEXT NOT NULL CHECK (length(trim(requested_at)) > 0),
+        recorded_at TEXT NOT NULL CHECK (length(trim(recorded_at)) > 0),
+        FOREIGN KEY (operation_id)
+            REFERENCES multi_authority_change_operations(operation_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE INDEX recovery_evidence_admissions_operation
+        ON recovery_evidence_admissions(operation_id);
+
+    CREATE TRIGGER recovery_admission_requires_current_enabled_issuer
+    BEFORE INSERT ON recovery_evidence_admissions
+    WHEN NOT EXISTS (
+        SELECT 1 FROM recovery_evidence_issuer_registry AS r
+        WHERE r.issuer_id = NEW.issuer_id
+          AND r.registry_revision = NEW.issuer_registry_revision
+          AND r.enabled = 1
+          AND r.registry_revision = (
+              SELECT MAX(latest.registry_revision)
+              FROM recovery_evidence_issuer_registry AS latest
+              WHERE latest.issuer_id = NEW.issuer_id
+          )
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'recovery admission requires current enabled issuer revision');
+    END;
+
+    CREATE TRIGGER recovery_admission_requires_active_claimed_operation
+    BEFORE INSERT ON recovery_evidence_admissions
+    WHEN NOT EXISTS (
+        SELECT 1 FROM multi_authority_change_operations AS o
+        WHERE o.operation_id = NEW.operation_id
+          AND o.status IN (
+              'INVALIDATION_PENDING', 'SOURCE_PENDING',
+              'SOURCE_CONFIRMED', 'RECONCILING'
+          )
+    )
+    OR NEW.target_count != (
+        SELECT COUNT(*) FROM multi_authority_change_targets
+        WHERE operation_id = NEW.operation_id
+    )
+    OR NEW.target_count != (
+        SELECT COUNT(*) FROM multi_authority_change_claims
+        WHERE operation_id = NEW.operation_id
+    )
+    OR EXISTS (
+        SELECT 1
+        FROM multi_authority_change_targets AS t
+        LEFT JOIN multi_authority_change_claims AS c
+          ON c.operation_id = t.operation_id
+         AND c.authority_kind = t.authority_kind
+         AND c.authority_id = t.authority_id
+        WHERE t.operation_id = NEW.operation_id
+          AND c.operation_id IS NULL
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'recovery admission requires complete active operation claims');
+    END;
+
+    CREATE TRIGGER recovery_evidence_admissions_no_update
+    BEFORE UPDATE ON recovery_evidence_admissions
+    BEGIN
+        SELECT RAISE(ABORT, 'recovery evidence admissions are immutable');
+    END;
+
+    CREATE TRIGGER recovery_evidence_admissions_no_delete
+    BEFORE DELETE ON recovery_evidence_admissions
+    BEGIN
+        SELECT RAISE(ABORT, 'recovery evidence admissions are retained');
+    END;
+    """,
+)
+
+
 SQLITE_MIGRATIONS = (
     CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
-    CORE_SCHEMA_V5, CORE_SCHEMA_V6,
+    CORE_SCHEMA_V5, CORE_SCHEMA_V6, CORE_SCHEMA_V7, CORE_SCHEMA_V8,
+    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13, CORE_SCHEMA_V14, CORE_SCHEMA_V15, CORE_SCHEMA_V16, CORE_SCHEMA_V17,
 )
