@@ -578,3 +578,9 @@ Se añade una prueba de corrupción controlada que inserta una revisión posteri
 **Límites:** no se impide reactivar un emisor mediante una nueva revisión; no se modifica el esquema ni el flujo de admisión. La auditoría no autentica la fuente del reloj y permanece en solo lectura.
 
 **Estado: VALIDADO por el propietario; suite completa: 1139 tests en 8.811 s, todos OK.**
+
+## 51. Ciclo 3.1 — Lecturas workspace dentro de la UoW de autoridad
+
+`WorkspaceCapabilityExecutionService` mantiene abierta la `SQLiteLocalAuthorityUnitOfWork` (`BEGIN IMMEDIATE`) durante la lectura/listado protegido del filesystem. Identity, Grants, Project y Environment se consultan desde esa misma unidad; `SQLiteProjectEnvironmentRepository.get_environment()` fue corregido para respetar la UoW inyectada en vez de abrir una conexión independiente. La prueba de regresión verifica que una lectura de Environment observa una actualización aún no confirmada en la transacción y que el rollback exterior restaura el estado previo.
+
+Esta garantía solo aplica a cambios de autoridad SQLite que comparten el mismo archivo/base y respetan las transacciones SQLite. No es fencing distribuido, no cubre configuración externa del workspace ni hace segura una ejecución sobre una autoridad alternativa. El servicio solo ejecuta `workspace.list`/`workspace.read`; no se ha creado coordinador genérico, admisión de operación ni integración runtime. **Implementación pendiente de validación local.**
