@@ -17,7 +17,6 @@ from atlas.core.agent_delegation import (
 )
 from atlas.core.agent_identity import CanonicalAgentIdentity
 from atlas.core.context import OperationContext
-from atlas.core.enums import DelegationMode
 from atlas.core.errors import AuthorizationError
 from atlas.core.identity import Identity, IdentityKind, IdentityStatus
 from atlas.core.user_identity import CanonicalUserIdentity
@@ -248,7 +247,6 @@ class AgentRenewalApprovalLifecycleTests(unittest.TestCase):
     def test_inactive_native_binding_blocks_pending_agent_approval(self):
         self.binding_active["value"] = False
         self.assert_denied_without_mutation()
-
 
     def test_owner_can_reject_pending_request_after_association_suspension_and_revocation(self):
         self.association_state["value"] = replace(
