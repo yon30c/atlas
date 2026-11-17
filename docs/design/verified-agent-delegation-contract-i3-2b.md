@@ -540,7 +540,7 @@ A canonical Project/Environment association already exists in migration V18 as `
 
 I3-2B.6E wires AGENT renewal to the existing authority: within the same shared UoW, the service now requires the exact association for the Grant's Project and Environment to exist and be ACTIVE. Missing or suspended associations fail closed before persistence. No new migration or duplicate relationship model is introduced.
 
-**Validation pending:** focused tests, full unit suite and compileall on Debian for the HEAD containing I3-2B.6E.
+**Owner validation confirmed on Debian for HEAD `b98c091243475d3c660e8b67e3414d53c6b31d98`:** full unit suite **1,400 tests in 21.235 seconds, OK**; `python -m compileall -q src tests` returned **COMPILE_EXIT_CODE=0**.
 
 
 #### 18.8 I3-2B.6D — validation follow-up
@@ -561,3 +561,8 @@ The AGENT renewal request path now requires the existing `uow.workspaces` reposi
 This reuses schema V18 and its existing CAS/lifecycle contract. It deliberately does not add another table or association abstraction.
 
 Tests cover missing and suspended association denial with no renewal write/commit, and fail closed when the association authority is absent. The minimal `ProjectEnvironmentAssociationReaderPort` makes the transaction-bound read contract explicit. **Owner validation on Debian is pending for the updated HEAD.**
+
+
+#### 18.10 I3-2B.6E — owner validation result
+
+The owner ran the complete unit suite on Debian for HEAD `b98c091243475d3c660e8b67e3414d53c6b31d98`: **1,400 tests in 21.235 seconds, OK**. `python -m compileall -q src tests` returned **COMPILE_EXIT_CODE=0**. This validates the canonical association enforcement and its fail-closed service tests at that HEAD.
