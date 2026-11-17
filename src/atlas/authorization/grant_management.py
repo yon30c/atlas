@@ -4,7 +4,6 @@ from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import cast
 
-from atlas.authorization.identity_evidence import require_verified_owner_context
 from atlas.authorization.grant_revocation import (
     GrantRevocationAuthorityChangeAuthorization,
     GrantRevocationAuthorizationResult,
@@ -12,6 +11,7 @@ from atlas.authorization.grant_revocation import (
     GrantRevocationProofAuthorizationService,
     GrantRevocationResult,
 )
+from atlas.authorization.identity_evidence import require_verified_owner_context
 from atlas.authorization.models import (
     Grant,
     GrantRevocationAuthorizationRequest,
