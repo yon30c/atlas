@@ -248,6 +248,6 @@ Implementado:
 - Reutilización de `_read_connection()`, por lo que la lectura se incorpora a la misma conexión de `SQLiteUnitOfWork` cuando la autoridad se compone con una UoW externa.
 - Pruebas añadidas para pareja canónica con IDs distintos, identidad inexistente, identidad no USER, UUID inválido y lectura dentro de UoW con rollback externo.
 
-**Pendiente de validación:** las pruebas nuevas y la suite completa aún no se han ejecutado. El workflow CI actual solo dispara en push a `implementation/**` y PR cuyo destino sea `main` o `implementation/**`; esta rama `feature/**` no activa ese workflow por sí sola. No declarar I-1 validado hasta ejecutar localmente o habilitar una ruta de CI adecuada y revisar los resultados.
+**Validación completada:** el usuario ejecutó la suite completa en Debian: `Ran 1262 tests ... OK`; `python -m compileall -q src tests` terminó con `COMPILE_EXIT_CODE=0`. Las pruebas específicas de I-1 forman parte de esa suite. El workflow CI actual no se dispara para esta rama `feature/**`; la validación fue manual y los resultados fueron compartidos en la conversación.
 
 **Límite:** no se modificó esquema/migración, no se alteró la relación canónica, no se añadió acceso SQL desde Native Identity Authority y no se implementó todavía I-2.
