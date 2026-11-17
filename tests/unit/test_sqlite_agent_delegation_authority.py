@@ -150,7 +150,7 @@ class SQLiteAgentDelegationAuthorityTests(unittest.TestCase):
         with self.assertRaises(VerifiedIdentityContextRejected):
             self._create()
 
-    def test_inactive_agent_or_revoked_native_binding_is_rejected(self):
+    def test_revoked_native_agent_binding_is_rejected(self):
         with self.factory() as unit:
             unit.native_agent_identity.revoke_native_agent_binding(
                 self._active_binding_id(), expected_revision=1,
