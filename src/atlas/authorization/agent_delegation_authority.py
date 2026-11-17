@@ -60,15 +60,17 @@ class SQLiteAgentDelegationAuthority:
         if not isinstance(verified_owner_identity, VerifiedIdentityContext):
             raise AuthorizationError("se requiere evidencia USER verificada")
 
-        now = self._clock.now()
-        _require_utc(now, "clock.now()")
-        if not_before < now:
-            raise ContractError("not_before no puede preceder la emisión")
-        if expires_at <= not_before or expires_at <= now:
-            raise ContractError("la ventana de delegación debe estar vigente y ser positiva")
+        if expires_at <= not_before:
+            raise ContractError("expires_at debe ser posterior a not_before")
 
         try:
             with self._uow_factory() as unit:
+                # Read time only after BEGIN IMMEDIATE has acquired the write
+                # transaction, so waiting for the lock cannot stale the window.
+                now = self._clock.now()
+                _require_utc(now, "clock.now()")
+                if not_before < now or expires_at <= now:
+                    raise ContractError("la ventana de delegación debe estar vigente al emitir")
                 owner = self._owner_verifier.verify_in_unit_of_work(
                     verified_owner_identity, unit
                 )
