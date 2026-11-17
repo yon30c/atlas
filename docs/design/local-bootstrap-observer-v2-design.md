@@ -1,6 +1,6 @@
 # Diseño V2 del observador LOCAL de procesos
 
-**Estado:** implementación V2 publicada en `feature/terminal-commands`; compilación y pruebas Debian del propietario pendientes. Alcance aprobado el 16-11-2026 para solo observación, sin instalación ni cambios del host. No es autenticador ni componente de autorización.  
+**Estado:** implementación V2 y validación automatizada/manual en Debian completadas el 16-11-2026. El alcance sigue limitado a observación, sin instalación ni cambios del host. No es autenticador ni componente de autorización.  
 **Rama:** `feature/terminal-commands`.  
 **Relacionado:** `local-bootstrap-validator-v1-design.md`, `local-bootstrap-privilege-validation-contract.md`, `local-bootstrap-privilege-boundary.md`.
 
@@ -52,7 +52,7 @@ Abrir `/dev/tty` sin adquirir un terminal de control (`O_NOCTTY`) y consultar:
 - foreground PGID mediante `tcgetpgrp`;
 - SID y PGID del proceso mediante `getsid` y `getpgrp`.
 
-Si no existe TTY controlador o la consulta no está disponible, mostrar un estado explícito `TTY_UNAVAILABLE`/incompleto. No inferir TTY a partir de stdin/stdout, propietario del dispositivo, `tty_nr` aislado o variables de entorno.
+Si no existe TTY controlador o la consulta no está disponible, mostrar un estado explícito `TTY_UNAVAILABLE`. La ausencia de TTY produce observación incompleta cuando no hay otra contradicción. Si se detecta una contradicción independiente —por ejemplo, el SID del padre directo no coincide con el SID del observador— el resultado global es inconsistente, aunque el TTY también esté ausente. No inferir TTY a partir de stdin/stdout, propietario del dispositivo, `tty_nr` aislado o variables de entorno.
 
 La coherencia limitada se comprueba con igualdad de SID entre terminal, observador y padre directo, y correspondencia del PGID con el foreground PGID. También se contrastan SID/PGID del proceso obtenidos por syscalls con los campos correspondientes de su propio `stat`. Esta observación no prueba origen del PTY ni presencia física.
 
@@ -78,8 +78,8 @@ Estados V1 permitidos: `OBSERVATION_CONSISTENT`, `OBSERVATION_INCONSISTENT`, `OB
 
 Códigos de salida:
 - 0: observaciones completas y consistentes según V1;
-- 2: observación incompleta;
-- 3: observación inconsistente;
+- 2: observación incompleta, cuando falta evidencia requerida y no se observó una contradicción independiente;
+- 3: observación inconsistente. Una contradicción tiene precedencia sobre la falta de evidencia;
 - 1: error interno/uso de sistema;
 - 64: argumentos no válidos.
 
@@ -91,14 +91,14 @@ Un modo diagnóstico opcional de duración acotada permite muestrear el TTY y fo
 
 ## 9. Pruebas V2
 
-Las pruebas automatizadas cubren validación de argumentos, límites de duración, clasificación de lecturas, estados pidfd simulados, comparación de snapshots y metadatos de ejecutable, además de un smoke test del recolector real. Las pruebas de integración manuales en Debian se ejecutarán después de completar la implementación:
+Las pruebas automatizadas cubren validación de argumentos, límites de duración, clasificación de lecturas, estados pidfd simulados, comparación de snapshots y metadatos de ejecutable, además de un smoke test del recolector real. Las siguientes pruebas de integración manuales se ejecutaron en Debian el 16-11-2026:
 
 1. invocación ordinaria desde terminal local;
 2. sudo directo desde terminal local, solo si el operador decide ejecutarlo;
 3. SSH interactivo con PTY y sudo directo;
 4. SSH con PTY y shell intermediario (el padre directo debe reflejar el wrapper, no aceptar un sudo ancestro);
-5. SSH sin PTY: registrar ausencia de TTY; si sudo no permite ejecutar por falta de terminal/autenticación, caso no concluyente, sin cambiar políticas;
-6. muestreo de foreground/TTY y cambios durante la ventana diagnóstica.
+5. SSH sin PTY, ejecución ordinaria sin privilegios: TTY y exe del padre no disponibles; resultado `OBSERVATION_INCONSISTENT` porque el padre directo tenía SID 12863 y el observador SID 12871. La discrepancia de sesión, no la ausencia de TTY por sí sola, determina la clasificación;
+6. muestreo de foreground/TTY estable durante 5 segundos y detección del cambio foreground durante la ventana de 10 segundos.
 
 No habilitar NOPASSWD, no cambiar timestamp, no usar sudo -S ni alterar sudoers/SSH. No instalar el observador. Binarios solo en `/tmp`.
 
@@ -114,4 +114,4 @@ No habilitar NOPASSWD, no cambiar timestamp, no usar sudo -S ni alterar sudoers/
 8. build estricto y suite automatizada en Debian por el propietario, incluyendo el smoke test del recolector real.
 9. documentación con comandos exactos y límites.
 
-La implementación y documentación están publicadas. El cierre de validación no se declarará hasta que el propietario ejecute `sh tools/bootstrap-observer/test_v2.sh`, las pruebas manuales documentadas y comparta sus resultados en Debian. Completar V2 no aprueba A, no autoriza PAM, helper privilegiado ni V3/V4.
+La suite `sh tools/bootstrap-observer/test_v2.sh` pasó en Debian: V1 parser tests, V2 unit/live smoke tests, build estricto y CLI smoke. Las pruebas manuales anteriores también se completaron con los resultados documentados. V2 queda validado para su alcance de observación. La prueba SSH con shell intermediario mostró que el padre directo es `/usr/bin/dash`; el estado genérico `OBSERVATION_CONSISTENT` solo expresa coherencia de las observaciones y no acepta ni autoriza esa cadena de privilegios. Completar V2 no aprueba A, no autoriza PAM, helper privilegiado ni V3/V4.
