@@ -78,7 +78,11 @@ En la rama inspeccionada:
 
 No corregirlo reemplazando una comparación por otra sin introducir la verificación del contexto canónico. La validación correcta para actor USER compara `actor.identity_id` con el `identity_id` verificado y compara `context.user_id` con el `user_id` canónico verificado.
 
-### 4.4 Cobertura de pruebas actual
+### 4.4 Patrón canónico ya usado por el gate de Workspace
+
+`WorkspaceCapabilityExecutionService` obtiene `canonical = unit.identity.get_user(context.user_id)` dentro de la UoW y exige que `canonical.user_id == context.user_id` y `canonical.identity == actor` antes de continuar. Este patrón evita equiparar los strings: resuelve el UserId a su Identity(USER) canónica y compara el objeto Identity completo. También mantiene la lectura y las validaciones CAM dentro de la misma UoW local. Es una referencia útil para la reconciliación de la correspondencia, pero **no demuestra por sí sola** que `OperationContext` proceda de un `VerifiedIdentityContext`; esa procedencia debe quedar garantizada por la frontera de autenticación.
+
+### 4.5 Cobertura de pruebas actual
 
 `tests/unit/test_grant_management.py` construye su fixture con `actor.identity_id = "user-001"` y `context.user_id = "user-001"`; el test de propietario inválido también prueba IDs diferentes como rechazo. Esta suite codifica la igualdad accidental y no contiene un caso válido donde UserId e identity_id sean distintos pero estén relacionados por una pareja canónica verificada.
 
