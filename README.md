@@ -15,7 +15,7 @@ La visión de Atlas se apoya en estos principios:
 
 La autonomía de Atlas no equivale a autoridad. Comprender una solicitud, generar una respuesta o proponer un plan no autoriza ni ejecuta una operación.
 
-> **Estado de esta documentación:** sincronizado con el estado conocido de la rama `feature/terminal-commands` al 16 de noviembre de 2026. La evidencia de pruebas corresponde al commit de código `610f027f1fe91933278e431d8a9ec29dd291b96e`; las actualizaciones documentales posteriores no modifican código. Este README diferencia capacidades funcionales, composición parcial y trabajo pendiente. Un contrato, puerto, modelo o reducer no demuestra por sí solo que una capacidad esté habilitada en un runtime completo.
+> **Estado de esta documentación:** sincronizado con el estado conocido de la rama `feature/terminal-commands` al 16 de noviembre de 2026. La evidencia funcional de Atlas Terminal descrita aquí corresponde al commit base `610f027f1fe91933278e431d8a9ec29dd291b96e`; los prototipos bootstrap V1/V2/V3 y sus pruebas se registran por separado en `docs/status-current.md` y sus diseños. Este README diferencia capacidades funcionales, composición parcial y trabajo pendiente. Un contrato, puerto, modelo o reducer no demuestra por sí solo que una capacidad esté habilitada en un runtime completo.
 
 ## Estado general del desarrollo
 
