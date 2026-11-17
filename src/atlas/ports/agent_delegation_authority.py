@@ -36,14 +36,14 @@ class AgentDelegationAuthorityPort(Protocol):
         *,
         expected_revision: int,
         verified_owner_identity: VerifiedIdentityContext,
-        revoked_at: datetime,
     ) -> AgentDelegation:
         """Owner-only terminal revocation guarded by compare-and-swap.
 
         Implementations must load the canonical current row, apply
-        validate_agent_delegation_transition(current, updated), and persist
-        within one transaction/fencing boundary. A revoked row is terminal;
-        callers cannot reactivate it by submitting a replacement snapshot.
+        validate_agent_delegation_transition(current, updated), derive the
+        revocation timestamp from a trusted clock, and persist within one
+        transaction/fencing boundary. A revoked row is terminal; callers
+        cannot reactivate it by submitting a replacement snapshot.
         """
 
     def verify_for_operation(
