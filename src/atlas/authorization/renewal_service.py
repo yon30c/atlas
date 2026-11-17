@@ -183,7 +183,7 @@ class GrantRenewalService:
         self,
         context: OperationContext,
         verified_identity: VerifiedIdentityContext | None,
-    ):
+    ) -> CanonicalUserIdentity:
         return require_verified_owner_context(
             context,
             verified_identity,
