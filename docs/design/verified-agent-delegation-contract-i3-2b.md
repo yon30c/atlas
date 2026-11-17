@@ -392,3 +392,10 @@ Este slice no implementa la autoridad de delegación ni emite `VerifiedAgentDele
 ### Validación Debian — I3-2B.3B.1
 
 El propietario ejecutó la suite completa sobre el HEAD de esta fase: `Ran 1341 tests in 17.171s`, `OK`; `python -m compileall -q src tests` terminó con `COMPILE_EXIT_CODE=0`. Esta evidencia corresponde a la rama de diseño actual y no implica activación de autenticación AGENT en runtime ni habilitación de delegaciones.
+
+
+## 15. I3-2B.3B.2 — caller-bound delegation verification contract
+
+The `AgentDelegationAuthorityPort.verify_for_operation` contract now requires a `VerifiedAgentIdentityContext` argument. A delegation identifier is not a bearer credential: implementations must revalidate the supplied AGENT evidence and require its canonical identity ID to equal the delegation's `agent_identity_id` before issuing any `VerifiedAgentDelegationContext`.
+
+A focused domain-contract test asserts that this argument is mandatory and typed. This is a contract-hardening slice only; no production authority implementation or delegated operation is enabled.
