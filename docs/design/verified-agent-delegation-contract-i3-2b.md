@@ -507,3 +507,19 @@ Hallazgos que bloquean la habilitación:
 - La acción explícita grant.renewal.request no existe todavía y requiere aprobación de semántica antes de añadirla a CAM.
 
 I3-2B.6A es solo auditoría documental. GrantRenewalService.request_renewal permanece fail-closed; I3-2B.6B/6C no están implementados.
+
+
+### 18.6 Integración CAM para renovación AGENT — I3-2B.6
+
+El usuario aprobó la política conservadora: la delegación debe cubrir exactamente todos los recursos del Grant; la acción `grant.renewal.request` debe existir en el Grant y en la delegación; las decisiones siguen siendo USER owner-only.
+
+Implementación:
+- `agent_renewal_policy.py` aplica CAM a cada recurso del Grant y exige ALLOW del mismo Grant/revisión.
+- `GrantRenewalService.request_renewal` exige evidencia AGENT y delegación, las revalida dentro de la UoW local compartida y resuelve Grant + Project/Environment canónicos antes de CAM.
+- La hora procede de `Clock`; el argumento legacy `now` no se usa como fuente de tiempo.
+- `CORE_SCHEMA_V24` persiste `grant_revision`, `delegation_id` y `delegation_revision`, con FK, inmutabilidad y triggers que validan el binding canónico, la cobertura exacta, la acción, el issuer y el binding AGENT.
+- Se admite una solicitud PENDING por Grant. `renewal_id` permite replay idempotente solo para la misma intención; conflictos se deniegan.
+- La aprobación USER exige la revisión exacta del Grant capturada al solicitar. La revocación posterior de la delegación no sustituye ni bloquea la decisión del propietario USER.
+- Esta UoW es una transacción SQLite local, no el coordinador general de admisión/fencing ni atomicidad distribuida.
+
+**Validación Debian I3-2B.6B/6C: pendiente del propietario.** No declarar esta integración validada hasta recibir tests focalizados, suite completa y compileall. No se habilitaron endpoints, login ni runtime AGENT.
