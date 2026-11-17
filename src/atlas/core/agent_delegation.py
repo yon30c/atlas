@@ -74,6 +74,7 @@ class AgentDelegation:
     agent_binding_id: str
     agent_binding_revision: int
     grant_id: str
+    grant_revision: int
     project_id: str
     environment: str
     scope: AgentDelegationScope
