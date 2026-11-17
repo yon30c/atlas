@@ -170,6 +170,32 @@ class VerifiedIdentityContextServiceTests(unittest.TestCase):
         with self.assertRaises(VerifiedIdentityContextRejected):
             service.verify(context)
 
+    def test_proof_authenticated_before_binding_verification_is_rejected(self):
+        earlier_reference = NativeProofReference.generate()
+        with self.factory() as unit:
+            unit.native_authentication.create_native_authentication_proof(
+                NativeAuthenticationProof(
+                    proof_id=str(uuid4()),
+                    reference_digest=earlier_reference.digest,
+                    issuer_id=self.issuer.issuer_id,
+                    native_subject=self.subject,
+                    authenticator_id=self.authenticator.authenticator_id,
+                    credential_revision=1,
+                    authenticated_at=self.clock.now() - timedelta(seconds=3),
+                    expires_at=self.clock.now() + timedelta(minutes=1),
+                    audience="atlas.internal",
+                )
+            )
+            unit.commit()
+        with self.assertRaises(VerifiedIdentityContextRejected):
+            self._service().admit_proof(earlier_reference)
+        with self.database.connection() as connection:
+            row = connection.execute(
+                "SELECT status FROM native_authentication_proofs WHERE reference_digest = ?",
+                (earlier_reference.digest,),
+            ).fetchone()
+        self.assertEqual(row["status"], "PENDING")
+
     def test_binding_failure_rolls_back_proof_consumption(self):
         SQLiteNativeIdentityAuthority(self.database).revoke_native_binding(
             self.binding.binding_id,
