@@ -1,6 +1,7 @@
 """HMAC-SHA256 attestor for short-lived VerifiedIdentityContext claims."""
 
 import base64
+import binascii
 import hashlib
 import hmac
 
@@ -30,9 +31,12 @@ class HmacVerifiedIdentityContextAttestor:
             return False
         try:
             supplied = base64.urlsafe_b64decode(attestation + "=")
-        except (ValueError, base64.binascii.Error):
+        except (ValueError, binascii.Error):
             return False
         if len(supplied) != hashlib.sha256().digest_size:
+            return False
+        canonical = base64.urlsafe_b64encode(supplied).decode("ascii").rstrip("=")
+        if not hmac.compare_digest(canonical, attestation):
             return False
         expected = hmac.new(self._key, payload, hashlib.sha256).digest()
         return hmac.compare_digest(expected, supplied)
