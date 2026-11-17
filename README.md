@@ -363,6 +363,7 @@ Estas son ejecuciones locales; no son resultados de GitHub Actions ni validació
 - [Arquitectura de coordinación del bootstrap LOCAL](docs/design/local-bootstrap-coordination-architecture.md)
 - [Frontera de privilegios del bootstrap LOCAL](docs/design/local-bootstrap-privilege-boundary.md)
 - [Contrato de validación de privilegios del bootstrap LOCAL](docs/design/local-bootstrap-privilege-validation-contract.md)
+- [Diseño V1 del validador aislado de bootstrap LOCAL](docs/design/local-bootstrap-validator-v1-design.md)
 - [Autenticador PAM local para bootstrap](docs/design/local-pam-bootstrap-authenticator.md)
 - [Protocolo de prueba para bootstrap LOCAL](docs/design/local-pam-bootstrap-proof-protocol.md)
 - [ME-D4O-B — admisión durable de lectura](docs/design/ME-D4O-B-durable-read-admission.md)
