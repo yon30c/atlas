@@ -1,6 +1,6 @@
 """Validación común de operaciones directas del propietario USER."""
 
-from atlas.authorization.identity_evidence import VerifiedIdentityContextVerifierPort
+from atlas.ports.verified_identity_context_verifier import VerifiedIdentityContextVerifierPort
 from atlas.core.context import OperationContext
 from atlas.core.errors import AuthorizationError, ContractError
 from atlas.core.identity import IdentityKind, IdentityStatus
