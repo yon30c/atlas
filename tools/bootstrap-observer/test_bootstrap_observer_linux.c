@@ -18,7 +18,7 @@ static void test_output_escaping(void) {
     bo_print_report(stream, &report);
     rewind(stream);
     count = fread(output, 1U, sizeof(output) - 1U, stream);
-    output[count] = '\\0';
+    output[count] = '\0';
 
     assert(strstr(output,
                   "parent_exe_target=parent\\x0aAUTHORIZATION=FORGED") != NULL);
