@@ -1,6 +1,7 @@
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import unittest
+import inspect
 from uuid import uuid4
 
 from atlas.core.agent_delegation import (
@@ -18,6 +19,7 @@ from atlas.core.native_agent_identity import (
     NativeAgentIdentityBindingStatus,
 )
 from atlas.core.verified_agent_identity_context import VerifiedAgentIdentityContext
+from atlas.ports.agent_delegation_authority import AgentDelegationAuthorityPort
 
 
 def uid():
@@ -205,6 +207,17 @@ class AgentDelegationDomainContractTests(unittest.TestCase):
                 revoked_at=self.now,
                 revoked_by_user_id=None,
             )
+
+    def test_operation_verification_requires_authenticated_agent_evidence(self):
+        parameters = inspect.signature(
+            AgentDelegationAuthorityPort.verify_for_operation
+        ).parameters
+        self.assertIn("verified_agent_identity", parameters)
+        self.assertIs(
+            parameters["verified_agent_identity"].annotation,
+            VerifiedAgentIdentityContext,
+        )
+        self.assertIs(parameters["verified_agent_identity"].default, inspect.Parameter.empty)
 
     def test_verified_delegation_context_is_canonical_and_deterministic(self):
         context = self._delegation_context()
