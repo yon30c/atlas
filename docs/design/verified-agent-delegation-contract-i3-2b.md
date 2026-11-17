@@ -293,3 +293,14 @@ Invariantes en modelos:
 La auditoría existente `docs/design/assistant-operation-consistency-boundary.md` registra que la composición actual de Identity abre su propia SQLite/UoW y que Grants/Renewals usan una UoW distinta; no se ha demostrado una base/UoW canónica compartida entre esas autoridades. Por ello no se puede afirmar hoy atomicidad entre Identity, binding, delegación, Grant y renovación. I3-2B.5 deberá diseñar y probar una UoW compartida o un mecanismo de fencing/consistencia equivalente antes de habilitar cualquier solicitud AGENT. Si no se demuestra, la ruta permanece bloqueada.
 
 **Validación:** se añadieron pruebas unitarias focalizadas en `tests/unit/test_agent_delegation_domain_contracts.py`. No se ha ejecutado la suite en Debian desde esta rama; la validación queda pendiente del entorno del propietario.
+
+
+### 11.1. Precisión sobre revocación terminal y objetos inmutables
+
+Un dataclass inmutable valida un **snapshot**, pero no conoce el snapshot anterior. Por ello, `AgentDelegation.__post_init__` valida que:
+- un estado ACTIVE no tenga metadatos de revocación;
+- un estado REVOKED tenga `revoked_at` y `revoked_by_user_id`.
+
+La irreversibilidad histórica se valida con `validate_agent_delegation_transition(current, updated)`: una fila REVOKED no puede volver a ACTIVE ni alterar su auditoría de revocación; la revisión debe avanzar exactamente en una unidad. La autoridad debe invocar esta función tras leer el registro canónico y dentro de la misma transacción o frontera de fencing que realiza CAS. La función aislada no sustituye el control transaccional.
+
+Las pruebas de redacción deben comprobar que el **valor secreto** no aparece en `repr`, no que desaparezca el nombre del campo: `verification_ref=<redacted>` y `attestation=<redacted>` son marcadores esperados y no revelan los valores.
