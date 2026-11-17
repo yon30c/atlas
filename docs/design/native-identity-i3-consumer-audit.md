@@ -264,3 +264,14 @@ Se completó el slice de binding persistente AGENT:
 - Se conserva intacta la tabla y el trigger USER native_identity_bindings.
 
 Tests añadidos: tests/unit/test_sqlite_native_agent_identity_authority.py. La validación focalizada, suite completa y compileall siguen pendientes de ejecución en Debian. No se declara éxito de pruebas.
+
+
+### 13. I3-2B.3A — persistencia de delegaciones
+
+Se publicó CORE_SCHEMA_V23 y SQLiteAgentDelegationRepository como sustrato de persistencia, no como autoridad de emisión. La tabla mantiene owner/USER, AGENT, Grant/revision, project/environment, scope explícito, issuer, ventana temporal y tombstones de revocación.
+
+La inserción valida mediante SQLite el propietario canónico activo, identidad AGENT activa, Grant exacto vigente, issuer activo y binding AGENT activo. El subconjunto de recursos/acciones se valida en Python y en triggers SQLite. Claims inmutables, CAS de revisión, revocación terminal y no-delete quedan protegidos en la base.
+
+SQLiteLocalAuthorityUnitOfWork ahora expone USER identity, AGENT identity, USER/AGENT native bindings, Grants, renewals y delegations sobre una sola SQLiteUnitOfWork.
+
+**Bloqueo explícito:** no existe todavía implementación productiva de los puertos VerifiedIdentityContextVerifierPort, VerifiedAgentIdentityContextVerifierPort y VerifiedAgentDelegationContextVerifierPort. El repositorio no prueba consentimiento del owner y no debe usarse como API de aplicación. I3-2B.3B debe implementar verificación transaccional y servicio de autoridad; no se emiten contextos verificados ni se habilitan operaciones delegated.
