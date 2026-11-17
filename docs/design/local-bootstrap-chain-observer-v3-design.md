@@ -20,7 +20,7 @@ Ningún resultado es ALLOW, AUTHORIZED, TRUSTED o PROOF_READY. El resultado posi
 
 ### 2.1 Padre directo sudo
 
-El primer proceso observado debe ser el padre directo del observador. Se compara el objeto ejecutable abierto en /proc/PID/exe mediante O_PATH/fstat y readlinkat sobre el mismo descriptor. Para la clasificación diagnóstica se exige:
+El primer proceso observado debe ser el padre directo del observador. Se observa el objeto ejecutable mediante O_PATH/fstat y el destino textual de /proc/PID/exe mediante readlink. Son observaciones separadas y no atómicas; se comparan en dos muestras. Para la clasificación diagnóstica se exige:
 - nombre base del destino sudo;
 - archivo regular;
 - UID/GID del objeto 0/0;
@@ -63,7 +63,7 @@ El prototipo no intenta convertir wrappers en una cadena aceptable buscando ance
 ### 2.5 Carreras y sustitución de procesos
 
 - Se abre pidfd para cada proceso observado.
-- Se leen status, stat y metadatos del ejecutable dos veces.
+- Se leen status, stat y metadatos del ejecutable dos veces. El fstat del descriptor O_PATH y readlink del enlace procfs son observaciones separadas, no una prueba atómica del mismo instante.
 - Se comparan PID, PPID, UID/GID, estado, PGRP, SID, TTY, TPGID, starttime y metadatos del objeto ejecutable.
 - Se comprueba liveness del pidfd antes/después.
 - Se comprueban los enlaces PPID entre nodos.
