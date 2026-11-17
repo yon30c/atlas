@@ -426,6 +426,13 @@ int bo_collect(bo_report *report) {
     if (getppid() != parent_pid) {
         report->result = BV_OBSERVATION_INCONSISTENT;
     }
+    if (report->have_self_stat &&
+        (report->self_stat.session != report->process_sid ||
+         report->self_stat.pgrp != report->process_pgrp ||
+         (tty.available &&
+          report->self_stat.tpgid != report->foreground_pgrp))) {
+        report->result = BV_OBSERVATION_INCONSISTENT;
+    }
     if (!first_ok || !second_ok || !report->exe_first_available ||
         !report->exe_second_available || !report->tty_available ||
         report->pidfd_state == BV_PIDFD_NOT_REQUESTED) {
@@ -588,6 +595,16 @@ void bo_print_report(FILE *stream, const bo_report *report) {
     fprintf(stream, "result=%s\n", result_name(report->result));
     fprintf(stream, "observer_sid=%" PRId32 "\n", report->process_sid);
     fprintf(stream, "observer_pgrp=%" PRId32 "\n", report->process_pgrp);
+    if (report->have_self_stat) {
+        fprintf(stream, "observer_starttime=%" PRIu64 "\n",
+                report->self_stat.starttime);
+        fprintf(stream, "observer_tty_nr=%" PRId64 "\n",
+                report->self_stat.tty_nr);
+        fprintf(stream, "observer_tpgid=%" PRId32 "\n",
+                report->self_stat.tpgid);
+    } else {
+        fprintf(stream, "observer_stat=UNAVAILABLE\n");
+    }
     fprintf(stream, "pidfd=%s\n", pidfd_name(report->pidfd_state));
     if (report->pidfd_errno != 0) {
         fprintf(stream, "pidfd_errno=%d (%s)\n", report->pidfd_errno,
@@ -619,6 +636,7 @@ void bo_print_report(FILE *stream, const bo_report *report) {
         fprintf(stream, "parent_gid=%" PRIu32 "/%" PRIu32 "/%" PRIu32
                         "/%" PRIu32 "\n",
                 status->gid[0], status->gid[1], status->gid[2], status->gid[3]);
+        fprintf(stream, "parent_state=%c\n", stat_value->state);
         fprintf(stream, "parent_starttime=%" PRIu64 "\n",
                 stat_value->starttime);
         fprintf(stream, "parent_sid=%" PRId32 "\n", stat_value->session);
