@@ -707,8 +707,16 @@ CORE_SCHEMA_V7 = SQLiteMigration(
         project_id TEXT NOT NULL CHECK (length(trim(project_id)) > 0),
         environment TEXT NOT NULL CHECK (length(trim(environment)) > 0),
         resource_type TEXT NOT NULL CHECK (length(trim(resource_type)) > 0),
-        resource_ids_json TEXT NOT NULL CHECK (length(trim(resource_ids_json)) > 2),
-        actions_json TEXT NOT NULL CHECK (length(trim(actions_json)) > 2),
+        resource_ids_json TEXT NOT NULL CHECK (
+            length(trim(resource_ids_json)) > 2
+            AND json_valid(resource_ids_json)
+            AND json_type(resource_ids_json) = 'array'
+        ),
+        actions_json TEXT NOT NULL CHECK (
+            length(trim(actions_json)) > 2
+            AND json_valid(actions_json)
+            AND json_type(actions_json) = 'array'
+        ),
         issued_at TEXT NOT NULL,
         expires_at TEXT NOT NULL,
         revoked_at TEXT,
@@ -2243,6 +2251,7 @@ CORE_SCHEMA_V23 = SQLiteMigration(
           AND g.environment = NEW.environment
           AND g.revision = NEW.grant_revision
           AND g.revoked_at IS NULL
+          AND g.issued_at <= NEW.issued_at
           AND g.expires_at >= NEW.expires_at
           AND issuer.status = 'ACTIVE'
           AND EXISTS (
@@ -2254,6 +2263,38 @@ CORE_SCHEMA_V23 = SQLiteMigration(
     )
     BEGIN
         SELECT RAISE(ABORT, 'delegation claims do not match active canonical owner, agent, Grant and issuer');
+    END;
+
+    CREATE TRIGGER agent_delegation_resource_scope_within_grant
+    BEFORE INSERT ON agent_delegations
+    WHEN EXISTS (
+        SELECT 1
+        FROM json_each(NEW.resource_ids_json) delegated
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM authorization_grants g, json_each(g.resource_ids_json) granted
+            WHERE g.grant_id = NEW.grant_id
+              AND granted.value = delegated.value
+        )
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'delegated resource scope exceeds canonical Grant');
+    END;
+
+    CREATE TRIGGER agent_delegation_actions_within_grant
+    BEFORE INSERT ON agent_delegations
+    WHEN EXISTS (
+        SELECT 1
+        FROM json_each(NEW.actions_json) delegated
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM authorization_grants g, json_each(g.actions_json) granted
+            WHERE g.grant_id = NEW.grant_id
+              AND granted.value = delegated.value
+        )
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'delegated actions exceed canonical Grant');
     END;
 
     CREATE TRIGGER agent_delegation_identity_immutable
