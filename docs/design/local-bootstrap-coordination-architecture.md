@@ -16,6 +16,12 @@ El bootstrap LOCAL utilizará tres responsabilidades separadas:
 
 No existe un emisor independiente de desafíos. El helper genera criptográficamente request_id, nonce y proof_id durante la invocación interactiva. El helper no recibe descriptor, subject, action, profile, epoch, owner ID, timestamp ni resultado PAM desde el caller.
 
+## Política de sesión interactiva
+
+El coordinador acepta la prueba firmada del helper tanto si el bootstrap se inició desde un terminal local como desde SSH interactivo con PTY. SSH sin PTY y ejecución no interactiva quedan excluidos. La modalidad de acceso no cambia el sujeto local esperado, el descriptor, la verificación PAM, la confirmación TTY ni las condiciones transaccionales. Un PTY no acredita presencia física.
+
+La comprobación de TTY, foreground, sesión, invocación privilegiada y cancelación por desconexión pertenece al helper; el coordinador verifica criptográficamente la prueba y aplica el consumo de un solo uso y el commit atómico descritos en este documento. Véase [Frontera de privilegios del bootstrap LOCAL](local-bootstrap-privilege-boundary.md).
+
 ## 2. Fuente autoritativa previa a CAM
 
 La configuración protegida del host es la fuente de la intención de bootstrap, no la base de datos CAM que se está inicializando.
