@@ -224,7 +224,13 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
             IntentKind.WORKSPACE_LIST,
             (("workspace_id", "demo"),),
         )
-        malformed = replace(plan, steps=())
+        extra_step = PlanStep(
+            step_id="step-002",
+            capability=IntentKind.WORKSPACE_LIST,
+            parameters=(("workspace_id", "demo"),),
+            expected_result="Segundo resultado",
+        )
+        malformed = replace(plan, steps=plan.steps + (extra_step,))
         with self.assertRaises(ContractError):
             self.service.execute(malformed, self.context, NOW, review_confirmed=True)
 
