@@ -22,7 +22,10 @@ from atlas.authorization.agent_delegation_authority import SQLiteAgentDelegation
 from atlas.authorization.models import Grant, GrantResourceScope
 from atlas.core.agent_delegation import AgentDelegationScope
 from atlas.core.errors import AuthorizationError, ContractError
-from atlas.identity.verified_identity_context_service import (\n    VerifiedIdentityContextRejected,\n    VerifiedIdentityContextService,\n)
+from atlas.identity.verified_identity_context_service import (
+    VerifiedIdentityContextRejected,
+    VerifiedIdentityContextService,
+)
 
 
 _PHC = "$argon2id$v=19$m=8,t=1,p=1$c2FsdHNhbHRzYWx0c2FsdA$aGFzaGhhc2hoYXNo"
@@ -141,7 +144,7 @@ class SQLiteAgentDelegationAuthorityTests(unittest.TestCase):
 
     def test_forged_or_expired_owner_context_is_rejected(self):
         forged = replace(self.owner_context, user_id=str(uuid4()))
-        with self.assertRaises(Exception):
+        with self.assertRaises(VerifiedIdentityContextRejected):
             self._create(verified_owner_identity=forged)
         self.clock.value += timedelta(minutes=3)
         with self.assertRaises(Exception):
@@ -166,8 +169,7 @@ class SQLiteAgentDelegationAuthorityTests(unittest.TestCase):
         return row["binding_id"]
 
     def test_grant_owner_subject_revocation_and_expiry_are_revalidated(self):
-        other_owner = str(uuid4())
-        changed = replace(self.grant, owner_user_id=other_owner, revision=2)
+        changed = replace(self.grant, revoked_at=self.clock.now(), revision=2)
         SQLiteGrantRepository(self.database).update(changed)
         with self.assertRaises(AuthorizationError):
             self._create()
