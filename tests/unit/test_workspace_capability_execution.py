@@ -226,16 +226,20 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
             self.service.execute(plan, self.context, NOW, review_confirmed=True)
 
     def test_workspace_owner_must_match_canonical_user(self):
-        from dataclasses import replace
         with self.uow_factory() as unit:
-            current = unit.workspaces.get_workspace("demo")
-            unit.workspaces.update_workspace(
-                replace(current, owner_user_id="another-user", revision=2),
-                expected_revision=1,
+            other_user = unit.identity.create_user()
+            unit.workspaces.create_workspace(
+                WorkspaceRecord(
+                    workspace_id="foreign",
+                    owner_user_id=other_user.user_id,
+                    project_id=ProjectId("atlas-demo"),
+                    environment_id=EnvironmentId("test"),
+                    root_ref="mount:demo-root",
+                )
             )
             unit.commit()
-        self._grant(kind=IntentKind.WORKSPACE_LIST, resource_id="demo")
-        plan = self._plan(IntentKind.WORKSPACE_LIST, (("workspace_id", "demo"),))
+        self._grant(kind=IntentKind.WORKSPACE_LIST, resource_id="foreign")
+        plan = self._plan(IntentKind.WORKSPACE_LIST, (("workspace_id", "foreign"),))
         with self.assertRaises(AuthorizationError):
             self.service.execute(plan, self.context, NOW, review_confirmed=True)
 
