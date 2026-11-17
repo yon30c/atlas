@@ -1,6 +1,6 @@
 # Contrato de validación de privilegios para bootstrap LOCAL (candidato A)
 
-**Estado:** contrato de diseño para revisión; no implementado, no aprobado para ejecución privilegiada.  
+**Estado:** contrato general de validación pendiente de cierre; alcance V1 del validador aislado aprobado para implementación sin privilegios. Candidato A no aprobado para ejecución privilegiada.  
 **Rama:** `feature/terminal-commands`.  
 **Fecha:** 16 de noviembre de 2026.  
 **Relacionado:** `local-bootstrap-privilege-boundary.md`, `local-pam-bootstrap-authenticator.md`, `local-pam-bootstrap-proof-protocol.md`, `local-bootstrap-coordination-architecture.md`.
@@ -9,7 +9,7 @@
 
 Este documento convierte las observaciones del prototipo C en requisitos verificables para evaluar el candidato A: helper C root-owned, ejecutado directamente mediante sudo, con autenticación PAM propia.
 
-El contrato no aprueba A ni autoriza implementar o instalar el helper. Define las condiciones que un prototipo de validación sin PAM, claves ni escritura CAM tendría que demostrar.
+El contrato no aprueba A ni autoriza implementar o instalar el helper privilegiado. Define las condiciones que deberán demostrarse antes de considerar ese candidato. Por decisión del propietario del 16-11-2026, queda aprobado únicamente el alcance V1 descrito en `local-bootstrap-validator-v1-design.md`: parser/evaluador aislado basado en fixtures, sin recolector de procesos real, privilegios, PAM, claves, configuración protegida, SQLite ni CAM.
 
 **Decisión provisional:** A continúa como candidato preferido por su menor superficie operativa. B (servicio privilegiado con socket Unix, `SO_PEERCRED` y TTY transferido) permanece como alternativa. Si una condición obligatoria de A no puede demostrarse en el Debian real, no se debilita el requisito: A se descarta y se reevalúa B.
 
@@ -224,20 +224,31 @@ No ejecutar todavía pruebas que requieran instalar el helper, modificar host o 
 - Revisar todos los caminos de error y asegurar que ninguno continúa.
 - Mantener el probe separado del futuro helper.
 
-### Etapa V1 — pruebas unitarias del validador aislado
+### Etapa V1 — parser/evaluador aislado (APROBADA PARA IMPLEMENTACIÓN)
 
-Con fuentes de proceso simuladas o interfaces inyectables, probar:
-- campos ausentes, duplicados, malformados o truncados;
-- PID inválido, reutilizado o starttime diferente;
-- pidfd ausente, error o terminación;
-- PPID cambiado o relación inesperada;
-- credenciales UID/GID inesperadas;
-- ejecutable no regular, propietario/permisos incorrectos o identidad distinta;
-- shell/wrapper como padre directo;
-- SID, PGID, TTY o foreground inconsistentes;
-- cualquier error de lectura, timeout o revalidación fallida.
+El alcance aprobado se limita estrictamente al documento [Diseño V1 del validador aislado](local-bootstrap-validator-v1-design.md).
 
-Toda prueba negativa debe verificar que no se emite prueba.
+Se autoriza implementar en `tools/bootstrap-validator/`:
+
+- parsers puros que reciben bytes y longitud explícita para campos seleccionados de `/proc/<pid>/status` y `/proc/<pid>/stat`;
+- validación estricta de gramática, límites, duplicados, truncamiento, PID y `starttime`;
+- modelos normalizados que distinguen valores ausentes/no verificables de valores reales;
+- evaluador puro sobre snapshots y fixtures;
+- únicamente los resultados `OBSERVATION_CONSISTENT`, `OBSERVATION_INCONSISTENT` y `OBSERVATION_INCOMPLETE`;
+- pruebas unitarias positivas y negativas de la matriz del diseño V1.
+
+Condiciones obligatorias:
+
+1. El parser no abre archivos ni consulta procfs; no realiza llamadas al sistema.
+2. No se reutiliza ni enlaza código de `tools/bootstrap-probe/`.
+3. V1 no incluye recolector real, pidfd, lectura de TTY, validación de ejecutables ni inspección del host.
+4. No existe resultado de autorización, `ALLOW`, `AUTHORIZED` o `PROOF_READY`.
+5. No se genera, serializa ni emite proof o envelope.
+6. No se conecta PAM, configuración protegida, claves, sudo, systemd, Broker, SQLite, CAM ni runtime.
+7. Los fixtures y binarios se mantienen en el checkout o en rutas temporales no privilegiadas.
+8. Compilación estricta y pruebas negativas deben demostrar los estados exactos previstos; los datos incompletos fallan de forma cerrada.
+
+La aprobación de V1 autoriza únicamente este trabajo aislado. No autoriza V2, integración con procesos reales, cambios del host ni ejecución privilegiada.
 
 ### Etapa V2 — integración de solo observación en Debian
 
@@ -293,7 +304,7 @@ Observaciones recibidas del propietario:
 
 El recorrido de ancestros y el pidfd del probe son lecturas diagnósticas no atómicas. No se ha ejecutado un validador, no se ha probado PAM dentro de helper, no se han emitido pruebas y no se ha modificado el host.
 
-## 12. Prohibiciones mientras el contrato siga pendiente
+## 12. Prohibiciones fuera del alcance V1 aprobado
 
 No:
 - escribir o instalar helper privilegiado;
@@ -305,4 +316,4 @@ No:
 - conectar el helper con el runtime;
 - aceptar observaciones diagnósticas como autorización.
 
-**Criterio de cierre de este documento:** revisión y aprobación del contrato, no aprobación de A ni autorización de implementación.
+**Estado de aprobación:** el propietario aprobó el alcance V1 aislado el 16-11-2026. El contrato general permanece abierto y el candidato A no está aprobado. Cualquier ampliación a V2, recolector real, PAM, helper privilegiado o cambios del host requiere diseño, revisión y aprobación separados.
