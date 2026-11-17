@@ -203,7 +203,7 @@ Antes de leer/listar, el servicio abre `SQLiteLocalAuthorityUnitOfWork` (`BEGIN 
 
 Se corrige `SQLiteProjectEnvironmentRepository.get_environment()` para utilizar `_read_connection()`, respetando la conexión transaccional inyectada. Se añade una prueba que comprueba visibilidad de una revisión no confirmada dentro de la UoW y rollback exterior.
 
-**Límites:** esta implementación reutiliza el evaluador CAM y la autoridad SQLite local, pero no crea un adaptador genérico de `OperationAuthorizationPort`, no emite evidencia criptográfica, no implementa Approval Manager ni coordinador distribuido. `REQUIRE_APPROVAL` no permite continuar. No se conecta a CLI/runtime y no expone escritura. **Pendiente de validación local por el propietario.**
+**Límites:** esta implementación reutiliza el evaluador CAM y la autoridad SQLite local, pero no crea un adaptador genérico de `OperationAuthorizationPort`, no emite evidencia criptográfica, no implementa Approval Manager ni coordinador distribuido. `REQUIRE_APPROVAL` no permite continuar. No se conecta a CLI/runtime y no expone escritura. **VALIDADO por el propietario: suite completa de 1,194 tests en 9.318 s, todos OK.**
 
 ## 12. Requisito para el Ciclo 3.2 — contexto confiable de consola
 
