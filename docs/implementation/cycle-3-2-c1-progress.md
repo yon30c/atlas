@@ -2,7 +2,7 @@
 
 **Rama:** `feature/cycle-3-2-c1-native-credentials`  
 **Base:** PR #8, `design/cycle-3-2-c1-native-authentication-contracts`  
-**Estado:** C1-1, C1-2 y C1-3 validados por suite en Debian; C1-4 implementado y pendiente de validación.
+**Estado:** C1-1 a C1-4 validados por suite/compilación en Debian; C1-5 implementado en GitHub y pendiente de validación local.
 
 ## Slice C1-1 — credenciales y Argon2id
 
@@ -63,19 +63,24 @@ Se implementó:
 - Export de adapter y migración v19.
 - Pruebas de persistencia, unicidad, no reasignación tras revocación, identidad canónica stale/mismatch, estado activo, CAS, tombstones y rollback/commit compartido.
 
-**Validación C1-4:** pendiente. Ejecutar en Debian:
+**Validación C1-4 confirmada por el propietario:** suite completa 1,254 OK; `python -m compileall -q src tests` con `COMPILE_EXIT_CODE=0`; HEAD `e153a5c`; rama limpia y alineada con origin.
 
-```bash
-python -m unittest discover -s tests/unit -p 'test_sqlite_native_identity_authority.py' -v
-python -m unittest discover -s tests/unit -p 'test_sqlite_local_authority_unit_of_work.py' -v
-python -m compileall -q src tests
-echo "COMPILE_EXIT_CODE=$?"
-python -m unittest discover -s tests -t tests -v
-git status --short --branch
-git log -1 --oneline
-```
+La migración v19/ solo se ha añadido al código del PR; no se ha aplicado a la base de datos de producción. La validación local de migración debe hacerse en bases de prueba temporales.
 
-La migración v19 solo se ha añadido al código del PR; no se ha aplicado a la base de datos de producción. La validación local de migración debe hacerse en bases de prueba temporales.
+## Slice C1-5 — persistencia Authentication Authority y proofs one-shot
+
+Se añadieron en el branch:
+
+- Migración aditiva v20 para `native_authenticators` y `native_authentication_proofs`; v1–v19 no se modifican.
+- Autenticadores con PHC Argon2id, subject nativo, login handle único por issuer, revisión de credencial y estados terminales; sin contraseña en claro.
+- Proofs con digest SHA-256 único, audience, timestamps y revisión exacta; no se persiste la referencia raw.
+- Triggers de integridad, inmutabilidad, revocación terminal, no-delete y revocación automática de proofs pendientes cuando cambia la credencial o se suspende/revoca el autenticador.
+- `SQLiteNativeAuthenticationAuthority` con creación/lectura de autenticadores, rotación de PHC con CAS, emisión y consumo one-shot condicional.
+- Consumo usa `BEGIN IMMEDIATE` y UPDATE condicional; audience incorrecta no consume el proof.
+- Integración `SQLiteLocalAuthorityUnitOfWork.native_authentication` compartiendo la transacción física.
+- Pruebas focalizadas añadidas para digest-only, audiencia, expiración, replay, revisión de credenciales, concurrencia y UoW.
+
+**Validación C1-5:** pendiente de ejecución en Debian. No afirmar la migración ni las pruebas como validadas hasta recibir los resultados del propietario.
 
 ## Límites y bloqueos de seguridad
 
