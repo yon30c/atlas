@@ -50,6 +50,8 @@ class AgentDelegationDomainContractTests(unittest.TestCase):
             binding_id=self.binding_id,
             binding_revision=2,
             issuer_id=self.issuer_id,
+            realm="atlas.primary",
+            audience="atlas.agent.operations",
             authenticated_at=self.now - timedelta(seconds=2),
             verified_at=self.now,
             expires_at=self.now + timedelta(minutes=2),
@@ -91,6 +93,8 @@ class AgentDelegationDomainContractTests(unittest.TestCase):
             environment="production",
             scope=self.scope,
             issuer_id=self.issuer_id,
+            realm="atlas.primary",
+            audience="atlas.agent.delegation",
             verified_at=self.now,
             expires_at=self.now + timedelta(minutes=1),
             verification_ref="C" * 43,
@@ -192,6 +196,8 @@ class AgentDelegationDomainContractTests(unittest.TestCase):
         payload = context.attestation_payload()
         self.assertIn(b'"protocol":"atlas:verified-agent-delegation:v1"', payload)
         self.assertIn(b'"grant_revision":4', payload)
+        self.assertIn(b'"audience":"atlas.agent.delegation"', payload)
+        self.assertIn(b'"realm":"atlas.primary"', payload)
         self.assertEqual(payload, context.attestation_payload())
         self.assertNotIn("attestation=", repr(context))
         with self.assertRaises(ContractError):
