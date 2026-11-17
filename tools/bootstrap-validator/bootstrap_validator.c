@@ -3,11 +3,6 @@
 #include <limits.h>
 #include <string.h>
 
-static bool ws(unsigned char c) {
-    return c == ' ' || c == '\t' || c == '\n' || c == '\r' ||
-           c == '\v' || c == '\f';
-}
-
 static bool u64(const unsigned char *s, size_t n, uint64_t max, uint64_t *out) {
     uint64_t v = 0;
 
