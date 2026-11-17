@@ -179,6 +179,18 @@ class SQLiteNativeIdentityAuthority:
             ).fetchone()
             return None if row is None else self._binding_from_row(row)
 
+    def get_native_binding_by_id(
+        self,
+        binding_id: str,
+    ) -> NativeIdentityBinding | None:
+        validate_canonical_uuid4(binding_id, "binding_id")
+        with self._read_connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM native_identity_bindings WHERE binding_id = ?",
+                (binding_id,),
+            ).fetchone()
+            return None if row is None else self._binding_from_row(row)
+
     def create_native_binding(
         self,
         identity: CanonicalUserIdentity,
