@@ -71,7 +71,13 @@ Only after the automated suite passes:
     # Direct sudo from local terminal: diagnostic pattern should match
     sudo -- /tmp/atlas-bootstrap-chain-observer
 
-    # SSH with PTY and direct sudo (from the Windows client)
+    # SSH interactive session: enter a shell, then run direct sudo
+    ssh -tt greed@10.0.0.81
+    sudo -- /tmp/atlas-bootstrap-chain-observer
+
+    # SSH with PTY and remote-command direct sudo: on the validated host,
+    # expected CHAIN_MISMATCH (sshd-session is the first non-sudo ancestor
+    # and reports tty_nr=0; this does NOT mean SSH failed to allocate a PTY)
     ssh -t greed@10.0.0.81 'sudo -- /tmp/atlas-bootstrap-chain-observer'
 
     # SSH with PTY and shell intermediary: direct parent must be rejected
