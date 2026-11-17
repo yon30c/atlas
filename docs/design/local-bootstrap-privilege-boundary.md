@@ -452,3 +452,34 @@ Antes de aprobar A se requiere:
 6. revisar el código y aprobar explícitamente la implementación privilegiada.
 
 No se modificará sudoers, PAM, systemd, Broker, usuarios/grupos ni permisos del host; no se instalará helper ni se generarán claves hasta cerrar el diseño y recibir aprobación explícita. Si cualquiera de los controles no puede demostrarse, se elige B sin debilitar los requisitos.
+
+
+## 4.8 Recorrido diagnóstico de ancestros desde el helper (16-11-2026)
+
+Se amplió `tools/bootstrap-probe/bootstrap_probe.c` para recorrer hasta 12 ancestros comenzando por el padre directo del helper. Para cada PID intenta observar:
+
+- UID/GID real, efectivo, saved y filesystem desde `/proc/<pid>/status`;
+- PPID, PGID, SID, `tty_nr` y `tpgid` desde `/proc/<pid>/stat`;
+- ejecutable abierto mediante `/proc/<pid>/exe`, con dispositivo, inode, propietario, modo y destino informativo;
+- destinos de los descriptores 0, 1 y 2;
+- disponibilidad de pidfd y su estado inmediato mediante `poll(..., 0)`;
+- estabilidad observada del PPID entre dos lecturas de status.
+
+El recorrido se inicia desde el PID del padre capturado por el helper y sube mediante PPID. Tiene límite fijo de 12 niveles y se detiene ante PID inválido, padre 1 o error de lectura.
+
+**Límite esencial:** el recorrido es una secuencia de lecturas no atómica de `/proc`. Un pidfd mantiene una referencia al proceso observado, pero no congela su ejecutable, sus credenciales, su relación de parentesco ni sus descriptores. Que el PPID no cambie entre dos lecturas no elimina carreras antes, durante o después de la observación. Los valores de stat y status tampoco constituyen una prueba criptográfica de procedencia.
+
+El probe sigue siendo exclusivamente diagnóstico: no compara ancestros con una política de autorización, no autentica el origen de una sesión, no emite pruebas, no escribe CAM y no debe instalarse como helper privilegiado.
+
+### Verificación pendiente
+
+Compilar en Debian con las opciones estrictas documentadas en `tools/bootstrap-probe/README.md`. Si compila, ejecutar:
+
+1. shell interactiva ordinaria (sin sudo);
+2. `sudo -- /tmp/atlas-bootstrap-probe` desde terminal interactiva;
+3. `ssh -t HOST 'sudo -- /tmp/atlas-bootstrap-probe'`;
+4. la invocación indirecta `sudo -- sh -c "/tmp/atlas-bootstrap-probe"`.
+
+Comparar si el recorrido identifica de forma consistente el monitor sudo, el ejecutor sudo, la shell original y los procesos sshd. Registrar errores de lectura o PPID inestable como resultados inconclusos, no como autorización ni como prueba automática de ataque.
+
+No modificar sudoers, PAM, systemd, usuarios/grupos, permisos ni políticas de timestamp para realizar estas pruebas.
