@@ -153,6 +153,79 @@ No usar `SUDO_UID`, `SUDO_USER`, PPID aislado, nombre de proceso aislado ni prop
 
 **Siguiente paso de diseño:** especificar el contrato de validación del padre sudo y las comprobaciones anti-TOCTOU para el helper C. Antes de implementar, revisar el comportamiento exacto con el helper mínimo en un entorno de prueba y definir pruebas negativas (invocación directa, caller atlas, caller atlas-sandbox, sin TTY, TTY no foreground, padre inesperado y entorno manipulado). No modificar sudoers ni instalar/configurar nada todavía.
 
+
+## 4.3 Contrato de validación del proceso padre sudo (diseño propuesto)
+
+La evidencia observada permite mantener A como candidato preferido, pero no autoriza a tratar cualquier proceso root cuyo padre aparente ser sudo como confiable. El helper C deberá validar una relación de invocación concreta, usando datos del kernel y objetos abiertos, y fallar ante cualquier discrepancia.
+
+### A. Precondiciones del helper
+
+- Ejecutable en ruta fija, root-owned, no escribible por grupo/otros; todos los directorios padre también protegidos.
+- No setuid ni file capabilities.
+- Invocación esperada: `sudo -- /usr/libexec/atlas/local-bootstrap-authenticator`, sin argumentos.
+- `argc` debe ser exactamente 1. No se interpreta stdin como entrada de protocolo ni de credenciales.
+- El helper no acepta `-u`, `-E`, shell, modo login, rutas alternativas ni opciones.
+- La política efectiva de sudo debe permitir únicamente el comportamiento esperado para el sujeto operativo. No se añadirá NOPASSWD ni una excepción amplia.
+- La contraseña de sudo no sustituye la autenticación PAM que realiza el helper.
+
+### B. Validación del padre directo
+
+Al inicio, el helper captura `getpid()`, `getppid()`, `getsid(0)`, `getpgrp()` y la identidad del TTY. Luego:
+
+1. Abre un pidfd para el PID padre con `pidfd_open(2)`; si no está disponible o falla, rechaza A en vez de degradar a una comprobación débil.
+2. Abre `/proc/<ppid>/exe` y obtiene metadatos del ejecutable mediante `fstat` sobre el objeto abierto. Comprueba que corresponde al binario sudo aprobado en el host, es regular, propiedad de root y no modificable por grupo/otros. La ruta textual de `readlink` no basta como prueba.
+3. Lee `/proc/<ppid>/status` de forma acotada y parsea estrictamente los cuatro UID/GID. El UID real debe coincidir con el UID del sujeto local obtenido de la configuración protegida y la base local de cuentas; el UID efectivo debe ser 0. No acepta valores de entorno como sustituto.
+4. Comprueba que el padre directo sigue siendo el PID capturado, que su SID coincide con el SID del helper y que el helper no ha sido reparentado durante la validación.
+5. Verifica que el padre no es el propio helper ni un wrapper/shell. No se sigue una cadena arbitraria de ancestros para “encontrar” un sudo más arriba.
+6. Revalida el estado del pidfd y la relación de proceso antes de comenzar la interacción. Si el padre desaparece, cambia la relación o una lectura es inconsistente, aborta.
+
+El pidfd fija la referencia al proceso y evita confundir un PID reutilizado con otro proceso; no congela por sí solo sus credenciales, ejecutable ni estado. Por eso se requieren lecturas coherentes, comprobaciones repetidas y una política de fallo cerrado. No se afirmará que /proc ofrece una instantánea atómica de todos los atributos.
+
+### C. Validación de sesión y TTY
+
+- Abre `/dev/tty` con flags que impidan seguir un enlace inesperado y comprueba con `fstat` y `isatty` que es un terminal.
+- Obtiene SID del terminal mediante `tcgetsid(fd)`, SID del helper mediante `getsid(0)` y grupo foreground mediante `tcgetpgrp(fd)`.
+- Exige que SID del terminal = SID del helper = SID del padre sudo.
+- Exige que `tcgetpgrp(fd) == getpgrp()` antes de cada prompt y durante las fases interactivas. Si el helper deja de estar en foreground, interrumpe la operación y no emite prueba.
+- No exige que el propietario UID del nodo devpts sea greed: con `sudo -i`/PTY allocation el dispositivo puede pertenecer a root. El propietario del nodo no autentica al operador.
+- La política LOCAL debe decidir expresamente si admite PTY remoto (por ejemplo, SSH). Un TTY controlador válido demuestra interacción con una sesión, no presencia física ante el servidor. Hasta que esa política se cierre, no se describirá el control como “consola física”.
+- No acepta stdin como sustituto del TTY ni usa stdout/stderr redirigidos para solicitar confirmación o contraseña.
+
+Las llamadas a `tcgetpgrp` se repetirán justo antes de leer confirmación y antes/durante PAM. El helper no puede impedir que el usuario cambie de terminal o que la sesión se cierre; ante pérdida de foreground, HUP, EOF o error de terminal cancela y limpia el estado sensible.
+
+### D. Configuración sudo y ejecutable
+
+Antes de aprobar A debe existir una inspección de solo lectura y una prueba del helper mínimo que establezcan:
+
+- versión/ruta efectiva de sudo y su ejecutable root-owned;
+- `env_reset` efectivo y ausencia de preservación arbitraria de variables para esta invocación;
+- ausencia de `SETENV` o reglas que permitan cambiar entorno/ejecutable de forma no prevista;
+- uso de PTY coherente con la política aprobada;
+- que el helper recibe exactamente el padre y las credenciales observadas en la prueba;
+- que el usuario técnico `atlas`, `atlas-sandbox` y un proceso sin TTY no pueden obtener el mismo flujo mediante sus permisos reales.
+
+No se considerará suficiente una coincidencia de nombre de proceso, PPID, `SUDO_UID`, `SUDO_USER`, UID efectivo, propietario del TTY ni una sola lectura de `/proc`. La cuenta greed ya tiene sudo irrestricto; el modelo no intenta limitar a un administrador que decide ejecutar código arbitrario como root.
+
+### E. Pruebas negativas obligatorias antes de aprobar A
+
+1. Ejecutar el helper directamente como greed sin sudo: rechazo.
+2. Ejecutarlo desde root sin padre sudo válido: rechazo.
+3. Intentar invocarlo desde `atlas` y `atlas-sandbox`: rechazo por política de sudo y por validación del sujeto.
+4. Invocarlo sin TTY controlador: rechazo.
+5. Invocarlo desde un grupo que no sea foreground: rechazo.
+6. Cambiar de foreground o cerrar el TTY durante el prompt: cancelación sin prueba.
+7. Añadir argumentos o intentar alterar entorno, locale, PATH, HOME, USER, SUDO_UID/SUDO_USER: no cambia descriptor, sujeto, ruta ni política; discrepancias producen rechazo.
+8. Simular padre inesperado, proceso reparentado, fallo de pidfd o inconsistencia de /proc: rechazo.
+9. Alterar permisos del helper, sus directorios, configuración o clave: rechazo antes de PAM.
+10. Contraseña incorrecta, cuenta bloqueada/inactiva o fallo PAM: no se emite prueba.
+
+Estas pruebas se diseñarán primero como pruebas unitarias/integración sin privilegios reales cuando sea posible. Las pruebas que requieran sudo/PAM se harán en un entorno de prueba controlado y solo después de aprobación explícita. No se ejecutarán ahora.
+
+### F. Criterio de selección
+
+A se aprobará únicamente si la implementación puede cumplir y demostrar todos los controles anteriores en el Debian real. Si pidfd, procfs, política sudo, sesión/TTY o pruebas negativas no permiten una validación coherente, se seleccionará B. No se relajarán las condiciones para conservar A.
+
+
 ## 5. Entorno, argumentos y descriptores
 
 - Rechazar argc distinto del valor fijo esperado.
