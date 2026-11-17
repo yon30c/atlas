@@ -1,7 +1,6 @@
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-import sqlite3
 import tempfile
 import unittest
 from uuid import uuid4
@@ -22,7 +21,6 @@ from atlas.authentication.native import (
     NativeProofReference,
     NativeSubject,
 )
-from atlas.core.errors import ContractError
 from atlas.core.identity import IdentityStatus
 from atlas.identity.verified_identity_context_service import (
     VerifiedIdentityContextRejected,
