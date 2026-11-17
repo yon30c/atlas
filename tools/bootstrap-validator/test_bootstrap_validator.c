@@ -22,6 +22,9 @@ static void test_stat(void){
  const char *tail="123 (x) S 10 11 12 0 0 0 0 0 0 0 0 0 0 0 0 0 0 10 11 extra"; assert(bv_parse_stat((const unsigned char*)tail,strlen(tail),123,&o)==BV_INVALID);
  const char *unsigned_counter="123 (x) S 10 11 12 0 0 18446744073709551615 1 2 3 4 5 6 -7 -8 -9 -10 11 -12 987654"; assert(bv_parse_stat((const unsigned char*)unsigned_counter,strlen(unsigned_counter),123,&o)==BV_OK);
  const char *negative_counter="123 (x) S 10 11 12 0 0 -1 1 2 3 4 5 6 -7 -8 -9 -10 11 -12 987654"; assert(bv_parse_stat((const unsigned char*)negative_counter,strlen(negative_counter),123,&o)==BV_RANGE);
+ const char *crlf="123 (x) S 10 11 12 0 0 0 1 2 3 4 5 6 -7 -8 -9 -10 11 -12 987654\r\n"; assert(bv_parse_stat((const unsigned char*)crlf,strlen(crlf),123,&o)==BV_INVALID);
+ const char *split="123 (x) S 10 11 12 0 0 0 1 2 3 4 5 6 -7 -8 -9 -10 11 -12\n987654"; assert(bv_parse_stat((const unsigned char*)split,strlen(split),123,&o)==BV_RANGE);
+ const char *tab="123 (x)\tS 10 11 12 0 0 0 1 2 3 4 5 6 -7 -8 -9 -10 11 -12 987654"; assert(bv_parse_stat((const unsigned char*)tab,strlen(tab),123,&o)==BV_INVALID);
 }
 static bv_observation complete(void){
  bv_observation o={0}; o.has_requested_pid=true;o.requested_pid=123;o.has_helper_pid=true;o.helper_pid=200;
