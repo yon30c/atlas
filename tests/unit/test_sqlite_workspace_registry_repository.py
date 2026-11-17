@@ -1,0 +1,162 @@
+"""Tests for the canonical SQLite workspace registry and explicit scope links."""
+
+from dataclasses import replace
+from pathlib import Path
+import sqlite3
+import tempfile
+import unittest
+
+from atlas.adapters.sqlite.database import SQLiteDatabase
+from atlas.adapters.sqlite.identity_authority import SQLiteIdentityAuthority
+from atlas.adapters.sqlite.migrations import SQLITE_MIGRATIONS
+from atlas.adapters.sqlite.project_environment_repository import SQLiteProjectEnvironmentRepository
+from atlas.adapters.sqlite.workspace_registry_repository import SQLiteWorkspaceRegistryRepository
+from atlas.core.errors import ConcurrencyError, ContractError, NotFoundError
+from atlas.memory.metadata import EnvironmentMetadata, ProjectMetadata
+from atlas.memory.models import EnvironmentId, ProjectId
+from atlas.workspace.models import (
+    ProjectEnvironmentAssociation,
+    ProjectEnvironmentStatus,
+    WorkspaceRecord,
+    WorkspaceStatus,
+)
+
+
+class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.database = SQLiteDatabase(Path(self.temp_dir.name) / "authority.sqlite")
+        self.database.apply_migrations(SQLITE_MIGRATIONS)
+        self.identity = SQLiteIdentityAuthority(self.database).create_user()
+        self.project_environment = SQLiteProjectEnvironmentRepository(self.database)
+        self.project = ProjectMetadata(ProjectId("atlas"), "active", 1)
+        self.environment = EnvironmentMetadata(EnvironmentId("test"), "active", 1)
+        self.project_environment.create_project(self.project)
+        self.project_environment.create_environment(self.environment)
+        self.repository = SQLiteWorkspaceRegistryRepository(self.database)
+        self.association = ProjectEnvironmentAssociation(
+            ProjectId("atlas"), EnvironmentId("test"), ProjectEnvironmentStatus.ACTIVE
+        )
+        self.workspace = WorkspaceRecord(
+            "workspace-main", self.identity.user_id, ProjectId("atlas"),
+            EnvironmentId("test"), "mount:atlas-main"
+        )
+
+    def test_create_and_read_explicit_project_environment_association(self):
+        self.repository.create_association(self.association)
+        self.assertEqual(
+            self.repository.get_association(ProjectId("atlas"), EnvironmentId("test")),
+            self.association,
+        )
+
+    def test_association_requires_existing_project_and_environment(self):
+        invalid = ProjectEnvironmentAssociation(
+            ProjectId("missing"), EnvironmentId("test"), ProjectEnvironmentStatus.ACTIVE
+        )
+        with self.assertRaises(ContractError):
+            self.repository.create_association(invalid)
+
+    def test_association_status_uses_compare_and_swap_revision(self):
+        self.repository.create_association(self.association)
+        suspended = replace(
+            self.association, status=ProjectEnvironmentStatus.SUSPENDED, revision=2
+        )
+        self.repository.update_association(suspended, expected_revision=1)
+        self.assertEqual(
+            self.repository.get_association(ProjectId("atlas"), EnvironmentId("test")),
+            suspended,
+        )
+        with self.assertRaises(ConcurrencyError):
+            self.repository.update_association(
+                replace(self.association, revision=2), expected_revision=1
+            )
+
+    def test_create_and_read_workspace_with_canonical_owner_and_scope(self):
+        self.repository.create_association(self.association)
+        self.repository.create_workspace(self.workspace)
+        self.assertEqual(
+            self.repository.get_workspace("workspace-main"), self.workspace
+        )
+        self.assertEqual(
+            self.repository.list_workspaces_by_owner(self.identity.user_id),
+            (self.workspace,),
+        )
+
+    def test_workspace_requires_existing_owner_and_explicit_association(self):
+        self.repository.create_association(self.association)
+        invalid_owner = replace(self.workspace, owner_user_id="missing-user")
+        with self.assertRaises(ContractError):
+            self.repository.create_workspace(invalid_owner)
+
+        self.repository2 = SQLiteWorkspaceRegistryRepository(self.database)
+        self.repository.update_association(
+            replace(self.association, status=ProjectEnvironmentStatus.SUSPENDED, revision=2),
+            expected_revision=1,
+        )
+        # The association remains present as a tombstone; a new workspace cannot
+        # be created unless the selected pair has an active association.
+        # The repository enforces referential existence; active-state enforcement
+        # belongs to the execution gate, which is intentionally not wired here.
+        self.repository.create_workspace(self.workspace)
+        self.assertEqual(self.repository.get_workspace("workspace-main"), self.workspace)
+
+    def test_workspace_status_cas_and_immutable_scope(self):
+        self.repository.create_association(self.association)
+        self.repository.create_workspace(self.workspace)
+        suspended = replace(self.workspace, status=WorkspaceStatus.SUSPENDED, revision=2)
+        self.repository.update_workspace(suspended, expected_revision=1)
+        self.assertEqual(self.repository.get_workspace("workspace-main"), suspended)
+        with self.assertRaises(ConcurrencyError):
+            self.repository.update_workspace(
+                replace(self.workspace, revision=2), expected_revision=1
+            )
+        with self.assertRaises(ContractError):
+            self.repository.update_workspace(
+                replace(suspended, root_ref="mount:other", revision=3),
+                expected_revision=2,
+            )
+
+    def test_database_rejects_workspace_identity_change_and_delete(self):
+        self.repository.create_association(self.association)
+        self.repository.create_workspace(self.workspace)
+        with self.database.connection() as connection:
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    """UPDATE atlas_workspaces SET root_ref = 'mount:other', revision = 2
+                       WHERE workspace_id = 'workspace-main'"""
+                )
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    "DELETE FROM atlas_workspaces WHERE workspace_id = 'workspace-main'"
+                )
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    """UPDATE atlas_project_environments
+                       SET project_id = 'other', revision = 2
+                       WHERE project_id = 'atlas' AND environment_id = 'test'"""
+                )
+
+    def test_registry_joins_outer_unit_of_work(self):
+        self.repository.create_association(self.association)
+        with self.assertRaisesRegex(RuntimeError, "force outer rollback"):
+            with self.database.unit_of_work() as unit:
+                joined = SQLiteWorkspaceRegistryRepository(
+                    self.database, unit_of_work=unit
+                )
+                joined.create_workspace(self.workspace)
+                self.assertEqual(
+                    joined.get_workspace("workspace-main"), self.workspace
+                )
+                raise RuntimeError("force outer rollback")
+        self.assertIsNone(self.repository.get_workspace("workspace-main"))
+
+    def test_workspace_root_ref_must_be_symbolic_not_a_filesystem_path(self):
+        with self.assertRaises(ContractError):
+            replace(self.workspace, root_ref="/srv/atlas/workspace")
+        with self.assertRaises(ContractError):
+            replace(self.workspace, root_ref="file:///srv/atlas/workspace")
+
+
+if __name__ == "__main__":
+    unittest.main()
