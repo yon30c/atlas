@@ -154,6 +154,31 @@ No usar `SUDO_UID`, `SUDO_USER`, PPID aislado, nombre de proceso aislado ni prop
 **Siguiente paso de diseño:** especificar el contrato de validación del padre sudo y las comprobaciones anti-TOCTOU para el helper C. Antes de implementar, revisar el comportamiento exacto con el helper mínimo en un entorno de prueba y definir pruebas negativas (invocación directa, caller atlas, caller atlas-sandbox, sin TTY, TTY no foreground, padre inesperado y entorno manipulado). No modificar sudoers ni instalar/configurar nada todavía.
 
 
+## 4.2.1 Política de terminal local y SSH interactivo
+
+**Decisión aprobada: se admite bootstrap desde terminal local y desde SSH interactivo con PTY.** SSH sin PTY y cualquier ejecución no interactiva quedan fuera del flujo.
+
+La autorización no depende de que el operador esté físicamente frente al servidor. Un PTY SSH acredita una sesión de terminal interactiva, no presencia física, ubicación ni dispositivo confiable.
+
+Condiciones para ambas modalidades:
+
+- El TTY controlador debe existir y superar las validaciones de SID y grupo foreground de §4.3.
+- La confirmación del descriptor se lee directamente del TTY controlador, nunca de stdin, argumentos, variables de entorno, pipe, archivo o socket no autenticado.
+- PAM realiza una autenticación reciente del sujeto configurado (`greed`) dentro del helper; el éxito de sudo, una sesión SSH ya abierta o una caché de credenciales no sustituyen esta autenticación.
+- `pam_acct_mgmt` también debe aprobar; cuenta expirada, bloqueada o no autorizada implica rechazo.
+- Pérdida de TTY, foreground, sesión, conexión o señal de cierre antes de emitir la prueba cancela el bootstrap.
+- La prueba firmada vincula el descriptor exacto, sujeto autenticado, dominio/host, nonce, request/proof IDs y ventana temporal. No incluye ni confía en una afirmación del cliente sobre que el acceso fue local o remoto.
+- Las políticas SSH del host (por ejemplo, permitir o denegar login root, autenticación y asignación de PTY) permanecen bajo administración del propietario. Este diseño no las modifica ni presupone su configuración.
+- No se habilitará forwarding de terminal, X11 ni mecanismos alternativos como sustituto de un TTY controlador válido.
+
+Pruebas específicas:
+1. SSH con PTY y sujeto greed: puede continuar solo si todas las comprobaciones de sudo, TTY y PAM pasan.
+2. SSH sin PTY (`ssh -T`) y comandos remotos no interactivos: rechazo antes de PAM y sin emitir prueba.
+3. Desconexión SSH, HUP, EOF o pérdida del foreground durante confirmación/PAM: cancelación sin prueba.
+4. TTY local válido: mismo contrato de seguridad que SSH con PTY.
+5. Usuario SSH distinto de greed: rechazo, incluso si consigue invocar el ejecutable.
+6. Reenvío de stdin/stdout/stderr, pipes o variables que simulen una sesión: no pueden sustituir el TTY controlador ni alterar el sujeto.
+
 ## 4.3 Contrato de validación del proceso padre sudo (diseño propuesto)
 
 La evidencia observada permite mantener A como candidato preferido, pero no autoriza a tratar cualquier proceso root cuyo padre aparente ser sudo como confiable. El helper C deberá validar una relación de invocación concreta, usando datos del kernel y objetos abiertos, y fallar ante cualquier discrepancia.
