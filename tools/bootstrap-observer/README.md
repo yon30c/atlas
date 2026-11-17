@@ -47,10 +47,10 @@ Run these only after the automated build succeeds:
 
 ```sh
 /tmp/atlas-bootstrap-observer
-printf 'exit=%s\\n' "$?"
+printf 'exit=%s\n' "$?"
 
 /tmp/atlas-bootstrap-observer --hold-ms 5000
-printf 'exit=%s\\n' "$?"
+printf 'exit=%s\n' "$?"
 ```
 
 To observe a foreground change using interactive shell job control, run this
