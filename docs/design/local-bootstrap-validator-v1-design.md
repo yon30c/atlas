@@ -203,3 +203,8 @@ El cierre solo cubre parsers/evaluador fixture-only. No aprueba A, no autoriza P
 El propietario aprobó este alcance el 16-11-2026. La implementación aislada y sus pruebas sin privilegios quedaron validadas en Debian en esa fecha, respetando todas las exclusiones de este documento.
 
 La aprobación no autoriza recolector real de procesos, integración con procfs/TTY/pidfd, validación del sudo real, V2, PAM, helper privilegiado, claves, configuración protegida, cambios del host, SQLite/CAM ni integración con runtime. Cualquier ampliación requiere una propuesta separada y aprobación explícita.
+
+
+## 11. Enmienda posterior — autorización V2
+
+La exclusión de V2 registrada en la decisión original de esta V1 reflejaba el alcance aprobado en ese momento. Posteriormente, el propietario aprobó expresamente el 16-11-2026 el trabajo V2 de solo observación, sujeto al documento `local-bootstrap-observer-v2-design.md`. Esa aprobación posterior no amplía ni altera el alcance, las garantías o los resultados de V1.
