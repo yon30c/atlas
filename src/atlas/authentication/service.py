@@ -57,8 +57,8 @@ class NativeAuthenticationConfig:
             raise ContractError("audience confiable debe ser no vacía")
         if not isinstance(self.proof_ttl, timedelta):
             raise ContractError("proof_ttl debe ser timedelta")
-        if self.proof_ttl <= timedelta(0) or self.proof_ttl > timedelta(minutes=5):
-            raise ContractError("proof_ttl debe estar entre 0 y 5 minutos")
+        if self.proof_ttl <= timedelta(0):
+            raise ContractError("proof_ttl debe ser positivo; el valor configurado es el límite máximo")
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -134,7 +134,11 @@ class NativeAuthenticationService:
         try:
             with self._unit_of_work_factory() as unit:
                 issuer = unit.native_identity.get_native_issuer(self._config.realm)
-                if issuer is None or getattr(issuer.status, "value", None) != "ACTIVE":
+                if (
+                    issuer is None
+                    or getattr(issuer.status, "value", None) != "ACTIVE"
+                    or getattr(issuer.profile, "value", None) != "NATIVE_AUTHORITY_PROOF"
+                ):
                     raise AuthenticationFailed("autenticación no válida")
 
                 try:
