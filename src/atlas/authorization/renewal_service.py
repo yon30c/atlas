@@ -116,6 +116,20 @@ class GrantRenewalService:
                 canonical_agent.identity != context.actor
                 or canonical_delegation.delegation_id != verified_delegation.delegation_id
                 or canonical_delegation.revision != verified_delegation.delegation_revision
+                or canonical_delegation.owner_user_id != verified_delegation.owner_user_id
+                or canonical_delegation.owner_identity_id != verified_delegation.owner_identity_id
+                or canonical_delegation.agent_identity_id != verified_delegation.agent_identity_id
+                or canonical_delegation.grant_id != verified_delegation.grant_id
+                or canonical_delegation.grant_revision != verified_delegation.grant_revision
+                or canonical_delegation.project_id != verified_delegation.project_id
+                or canonical_delegation.environment != verified_delegation.environment
+                or canonical_delegation.scope != verified_delegation.scope
+                or canonical_delegation.issuer_id != verified_delegation.issuer_id
+                or canonical_delegation.status.value != "active"
+                or not (
+                    canonical_delegation.not_before <= trusted_now
+                    < canonical_delegation.expires_at
+                )
             ):
                 raise AuthorizationError("la evidencia AGENT/delegación no coincide con el estado canónico")
 
