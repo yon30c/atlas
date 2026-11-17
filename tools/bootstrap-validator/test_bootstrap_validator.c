@@ -4,6 +4,7 @@
 #include <string.h>
 static const unsigned char status_ok[]="Name:\ttest\nState:\tR (running)\nGid:\t0\t0\t0\t0\nPPid:\t123\nUid:\t1000\t1000\t1000\t1000\n";
 static const unsigned char stat_ok[]="123 (sudo (worker)) S 10 11 12 34818 13 0 1 2 3 4 5 6 7 8 9 10 11 12 987654\n";
+static const unsigned char stat_linux_full[]="2320 (bash) S 2319 2320 2320 34816 12667 4194304 47459 3181189 0 764 37 54 41920 3026 20 0 1 0 3539 9461760 1496 18446744073709551615 94168313634816 94168314457953 140736152141424 0 0 0 65536 3686404 1266761467 1 0 0 17 3 0 0 0 0 0 94168314690128 94168314738532 94169368309760 140736152145482 140736152145488 140736152145488 140736152145902 0\\n";
 static void test_status(void){
  bv_status o;
  assert(bv_parse_status(status_ok,sizeof(status_ok)-1,&o)==BV_OK);
@@ -39,6 +40,8 @@ static void test_status(void){
 static void test_stat(void){
  bv_stat o;
  assert(bv_parse_stat(stat_ok,sizeof(stat_ok)-1,123,&o)==BV_OK);
+ assert(bv_parse_stat(stat_linux_full,sizeof(stat_linux_full)-1,2320,&o)==BV_OK);
+ assert(o.pid==2320&&o.ppid==2319&&o.pgrp==2320&&o.session==2320&&o.tty_nr==34816&&o.tpgid==12667&&o.starttime==3539);
  assert(o.pid==123&&o.ppid==10&&o.pgrp==11&&o.session==12&&o.tty_nr==34818&&o.tpgid==13&&o.starttime==987654);
  assert(bv_parse_stat(stat_ok,sizeof(stat_ok)-1,124,&o)==BV_INVALID);
  const char *shortline="123 (x) S 10 11 12 0 0";
