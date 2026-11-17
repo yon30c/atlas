@@ -27,32 +27,19 @@ reads are not atomic and a process may change immediately after observation.
 From the repository root on Debian:
 
 ```sh
-cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
-  -o /tmp/atlas-bootstrap-validator-tests \
-  tools/bootstrap-validator/bootstrap_validator.c \
-  tools/bootstrap-validator/test_bootstrap_validator.c
-
-/tmp/atlas-bootstrap-validator-tests
-
-cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
-  -o /tmp/atlas-bootstrap-observer-tests \
-  tools/bootstrap-validator/bootstrap_validator.c \
-  tools/bootstrap-observer/bootstrap_observer_linux.c \
-  tools/bootstrap-observer/test_bootstrap_observer_linux.c
-
-/tmp/atlas-bootstrap-observer-tests
-
-cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
-  -o /tmp/atlas-bootstrap-observer \
-  tools/bootstrap-validator/bootstrap_validator.c \
-  tools/bootstrap-observer/bootstrap_observer_linux.c \
-  tools/bootstrap-observer/bootstrap_observer_main.c
+sh tools/bootstrap-observer/test_v2.sh
 ```
 
-Expected unit-test output:
+The script builds with `-std=c11 -Wall -Wextra -Wpedantic -Werror`, runs
+the V1 parser suite, runs the V2 classification/snapshot tests and a live
+collector smoke test, then builds the observer CLI. All binaries are placed in
+`/tmp`.
+
+Expected output:
 
 - `bootstrap-validator V1: tests passed`
 - `bootstrap-observer V2: unit and live smoke tests passed`
+- `V2 build and automated tests completed.`
 
 ## Manual Debian observations
 
@@ -65,6 +52,19 @@ printf 'exit=%s\\n' "$?"
 /tmp/atlas-bootstrap-observer --hold-ms 5000
 printf 'exit=%s\\n' "$?"
 ```
+
+To observe a foreground change using interactive shell job control, run this
+in a terminal with job control enabled:
+
+```sh
+/tmp/atlas-bootstrap-observer --hold-ms 10000 &
+sleep 1
+fg %1
+```
+
+The observer begins in the background and should detect the foreground process
+group changing when the shell brings it to the foreground. This is a
+diagnostic exercise only; it does not authenticate the terminal or operator.
 
 Exit codes:
 
