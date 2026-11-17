@@ -251,3 +251,28 @@ Implementado:
 **Validación completada:** el usuario ejecutó la suite completa en Debian: `Ran 1262 tests ... OK`; `python -m compileall -q src tests` terminó con `COMPILE_EXIT_CODE=0`. Las pruebas específicas de I-1 forman parte de esa suite. El workflow CI actual no se dispara para esta rama `feature/**`; la validación fue manual y los resultados fueron compartidos en la conversación.
 
 **Límite:** no se modificó esquema/migración, no se alteró la relación canónica, no se añadió acceso SQL desde Native Identity Authority y no se implementó todavía I-2.
+
+## 12. I-2 — contrato de autenticación y VerifiedIdentityContext
+
+**Documento de detalle:** `docs/design/native-authentication-i2-verified-context-contract.md`.
+
+**Estado:** contrato de implementación documentado; código I-2 pendiente.
+
+La inspección confirmó:
+- La persistencia C1 acepta un `NativeAuthenticationProof` ya construido; no verifica contraseña ni demuestra cómo se obtuvo.
+- `argon2-cffi` ya es dependencia del proyecto.
+- Existe `Clock` como puerto UTC.
+- `SQLiteLocalAuthorityUnitOfWork` expone `identity`, `native_identity` y `native_authentication` sobre la misma UoW.
+- I-1 ya permite resolver `identity_id → CanonicalUserIdentity`.
+- La autoridad nativa resuelve issuer por realm y binding por issuer + subject digest.
+
+Decisiones registradas:
+- El realm, audience y TTL se inyectan desde composición confiable; nunca desde el request.
+- Solo el servicio de aplicación verifica Argon2id y puede emitir proof.
+- Se requiere relectura/CAS de credential_revision después de verificar la contraseña.
+- Proof consumption, binding lookup y canonical identity resolution deben compartir una UoW física.
+- VerifiedIdentityContext conserva los IDs canónicos separados, binding/identity revisions y expiración explícita.
+- La derivación de OperationContext queda limitada a USER directo y no concede autorización CAM.
+- No hay actualmente un puerto de throttling. Se exige un guard compartido, atómico y fail-closed; un contador en memoria no se acepta para producción.
+
+**Pendiente:** implementar los servicios, modelo, puertos, adaptador Argon2, guard contract, pruebas de rollback/replay/revisión/secret hygiene y validar suite completa. El diseño no habilita login operativo ni capacidades protegidas.
