@@ -8,6 +8,7 @@ from atlas.core.agent_delegation import (
     AgentDelegationScope,
     AgentDelegationStatus,
     VerifiedAgentDelegationContext,
+    validate_agent_delegation_transition,
 )
 from atlas.core.agent_identity import CanonicalAgentIdentity
 from atlas.core.errors import ContractError
@@ -121,7 +122,7 @@ class AgentDelegationDomainContractTests(unittest.TestCase):
             replace(context, identity_revision=True)
         with self.assertRaises(ContractError):
             replace(context, expires_at=context.verified_at)
-        self.assertNotIn("attestation=", repr(context))
+        self.assertNotIn("B" * 43, repr(context))
 
     def test_native_agent_binding_enforces_type_independent_identity_id_and_lifecycle(self):
         binding = NativeAgentIdentityBinding(
@@ -182,8 +183,19 @@ class AgentDelegationDomainContractTests(unittest.TestCase):
             revoked_by_user_id=self.owner_user_id,
         )
         self.assertEqual(revoked.status, AgentDelegationStatus.REVOKED)
+        re_revoked = replace(revoked, revision=3)
+        validate_agent_delegation_transition(revoked, re_revoked)
         with self.assertRaises(ContractError):
-            replace(revoked, status=AgentDelegationStatus.ACTIVE, revoked_at=None, revoked_by_user_id=None)
+            validate_agent_delegation_transition(
+                revoked,
+                replace(
+                    revoked,
+                    status=AgentDelegationStatus.ACTIVE,
+                    revision=3,
+                    revoked_at=None,
+                    revoked_by_user_id=None,
+                ),
+            )
         with self.assertRaises(ContractError):
             self._delegation(
                 status=AgentDelegationStatus.REVOKED,
@@ -199,7 +211,7 @@ class AgentDelegationDomainContractTests(unittest.TestCase):
         self.assertIn(b'"audience":"atlas.agent.delegation"', payload)
         self.assertIn(b'"realm":"atlas.primary"', payload)
         self.assertEqual(payload, context.attestation_payload())
-        self.assertNotIn("attestation=", repr(context))
+        self.assertNotIn("D" * 43, repr(context))
         with self.assertRaises(ContractError):
             replace(context, grant_revision=0)
         with self.assertRaises(ContractError):
