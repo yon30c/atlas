@@ -209,7 +209,26 @@ class VerifiedIdentityContextService:
     def verify(
         self, context: VerifiedIdentityContext
     ) -> CanonicalUserIdentity:
-        """Revalidate attestation, expiry, issuer, binding and canonical identity."""
+        """Revalidate using an owned transaction."""
+        try:
+            with self._uow_factory() as unit:
+                canonical = self.verify_in_unit_of_work(context, unit)
+                return canonical
+        except (VerifiedIdentityContextRejected, ContractError):
+            raise
+        except Exception as exc:
+            raise VerifiedIdentityContextUnavailable(
+                "Identity Authority no pudo revalidar el contexto"
+            ) from exc
+
+    def verify_in_unit_of_work(
+        self, context: VerifiedIdentityContext, unit
+    ) -> CanonicalUserIdentity:
+        """Revalidate USER evidence inside a caller-owned shared transaction.
+
+        The caller retains commit/rollback ownership. This method never opens,
+        commits, or closes a unit of work.
+        """
         if not isinstance(context, VerifiedIdentityContext):
             raise VerifiedIdentityContextRejected("contexto de identidad no válido")
         now = self._now()
@@ -220,57 +239,35 @@ class VerifiedIdentityContextService:
             or context.expires_at - context.verified_at > self._context_ttl
         ):
             raise VerifiedIdentityContextRejected("contexto de identidad no válido")
-        try:
-            if not self._attestor.verify(
-                self._attestation_payload(context), context.attestation
-            ):
-                raise VerifiedIdentityContextRejected(
-                    "contexto de identidad no válido"
-                )
-            with self._uow_factory() as unit:
-                issuer = unit.native_identity.get_native_issuer(self._realm)
-                if (
-                    issuer is None
-                    or issuer.issuer_id != context.issuer_id
-                    or issuer.profile is not NativeIssuerProfile.NATIVE_AUTHORITY_PROOF
-                    or issuer.status is not NativeIssuerStatus.ACTIVE
-                ):
-                    raise VerifiedIdentityContextRejected(
-                        "contexto de identidad no válido"
-                    )
-
-                binding = unit.native_identity.get_native_binding_by_id(
-                    context.binding_id
-                )
-                if (
-                    binding is None
-                    or binding.status is not NativeIdentityBindingStatus.ACTIVE
-                    or binding.issuer_id != context.issuer_id
-                    or binding.identity_id != context.identity_id
-                    or binding.revision != context.binding_revision
-                ):
-                    raise VerifiedIdentityContextRejected(
-                        "contexto de identidad no válido"
-                    )
-
-                canonical = unit.identity.get_user_by_identity_id(
-                    context.identity_id
-                )
-                if (
-                    canonical is None
-                    or canonical.user_id != context.user_id
-                    or canonical.identity.identity_id != context.identity_id
-                    or canonical.identity.kind is not IdentityKind.USER
-                    or canonical.identity.status is not IdentityStatus.ACTIVE
-                    or canonical.identity.revision != context.identity_revision
-                ):
-                    raise VerifiedIdentityContextRejected(
-                        "contexto de identidad no válido"
-                    )
-                return canonical
-        except VerifiedIdentityContextRejected:
-            raise
-        except Exception as exc:
-            raise VerifiedIdentityContextUnavailable(
-                "Identity Authority no pudo revalidar el contexto"
-            ) from exc
+        if not self._attestor.verify(
+            self._attestation_payload(context), context.attestation
+        ):
+            raise VerifiedIdentityContextRejected("contexto de identidad no válido")
+        issuer = unit.native_identity.get_native_issuer(self._realm)
+        if (
+            issuer is None
+            or issuer.issuer_id != context.issuer_id
+            or issuer.profile is not NativeIssuerProfile.NATIVE_AUTHORITY_PROOF
+            or issuer.status is not NativeIssuerStatus.ACTIVE
+        ):
+            raise VerifiedIdentityContextRejected("contexto de identidad no válido")
+        binding = unit.native_identity.get_native_binding_by_id(context.binding_id)
+        if (
+            binding is None
+            or binding.status is not NativeIdentityBindingStatus.ACTIVE
+            or binding.issuer_id != context.issuer_id
+            or binding.identity_id != context.identity_id
+            or binding.revision != context.binding_revision
+        ):
+            raise VerifiedIdentityContextRejected("contexto de identidad no válido")
+        canonical = unit.identity.get_user_by_identity_id(context.identity_id)
+        if (
+            canonical is None
+            or canonical.user_id != context.user_id
+            or canonical.identity.identity_id != context.identity_id
+            or canonical.identity.kind is not IdentityKind.USER
+            or canonical.identity.status is not IdentityStatus.ACTIVE
+            or canonical.identity.revision != context.identity_revision
+        ):
+            raise VerifiedIdentityContextRejected("contexto de identidad no válido")
+        return canonical
