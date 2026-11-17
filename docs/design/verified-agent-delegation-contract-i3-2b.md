@@ -454,7 +454,7 @@ La revocación no modifica el Grant, no reactiva ni edita claims, y no emite `Ve
 
 Tests añadidos en `tests/unit/test_sqlite_agent_delegation_authority.py`: revocación válida/auditoría, evidencia USER manipulada o expirada, owner distinto, CAS obsoleto, delegación ausente y rollback después de la escritura.
 
-**Validación Debian:** pendiente de ejecución por el propietario. No se afirma que las pruebas hayan pasado.
+**Validación Debian confirmada por el propietario:** suite completa `Ran 1355 tests`, `OK`; `python -m compileall -q src tests` devolvió `COMPILE_EXIT_CODE=0`.
 
 
 ## 18. I3-2B.5 — verificación de operación y evidencia efímera de delegación
