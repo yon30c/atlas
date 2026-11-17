@@ -1,0 +1,268 @@
+# I3-2B — contrato de identidad AGENT y delegación verificable
+
+**Estado:** propuesta de diseño; no implementa ni habilita autenticación AGENT ni operaciones delegadas.  
+**Base:** `feature/verified-identity-i3-renewal-owner` (I3-2A validado por el propietario).  
+**Alcance inicial:** permitir, en una fase posterior, que una identidad AGENT autenticada solicite la renovación de un Grant concreto cuando exista delegación vigente del propietario.  
+**Decisión de seguridad:** I3-2B separa tres decisiones: autenticación del agente, prueba de delegación del propietario y autorización CAM. Ninguna sustituye a las otras.
+
+## 1. Hallazgo de partida
+
+La implementación inspeccionada ya dispone de:
+
+- `IdentityKind.AGENT` en el modelo general de identidad.
+- `Grant` con `owner_user_id`, `subject_identity_id`, proyecto, entorno, conjunto explícito de recursos, acciones, expiración, revocación y revisión.
+- Evidencia nativa USER en I-2: `VerifiedIdentityContext`, `CanonicalUserIdentity` y `NativeIdentityBinding`.
+
+Pero la ruta nativa está expresamente limitada a USER:
+
+- `VerifiedIdentityContext` rechaza cualquier `identity_type` distinto de USER.
+- `CanonicalUserIdentity` representa un par UserId + Identity(USER).
+- `NativeIdentityBinding` y `NativeIdentityAuthorityPort` declaran bindings USER.
+- `IdentityAuthorityPort.get_user_by_identity_id` resuelve únicamente identidades USER.
+
+Por tanto, no se debe ensanchar esos tipos USER mediante casts, valores AGENT dentro de `CanonicalUserIdentity`, ni excepciones en el verificador actual. El tipo de prueba USER debe seguir siendo USER-only.
+
+## 2. Modelo de confianza: tres planos separados
+
+### 2.1 Autenticación AGENT
+
+Demuestra quién es el principal AGENT que controla la credencial usada en esta sesión.
+
+Propuesta de contratos nuevos e independientes:
+
+- `CanonicalAgentIdentity`: agregado canónico que contiene una Identity de tipo AGENT activa y su revisión. No contiene un UserId.
+- `AgentIdentityAuthorityPort`: crea/resuelve/retira identidades AGENT y devuelve el agregado canónico. No acepta un IdentityId elegido por el caller como identidad canónica.
+- `NativeAgentIdentityBinding` y `NativeAgentIdentityAuthorityPort`: binding de un sujeto de issuer a un AGENT canónico, con issuer, digest, estado, revisión, timestamps y tombstone de revocación. No reutiliza ni cambia la semántica del binding USER existente.
+- `VerifiedAgentIdentityContext`: evidencia efímera attested, de tipo AGENT-only, con context_id, identity_id, identity_revision, binding_id, binding_revision, issuer_id, authenticated_at, verified_at, expires_at, verification_ref y attestation.
+- `VerifiedAgentIdentityContextVerifierPort.verify(context)`: revalida attestation, TTL, issuer activo, binding activo y sin cambios, identidad AGENT canónica activa y revisión exacta. Devuelve `CanonicalAgentIdentity` o deniega.
+
+La admisión de proof debe reutilizar las garantías criptográficas de I-2 (dominio separado, audiencia/realm, proof one-shot y digest-only persistence), pero con audiencia y tipo de sujeto AGENT explícitos. No aceptar un proof USER como proof AGENT ni viceversa. Un AGENT no se crea automáticamente porque exista un Grant cuyo `subject_identity_id` coincida.
+
+### 2.2 Delegación otorgada por USER
+
+Demuestra qué autorizó el propietario para ese agente. No autentica al agente.
+
+Nuevo agregado propuesto: `AgentDelegation` (nombre provisional), administrado exclusivamente por una Delegation Authority.
+
+Claims mínimos:
+
+| Campo | Semántica |
+|---|---|
+| `delegation_id` | UUID canónico e inmutable |
+| `owner_user_id` | UserId canónico del propietario |
+| `agent_identity_id` | IdentityId canónico AGENT |
+| `grant_id` | Grant concreto al que queda vinculada |
+| `grant_revision` | Revisión del Grant al emitir la delegación |
+| `project_id`, `environment` | Scope exacto del Grant |
+| `resource_scope` | Subconjunto explícito del scope del Grant |
+| `actions` | Subconjunto explícito de acciones del Grant |
+| `issued_at`, `not_before`, `expires_at` | Ventana UTC acotada |
+| `status`, `revision` | ACTIVE/REVOKED y revisión monotónica |
+| `issuer_id` | Autoridad que registró la decisión |
+| `created_by_user_identity_id` | Identity(USER) que aprobó; nunca un ID suministrado sin verificar |
+| `revoked_at`, `revoked_by_user_id` | Tombstone/auditoría de revocación |
+
+Invariantes de emisión:
+
+1. Solo una operación explícita del propietario autenticado con `VerifiedIdentityContext` USER puede crear una delegación.
+2. El verificador USER resuelve el par canónico; `owner_user_id` debe coincidir con `canonical.user_id`. La identidad decisora debe ser `canonical.identity`. Nunca comparar UserId con IdentityId.
+3. El Grant debe existir, pertenecer al mismo propietario y tener como sujeto al AGENT indicado.
+4. Proyecto y entorno deben coincidir exactamente con el Grant.
+5. Recursos delegados deben ser un subconjunto estricto o igual del `GrantResourceScope`; acciones delegadas deben ser subconjunto de `Grant.actions`. Wildcards siguen prohibidos.
+6. `not_before >= grant.issued_at`; `expires_at > not_before`; `expires_at <= grant.expires_at`. La delegación nunca extiende el Grant.
+7. La revisión del Grant queda fijada. Si el Grant cambia de revisión, scope, acciones, expiración, sujeto o propietario, la delegación anterior deja de ser válida; debe emitirse otra mediante nueva aprobación.
+8. No existe auto-delegación por el AGENT, herencia implícita, delegación transitiva ni elevación de privilegios.
+
+La delegación es un mandato independiente, no un segundo Grant CAM. No amplía los permisos: solo acredita el consentimiento del propietario dentro de límites que ya están concedidos por CAM.
+
+### 2.3 Autorización CAM
+
+CAM sigue siendo la autoridad ordinaria que evalúa la acción concreta, recurso, propietario, proyecto, entorno, vigencia, revocación y revisión del Grant.
+
+Para una operación delegada deben cumplirse simultáneamente:
+
+- identidad AGENT autenticada y canónica;
+- delegación vigente emitida por autoridad confiable para ese AGENT y ese propietario;
+- Grant exacto vigente, no revocado y coincidente;
+- acción y recurso permitidos por CAM;
+- límites de la delegación no más amplios que el Grant;
+- `OperationContext` coherente con la evidencia verificada.
+
+`DelegationMode.DELEGATED` solo describe el modo del contexto. Nunca es prueba ni permiso.
+
+## 3. Contratos/puertos propuestos
+
+Los nombres son conceptuales; se deben ajustar a convenciones del código antes de implementar.
+
+### 3.1 `DelegationAuthorityPort`
+
+Operaciones mínimas:
+
+- `create_for_grant(..., verified_owner_identity, ...)`: crea una delegación después de revalidar identidad USER, ownership y restricciones del Grant.
+- `get_by_id(delegation_id)`: devuelve el registro canónico, incluido tombstone.
+- `revoke(delegation_id, expected_revision, verified_owner_identity, revoked_at)`: revocación owner-only con CAS; terminal, nunca se reactiva ni reasigna.
+- `verify_for_operation(delegation_id, expected_revision, ...)`: comprueba estado, ventana, vínculos, scope y revisiones actuales. No debe confiar en claims copiados del caller.
+
+La autoridad debe ser única y explícita en composition root. Sin autoridad, key, registro, UoW o issuer disponible, la operación deniega.
+
+### 3.2 `VerifiedDelegationContext`
+
+Evidencia efímera producida por la Delegation Authority después de verificar el registro canónico. Debe incluir como mínimo:
+
+- delegation_id y delegation_revision;
+- owner_user_id y agent_identity_id;
+- grant_id y grant_revision;
+- project_id y environment;
+- digest/canonical representation de resource_scope y actions;
+- issuer_id;
+- verified_at y expires_at (TTL corto, no mayor que el fin de la delegación);
+- context_id/verification_ref y attestation.
+
+La attestation debe usar serialización canónica, HMAC-SHA-256 o mecanismo equivalente ya aprobado, separación de dominio específica (`atlas:delegation:v1`), issuer/realm/audience fijos y comparación en tiempo constante. Claves separadas de las claves de VerifiedIdentityContext USER y rotación explícita. No incluir secretos ni credenciales.
+
+**La attestation no es la fuente de verdad:** cada consumidor revalida el registro actual y sus revisiones contra Delegation Authority. Una firma válida sobre una delegación ya revocada no la revive.
+
+### 3.3 Verificador de operación delegada
+
+Un helper común (provisional `require_verified_agent_delegation`) debe recibir contexto, `VerifiedAgentIdentityContext`, `VerifiedDelegationContext`, Grant actual y verificadores confiables. Comprueba:
+
+- actor == Identity AGENT canónica devuelta por el verificador AGENT;
+- el AGENT verificado coincide con `agent_identity_id` de la delegación y `subject_identity_id` del Grant;
+- `context.user_id` coincide con el propietario canónico de la delegación/Grant;
+- `context.delegation is DelegationMode.DELEGATED`;
+- proyecto/entorno coinciden exactamente;
+- Grant ID/revisión/propietario/sujeto/scope/acciones/expiry coinciden con la delegación;
+- acción y recurso de la operación están dentro de ambos límites;
+- delegación y Grant están vigentes y no revocados;
+- ninguna revisión ha cambiado desde la emisión/verificación.
+
+No debe devolver un `CanonicalUserIdentity` para un AGENT ni transformar la evidencia AGENT en identidad USER. Los tipos de evidencia permanecen separados.
+
+## 4. Ciclo de vida y revocación
+
+Estados mínimos: ACTIVE y REVOKED. No reactivar ni editar una delegación existente.
+
+- **Creación:** decisión USER autenticada; validación de Grant; registro inmutable de la delegación; revisión inicial 1.
+- **Uso:** autenticación AGENT por operación/sesión de corta duración; revalidación de binding, delegación y Grant.
+- **Revocación:** solo propietario autenticado (y, opcionalmente, una autoridad de seguridad explícitamente autorizada en un contrato separado); CAS sobre revisión; tombstone permanente.
+- **Cambios del Grant:** invalidan la delegación por mismatch de `grant_revision`; no actualizar silenciosamente la delegación.
+- **Revocación del binding AGENT/issuer:** invalida cualquier contexto AGENT, aunque la delegación siga ACTIVE.
+- **Expiración:** se evalúa con reloj UTC confiable en el momento de la operación, no solo al emitir el contexto.
+- **Eliminación:** no borrar físicamente los registros necesarios para auditoría/replay defense.
+
+La revocación de un Grant invalida de inmediato todas las delegaciones vinculadas. La revocación de una delegación no modifica el Grant ni otras delegaciones.
+
+## 5. Consistencia, concurrencia y límites transaccionales
+
+La comprobación de identidad, binding, delegación, Grant y escritura de la solicitud no debe crear una ventana TOCTOU.
+
+Contrato requerido para habilitar una operación:
+
+1. La operación entra en una UoW que pueda leer de forma consistente Identity/AgentBinding, Delegation, Grant y Renewal.
+2. Revalida estado y revisiones dentro de esa frontera.
+3. Crea la solicitud con CAS/idempotencia bajo la misma transacción o con un mecanismo de fencing explícito equivalente.
+4. Si una revocación/cambio concurrente gana la carrera, la solicitud debe abortar.
+5. Si las autoridades no comparten la misma transacción/DB o no existe fencing demostrado, no afirmar atomicidad: mantener la operación bloqueada.
+
+La garantía actual de `SQLiteLocalAuthorityUnitOfWork` solo aplica a authorities que comparten exactamente la misma instancia de `SQLiteDatabase`. El diseño no presupone atomicidad global con el journal ni con sistemas externos.
+
+Se recomienda idempotencia por `request_id` (y una restricción para impedir solicitudes PENDING duplicadas para el mismo Grant, si el producto decide esa regla). Reintentos no deben crear múltiples renovaciones ni repetir efectos.
+
+## 6. Aplicación a `GrantRenewalService.request_renewal`
+
+Firma conceptual futura:
+
+```python
+request_renewal(
+    context,
+    renewal_id,
+    grant_id,
+    proposed_expires_at,
+    now,
+    *,
+    verified_agent_identity,
+    verified_delegation,
+)
+```
+
+Antes de persistir, la operación debe verificar:
+
+- actor AGENT canónico y autenticado;
+- propietario USER canónico vinculado al Grant;
+- delegación ACTIVE para el par exacto owner/agent y Grant;
+- permiso explícito `grant.renewal.request` en la delegación y en el Grant/CAM;
+- scope exacto de proyecto/entorno y recurso aplicable;
+- Grant vigente/no revocado y revisión esperada;
+- propuesta de expiración posterior a la actual y dentro de límites de política; la solicitud no renueva por sí misma el Grant;
+- ausencia de una solicitud PENDING incompatible/duplicada;
+- persistencia atómica y atribución de `requested_by_identity_id` al AGENT canónico.
+
+La solicitud no debe cambiar `Grant.expires_at`. Solo el propietario autenticado puede aprobar/rechazar mediante I3-2A. La aprobación debe volver a validar el Grant, su revisión/expiry y la solicitud; una delegación vencida después de solicitar no convierte al agente en decisor.
+
+Hasta que existan todos los contratos, UoW y pruebas, el método permanece fail-closed como está en PR #15.
+
+## 7. Amenazas y pruebas obligatorias
+
+### Autenticación AGENT
+- proof USER presentado como AGENT y viceversa;
+- Identity(USER) en contexto AGENT;
+- AGENT desconocido, inactivo, revocado o revisión obsoleta;
+- issuer/audience/realm incorrectos, TTL vencido, attestation manipulada;
+- proof reutilizado, credencial inválida y autoridad indisponible.
+
+### Delegación
+- ausencia de delegación, delegación fabricada o firmada por actor no confiable;
+- owner/agent/Grant/project/environment mismatch;
+- recurso/acción fuera de subconjunto;
+- expiración mayor que Grant, delegación futura o expirada;
+- Grant revision cambiada, Grant revocado o binding/issuer revocado;
+- delegación revocada con attestation anterior todavía criptográficamente válida;
+- revocación concurrente con solicitud;
+- revisión CAS incorrecta, rollback y UoW no compartida;
+- delegación transitiva, self-delegation y escalada de scope;
+- replay de request_id y duplicados PENDING.
+
+### Renovación
+- AGENT válido pero sin delegación: DENY;
+- delegación válida pero AGENT no autenticado: DENY;
+- ambos válidos pero CAM no permite acción/recurso: DENY;
+- agente solicita; solo USER owner puede decidir;
+- solicitud no altera Grant; aprobación posterior valida el estado actual;
+- IDs UserId e IdentityId distintos en todos los casos positivos.
+
+Fakes de verificador solo en tests, con tipos explícitos y nunca componibles en runtime. Tests negativos deben comprobar ausencia de escrituras y rollback, no solo la excepción.
+
+## 8. Secuencia de implementación recomendada
+
+1. **I3-2B.1 — contratos de dominio y puertos:** tipos canónicos AGENT, contexto verificado AGENT, agregado de delegación, evidencia verificada de delegación y protocolos. Sin persistencia ni ruta habilitada.
+2. **I3-2B.2 — autoridad de identidad AGENT:** ciclo de vida canónico y bindings AGENT; pruebas de separación USER/AGENT.
+3. **I3-2B.3 — autoridad de delegación:** persistencia, emisión owner-only, revocación terminal/CAS, auditoría y revalidación.
+4. **I3-2B.4 — admisión de proof AGENT:** proof one-shot, attestation y guard fail-closed; sin exponer login/endpoints.
+5. **I3-2B.5 — UoW y verificación de operación delegada:** comprobar atomicidad/fencing real con Identity, Binding, Delegation, Grant y Renewal.
+6. **I3-2B.6 — habilitación acotada de `request_renewal`:** solo cuando los slices anteriores estén validados; mantener aprobación/rechazo owner-only de I3-2A.
+
+Cada slice tendrá PR Draft, pruebas focalizadas, suite completa y compileall validados en Debian por el propietario. No se fusiona ningún PR sin aprobación explícita.
+
+## 9. No objetivos y restricciones
+
+- No convertir `OperationContext`, `Identity(ACTIVE)` o `DelegationMode.DELEGATED` en evidencia.
+- No ampliar `VerifiedIdentityContext` ni `CanonicalUserIdentity` para incluir AGENT.
+- No permitir que un AGENT emita, delegue o amplíe su propia autoridad.
+- No permitir delegación transitiva en esta fase.
+- No sustituir CAM con la Delegation Authority.
+- No implementar login operativo, endpoints, CLI, bootstrap o wiring de producción en este diseño.
+- No cambiar DB productiva, host, systemd, sudoers, usuarios, Docker ni privilegios.
+- No afirmar garantías de consistencia distribuida que no estén demostradas.
+
+## 10. Criterio de salida de diseño
+
+El contrato queda listo para implementación cuando la revisión confirme:
+- separación de tipos y autoridades USER/AGENT;
+- owner consent verificable e independiente de agent proof;
+- delegación estrecha, vinculada a Grant y no elevadora;
+- revocación/expiración/revisión revalidadas en cada operación;
+- CAM como autorización final;
+- límites transaccionales y concurrencia explícitos;
+- pruebas negativas y fail-closed definidas.
+
+**Estado actual:** propuesta documental únicamente. `GrantRenewalService.request_renewal` permanece bloqueado. No se ha añadido código, migración, autoridad productiva ni endpoint.
