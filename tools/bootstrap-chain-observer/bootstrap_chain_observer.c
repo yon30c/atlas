@@ -100,10 +100,9 @@ static bool read_executable(pid_t pid, aco_node *node) {
         (void)close(fd);
         return false;
     }
+    length = readlinkat(fd, "", node->exe_target,
+                        sizeof(node->exe_target) - 1U);
     (void)close(fd);
-
-    length = readlink(path, node->exe_target,
-                      sizeof(node->exe_target) - 1U);
     if (length < 0 || (size_t)length >= sizeof(node->exe_target) - 1U) {
         return false;
     }
@@ -326,6 +325,7 @@ int aco_collect(aco_report *report) {
     bool tty_before = false;
     bool tty_after = false;
     struct timespec pause_time = {0, 20000000L};
+    struct timespec remaining_time;
     size_t i;
 
     if (report == NULL) {
@@ -418,7 +418,8 @@ int aco_collect(aco_report *report) {
         report->collection_complete = false;
     }
 
-    while (nanosleep(&pause_time, &pause_time) != 0 && errno == EINTR) {
+    while (nanosleep(&pause_time, &remaining_time) != 0 && errno == EINTR) {
+        pause_time = remaining_time;
     }
 
     if (getppid() != initial_parent ||
