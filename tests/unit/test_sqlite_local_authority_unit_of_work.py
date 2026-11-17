@@ -34,7 +34,10 @@ class SQLiteLocalAuthorityUnitOfWorkTests(unittest.TestCase):
     def test_one_unit_exposes_all_canonical_authority_repositories(self):
         with self.factory() as unit:
             self.assertIsNotNone(unit.identity)
+            self.assertIsNotNone(unit.agent_identity)
             self.assertIsNotNone(unit.native_identity)
+            self.assertIsNotNone(unit.native_agent_identity)
+            self.assertIsNotNone(unit.agent_delegations)
             self.assertIsNotNone(unit.native_authentication)
             self.assertIsNotNone(unit.grants)
             self.assertIsNotNone(unit.renewals)
@@ -42,7 +45,10 @@ class SQLiteLocalAuthorityUnitOfWorkTests(unittest.TestCase):
             self.assertIsNotNone(unit.authority_changes)
             self.assertIs(unit.authority_changes._unit_of_work, unit._unit)
             self.assertIs(unit.identity._unit_of_work, unit._unit)
+            self.assertIs(unit.agent_identity._unit_of_work, unit._unit)
             self.assertIs(unit.native_identity._unit_of_work, unit._unit)
+            self.assertIs(unit.native_agent_identity._unit_of_work, unit._unit)
+            self.assertIs(unit.agent_delegations._unit_of_work, unit._unit)
             self.assertIs(unit.native_authentication._unit_of_work, unit._unit)
             self.assertIs(unit.project_environments._unit_of_work, unit._unit)
             self.assertIs(unit.grants._unit_of_work, unit._unit)
