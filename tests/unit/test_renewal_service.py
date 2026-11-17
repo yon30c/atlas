@@ -6,8 +6,8 @@ from unittest.mock import patch
 from atlas.authorization.models import (
     Grant,
     GrantRenewalRequest,
-    RenewalStatus,
     GrantResourceScope,
+    RenewalStatus,
 )
 from atlas.authorization.renewal_service import GrantRenewalService
 from atlas.core.context import OperationContext
@@ -19,17 +19,21 @@ from atlas.core.errors import (
     NotFoundError,
 )
 from atlas.core.identity import Identity, IdentityKind, IdentityStatus
-
 from tests.fakes.authorization_unit_of_work import (
     InMemoryAuthorizationUnitOfWorkFactory,
     InMemoryGrantRepository,
     InMemoryRenewalRepository,
     _UnitOfWorkRenewalRepository,
 )
+from tests.fixtures.verified_identity import (
+    OWNER_IDENTITY_ID,
+    OWNER_USER_ID,
+    VERIFIED_OWNER,
+    FakeVerifiedIdentityContextVerifier,
+)
 
 
 NOW = datetime(2026, 11, 12, 15, 0, tzinfo=timezone.utc)
-
 
 
 class GrantRenewalServiceTests(unittest.TestCase):
@@ -43,7 +47,7 @@ class GrantRenewalServiceTests(unittest.TestCase):
             request_id="request-001",
             correlation_id="correlation-001",
             actor=self.subject,
-            user_id="user-001",
+            user_id=OWNER_USER_ID,
             origin="unit-test",
             delegation=DelegationMode.DELEGATED,
             project_id="atlas",
@@ -54,7 +58,7 @@ class GrantRenewalServiceTests(unittest.TestCase):
         )
         self.grant = Grant(
             grant_id="grant-001",
-            owner_user_id="user-001",
+            owner_user_id=OWNER_USER_ID,
             subject_identity_id="agent-001",
             project_id="atlas",
             environment="development",
@@ -70,26 +74,34 @@ class GrantRenewalServiceTests(unittest.TestCase):
             self.renewal_repository,
         )
         self.grant_repository.create(self.grant)
-        self.service = GrantRenewalService(self.unit_of_work_factory)
+        self.service = GrantRenewalService(
+            self.unit_of_work_factory,
+            identity_verifier=FakeVerifiedIdentityContextVerifier(),
+        )
         self.proposed_expires_at = NOW + timedelta(days=9)
 
-    def request_renewal(self, renewal_id="renewal-001"):
-        return self.service.request_renewal(
-            self.context,
-            renewal_id,
-            self.grant.grant_id,
-            self.proposed_expires_at,
-            NOW,
+    def seed_pending_renewal(self, renewal_id="renewal-001"):
+        request = GrantRenewalRequest(
+            renewal_id=renewal_id,
+            grant_id=self.grant.grant_id,
+            owner_user_id=self.grant.owner_user_id,
+            subject_identity_id=self.grant.subject_identity_id,
+            requested_by_identity_id=self.grant.subject_identity_id,
+            current_expires_at=self.grant.expires_at,
+            proposed_expires_at=self.proposed_expires_at,
+            requested_at=NOW,
         )
+        self.renewal_repository.create(request)
+        return request
 
     def owner_context(
         self,
-        user_id="user-001",
+        user_id=OWNER_USER_ID,
         project_id="atlas",
         environment="development",
     ):
         actor = Identity(
-            identity_id=user_id,
+            identity_id=OWNER_IDENTITY_ID,
             kind=IdentityKind.USER,
             status=IdentityStatus.ACTIVE,
         )
@@ -97,128 +109,41 @@ class GrantRenewalServiceTests(unittest.TestCase):
             self.context,
             actor=actor,
             user_id=user_id,
+            delegation=None,
             project_id=project_id,
             environment=environment,
         )
 
-    def test_request_creates_pending_request_without_changing_grant(self):
-        request = self.request_renewal()
-        self.assertEqual(request.status, RenewalStatus.PENDING)
-        self.assertEqual(
-            self.renewal_repository.get(request.renewal_id),
-            request,
-        )
-        self.assertEqual(
-            self.grant_repository.get(self.grant.grant_id).expires_at,
-            self.grant.expires_at,
+    def approve(self, context, renewal_id, now, evidence=VERIFIED_OWNER):
+        return self.service.approve_renewal(
+            context, renewal_id, now, verified_identity=evidence
         )
 
-    def test_request_requires_active_agent_who_is_the_grant_subject(self):
-        invalid_subjects = (
-            Identity(
-                identity_id="agent-001",
-                kind=IdentityKind.USER,
-                status=IdentityStatus.ACTIVE,
-            ),
-            Identity(
-                identity_id="agent-001",
-                kind=IdentityKind.AGENT,
-                status=IdentityStatus.SUSPENDED,
-            ),
-            Identity(
-                identity_id="other-agent",
-                kind=IdentityKind.AGENT,
-                status=IdentityStatus.ACTIVE,
-            ),
+    def reject(self, context, renewal_id, now, evidence=VERIFIED_OWNER):
+        return self.service.reject_renewal(
+            context, renewal_id, now, verified_identity=evidence
         )
-        for actor in invalid_subjects:
-            with self.subTest(actor=actor):
-                with self.assertRaises(AuthorizationError):
-                    self.service.request_renewal(
-                        replace(self.context, actor=actor),
-                        "renewal-001",
-                        self.grant.grant_id,
-                        self.proposed_expires_at,
-                        NOW,
-                    )
 
-    def test_request_rejects_missing_delegation(self):
-        context = replace(self.context, delegation=None)
+    def test_agent_request_is_fail_closed_without_agent_and_delegation_authorities(self):
         with self.assertRaises(AuthorizationError):
-            self.service.request_renewal(
-                context,
-                "renewal-001",
-                self.grant.grant_id,
-                self.proposed_expires_at,
-                NOW,
-            )
-
-    def test_request_rejects_independent_delegation(self):
-        context = replace(
-            self.context,
-            delegation=DelegationMode.INDEPENDENT,
-        )
-        with self.assertRaises(AuthorizationError):
-            self.service.request_renewal(
-                context,
-                "renewal-001",
-                self.grant.grant_id,
-                self.proposed_expires_at,
-                NOW,
-            )
-
-    def test_request_requires_owner_context_and_exact_scope(self):
-        invalid_contexts = (
-            replace(self.context, user_id="user-002"),
-            replace(self.context, project_id="other-project"),
-            replace(self.context, environment="production"),
-        )
-        for context in invalid_contexts:
-            with self.subTest(context=context):
-                with self.assertRaises(AuthorizationError):
-                    self.service.request_renewal(
-                        context,
-                        "renewal-001",
-                        self.grant.grant_id,
-                        self.proposed_expires_at,
-                        NOW,
-                    )
-
-    def test_request_requires_active_grant_later_expiry_and_unique_id(self):
-        with self.assertRaises(ContractError):
             self.service.request_renewal(
                 self.context,
                 "renewal-001",
                 self.grant.grant_id,
-                self.grant.expires_at,
+                self.proposed_expires_at,
                 NOW,
             )
-
-        expired_grant = replace(self.grant, expires_at=NOW)
-        self.grant_repository.update(expired_grant)
-        with self.assertRaises(AuthorizationError):
-            self.request_renewal()
-
-        revoked_grant = replace(
+        self.assertIsNone(self.renewal_repository.get("renewal-001"))
+        self.assertEqual(
+            self.grant_repository.get(self.grant.grant_id),
             self.grant,
-            revoked_at=NOW - timedelta(seconds=1),
         )
-        self.grant_repository.update(revoked_grant)
-        with self.assertRaises(AuthorizationError):
-            self.request_renewal()
 
-        self.grant_repository.update(self.grant)
-        self.request_renewal()
-        with self.assertRaises(ContractError):
-            self.request_renewal()
-
-    def test_approval_updates_grant_and_records_owner_decision(self):
-        request = self.request_renewal()
+    def test_approval_updates_grant_and_records_canonical_owner_decision(self):
+        request = self.seed_pending_renewal()
         approval_time = NOW + timedelta(hours=1)
-        updated_grant = self.service.approve_renewal(
-            self.owner_context(),
-            request.renewal_id,
-            approval_time,
+        updated_grant = self.approve(
+            self.owner_context(), request.renewal_id, approval_time
         )
         updated_request = self.renewal_repository.get(request.renewal_id)
         self.assertEqual(updated_grant.expires_at, self.proposed_expires_at)
@@ -229,33 +154,62 @@ class GrantRenewalServiceTests(unittest.TestCase):
         )
         self.assertEqual(updated_request.status, RenewalStatus.APPROVED)
         self.assertEqual(updated_request.decided_at, approval_time)
-        self.assertEqual(updated_request.decided_by_user_id, "user-001")
+        self.assertEqual(updated_request.decided_by_user_id, OWNER_USER_ID)
+        self.assertNotEqual(OWNER_USER_ID, OWNER_IDENTITY_ID)
 
-    def test_approval_requires_owner_and_exact_scope(self):
-        request = self.request_renewal()
+    def test_approval_requires_verified_owner_and_exact_scope(self):
+        request = self.seed_pending_renewal()
         invalid_contexts = (
-            self.owner_context(user_id="user-002"),
+            self.owner_context(user_id="a6b2b66f-7c72-4d77-8d84-7d0a8c5a1999"),
             self.owner_context(project_id="other-project"),
             self.owner_context(environment="production"),
         )
         for context in invalid_contexts:
             with self.subTest(context=context):
                 with self.assertRaises(AuthorizationError):
-                    self.service.approve_renewal(
-                        context,
-                        request.renewal_id,
-                        NOW + timedelta(hours=1),
+                    self.approve(
+                        context, request.renewal_id, NOW + timedelta(hours=1)
                     )
 
+        with self.assertRaises(AuthorizationError):
+            self.service.approve_renewal(
+                self.owner_context(),
+                request.renewal_id,
+                NOW + timedelta(hours=1),
+            )
+
+        tampered = replace(
+            VERIFIED_OWNER,
+            user_id="a6b2b66f-7c72-4d77-8d84-7d0a8c5a1999",
+        )
+        with self.assertRaises(AuthorizationError):
+            self.approve(
+                self.owner_context(),
+                request.renewal_id,
+                NOW + timedelta(hours=1),
+                evidence=tampered,
+            )
+
+    def test_approval_fails_closed_when_identity_verifier_is_unavailable(self):
+        request = self.seed_pending_renewal()
+        service = GrantRenewalService(self.unit_of_work_factory)
+        with self.assertRaises(AuthorizationError):
+            service.approve_renewal(
+                self.owner_context(),
+                request.renewal_id,
+                NOW + timedelta(hours=1),
+                verified_identity=VERIFIED_OWNER,
+            )
+
     def test_approval_rejects_changed_or_expired_grant(self):
-        request = self.request_renewal()
+        request = self.seed_pending_renewal()
         changed_grant = replace(
             self.grant,
             expires_at=self.grant.expires_at + timedelta(days=1),
         )
         self.grant_repository.update(changed_grant)
         with self.assertRaises(ContractError):
-            self.service.approve_renewal(
+            self.approve(
                 self.owner_context(),
                 request.renewal_id,
                 NOW + timedelta(hours=1),
@@ -263,87 +217,69 @@ class GrantRenewalServiceTests(unittest.TestCase):
 
         self.grant_repository.update(self.grant)
         with self.assertRaises(AuthorizationError):
-            self.service.approve_renewal(
-                self.owner_context(),
-                request.renewal_id,
-                self.grant.expires_at,
+            self.approve(
+                self.owner_context(), request.renewal_id, self.grant.expires_at
             )
 
     def test_rejection_records_decision_without_changing_grant(self):
-        request = self.request_renewal()
+        request = self.seed_pending_renewal()
         decision_time = NOW + timedelta(hours=1)
-        rejected_request = self.service.reject_renewal(
-            self.owner_context(),
-            request.renewal_id,
-            decision_time,
+        rejected_request = self.reject(
+            self.owner_context(), request.renewal_id, decision_time
         )
         self.assertEqual(rejected_request.status, RenewalStatus.REJECTED)
         self.assertEqual(rejected_request.decided_at, decision_time)
-        self.assertEqual(rejected_request.decided_by_user_id, "user-001")
+        self.assertEqual(rejected_request.decided_by_user_id, OWNER_USER_ID)
         self.assertEqual(
             self.grant_repository.get(self.grant.grant_id),
             self.grant,
         )
 
-    def test_rejection_requires_owner_and_exact_scope(self):
-        request = self.request_renewal()
+    def test_rejection_requires_verified_owner_and_exact_scope(self):
+        request = self.seed_pending_renewal()
         invalid_contexts = (
-            self.owner_context(user_id="user-002"),
+            self.owner_context(user_id="a6b2b66f-7c72-4d77-8d84-7d0a8c5a1999"),
             self.owner_context(project_id="other-project"),
             self.owner_context(environment="production"),
         )
         for context in invalid_contexts:
             with self.subTest(context=context):
                 with self.assertRaises(AuthorizationError):
-                    self.service.reject_renewal(
-                        context,
-                        request.renewal_id,
-                        NOW + timedelta(hours=1),
+                    self.reject(
+                        context, request.renewal_id, NOW + timedelta(hours=1)
                     )
-
-    def test_decisions_are_single_use_and_unknown_request_is_not_found(self):
-        request = self.request_renewal()
-        owner_context = self.owner_context()
-        self.service.approve_renewal(
-            owner_context,
-            request.renewal_id,
-            NOW + timedelta(hours=1),
-        )
-        with self.assertRaises(ContractError):
-            self.service.approve_renewal(
-                owner_context,
-                request.renewal_id,
-                NOW + timedelta(hours=2),
-            )
-        with self.assertRaises(ContractError):
+        with self.assertRaises(AuthorizationError):
             self.service.reject_renewal(
-                owner_context,
+                self.owner_context(),
                 request.renewal_id,
-                NOW + timedelta(hours=2),
-            )
-        with self.assertRaises(NotFoundError):
-            self.service.reject_renewal(
-                owner_context,
-                "missing-renewal",
                 NOW + timedelta(hours=1),
             )
 
-    def test_approval_failure_rolls_back_grant_and_request(self):
-        request = GrantRenewalRequest(
-            renewal_id="renewal-atomic",
-            grant_id=self.grant.grant_id,
-            owner_user_id=self.grant.owner_user_id,
-            subject_identity_id=self.grant.subject_identity_id,
-            requested_by_identity_id=self.grant.subject_identity_id,
-            current_expires_at=self.grant.expires_at,
-            proposed_expires_at=self.proposed_expires_at,
-            requested_at=NOW,
+    def test_decisions_are_single_use_and_unknown_request_is_not_found(self):
+        request = self.seed_pending_renewal()
+        owner_context = self.owner_context()
+        self.approve(
+            owner_context, request.renewal_id, NOW + timedelta(hours=1)
         )
-        self.renewal_repository.create(request)
+        with self.assertRaises(ContractError):
+            self.approve(
+                owner_context, request.renewal_id, NOW + timedelta(hours=2)
+            )
+        with self.assertRaises(ContractError):
+            self.reject(
+                owner_context, request.renewal_id, NOW + timedelta(hours=2)
+            )
+        with self.assertRaises(NotFoundError):
+            self.reject(
+                owner_context, "missing-renewal", NOW + timedelta(hours=1)
+            )
+
+    def test_approval_failure_rolls_back_grant_and_request(self):
+        request = self.seed_pending_renewal("renewal-atomic")
         self.renewal_repository.fail_on_update = True
 
         with self.assertRaises(RuntimeError):
-            self.service.approve_renewal(
+            self.approve(
                 self.owner_context(),
                 request.renewal_id,
                 NOW + timedelta(hours=1),
@@ -355,12 +291,12 @@ class GrantRenewalServiceTests(unittest.TestCase):
         self.assertEqual(stored_request.status, RenewalStatus.PENDING)
 
     def test_approval_concurrency_conflict_rolls_back_grant(self):
-        request = self.request_renewal()
+        request = self.seed_pending_renewal()
         concurrent_request = replace(
             request,
             status=RenewalStatus.REJECTED,
             decided_at=NOW + timedelta(minutes=30),
-            decided_by_user_id="user-001",
+            decided_by_user_id=OWNER_USER_ID,
             version=2,
         )
         original_update_if_version = (
@@ -387,7 +323,7 @@ class GrantRenewalServiceTests(unittest.TestCase):
             new=simulate_concurrent_update,
         ):
             with self.assertRaises(ConcurrencyError):
-                self.service.approve_renewal(
+                self.approve(
                     self.owner_context(),
                     request.renewal_id,
                     NOW + timedelta(hours=1),
@@ -403,12 +339,12 @@ class GrantRenewalServiceTests(unittest.TestCase):
         )
 
     def test_rejection_concurrency_conflict_preserves_concurrent_approval(self):
-        request = self.request_renewal()
+        request = self.seed_pending_renewal()
         concurrent_request = replace(
             request,
             status=RenewalStatus.APPROVED,
             decided_at=NOW + timedelta(minutes=30),
-            decided_by_user_id="user-001",
+            decided_by_user_id=OWNER_USER_ID,
             version=2,
         )
         original_update_if_version = (
@@ -435,7 +371,7 @@ class GrantRenewalServiceTests(unittest.TestCase):
             new=simulate_concurrent_update,
         ):
             with self.assertRaises(ConcurrencyError):
-                self.service.reject_renewal(
+                self.reject(
                     self.owner_context(),
                     request.renewal_id,
                     NOW + timedelta(hours=1),
