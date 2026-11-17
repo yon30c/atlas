@@ -31,6 +31,7 @@ La inspección directa del código en `feature/cycle-3-2-b-trusted-workspace-mou
 - El propio módulo declara que la UoW es una composición de persistencia, no un coordinador de autorización o consistencia: no invalida Grants, no aplica fencing de efectos ni libera claims.
 - `IdentityAuthorityPort` actualmente expone `create_user()`, `get_user()` y `update_user_status()`. `SQLiteIdentityAuthority` crea UserId e Identity(USER) en una transacción, pero declara expresamente que no implementa issuer externo, binding, autenticación, recovery ni autorización.
 - El baseline no contiene todavía en esa composición una Authentication Authority, almacenamiento de autenticadores/sesiones/proofs ni el flujo operativo de issuer/binding nativo.
+- El documento físico B1-B-03B declara un baseline histórico SQLite v4/v5 y una rama de referencia anterior; PR #5/3.2-A ya introduce migración v18. Antes de diseñar cualquier migración de autenticación/binding hay que reconciliar ese documento con la cadena real del head 3.2-B. No se reutilizarán números de schema ni supuestos del baseline antiguo.
 - `SQLiteAuthorityChangeStore` persiste reservas, identidad de operación e idempotencia. Su propio contrato aclara que no calcula admisiones afectadas, no aplica fencing a rutas, no muta autoridades fuente ni declara reconciliación.
 - Los contratos/modelos de Consistency existentes no demuestran por sí solos que haya un coordinador concreto capaz de ejecutar invalidación y fencing de extremo a extremo.
 
