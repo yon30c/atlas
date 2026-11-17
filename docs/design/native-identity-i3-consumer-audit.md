@@ -291,3 +291,8 @@ El método `verify` vuelve a comprobar firma, TTL, issuer, binding activo/revisi
 ### Validación Debian — I3-2B.3B.1
 
 El propietario ejecutó la suite completa sobre el HEAD de esta fase: `Ran 1341 tests in 17.171s`, `OK`; `python -m compileall -q src tests` terminó con `COMPILE_EXIT_CODE=0`. Esta evidencia corresponde a la rama de diseño actual y no implica activación de autenticación AGENT en runtime ni habilitación de delegaciones.
+
+
+### Validación Debian — I3-2B.3B.2
+
+El propietario ejecutó `test_agent_delegation_domain_contracts.py`: `Ran 12 tests in 0.486s`, `OK`; `python -m compileall -q src tests` devolvió `COMPILE_EXIT_CODE=0`.
