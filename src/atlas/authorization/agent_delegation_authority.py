@@ -88,7 +88,9 @@ class SQLiteAgentDelegationAuthority:
                     or agent.identity.status is not IdentityStatus.ACTIVE
                 ):
                     raise AuthorizationError("la identidad AGENT no está activa")
-                if not unit.native_agent_identity.has_active_native_agent_binding(agent_identity_id):
+                if not unit.native_agent_identity.has_active_native_agent_binding(
+                    agent_identity_id, verified_owner_identity.issuer_id
+                ):
                     raise AuthorizationError("el AGENT no tiene un binding nativo activo")
 
                 grant = unit.grants.get(grant_id)
