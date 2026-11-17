@@ -60,8 +60,14 @@ class WorkspaceRecord:
         _required(self.project_id, "project_id")
         _required(self.environment_id, "environment_id")
         _required(self.root_ref, "root_ref")
-        if "://" in self.root_ref or self.root_ref.startswith(("/", "\\")) or "\\" in self.root_ref:
-            raise ContractError("root_ref debe ser una referencia simbólica, no una ruta")
+        if (
+            not self.root_ref.startswith("mount:")
+            or not self.root_ref[6:]
+            or "/" in self.root_ref
+            or "\\" in self.root_ref
+            or "://" in self.root_ref
+        ):
+            raise ContractError("root_ref debe usar el formato simbólico mount:<id>")
         if not isinstance(self.status, WorkspaceStatus):
             raise ContractError("status debe ser WorkspaceStatus")
         _revision(self.revision)
