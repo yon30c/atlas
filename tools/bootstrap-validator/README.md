@@ -28,9 +28,24 @@ cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
 /tmp/atlas-bootstrap-validator-tests
 ```
 
-Expected output: bootstrap-validator V1: tests passed
+Expected output: `bootstrap-validator V1: tests passed`
 
 The executable belongs in /tmp. Do not install it or run it through sudo.
+
+## Verification record
+
+V1 was validated on Debian on 2026-11-16 with the strict build above and the expanded fixture suite. The same suite also passed with AddressSanitizer and UndefinedBehaviorSanitizer using:
+
+```sh
+cc -std=c11 -O1 -g -Wall -Wextra -Wpedantic -Werror \\
+  -fsanitize=address,undefined -fno-omit-frame-pointer \\
+  -o /tmp/atlas-bootstrap-validator-sanitized \\
+  tools/bootstrap-validator/bootstrap_validator.c \\
+  tools/bootstrap-validator/test_bootstrap_validator.c
+/tmp/atlas-bootstrap-validator-sanitized
+```
+
+This record applies only to the fixture-only V1 parser/evaluator. It is not validation of a live process collector, sudo invocation, TTY provenance, PAM flow, or privileged helper.
 
 ## Interface
 
