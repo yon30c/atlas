@@ -286,3 +286,8 @@ Se añadió `VerifiedAgentIdentityContextService`, con admisión one-shot de pro
 El método `verify` vuelve a comprobar firma, TTL, issuer, binding activo/revisión y canonical AGENT activo/revisión, implementando el puerto `VerifiedAgentIdentityContextVerifierPort`.
 
 **Pendiente de validación Debian.** No se emite aún `VerifiedAgentDelegationContext`, no existe todavía autoridad de delegación y no se habilitan operaciones AGENT en runtime.
+
+
+### Validación Debian — I3-2B.3B.1
+
+El propietario ejecutó la suite completa sobre el HEAD de esta fase: `Ran 1341 tests in 17.171s`, `OK`; `python -m compileall -q src tests` terminó con `COMPILE_EXIT_CODE=0`. Esta evidencia corresponde a la rama de diseño actual y no implica activación de autenticación AGENT en runtime ni habilitación de delegaciones.
