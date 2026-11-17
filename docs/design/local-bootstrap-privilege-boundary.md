@@ -277,10 +277,52 @@ Ejecuciones para comparar:
 - `/tmp/atlas-bootstrap-probe` desde shell interactiva normal;
 - `sudo -- /tmp/atlas-bootstrap-probe` desde esa misma shell;
 - `ssh -t HOST 'sudo -- /tmp/atlas-bootstrap-probe'` desde cliente SSH con PTY;
-- `ssh -T HOST 'sudo -- /tmp/atlas-bootstrap-probe'` sin PTY, que debe informar que no puede abrir `/dev/tty`.
+- `ssh -T HOST 'sudo -- /tmp/atlas-bootstrap-probe'` sin PTY. Interpretar el resultado según la autenticación disponible: si sudo no puede solicitar contraseña, el comando no se ejecuta y la prueba no informa sobre un eventual PTY creado por `use_pty`. No asumir que la ausencia de PTY del cliente implica ausencia de TTY en el proceso hijo si sudo llega a ejecutar el comando.
 
 Reemplazar `HOST` por el alias/destino SSH real. No cambiar sudoers ni instalar el binario. Revisar la salida antes de compartirla. Todavía no se han compilado ni ejecutado estas fuentes en el Debian del propietario; no declarar el prototipo validado hasta recibir resultados.
 
+
+
+## 4.5 Inspección de integridad de sudo y prueba SSH sin PTY (16-11-2026)
+
+Se completó la inspección de solo lectura del ejecutable y configuración efectiva disponible en el host Debian:
+
+- `/usr/bin/sudo`: UID 0, GID 0, modo `4755`, tamaño 306456 bytes, inode 3270762, dispositivo 2082.
+- La cadena `/`, `/usr`, `/usr/bin` y el ejecutable pertenece a `root:root`; los directorios tienen modo `755`.
+- `findmnt -T /usr/bin/sudo`: raíz sobre `/dev/sdc2`, ext4, opciones `rw,relatime,errors=remount-ro`; no aparece `nosuid`.
+- Paquete propietario: `sudo`; versión `1.9.16p2-3+deb13u2`, estado `install ok installed`.
+- `sudo dpkg --verify sudo` no produjo salida: no reportó discrepancias verificables en los archivos del paquete.
+- El atributo extendido `security.capability` consultado mediante Python devolvió ENODATA (61), interpretado como atributo ausente; no se detectaron file capabilities adicionales.
+- `getcap` y `getfattr` no están instalados. No se instalaron paquetes.
+- `visudo -c` validó `/etc/sudoers` y `/etc/sudoers.d/README`.
+- Hash observado de `/usr/bin/sudo`: `a59f393bad5037644b89de64fe558ae6d5d1473c25c63022241e7c7019ad2f0c`. Es una referencia de esta inspección, no una verificación criptográfica independiente contra un repositorio de confianza.
+- La inspección previa de sudo mostró los defaults `env_reset`, `mail_badpass`, `secure_path` y `use_pty`; `greed` puede ejecutar `(ALL : ALL) ALL`.
+
+### Resultado de SSH sin PTY
+
+Se ejecutó desde Windows:
+
+```text
+ssh -T greed@10.0.0.81 'sudo -- /tmp/atlas-bootstrap-probe'
+sudo: a terminal is required to read the password; either use the -S option to read from standard input or configure an askpass helper
+sudo: a password is required
+```
+
+Sudo rechazó la solicitud porque no tenía un terminal desde el que solicitar la contraseña. El prototipo no se ejecutó. Por tanto, esta prueba **no demuestra** cómo se comportaría el helper si sudo ya tuviera una autorización válida para ejecutar el comando. Tampoco demuestra que el helper pueda distinguir un PTY asignado por SSH de un PTY creado por la opción sudo `use_pty`.
+
+La política aprobada sigue excluyendo SSH sin PTY. Sin embargo, el mecanismo concreto para demostrar esa condición en presencia de `use_pty` queda pendiente de diseño y prueba; no se aceptará una inferencia basada únicamente en que `/dev/tty` exista o en el foreground del PTY que reciba el helper.
+
+### Matriz consolidada de observaciones
+
+| Escenario | Resultado observado | Alcance |
+|---|---|---|
+| Ejecución local sin sudo | Prototipo diagnóstico se ejecuta como greed | Observación de proceso/TTY |
+| Ejecución local con sudo | Prototipo diagnóstico se ejecuta como root; padre sudo directo observado | Compatible con A |
+| SSH con PTY y sudo | Prototipo diagnóstico se ejecuta como root; cadena sudo/TTY observada | Compatible con A y política SSH interactiva |
+| SSH sin PTY, ejecución directa | No existe TTY controlador | Rechazo por ausencia de TTY |
+| SSH sin PTY, sudo sin credenciales disponibles | Sudo no puede solicitar contraseña y no ejecuta el prototipo | No concluyente sobre sudo `use_pty` tras autenticación válida |
+
+**Conclusión:** la integridad básica del ejecutable sudo y la configuración observada son compatibles con continuar evaluando A. No aprueban el diseño ni sustituyen el prototipo de validación C. La cuenta greed conserva autoridad administrativa irrestricta; el modelo no protege contra ese administrador actuando maliciosamente.
 
 ## 5. Entorno, argumentos y descriptores
 
