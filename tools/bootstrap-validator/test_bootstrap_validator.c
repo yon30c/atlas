@@ -40,9 +40,9 @@ static void test_status(void){
 static void test_stat(void){
  bv_stat o;
  assert(bv_parse_stat(stat_ok,sizeof(stat_ok)-1,123,&o)==BV_OK);
+ assert(o.pid==123&&o.ppid==10&&o.pgrp==11&&o.session==12&&o.tty_nr==34818&&o.tpgid==13&&o.starttime==987654);
  assert(bv_parse_stat(stat_linux_full,sizeof(stat_linux_full)-1,2320,&o)==BV_OK);
  assert(o.pid==2320&&o.ppid==2319&&o.pgrp==2320&&o.session==2320&&o.tty_nr==34816&&o.tpgid==12667&&o.starttime==3539);
- assert(o.pid==123&&o.ppid==10&&o.pgrp==11&&o.session==12&&o.tty_nr==34818&&o.tpgid==13&&o.starttime==987654);
  assert(bv_parse_stat(stat_ok,sizeof(stat_ok)-1,124,&o)==BV_INVALID);
  const char *shortline="123 (x) S 10 11 12 0 0";
  const char *missing_start="123 (x) S 10 11 12 0 0 0 1 2 3 4 5 6 -7 -8 -9 -10 11 -12";
