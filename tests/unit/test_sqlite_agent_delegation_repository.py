@@ -13,12 +13,15 @@ from atlas.adapters.sqlite import (
     SQLiteAgentIdentityAuthority,
     SQLiteDatabase,
     SQLiteGrantRepository,
+    SQLiteGrantRenewalRepository,
     SQLiteIdentityAuthority,
     SQLiteNativeAgentIdentityAuthority,
     SQLiteNativeIdentityAuthority,
     SQLITE_MIGRATIONS,
 )
-from atlas.authorization.models import Grant, GrantResourceScope
+from atlas.authorization.models import (
+    Grant, GrantRenewalRequest, GrantResourceScope,
+)
 from atlas.core.agent_delegation import (
     AgentDelegation,
     AgentDelegationScope,
@@ -57,7 +60,7 @@ class SQLiteAgentDelegationRepositoryTests(unittest.TestCase):
             resource_scope=GrantResourceScope(
                 "workspace", frozenset({"workspace-a", "workspace-b"})
             ),
-            actions=frozenset({"read", "list", "write"}),
+            actions=frozenset({"read", "list", "write", "grant.renewal.request"}),
             issued_at=self.now - timedelta(minutes=5),
             expires_at=self.now + timedelta(days=3),
         )
@@ -200,6 +203,59 @@ class SQLiteAgentDelegationRepositoryTests(unittest.TestCase):
                     values,
                 )
         self.assertIsNone(self.repository.get(delegation.delegation_id))
+
+    def test_renewal_request_persists_exact_full_scope_delegation_evidence(self):
+        delegation = self._delegation(
+            scope=AgentDelegationScope(
+                resource_type="workspace",
+                resource_ids=frozenset({"workspace-a", "workspace-b"}),
+                actions=frozenset({"grant.renewal.request"}),
+            )
+        )
+        self.repository.create(delegation)
+        renewals = SQLiteGrantRenewalRepository(self.database)
+        request = GrantRenewalRequest(
+            renewal_id="renewal-agent-full-scope",
+            grant_id=self.grant.grant_id,
+            owner_user_id=self.owner.user_id,
+            subject_identity_id=self.agent.identity.identity_id,
+            requested_by_identity_id=self.agent.identity.identity_id,
+            current_expires_at=self.grant.expires_at,
+            proposed_expires_at=self.grant.expires_at + timedelta(days=7),
+            requested_at=self.now,
+            grant_revision=self.grant.revision,
+            delegation_id=delegation.delegation_id,
+            delegation_revision=delegation.revision,
+        )
+        renewals.create(request)
+        self.assertEqual(renewals.get(request.renewal_id), request)
+
+    def test_database_rejects_renewal_using_partial_resource_delegation(self):
+        delegation = self._delegation(
+            scope=AgentDelegationScope(
+                resource_type="workspace",
+                resource_ids=frozenset({"workspace-a"}),
+                actions=frozenset({"grant.renewal.request"}),
+            )
+        )
+        self.repository.create(delegation)
+        renewals = SQLiteGrantRenewalRepository(self.database)
+        request = GrantRenewalRequest(
+            renewal_id="renewal-agent-partial-scope",
+            grant_id=self.grant.grant_id,
+            owner_user_id=self.owner.user_id,
+            subject_identity_id=self.agent.identity.identity_id,
+            requested_by_identity_id=self.agent.identity.identity_id,
+            current_expires_at=self.grant.expires_at,
+            proposed_expires_at=self.grant.expires_at + timedelta(days=7),
+            requested_at=self.now,
+            grant_revision=self.grant.revision,
+            delegation_id=delegation.delegation_id,
+            delegation_revision=delegation.revision,
+        )
+        with self.assertRaises(ContractError):
+            renewals.create(request)
+        self.assertIsNone(renewals.get(request.renewal_id))
 
     def test_database_prevents_direct_claim_mutation_and_deletion(self):
         delegation = self._delegation()
