@@ -4,7 +4,7 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$ROOT"
 
-CC=\${CC:-cc}
+CC=${CC:-cc}
 FLAGS="-std=c11 -Wall -Wextra -Wpedantic -Werror -O2"
 INCLUDES="-Itools/bootstrap-validator -Itools/bootstrap-chain-observer"
 
