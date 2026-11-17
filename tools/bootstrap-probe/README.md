@@ -38,17 +38,33 @@ Then, from the same shell:
 sudo -- /tmp/atlas-bootstrap-probe
 \`\`\`
 
-Repeat from an SSH session with PTY, and separately test no-PTY SSH:
+Repeat from an SSH session with PTY:
 
-\`\`\`sh
+```sh
 ssh -t HOST 'sudo -- /tmp/atlas-bootstrap-probe'
-ssh -T HOST 'sudo -- /tmp/atlas-bootstrap-probe'
-\`\`\`
+```
 
-The no-PTY run is expected to report that /dev/tty cannot be opened. Do not
-treat any other output as a pass/fail security verdict.
+For the no-PTY case, first run the probe directly (this isolates the TTY
+observation from sudo's own password/TTY policy):
 
-Review output before sharing it; process names and terminal metadata may reveal
+```sh
+ssh -T HOST '/tmp/atlas-bootstrap-probe'
+```
+
+Optionally try the sudo invocation without a PTY:
+
+```sh
+ssh -T HOST 'sudo -n -- /tmp/atlas-bootstrap-probe'
+```
+
+The last command may be rejected by sudo before the probe starts if no valid
+sudo timestamp is cached or the policy requires interactive authentication.
+That is a sudo-layer result, not a probe result. The direct no-PTY run should
+report that /dev/tty cannot be opened. Do not treat any other output as a
+pass/fail security verdict.
+
+Replace HOST with the actual SSH destination or configured alias. Review
+output before sharing it; process names and terminal metadata may reveal
 operational details.
 
 ## What it reports
