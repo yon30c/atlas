@@ -8,7 +8,9 @@ from atlas.core.context import OperationContext
 from atlas.core.errors import AuthorizationError, ContractError
 from atlas.core.identity import Identity, IdentityKind, IdentityStatus
 from tests.fixtures.verified_identity import (
-    OWNER_USER_ID, OWNER_IDENTITY_ID, VERIFIED_OWNER,
+    OWNER_IDENTITY_ID,
+    OWNER_USER_ID,
+    VERIFIED_OWNER,
     FakeVerifiedIdentityContextVerifier,
 )
 
@@ -94,7 +96,15 @@ class GrantManagementTests(unittest.TestCase):
             identity_verifier=self.identity_verifier,
         )
 
-    def issue(self, context=None, grant=None, *, service=None, verified_identity=VERIFIED_OWNER, now=NOW):
+    def issue(
+        self,
+        context=None,
+        grant=None,
+        *,
+        service=None,
+        verified_identity=VERIFIED_OWNER,
+        now=NOW,
+    ):
         target = service or self.service
         return target.issue(
             context or self.context,
