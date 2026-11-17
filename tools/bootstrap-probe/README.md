@@ -73,6 +73,8 @@ operational details.
 - Immediate parent PID, /proc/PID/status UID/GID/PPID values.
 - pidfd_open availability and immediate poll state.
 - Parent executable inode, ownership, mode, and informational symlink target.
+- Parent `/proc/PID/stat` session, process group, `tty_nr`, and `tpgid` fields.
+- Parent file descriptors 0, 1, and 2 as informational symlink targets.
 - Controlling terminal SID, process SID, foreground process group, process group,
   and device metadata.
 
