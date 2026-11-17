@@ -274,7 +274,7 @@ La inserción valida mediante SQLite el propietario canónico activo, identidad 
 
 SQLiteLocalAuthorityUnitOfWork ahora expone USER identity, AGENT identity, USER/AGENT native bindings, Grants, renewals y delegations sobre una sola SQLiteUnitOfWork.
 
-**Bloqueo explícito:** no existe todavía implementación productiva de los puertos VerifiedIdentityContextVerifierPort, VerifiedAgentIdentityContextVerifierPort y VerifiedAgentDelegationContextVerifierPort. El repositorio no prueba consentimiento del owner y no debe usarse como API de aplicación. I3-2B.3B debe implementar verificación transaccional y servicio de autoridad; no se emiten contextos verificados ni se habilitan operaciones delegated.
+**Bloqueo en el checkpoint I3-2B.3A:** todavía no existía soporte productivo para revalidar evidencia USER/AGENT dentro de la misma UoW. I3-2B.3B.3 cerró ese punto para los verificadores de identidad. La autoridad de delegación/verificador de contexto delegado sigue pendiente; el repositorio no prueba consentimiento del owner y no debe usarse como API de aplicación. No se emiten contextos delegados ni se habilitan operaciones delegated.
 
 **Validación del slice de persistencia:** suite completa del branch ejecutada por el propietario en Debian: 1,329/1,329 tests OK en 17.000s; `python -m compileall -q src tests` con `COMPILE_EXIT_CODE=0`. Esta validación no elimina el bloqueo de autoridad descrito arriba.
 
