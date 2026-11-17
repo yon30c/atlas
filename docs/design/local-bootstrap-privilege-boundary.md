@@ -115,21 +115,43 @@ El modelo de amenaza ya excluye al propietario administrador actuando maliciosam
 
 **Siguiente comprobación:** repetir solo la inspección de TTY usando la función libc `tcgetsid(2)` mediante `ctypes`, además de `tcgetpgrp`, `getsid(0)`, `getpgrp` y `fstat` del descriptor. No cambiar sudoers ni instalar/configurar nada. Después se decidirá si el mecanismo A puede sostenerse con los metadatos efectivos de sudo y el modelo de amenaza, o si conviene B (socket Unix + `SO_PEERCRED` + TTY transferido).
 
-## 4.2 Segunda prueba de sesión/TTY (16-11-2026)
+## 4.2 Segunda prueba y cadena de procesos (16-11-2026)
 
-El propietario ejecutó la comprobación mediante `sudo python3`:
+La inspección de sesión/TTY mediante libc devolvió:
 
-- UID real/efectivo: 0/0.
-- `SUDO_UID=1000`, `SUDO_USER=greed`.
-- Terminal SID: 10931.
-- Proceso SID: 10931.
-- Grupo foreground del terminal: 10931.
-- Grupo de proceso del comando: 10932.
+- UID real/efectivo del proceso Python: 0/0.
+- `SUDO_UID=1000`, `SUDO_USER=greed` (solo diagnóstico; no se aceptan como prueba).
+- Terminal SID y proceso SID: `10931`.
+- Grupo foreground reportado en esa ejecución: `10931`; grupo del proceso consultado: `10932`.
 - `/dev/tty` abrió correctamente; propietario UID 0, GID 5.
 
-**Conclusión:** el proceso y el TTY comparten sesión, pero el proceso no pertenece al grupo foreground reportado por el terminal. El requisito de foreground-control no está satisfecho en esta ejecución. El propietario del dispositivo TTY tampoco identifica al operador. No se aprueba el mecanismo A.
+En una comprobación separada de la cadena de procesos, el propietario obtuvo:
 
-**Siguiente diagnóstico:** repetir con un comando simple, sin heredoc, para observar PID/PPID/SID/PGID/TPGID del proceso y su cadena de padres. Comparar la salida con el comportamiento de `sudo use_pty`. No cambiar configuración. Si el desacoplamiento se debe a la asignación de PTY de sudo y no puede resolverse de forma robusta, seleccionar mecanismo B (servicio/socket Unix con `SO_PEERCRED` y transferencia explícita del TTY), sin debilitar la comprobación del terminal.
+```text
+PID    PPID   SID    PGID   TPGID  TT     RUID  EUID  COMMAND
+10938  10936  10938  10938  10939  pts/2  1000  0     sudo
+10939  10938  10938  10939  10939  pts/2     0  0     python3
+```
+
+Esta segunda salida aporta evidencia adicional:
+
+- El proceso `sudo` es el padre directo del proceso privilegiado.
+- `sudo` conserva RUID 1000 y EUID 0; el hijo ejecutado queda con RUID/EUID 0.
+- El hijo comparte SID con `sudo` y su PGID coincide con TPGID: el hijo es el grupo foreground del terminal en esta comprobación.
+- El grupo de `sudo` es distinto del grupo foreground, comportamiento compatible con que sudo coloque el comando en su propio grupo de procesos.
+
+Las dos comprobaciones de TTY no deben fusionarse como si fueran una única instantánea: la primera mostró un grupo no coincidente; la cadena posterior muestra un comando hijo en foreground. La cadena de procesos hace viable investigar A mediante validación del padre directo, pero todavía no basta para aprobarlo definitivamente.
+
+**Conclusión provisional:** A vuelve a ser el candidato preferido, condicionado a que un helper C real, ejecutado directamente por sudo, pueda validar de forma robusta y sin carreras:
+1. que su padre directo es el binario sudo esperado, root-owned y no modificable por usuarios no confiables;
+2. que el proceso padre tiene RUID igual al UID del sujeto configurado (1000 para greed) y EUID 0;
+3. que helper, padre y TTY pertenecen a la misma sesión;
+4. que el helper está en el grupo foreground del TTY durante toda la interacción;
+5. que la configuración efectiva de sudo no permite que un caller no privilegiado falsifique la cadena de invocación o sustituya el ejecutable.
+
+No usar `SUDO_UID`, `SUDO_USER`, PPID aislado, nombre de proceso aislado ni propietario del dispositivo TTY como prueba suficiente. El helper debe validar la relación completa con datos del kernel y archivos ejecutables/configuración protegidos. Esto no constituye una defensa contra greed actuando como administrador root.
+
+**Siguiente paso de diseño:** especificar el contrato de validación del padre sudo y las comprobaciones anti-TOCTOU para el helper C. Antes de implementar, revisar el comportamiento exacto con el helper mínimo en un entorno de prueba y definir pruebas negativas (invocación directa, caller atlas, caller atlas-sandbox, sin TTY, TTY no foreground, padre inesperado y entorno manipulado). No modificar sudoers ni instalar/configurar nada todavía.
 
 ## 5. Entorno, argumentos y descriptores
 
