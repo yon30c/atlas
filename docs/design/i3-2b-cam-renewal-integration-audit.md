@@ -340,7 +340,9 @@ Tests añadidos en `tests/unit/test_agent_renewal_approval_lifecycle.py`:
 - delegación revocada;
 - revisión de delegación cambiada;
 - binding nativo inactivo;
-- scope parcial/cambiado.
+- scope parcial/cambiado;
+- rechazo USER owner permitido incluso después de suspensión y revocación;
+- reloj confiable ausente: aprobación AGENT fail-closed.
 
 **Validación pendiente del propietario en Debian:** ejecutar suite completa y compileall sobre el HEAD actualizado. No se afirma ejecución local de tests ni CI. Los tests nuevos todavía deben ejecutarse en el entorno del propietario.
 
