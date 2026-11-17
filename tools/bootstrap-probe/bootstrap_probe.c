@@ -229,6 +229,161 @@ done:
     if (pidfd >= 0) close(pidfd);
 }
 
+
+#define MAX_ANCESTORS 12
+
+/*
+ * Read-only ancestry walk for design diagnostics. /proc is a time-varying
+ * observation; this output is deliberately not an authorization decision.
+ */
+static bool read_status_identity(pid_t pid, long *ppid_out,
+                                 unsigned int uid[4], unsigned int gid[4]) {
+    char path[64], buffer[16384];
+    ssize_t n;
+    int fd;
+    bool got_ppid = false, got_uid = false, got_gid = false;
+
+    if (snprintf(path, sizeof(path), "/proc/%ld/status", (long)pid) >= (int)sizeof(path))
+        return false;
+    fd = open(path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    if (fd < 0) return false;
+    n = read(fd, buffer, sizeof(buffer) - 1);
+    close(fd);
+    if (n <= 0 || n >= (ssize_t)(sizeof(buffer) - 1)) return false;
+    buffer[n] = '\0';
+
+    for (char *line = buffer; line && *line;) {
+        char *next = strchr(line, '\n');
+        if (next) *next++ = '\0';
+        if (strncmp(line, "PPid:", 5) == 0)
+            got_ppid = sscanf(line + 5, "%ld", ppid_out) == 1;
+        else if (strncmp(line, "Uid:", 4) == 0)
+            got_uid = sscanf(line + 4, "%u %u %u %u",
+                             &uid[0], &uid[1], &uid[2], &uid[3]) == 4;
+        else if (strncmp(line, "Gid:", 4) == 0)
+            got_gid = sscanf(line + 4, "%u %u %u %u",
+                             &gid[0], &gid[1], &gid[2], &gid[3]) == 4;
+        line = next;
+    }
+    return got_ppid && got_uid && got_gid;
+}
+
+static void inspect_ancestor_chain(pid_t first_pid) {
+    pid_t pid = first_pid;
+    printf("\n===== CADENA DE ANCESTROS (DIAGNÓSTICO; NO AUTORIZA) =====\n");
+
+    for (int level = 1; level <= MAX_ANCESTORS && pid > 1; level++) {
+        char path[96], target[PATH_MAX + 1], statbuf[4096];
+        ssize_t n, target_len;
+        unsigned int uid[4] = {0}, gid[4] = {0};
+        long ppid_before = -1, ppid_after = -1;
+        long stat_ppid = -1, pgrp = -1, session = -1, tpgid = -1;
+        int tty_nr = 0, pidfd = -1, exe_fd = -1;
+        struct stat exe_st;
+        bool stable = false;
+
+        if (!read_status_identity(pid, &ppid_before, uid, gid)) {
+            printf("\nNivel %d PID %ld: status no disponible/parseable (%s); se detiene\n",
+                   level, (long)pid, strerror(errno));
+            break;
+        }
+
+        printf("\n--- NIVEL %d | PID %ld ---\n", level, (long)pid);
+        printf("Credenciales UID real/efectivo/saved/fs: %u/%u/%u/%u\n",
+               uid[0], uid[1], uid[2], uid[3]);
+        printf("Credenciales GID real/efectivo/saved/fs: %u/%u/%u/%u\n",
+               gid[0], gid[1], gid[2], gid[3]);
+
+#ifdef SYS_pidfd_open
+        pidfd = (int)syscall(SYS_pidfd_open, pid, 0);
+        if (pidfd < 0) {
+            printf("pidfd: no disponible (%s)\n", strerror(errno));
+        } else {
+            struct pollfd pfd = {.fd = pidfd, .events = POLLIN};
+            int pr = poll(&pfd, 1, 0);
+            printf("pidfd: abierto; poll inmediato=%s\n",
+                   pr == 0 ? "sin evento" : (pr > 0 ? "evento" : "error"));
+        }
+#endif
+
+        if (snprintf(path, sizeof(path), "/proc/%ld/exe", (long)pid) < (int)sizeof(path)) {
+            exe_fd = open(path, O_RDONLY | O_CLOEXEC);
+            if (exe_fd >= 0 && fstat(exe_fd, &exe_st) == 0) {
+                printf("Ejecutable: dev=%" PRIuMAX " inode=%" PRIuMAX
+                       " owner=%lu:%lu mode=%04o regular=%s\n",
+                       (uintmax_t)exe_st.st_dev, (uintmax_t)exe_st.st_ino,
+                       (unsigned long)exe_st.st_uid, (unsigned long)exe_st.st_gid,
+                       (unsigned int)(exe_st.st_mode & 07777),
+                       S_ISREG(exe_st.st_mode) ? "sí" : "no");
+            } else {
+                printf("Ejecutable: no verificable (%s)\n", strerror(errno));
+            }
+            target_len = readlink(path, target, sizeof(target) - 1);
+            if (target_len >= 0) {
+                target[target_len] = '\0';
+                printf("Destino exe (informativo): %s\n", target);
+            }
+        }
+
+        if (snprintf(path, sizeof(path), "/proc/%ld/stat", (long)pid) < (int)sizeof(path)) {
+            int fd = open(path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+            if (fd >= 0) {
+                n = read(fd, statbuf, sizeof(statbuf) - 1);
+                close(fd);
+                if (n > 0 && n < (ssize_t)(sizeof(statbuf) - 1)) {
+                    char *close_paren;
+                    statbuf[n] = '\0';
+                    close_paren = strrchr(statbuf, ')');
+                    if (close_paren &&
+                        sscanf(close_paren + 1, " %*c %ld %ld %ld %d %ld",
+                               &stat_ppid, &pgrp, &session, &tty_nr, &tpgid) == 5) {
+                        printf("stat: PPID=%ld PGID=%ld SID=%ld tty_nr=%d TPGID=%ld\n",
+                               stat_ppid, pgrp, session, tty_nr, tpgid);
+                    } else {
+                        printf("stat: no se pudo parsear\n");
+                    }
+                }
+            }
+        }
+
+        for (int fdno = 0; fdno <= 2; fdno++) {
+            char fdpath[96];
+            if (snprintf(fdpath, sizeof(fdpath), "/proc/%ld/fd/%d",
+                         (long)pid, fdno) >= (int)sizeof(fdpath)) continue;
+            target_len = readlink(fdpath, target, sizeof(target) - 1);
+            if (target_len >= 0) {
+                target[target_len] = '\0';
+                printf("fd %d -> %s\n", fdno, target);
+            } else {
+                printf("fd %d -> no disponible (%s)\n", fdno, strerror(errno));
+            }
+        }
+
+        stable = read_status_identity(pid, &ppid_after, uid, gid) &&
+                 ppid_before == ppid_after;
+        if (pidfd >= 0) {
+            struct pollfd pfd = {.fd = pidfd, .events = POLLIN};
+            int pr = poll(&pfd, 1, 0);
+            if (pr != 0) stable = false;
+        }
+        printf("Revalidación del ancestro: %s\n",
+               stable ? "PID vivo y PPID sin cambio observado" :
+                        "inestable/no verificable durante la lectura");
+
+        if (exe_fd >= 0) close(exe_fd);
+        if (pidfd >= 0) close(pidfd);
+
+        if (stat_ppid > 0 && stat_ppid != ppid_before) {
+            printf("ADVERTENCIA: PPID de status y stat no coinciden (%ld/%ld)\n",
+                   ppid_before, stat_ppid);
+        }
+        if (ppid_before <= 1 || ppid_before == pid) break;
+        pid = (pid_t)ppid_before;
+    }
+
+    printf("\nFin de recorrido de ancestros. Es una secuencia de lecturas no atómica.\n");
+}
+
 static void inspect_tty(void) {
     int fd;
     struct stat st;
@@ -302,6 +457,7 @@ int main(int argc, char **argv) {
     printf("PGID: %ld\n", (long)getpgrp());
 
     inspect_parent(parent_pid);
+    inspect_ancestor_chain(parent_pid);
     inspect_tty();
 
     printf("\nFIN DEL DIAGNÓSTICO. Ningún resultado equivale a autorización.\n");
