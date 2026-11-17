@@ -22,6 +22,7 @@ from atlas.core.errors import AuthorizationError, ContractError
 from atlas.core.identity import Identity, IdentityKind, IdentityStatus
 from atlas.core.agent_identity import CanonicalAgentIdentity
 from atlas.core.verified_agent_identity_context import VerifiedAgentIdentityContext
+from atlas.workspace.models import ProjectEnvironmentStatus
 
 
 NOW = datetime(2026, 11, 17, 12, 0, tzinfo=timezone.utc)
@@ -61,6 +62,21 @@ class FakeProjectEnvironment:
         return SimpleNamespace(environment_id=environment_id, status="active", revision=1)
 
 
+class FakeWorkspaceRegistry:
+    def __init__(self):
+        self.association = SimpleNamespace(
+            project_id="atlas",
+            environment_id="development",
+            status=ProjectEnvironmentStatus.ACTIVE,
+            revision=1,
+        )
+
+    def get_association(self, project_id, environment_id):
+        if (project_id, environment_id) != ("atlas", "development"):
+            return None
+        return self.association
+
+
 class FakeRenewals:
     def __init__(self):
         self.items = {}
@@ -87,6 +103,7 @@ class FakeUnit:
         self.native_identity = object()
         self.identity = object()
         self.project_environments = FakeProjectEnvironment()
+        self.workspaces = FakeWorkspaceRegistry()
         self.committed = False
 
     def __enter__(self):
@@ -266,6 +283,39 @@ class AgentRenewalServiceTests(unittest.TestCase):
         def factory():
             unit = original(self.grant, self.renewals)
             unit.project_environments = InactiveProjects()
+            self.units.append(unit)
+            return unit
+        self.service._unit_of_work_factory = factory
+        with self.assertRaises(AuthorizationError):
+            self.request()
+        self.assertEqual(self.renewals.items, {})
+        self.assertFalse(self.units[-1].committed)
+
+    def test_missing_project_environment_association_denies_without_write(self):
+        self.units = []
+        original = FakeUnit
+        def factory():
+            unit = original(self.grant, self.renewals)
+            unit.workspaces.association = None
+            self.units.append(unit)
+            return unit
+        self.service._unit_of_work_factory = factory
+        with self.assertRaises(AuthorizationError):
+            self.request()
+        self.assertEqual(self.renewals.items, {})
+        self.assertFalse(self.units[-1].committed)
+
+    def test_suspended_project_environment_association_denies_without_write(self):
+        self.units = []
+        original = FakeUnit
+        def factory():
+            unit = original(self.grant, self.renewals)
+            unit.workspaces.association = SimpleNamespace(
+                project_id="atlas",
+                environment_id="development",
+                status=ProjectEnvironmentStatus.SUSPENDED,
+                revision=2,
+            )
             self.units.append(unit)
             return unit
         self.service._unit_of_work_factory = factory
