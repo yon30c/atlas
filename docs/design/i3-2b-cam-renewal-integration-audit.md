@@ -118,29 +118,29 @@ La aprobación/rechazo USER debe seguir siendo owner-only. En aprobación, reval
 
 También debe definirse idempotencia de renewal_id y si se permite más de una solicitud PENDING por Grant. La primera implementación debe rechazar duplicados incompatibles, no crear solicitudes paralelas ambiguas.
 
-## 8. Secuencia propuesta de implementación
+## 8. Implementación
 
-### I3-2B.6A — Auditoría CAM (este documento)
-Documenta contratos existentes, semántica CAM, bloqueo de delegación parcial y frontera UoW. No cambia código ni habilita rutas.
+### I3-2B.6A — Auditoría CAM
+Auditoría documental completada. El usuario aprobó la política conservadora: cobertura exacta de recursos, acción explícita en Grant/delegación y decisiones USER owner-only.
 
-### I3-2B.6B — Contrato y pruebas CAM para renovación
-- Añadir la acción explícita grant.renewal.request.
-- Añadir pruebas positivas y negativas del evaluador para actor AGENT, owner, project/environment, cada recurso, acción ausente y Grant exacto.
-- Definir y probar el gate de cobertura exacta de recursos.
-- Mantener request_renewal fail-closed.
+### I3-2B.6B — Contrato y pruebas CAM (implementado; validación pendiente)
+- Nuevo módulo `src/atlas/authorization/agent_renewal_policy.py` define `grant.renewal.request`.
+- Exige contexto AGENT activo con `DelegationMode.DELEGATED` y evidencia AGENT/delegación coincidente.
+- Exige que la delegación cubra exactamente todos los `resource_ids` del Grant y que la acción esté explícita en ambos.
+- Ejecuta `AuthorizationEvaluator` para cada recurso y exige ALLOW del mismo Grant y revisión.
+- Tests cubren scope parcial, acción ausente, actor/owner/project/environment, binding/revisiones, Grant expirado/revocado y evaluación de todos los recursos.
 
-### I3-2B.6C — Solicitud AGENT bajo UoW compartida
-- Inyectar verificadores USER/AGENT/delegación y la factory local confiable.
-- Revalidar evidencia AGENT y delegación dentro de la UoW.
-- Resolver Grant y Project/Environment canónicos.
-- Aplicar CAM para cada recurso y validar el gate de scope exacto.
-- Persistir request con revisiones/IDs de auditoría y CAS/idempotencia.
-- No alterar Grant ni permitir que AGENT apruebe/rechace.
-- Cualquier fallo debe dejar cero escrituras confirmadas.
+### I3-2B.6C — Solicitud AGENT bajo UoW compartida (implementado; validación pendiente)
+- `GrantRenewalService` recibe verificadores AGENT/delegación, reloj confiable y CAM evaluator por composición.
+- Revalida evidencia AGENT y `VerifiedAgentDelegationContext` dentro de la misma UoW local.
+- Resuelve Grant y Project/Environment canónicos dentro de esa UoW y ejecuta CAM antes de escribir.
+- La hora de solicitud proviene exclusivamente de `Clock`; el argumento legacy `now` se ignora.
+- La solicitud persiste `grant_revision`, `delegation_id` y `delegation_revision` inmutables. `CORE_SCHEMA_V24` agrega columnas, FK, triggers de integridad y validación de coincidencia con Grant/delegación/issuer/binding activos.
+- Se admite una sola solicitud PENDING por Grant. `renewal_id` es idempotente para la misma intención y rechaza reutilización conflictiva.
+- `approve_renewal` sigue exigiendo USER owner verificado y rechaza una revisión de Grant obsoleta. AGENT no puede aprobar ni rechazar.
+- No se altera el Grant al solicitar; la solicitud y las verificaciones se confirman en una única transacción SQLite local.
 
-Cada slice tendrá pruebas focalizadas, suite completa y compileall ejecutados por el propietario en Debian. PR #16 permanece Draft; no fusionar sin autorización explícita.
-
-## 9. Pruebas obligatorias
+## 9. Pruebas obligatorias y cobertura añadida
 
 - AGENT válido sin delegación, delegación revocada/expirada o revisión obsoleta: DENY sin escritura.
 - Contexto USER presentado en ruta AGENT o viceversa: DENY.
@@ -148,20 +148,22 @@ Cada slice tendrá pruebas focalizadas, suite completa y compileall ejecutados p
 - acción ausente de Grant o delegación: DENY.
 - recurso fuera de Grant/delegación o delegación parcial: DENY.
 - Grant expirado/revocado o revisión cambiada: DENY.
-- context.user_id alterado respecto del owner verificado: DENY.
+- `context.user_id` alterado respecto del owner verificado: DENY.
 - CAM ALLOW para otro Grant no satisface el Grant solicitado.
-- duplicado de renewal_id o PENDING incompatible: comportamiento idempotente y sin doble escritura.
-- rollback después de cualquier fallo posterior a una escritura provisional.
+- duplicado de `renewal_id` o PENDING incompatible: idempotencia y sin doble escritura.
+- rollback antes de commit ante cualquier fallo.
 - aprobación/rechazo por AGENT: DENY; solo USER owner verificado puede decidir.
-- la solicitud no cambia Grant.expires_at; solo la aprobación USER puede hacerlo.
+- la solicitud no cambia `Grant.expires_at`; solo la aprobación USER puede hacerlo.
+
+**Validación Debian de I3-2B.6B/6C pendiente del propietario.** Ejecutar tests focalizados, suite completa y `compileall`. PR #16 permanece Draft; no fusionar sin autorización explícita.
 
 ## 10. Estado y conclusión
 
-- I3-2B.5: validado por el propietario con 1,369 tests y compileall exit 0.
-- I3-2B.6A: auditoría documental completada.
-- I3-2B.6B/6C: no implementados.
-- GrantRenewalService.request_renewal: continúa fail-closed.
-- No hay login/endpoints/runtime AGENT habilitados.
-- No se ha creado una decisión CAM ni una admisión operativa a partir de la evidencia de delegación.
+- I3-2B.5: validado por el propietario con 1,369 tests y `compileall` exit 0.
+- I3-2B.6A: auditoría documental completada y política aprobada por el usuario.
+- I3-2B.6B/6C: implementación completada en la rama; validación Debian pendiente.
+- `GrantRenewalService.request_renewal`: ya no está globalmente fail-closed; solo admite el camino AGENT con evidencia verificable, CAM ALLOW y UoW local compartida. Sin configuración/evidencia válida, deniega.
+- No se habilitó login, endpoint ni runtime AGENT.
+- No se ha fusionado PR #16.
 
-**Bloqueo antes de implementar:** confirmar la semántica de producto de grant.renewal.request y aceptar que la primera versión solo permita renovar Grants cuya cobertura de recursos esté delegada íntegramente.
+La primera versión deniega deliberadamente cualquier delegación con cobertura parcial, y los Grants históricos sin la acción explícita `grant.renewal.request` no pueden iniciar solicitudes AGENT.
