@@ -249,6 +249,33 @@ class AgentRenewalApprovalLifecycleTests(unittest.TestCase):
         self.binding_active["value"] = False
         self.assert_denied_without_mutation()
 
+
+    def test_owner_can_reject_pending_request_after_association_suspension_and_revocation(self):
+        self.association_state["value"] = replace(
+            self.association_state["value"],
+            status=ProjectEnvironmentStatus.SUSPENDED,
+            revision=2,
+        )
+        self.delegation_state["value"] = replace(
+            self.delegation,
+            status=AgentDelegationStatus.REVOKED,
+            revision=5,
+            revoked_at=NOW - timedelta(minutes=1),
+            revoked_by_user_id=OWNER_USER_ID,
+        )
+        rejected = self.service.reject_renewal(
+            self.owner_context,
+            RENEWAL_ID,
+            NOW,
+            verified_identity=VERIFIED_OWNER,
+        )
+        self.assertIs(rejected.status, RenewalStatus.REJECTED)
+        self.assertEqual(self.grants.get(self.grant.grant_id), self.grant)
+
+    def test_agent_approval_fails_closed_without_trusted_clock(self):
+        self.service._clock = None
+        self.assert_denied_without_mutation()
+
     def test_partial_or_changed_delegation_scope_blocks_pending_agent_approval(self):
         narrowed = replace(
             self.delegation.scope,
