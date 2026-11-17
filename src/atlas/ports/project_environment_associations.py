@@ -13,4 +13,4 @@ class ProjectEnvironmentAssociationReaderPort(Protocol):
         self, project_id: ProjectId, environment_id: EnvironmentId
     ) -> ProjectEnvironmentAssociation | None:
         """Devuelve el vínculo canónico exacto o None si no existe."""
-}
+        ...
