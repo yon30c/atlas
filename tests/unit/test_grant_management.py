@@ -115,6 +115,30 @@ class GrantManagementTests(unittest.TestCase):
             self.issue(service=service)
         self.assertIsNone(self.repository.get(self.grant.grant_id))
 
+    def test_issue_rejects_context_user_id_not_matching_verified_identity(self):
+        mismatched = replace(
+            self.context,
+            user_id="f6b2b66f-7c72-4d77-8d84-7d0a8c5a1006",
+        )
+        with self.assertRaises(AuthorizationError):
+            self.issue(context=mismatched)
+
+    def test_issue_rejects_tampered_verified_identity_context(self):
+        tampered = replace(
+            VERIFIED_OWNER,
+            user_id="f6b2b66f-7c72-4d77-8d84-7d0a8c5a1006",
+        )
+        with self.assertRaises(AuthorizationError):
+            self.issue(verified_identity=tampered)
+
+    def test_issue_fails_closed_when_identity_verifier_is_unavailable(self):
+        service = GrantManagementService(
+            self.repository,
+            unit_of_work_factory=lambda: InMemoryAuthorizationUnitOfWork(self.repository),
+        )
+        with self.assertRaises(AuthorizationError):
+            self.issue(service=service)
+
     def test_issue_stores_and_returns_grant(self):
         result = self.issue(self.context, self.grant, NOW)
         self.assertEqual(result, self.grant)
