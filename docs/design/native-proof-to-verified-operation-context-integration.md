@@ -312,7 +312,7 @@ Archivos:
 - `src/atlas/identity/verified_operation_context_factory.py`: derivación USER directa, sin delegación y sin aceptar actor/UserId del caller.
 - Tests: `test_verified_identity_context_service.py`, `test_verified_operation_context_factory.py`, y ampliación de `test_sqlite_native_identity_authority.py`.
 
-El servicio de Identity Authority consume proof, resuelve issuer por realm configurado, binding por issuer + digest del NativeSubject del proof y usuario canónico por I-1, todo dentro de una única UoW. Si una resolución falla después del consumo, se revierte el proof. El verificador exige attestation válida, contexto no expirado, issuer activo, binding activo con revisión exacta e identidad USER activa con UserId/revisión exactos.
+El servicio de Identity Authority consume proof, resuelve issuer por realm configurado, binding por issuer + digest del NativeSubject del proof y usuario canónico por I-1, todo dentro de una única UoW. Si una resolución falla después del consumo, se revierte el proof. El verificador exige attestation válida, separada por versión/realm/audience, contexto no expirado, issuer activo, binding activo con revisión exacta e identidad USER activa con UserId/revisión exactos. La admisión también exige que `proof.authenticated_at` no preceda `binding.verified_at`.
 
 **Brecha de procedencia:** una simple relectura de los registros no impedía fabricar un dataclass con IDs válidos. Se cerró en este slice con HMAC-SHA256 sobre todos los claims. La clave no se persiste ni se acepta del caller; la rotación invalida los contextos anteriores. La attestation no sustituye la relectura de autoridades.
 
