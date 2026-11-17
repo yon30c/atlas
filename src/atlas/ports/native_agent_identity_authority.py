@@ -20,7 +20,7 @@ class NativeAgentIdentityAuthorityPort(Protocol):
     ) -> NativeAgentIdentityBinding | None:
         """Resolve an AGENT binding by immutable identifier."""
 
-    def has_active_native_agent_binding(self, identity_id: str) -> bool:
+    def has_active_native_agent_binding(self, identity_id: str, issuer_id: str) -> bool:
         """Return true only when an AGENT has an active binding and issuer."""
 
     def create_native_agent_binding(
