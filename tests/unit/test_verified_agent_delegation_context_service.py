@@ -119,6 +119,16 @@ class VerifiedAgentDelegationContextServiceTests(unittest.TestCase):
             verification_ref="A" * 43,
             attestation="B" * 43,
         )
+        self.binding = SimpleNamespace(
+            binding_id=self.agent_context.binding_id,
+            identity_id=self.agent.identity.identity_id,
+            issuer_id=self.issuer.issuer_id,
+            revision=self.agent_context.binding_revision,
+            status=SimpleNamespace(value="active"),
+        )
+        self.unit.native_agent_identity.get_native_agent_binding_by_id = (
+            lambda binding_id: self.binding if binding_id == self.binding.binding_id else None
+        )
         self.attestor = HmacVerifiedIdentityContextAttestor(b"K" * 32)
         self.service = VerifiedAgentDelegationContextService(
             unit_of_work_factory=lambda: self.unit,
@@ -255,6 +265,19 @@ class VerifiedAgentDelegationContextServiceTests(unittest.TestCase):
         )
         self.unit.agent_delegations.get = lambda delegation_id: replace(
             self.delegation, revision=2
+        )
+        with self.assertRaises(VerifiedAgentDelegationContextRejected):
+            self.service.verify(context)
+
+    def test_rejects_replaced_or_revoked_agent_binding(self):
+        context = self.service.verify_for_operation(
+            self.delegation.delegation_id,
+            expected_revision=1,
+            verified_agent_identity=self.agent_context,
+        )
+        self.binding = replace(
+            self.binding,
+            revision=3,
         )
         with self.assertRaises(VerifiedAgentDelegationContextRejected):
             self.service.verify(context)
