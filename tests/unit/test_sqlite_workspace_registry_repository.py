@@ -84,23 +84,18 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
             (self.workspace,),
         )
 
-    def test_workspace_requires_existing_owner_and_explicit_association(self):
+    def test_workspace_requires_existing_owner_and_active_association(self):
         self.repository.create_association(self.association)
         invalid_owner = replace(self.workspace, owner_user_id="missing-user")
         with self.assertRaises(ContractError):
             self.repository.create_workspace(invalid_owner)
 
-        self.repository2 = SQLiteWorkspaceRegistryRepository(self.database)
         self.repository.update_association(
             replace(self.association, status=ProjectEnvironmentStatus.SUSPENDED, revision=2),
             expected_revision=1,
         )
-        # The association remains present as a tombstone; a new workspace cannot
-        # be created unless the selected pair has an active association.
-        # The repository enforces referential existence; active-state enforcement
-        # belongs to the execution gate, which is intentionally not wired here.
-        self.repository.create_workspace(self.workspace)
-        self.assertEqual(self.repository.get_workspace("workspace-main"), self.workspace)
+        with self.assertRaises(ContractError):
+            self.repository.create_workspace(self.workspace)
 
     def test_workspace_requires_an_explicit_project_environment_association(self):
         with self.assertRaises(ContractError):
