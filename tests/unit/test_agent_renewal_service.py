@@ -221,7 +221,6 @@ class AgentRenewalServiceTests(unittest.TestCase):
             "now": NOW - timedelta(days=365),  # untrusted compatibility argument
             "verified_agent_identity": self.agent_evidence,
             "verified_delegation": self.delegation_evidence,
-            "expected_delegation_revision": 4,
         }
         args.update(kwargs)
         return self.service.request_renewal(**args)
@@ -249,8 +248,12 @@ class AgentRenewalServiceTests(unittest.TestCase):
         self.assertFalse(self.units[-1].committed)
 
     def test_stale_delegation_revision_is_denied_without_write(self):
+        stale_evidence = replace(
+            self.delegation_evidence,
+            delegation_revision=self.delegation_evidence.delegation_revision + 1,
+        )
         with self.assertRaises(AuthorizationError):
-            self.request(expected_delegation_revision=3)
+            self.request(verified_delegation=stale_evidence)
         self.assertEqual(self.renewals.items, {})
         self.assertFalse(self.units[-1].committed)
 
