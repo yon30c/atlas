@@ -2022,8 +2022,110 @@ CORE_SCHEMA_V20 = SQLiteMigration(
 )
 
 
+
+CORE_SCHEMA_V21 = SQLiteMigration(
+    version=21,
+    name="canonical_native_agent_identity_bindings",
+    sql="""
+    CREATE TABLE native_agent_identity_bindings (
+        binding_id TEXT PRIMARY KEY CHECK (
+            length(binding_id) = 36
+            AND binding_id = lower(binding_id)
+            AND length(replace(binding_id, '-', '')) = 32
+            AND substr(binding_id, 9, 1) = '-'
+            AND substr(binding_id, 14, 1) = '-'
+            AND substr(binding_id, 19, 1) = '-'
+            AND substr(binding_id, 24, 1) = '-'
+            AND substr(binding_id, 15, 1) = '4'
+            AND substr(binding_id, 20, 1) IN ('8', '9', 'a', 'b')
+            AND binding_id NOT GLOB '*[^0-9a-f-]*'
+        ),
+        identity_id TEXT NOT NULL,
+        issuer_id TEXT NOT NULL,
+        subject_digest TEXT NOT NULL CHECK (
+            length(subject_digest) = 64
+            AND subject_digest NOT GLOB '*[^0-9a-f]*'
+        ),
+        status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'REVOKED')),
+        revision INTEGER NOT NULL CHECK (revision > 0),
+        created_at TEXT NOT NULL,
+        verified_at TEXT NOT NULL,
+        revoked_at TEXT,
+        UNIQUE (issuer_id, subject_digest),
+        FOREIGN KEY (identity_id) REFERENCES identity_records(identity_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+        FOREIGN KEY (issuer_id) REFERENCES native_identity_issuers(issuer_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+        CHECK (
+            (status = 'ACTIVE' AND revoked_at IS NULL)
+            OR (status = 'REVOKED' AND revoked_at IS NOT NULL)
+        )
+    );
+
+    CREATE INDEX native_agent_identity_bindings_by_identity
+        ON native_agent_identity_bindings(identity_id, status);
+
+    CREATE TRIGGER native_agent_identity_binding_requires_active_agent
+    BEFORE INSERT ON native_agent_identity_bindings
+    WHEN NOT EXISTS (
+        SELECT 1 FROM identity_records
+        WHERE identity_id = NEW.identity_id
+          AND identity_kind = 'agent'
+          AND identity_status = 'active'
+          AND user_id IS NULL
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'native AGENT binding requires an active canonical AGENT identity');
+    END;
+
+    CREATE TRIGGER native_agent_identity_binding_requires_active_issuer
+    BEFORE INSERT ON native_agent_identity_bindings
+    WHEN NOT EXISTS (
+        SELECT 1 FROM native_identity_issuers
+        WHERE issuer_id = NEW.issuer_id AND status = 'ACTIVE'
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'native AGENT binding requires an active native issuer');
+    END;
+
+    CREATE TRIGGER native_agent_identity_binding_identity_immutable
+    BEFORE UPDATE OF binding_id, identity_id, issuer_id, subject_digest, created_at, verified_at
+    ON native_agent_identity_bindings
+    WHEN NEW.binding_id != OLD.binding_id
+      OR NEW.identity_id != OLD.identity_id
+      OR NEW.issuer_id != OLD.issuer_id
+      OR NEW.subject_digest != OLD.subject_digest
+      OR NEW.created_at != OLD.created_at
+      OR NEW.verified_at != OLD.verified_at
+    BEGIN
+        SELECT RAISE(ABORT, 'native AGENT binding identity is immutable');
+    END;
+
+    CREATE TRIGGER native_agent_identity_binding_revision_step
+    BEFORE UPDATE ON native_agent_identity_bindings
+    WHEN NEW.revision != OLD.revision + 1
+    BEGIN
+        SELECT RAISE(ABORT, 'native AGENT binding revision must increase by exactly one');
+    END;
+
+    CREATE TRIGGER native_agent_identity_binding_revoked_terminal
+    BEFORE UPDATE OF status ON native_agent_identity_bindings
+    WHEN OLD.status = 'REVOKED' AND NEW.status != 'REVOKED'
+    BEGIN
+        SELECT RAISE(ABORT, 'revoked native AGENT binding is terminal');
+    END;
+
+    CREATE TRIGGER native_agent_identity_binding_no_delete
+    BEFORE DELETE ON native_agent_identity_bindings
+    BEGIN
+        SELECT RAISE(ABORT, 'native AGENT bindings are retained as tombstones');
+    END;
+    """,
+)
+
+
 SQLITE_MIGRATIONS = (
     CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
     CORE_SCHEMA_V5, CORE_SCHEMA_V6, CORE_SCHEMA_V7, CORE_SCHEMA_V8,
-    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13, CORE_SCHEMA_V14, CORE_SCHEMA_V15, CORE_SCHEMA_V16, CORE_SCHEMA_V17, CORE_SCHEMA_V18, CORE_SCHEMA_V19, CORE_SCHEMA_V20,
+    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13, CORE_SCHEMA_V14, CORE_SCHEMA_V15, CORE_SCHEMA_V16, CORE_SCHEMA_V17, CORE_SCHEMA_V18, CORE_SCHEMA_V19, CORE_SCHEMA_V20, CORE_SCHEMA_V21,
 )
