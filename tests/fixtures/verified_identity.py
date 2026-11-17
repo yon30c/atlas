@@ -29,12 +29,19 @@ VERIFIED_OWNER = VerifiedIdentityContext(
 class FakeVerifiedIdentityContextVerifier:
     """Explicit test double; production composition must use Identity Authority."""
 
+    def __init__(self):
+        self.verify_calls = 0
+        self.verify_in_uow_calls = 0
+        self.last_unit_of_work = None
+
     def verify(self, context):
+        self.verify_calls += 1
         if context != VERIFIED_OWNER:
             raise ValueError("invalid test evidence")
         return self._canonical()
 
     def verify_in_unit_of_work(self, context, unit):
+        self.verify_in_uow_calls += 1
         self.last_unit_of_work = unit
         if context != VERIFIED_OWNER:
             raise ValueError("invalid test evidence")
