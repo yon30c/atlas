@@ -90,11 +90,11 @@ class VerifiedIdentityContextService:
         # This prevents a context minted for one internal consumer from being
         # replayed against another consumer even when they share an HMAC key.
         prefix = (
-            b"atlas.verified-identity-context.v1\\x00"
+            b"atlas.verified-identity-context.v1\x00"
             + self._realm.encode("ascii")
-            + b"\\x00"
+            + b"\x00"
             + self._audience.encode("ascii")
-            + b"\\x00"
+            + b"\x00"
         )
         return prefix + context.attestation_payload()
 
