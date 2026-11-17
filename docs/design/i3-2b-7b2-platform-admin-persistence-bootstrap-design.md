@@ -164,3 +164,22 @@ Para consumidores runtime futuros, identidad USER, revisión de identidad y gran
 - Merge del PR.
 
 **Gate:** antes de escribir código, confirmar el registro de migraciones y cerrar el contrato exacto de procedencia del operador para el bootstrap offline. Ningún privilegio se concede durante esta etapa.
+
+
+## 11. Inspección del árbol de implementación — confirmación del siguiente slice
+
+Inspección directa de la rama en GitHub después de publicar este diseño:
+
+- El registro SQLITE_MIGRATIONS en src/atlas/adapters/sqlite/migrations.py termina actualmente en CORE_SCHEMA_V24 y enumera explícitamente V1–V24. Por tanto, **V25 queda confirmado como siguiente número libre en este HEAD**; no era necesario dejarlo como hipótesis.
+- SQLiteLocalAuthorityUnitOfWork compone Identity Authority, AGENT/native authorities, delegaciones, Project/Environment, Workspace y stores auxiliares sobre una misma SQLiteUnitOfWork. El reader runtime Platform Admin debe seguir este patrón y compartir la transacción física.
+- La composición runtime actual no contiene PlatformAdminAuthorityReaderPort ni PlatformAdminBootstrapPort. La primera se añadirá a la UoW; la segunda debe permanecer fuera de esa composición.
+- PlatformAdminBootstrapPort actual solo recibe PlatformAdminGrant. Ese contrato no transporta referencia de operación ni evidencia/procedencia del operador y no basta para el requisito de auditoría definido en este documento. Debe ampliarse antes de implementar el adaptador offline; no implementar el comando con una referencia inventada ni vacía.
+- La implementación SQLite de Identity Authority resuelve el par UserId/Identity(USER) mediante JOIN canónico y devuelve status/revision. El bootstrap debe reutilizar esa autoridad dentro de la UoW, no consultar ni escribir tablas de identidad por su cuenta.
+
+### Decisión pendiente acotada: procedencia del operador offline
+
+Recomendación para el primer comando: exigir terminal interactivo local y registrar como procedencia técnica el UID real del proceso, el UID efectivo, el identificador de terminal y un operation_id UUID generado por la herramienta. Estos datos son evidencia del contexto de ejecución local, **no prueba de identidad humana ni de autorización del operador**. La política de confianza seguiría siendo que el operador con acceso local autorizado ejecuta deliberadamente la herramienta y revisa el destino/identidad/permisos antes de confirmar.
+
+No almacenar un nombre de usuario libre como si fuera autenticación, ni usar UID/TTY como sustituto de una identidad USER canónica. El actor de la concesión sigue siendo el USER existente que recibe el permiso; la procedencia del operador es un registro separado.
+
+**Gate operativo:** confirmar si esta procedencia técnica limitada (UID real/efectivo + TTY + operation_id + confirmación interactiva) es aceptable, o si se requiere un mecanismo de autenticación local más fuerte. Hasta esa decisión, se puede implementar V25, el reader runtime y los repositorios, pero no publicar ni ejecutar un comando de bootstrap.
