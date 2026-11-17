@@ -549,4 +549,4 @@ El trabajo se organiza en W0–W6:
 - W5: terminal interactiva limitada, solo tras validar el aislamiento.
 - W6: experiencia multiplataforma.
 
-Workstation no es una autorización independiente. CAM y las aprobaciones siguen siendo obligatorias; Assistant, agentes y Skills no reciben Docker socket, root ni shell irrestricta. El siguiente paso inmediato continúa siendo el Ciclo 3.2 (bootstrap confiable, contexto canónico y ownership de workspaces). La documentación W0 não implica ejecución habilitada ni cambios en el servidor.
+Workstation no es una autorización independiente. CAM y las aprobaciones siguen siendo obligatorias; Assistant, agentes y Skills no reciben Docker socket, root ni shell irrestricta. El siguiente paso inmediato continúa siendo el Ciclo 3.2 (bootstrap confiable, contexto canónico y ownership de workspaces). La documentación W0 no implica ejecución habilitada ni cambios en el servidor.
