@@ -181,3 +181,57 @@ No registrar contraseñas, PHC, NativeSubject en claro, proof raw, tokens ni ref
 7. Reconciliar los consumidores CAM que hoy equiparan `actor.identity_id` con `context.user_id`, sin eliminar sus validaciones de ownership `Grant.owner_user_id == context.user_id`.
 
 **Límite de este documento:** no cambia código, contratos normativos, migraciones, DB productiva, host, PAM, systemd, sudoers ni privilegios. No habilita login, bootstrap, sesiones, grants iniciales ni capacidades protegidas.
+
+
+## 10. Tres incrementos de implementación propuestos
+
+Los siguientes incrementos son secuenciales. No deben mezclarse en un único cambio porque cada uno establece una garantía requerida por el siguiente.
+
+### I-1 — resolución inversa canónica en Identity Authority
+
+**Objetivo:** permitir que una identidad obtenida del binding se resuelva a su agregado canónico sin que Native Identity Authority consulte tablas ajenas.
+
+Cambios:
+- Añadir `get_user_by_identity_id(identity_id)` a `IdentityAuthorityPort`.
+- Implementar la operación en `SQLiteIdentityAuthority` mediante JOIN de las tablas canónicas de usuario e identidad.
+- Validar UUIDv4 canónico y garantizar unicidad; devolver `CanonicalUserIdentity | None`.
+- Integrar el método en la UoW SQLite para que lea la misma conexión/transacción compartida.
+- Añadir pruebas para identidad existente, inexistente, identidad no USER, relación inconsistente y lectura dentro de una UoW con cambios aún no confirmados.
+
+Criterio de salida: no hay consulta SQL de Identity Authority desde Native Authentication/Native Identity, no se duplica `user_id` en el binding y UserId e identity_id permanecen distintos.
+
+### I-2 — Authentication service y emisión de VerifiedIdentityContext
+
+**Objetivo:** convertir las primitivas C1 en una cadena de autenticación verificable, sin exponer todavía endpoints ni login operativo.
+
+Cambios:
+- Crear el servicio de autenticación nativa con realm/audience obtenidos de configuración confiable, lookup por login handle, verificación Argon2id y emisión de proof solo tras verificación exitosa.
+- Definir throttling, errores uniformes, reloj, TTL, rehash y comportamiento ante cambios concurrentes de credential revision antes de habilitarlo.
+- Crear el consumidor de proof que, dentro de una sola UoW, consuma proof, valide la cadena issuer/authenticator/subject, resuelva binding y use I-1 para obtener el agregado canónico.
+- Introducir el modelo inmutable y efímero `VerifiedIdentityContext`, su emisor y un validador que reconsulte estado/revisiones y falle cerrado.
+- Derivar `OperationContext` solo en la frontera de aplicación confiable. No aceptar actor, UserId, binding, issuer, subject o audience seleccionados por el caller.
+- Probar rollback íntegro si falla cualquier resolución posterior al consumo del proof.
+
+Criterio de salida: solo una contraseña verificada puede originar un proof; solo un proof válido, no expirado, no consumido y de audience configurada puede producir un contexto; contexto y operación conservan UserId e identity_id separados.
+
+### I-3 — reconciliación de consumidores CAM y cierre de callers
+
+**Objetivo:** impedir que servicios privilegiados confundan identidad autenticada, usuario contextual y actor efectivo.
+
+Cambios:
+- Inyectar una frontera/verificador de identidad confiable en los servicios que admiten decisiones directas del propietario.
+- En `GrantManagementService`, validar procedencia y correspondencia del actor USER contra `VerifiedIdentityContext.identity_id` y `identity_revision`; mantener `Grant.owner_user_id == context.user_id`.
+- En `GrantRenewalService`, separar la ruta de solicitud del agente delegado de las rutas de aprobación/rechazo del propietario. La autenticación USER del propietario no autentica al agente; el agente y la delegación necesitan evidencia independiente.
+- Aplicar el mismo criterio a cualquier consumidor que use `OperationContext` como si fuera prueba de autenticación; inventariar call sites antes de modificar firmas.
+- Retirar fixtures que igualan artificialmente UserId e identity_id y añadir casos válidos con IDs distintos, además de caller fabricado, actor incorrecto, revisión obsoleta, expiración, binding revocado, ausencia de delegación y autoridad no disponible.
+- No añadir un bypass ni un constructor público alternativo para conservar compatibilidad con callers antiguos.
+
+Criterio de salida: ningún servicio sensible acepta un `OperationContext` no verificable; las rutas USER directas y AGENT delegadas tienen pruebas y evidencias separadas; CAM sigue siendo la evaluación ordinaria de acción/recurso/scope.
+
+### Orden de validación y límites
+
+1. I-1: pruebas unitarias de Identity Authority y UoW; suite completa y `compileall`.
+2. I-2: pruebas de credenciales, proof, binding, identidad canónica, expiración, replay, rollback y manipulación; suite completa y `compileall`.
+3. I-3: pruebas de todos los consumidores CAM y regresión de flujos USER/AGENT; suite completa y `compileall`.
+
+Cada incremento debe ejecutarse en una rama/PR de implementación separada del PR C1, que conserva su alcance de primitivas y persistencia. Los tres incrementos no habilitan por sí solos bootstrap, emisión inicial de Grant, sesiones C2, endpoints públicos, PAM, cambios de host ni capacidades protegidas. No se declara fencing global: la garantía transaccional aquí descrita es local a la misma UoW SQLite.
