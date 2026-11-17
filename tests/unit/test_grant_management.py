@@ -100,10 +100,10 @@ class GrantManagementTests(unittest.TestCase):
         self,
         context=None,
         grant=None,
+        now=NOW,
         *,
         service=None,
         verified_identity=VERIFIED_OWNER,
-        now=NOW,
     ):
         target = service or self.service
         return target.issue(
