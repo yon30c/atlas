@@ -117,6 +117,16 @@ La rama incorpora contratos y adaptadores de lectura independientes del runtime 
 - El protocolo serializa escritores cooperativos de Atlas mediante locks locales por destino y usa SHA-256 para detectar cambios previos. No coordina escritores externos ni ofrece atomicidad con SQLite.
 - La escritura no se añadió a `IntentKind` ni a `CapabilityCatalog`, y no se conectó a CLI/runtime. No es una autorización CAM ni un gate de ejecución.
 
+## 3.4 Gate CAM de ejecución read-only (Ciclo 3.1)
+
+**Estado: implementado en GitHub; pendiente de validación local.**
+
+- `WorkspaceCapabilityExecutionService` valida un plan de un solo paso y exige confirmación explícita de revisión.
+- Revalida la identidad contra el par canónico UserId/Identity de `SQLiteLocalAuthorityUnitOfWork`; exige proyecto y entorno activos; consulta Grants del propietario canónico y evalúa el recurso/acción exactos con `AuthorizationEvaluator`.
+- `workspace.list` usa `resource_type=workspace` y el ID exacto del workspace. `workspace.read` usa `resource_type=workspace_file` y un ID JSON canónico que liga workspace y ruta.
+- La operación de filesystem ocurre dentro de la misma UoW `BEGIN IMMEDIATE` que leyó las autoridades. `get_environment()` fue corregido para usar la conexión transaccional recibida.
+- Este es un gate local read-only, no un coordinador genérico ni una verificación criptográfica de evidencia. No está conectado a CLI/runtime y no autoriza escritura. La política de prueba asigna los workspaces al UserId canónico de la sesión.
+
 ## 4. Límites observados
 
 - `AtlasCore` solo expone `respond` y `respond_streaming`; no tiene un caso de uso de planificación ni ejecución.
