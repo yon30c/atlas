@@ -321,7 +321,7 @@ Implementación:
 
 Pruebas añadidas en tests/unit/test_sqlite_agent_identity_authority.py: creación UUIDv4, aislamiento USER/AGENT, desconocidos, UUID inválido, duplicados, CAS, revocación terminal, entradas inválidas, concurrencia y UoW suministrada.
 
-**Límite:** el esquema común identity_records es el almacenamiento de identidad canónica ya existente; la autoridad AGENT mantiene API y responsabilidad separadas. Este slice no implementa proof admission, NativeAgentIdentityBinding persistente, delegación, composition root de producción ni habilita GrantRenewalService.request_renewal.
+**Límite:** el esquema común identity_records es el almacenamiento de identidad canónica ya existente; la autoridad AGENT mantiene API y responsabilidad separadas. El binding persistente AGENT se incorpora en la subsección 12.1. Este slice no implementa proof admission, delegación, composition root de producción ni habilita GrantRenewalService.request_renewal.
 
 **Validación:** el código y las pruebas están publicados, pero no se declara que hayan sido ejecutados. Se requiere validación focalizada, suite completa y compileall en Debian antes de cerrar I3-2B.2.
 
