@@ -101,7 +101,7 @@ class GrantRenewalService:
             required_repositories = (
                 "agent_identity", "agent_delegations", "native_agent_identity",
                 "native_identity", "identity", "project_environments",
-                "grants", "renewals",
+                "workspaces", "grants", "renewals",
             )
             if any(getattr(uow, name, None) is None for name in required_repositories):
                 raise AuthorizationError(
@@ -146,13 +146,22 @@ class GrantRenewalService:
 
             project = uow.project_environments.get_project(grant.project_id)
             environment = uow.project_environments.get_environment(grant.environment)
+            association = uow.workspaces.get_association(
+                grant.project_id, grant.environment
+            )
             if (
                 project is None or project.status != "active"
                 or str(project.project_id) != grant.project_id
                 or environment is None or environment.status != "active"
                 or str(environment.environment_id) != grant.environment
+                or association is None
+                or association.status.value != "active"
+                or str(association.project_id) != grant.project_id
+                or str(association.environment_id) != grant.environment
             ):
-                raise AuthorizationError("Project/Environment no existe o no está activo")
+                raise AuthorizationError(
+                    "Project/Environment no existe, no está activo o no está asociado"
+                )
 
             self._validate_grant_active(grant, trusted_now)
             if proposed_expires_at <= grant.expires_at:
