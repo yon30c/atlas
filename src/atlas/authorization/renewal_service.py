@@ -4,6 +4,8 @@ from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime, timedelta
 
+from atlas.authorization.agent_renewal_policy import require_agent_renewal_cam_allow
+from atlas.authorization.evaluator import AuthorizationEvaluator
 from atlas.authorization.identity_evidence import require_verified_owner_context
 from atlas.authorization.models import (
     Grant,
@@ -19,6 +21,11 @@ from atlas.core.errors import (
 )
 from atlas.core.user_identity import CanonicalUserIdentity
 from atlas.core.verified_identity_context import VerifiedIdentityContext
+from atlas.core.verified_agent_identity_context import VerifiedAgentIdentityContext
+from atlas.core.agent_delegation import VerifiedAgentDelegationContext
+from atlas.ports.clock import Clock
+from atlas.ports.verified_agent_identity_context_verifier import VerifiedAgentIdentityContextVerifierPort
+from atlas.ports.verified_agent_delegation_context_verifier import VerifiedAgentDelegationContextVerifierPort
 from atlas.ports.verified_identity_context_verifier import (
     VerifiedIdentityContextVerifierPort,
 )
@@ -33,11 +40,19 @@ class GrantRenewalService:
         unit_of_work_factory: Callable[[], AuthorizationUnitOfWork],
         *,
         identity_verifier: VerifiedIdentityContextVerifierPort | None = None,
+        agent_identity_verifier: VerifiedAgentIdentityContextVerifierPort | None = None,
+        delegation_context_verifier: VerifiedAgentDelegationContextVerifierPort | None = None,
+        clock: Clock | None = None,
+        evaluator: AuthorizationEvaluator | None = None,
     ) -> None:
         if not callable(unit_of_work_factory):
             raise ContractError("unit_of_work_factory debe ser invocable")
         self._unit_of_work_factory = unit_of_work_factory
         self._identity_verifier = identity_verifier
+        self._agent_identity_verifier = agent_identity_verifier
+        self._delegation_context_verifier = delegation_context_verifier
+        self._clock = clock
+        self._evaluator = evaluator or AuthorizationEvaluator()
 
     def request_renewal(
         self,
@@ -45,18 +60,143 @@ class GrantRenewalService:
         renewal_id: str,
         grant_id: str,
         proposed_expires_at: datetime,
-        now: datetime,
+        now: datetime | None = None,
+        *,
+        verified_agent_identity: VerifiedAgentIdentityContext | None = None,
+        verified_delegation: VerifiedAgentDelegationContext | None = None,
+        expected_delegation_revision: int | None = None,
     ) -> GrantRenewalRequest:
-        """Fail closed until independent AGENT proof and delegation authority exist.
+        """Create an AGENT renewal request after same-UoW evidence and CAM checks.
 
-        The current native identity pipeline attests USER identities only.
-        OperationContext and DelegationMode.DELEGATED are caller-controlled
-        metadata and cannot authorize an agent renewal request.
+        The legacy positional now parameter is intentionally ignored.
+        Security time is obtained only from the trusted injected Clock.
         """
-        raise AuthorizationError(
-            "Solicitud de renovación por AGENT deshabilitada: "
-            "requiere autenticación AGENT y delegación verificable"
-        )
+        if (
+            not isinstance(verified_agent_identity, VerifiedAgentIdentityContext)
+            or not isinstance(verified_delegation, VerifiedAgentDelegationContext)
+            or isinstance(expected_delegation_revision, bool)
+            or not isinstance(expected_delegation_revision, int)
+            or expected_delegation_revision < 1
+        ):
+            raise AuthorizationError(
+                "Solicitud AGENT requiere evidencia de identidad y delegación verificable"
+            )
+        if (
+            self._agent_identity_verifier is None
+            or not callable(getattr(self._agent_identity_verifier, "verify_in_unit_of_work", None))
+            or self._delegation_context_verifier is None
+            or not callable(getattr(self._delegation_context_verifier, "verify_in_unit_of_work", None))
+            or self._clock is None
+            or not callable(getattr(self._clock, "now", None))
+        ):
+            raise AuthorizationError("La autoridad AGENT de renovación no está configurada")
+
+        self._validate_identifier(renewal_id, "renewal_id")
+        self._validate_identifier(grant_id, "grant_id")
+        self._validate_utc(proposed_expires_at, "proposed_expires_at")
+        trusted_now = self._clock.now()
+        self._validate_utc(trusted_now, "clock.now()")
+
+        with self._unit_of_work_factory() as uow:
+            required_repositories = (
+                "agent_identity", "agent_delegations", "native_agent_identity",
+                "native_identity", "identity", "project_environments",
+                "grants", "renewals",
+            )
+            if any(getattr(uow, name, None) is None for name in required_repositories):
+                raise AuthorizationError(
+                    "Se requiere SQLiteLocalAuthorityUnitOfWork con autoridades canónicas compartidas"
+                )
+
+            canonical_agent = self._agent_identity_verifier.verify_in_unit_of_work(
+                verified_agent_identity, uow
+            )
+            canonical_delegation = self._delegation_context_verifier.verify_in_unit_of_work(
+                verified_delegation, uow
+            )
+            if (
+                canonical_agent.identity != context.actor
+                or canonical_delegation.delegation_id != verified_delegation.delegation_id
+                or canonical_delegation.revision != expected_delegation_revision
+                or canonical_delegation.revision != verified_delegation.delegation_revision
+            ):
+                raise AuthorizationError("la evidencia AGENT/delegación no coincide con el estado canónico")
+
+            grant = self._get_grant(uow.grants, grant_id)
+            if (
+                canonical_delegation.grant_id != grant.grant_id
+                or canonical_delegation.grant_revision != grant.revision
+                or canonical_delegation.owner_user_id != grant.owner_user_id
+                or canonical_delegation.agent_identity_id != grant.subject_identity_id
+            ):
+                raise AuthorizationError("la delegación no corresponde al Grant actual")
+
+            project = uow.project_environments.get_project(grant.project_id)
+            environment = uow.project_environments.get_environment(grant.environment)
+            if (
+                project is None or project.status != "active"
+                or str(project.project_id) != grant.project_id
+                or environment is None or environment.status != "active"
+                or str(environment.environment_id) != grant.environment
+            ):
+                raise AuthorizationError("Project/Environment no existe o no está activo")
+
+            self._validate_grant_active(grant, trusted_now)
+            if proposed_expires_at <= grant.expires_at:
+                raise ContractError(
+                    "proposed_expires_at debe extender el vencimiento actual del Grant"
+                )
+
+            require_agent_renewal_cam_allow(
+                context=context,
+                verified_agent_identity=verified_agent_identity,
+                verified_delegation=verified_delegation,
+                grant=grant,
+                evaluator=self._evaluator,
+                now=trusted_now,
+            )
+
+            candidate = GrantRenewalRequest(
+                renewal_id=renewal_id,
+                grant_id=grant.grant_id,
+                owner_user_id=grant.owner_user_id,
+                subject_identity_id=grant.subject_identity_id,
+                requested_by_identity_id=canonical_agent.identity.identity_id,
+                current_expires_at=grant.expires_at,
+                proposed_expires_at=proposed_expires_at,
+                requested_at=trusted_now,
+                grant_revision=grant.revision,
+                delegation_id=canonical_delegation.delegation_id,
+                delegation_revision=canonical_delegation.revision,
+            )
+
+            existing = uow.renewals.get(renewal_id)
+            if existing is not None:
+                same_intent = (
+                    existing.grant_id == candidate.grant_id
+                    and existing.owner_user_id == candidate.owner_user_id
+                    and existing.subject_identity_id == candidate.subject_identity_id
+                    and existing.requested_by_identity_id == candidate.requested_by_identity_id
+                    and existing.current_expires_at == candidate.current_expires_at
+                    and existing.proposed_expires_at == candidate.proposed_expires_at
+                    and existing.grant_revision == candidate.grant_revision
+                    and existing.delegation_id == candidate.delegation_id
+                    and existing.delegation_revision == candidate.delegation_revision
+                )
+                if same_intent and existing.status is RenewalStatus.PENDING:
+                    return existing
+                raise ContractError("renewal_id ya está asociado a otra solicitud")
+
+            pending = tuple(
+                item for item in uow.renewals.list_by_grant(grant.grant_id)
+                if item.status is RenewalStatus.PENDING
+            )
+            if pending:
+                raise AuthorizationError("ya existe una solicitud PENDING para este Grant")
+
+            uow.renewals.create(candidate)
+            uow.commit()
+            return candidate
 
     def approve_renewal(
         self,
