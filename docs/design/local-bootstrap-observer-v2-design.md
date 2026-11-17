@@ -13,7 +13,7 @@ V2 sirve para comprobar si las observaciones del entorno real son legibles, repe
 ## 2. Límites obligatorios
 
 - Solo lecturas de procfs, apertura de pidfd, consultas TTY y metadatos de ejecutables.
-- Sin escritura en archivos, procfs, terminal, configuración o servicios.
+- Sin escritura en archivos, procfs, configuración o servicios. La única salida es el informe diagnóstico por stdout/stderr; no lee entrada ni cambia el estado del terminal.
 - Sin shell-outs, PATH, variables de entorno como fuente de identidad, PAM, sudo API, claves o emisión de proof.
 - Sin setuid, file capabilities, instalación, paquetes ni cambios de host.
 - Sin SQLite, CAM, Broker, runtime, red ni configuración protegida.
@@ -54,7 +54,7 @@ Abrir `/dev/tty` sin adquirir un terminal de control (`O_NOCTTY`) y consultar:
 
 Si no existe TTY controlador o la consulta no está disponible, mostrar un estado explícito `TTY_UNAVAILABLE`/incompleto. No inferir TTY a partir de stdin/stdout, propietario del dispositivo, `tty_nr` aislado o variables de entorno.
 
-La coherencia limitada se comprueba con igualdad de SID y correspondencia del PGID con el foreground PGID. Esta observación no prueba origen del PTY ni presencia física.
+La coherencia limitada se comprueba con igualdad de SID y correspondencia del PGID con el foreground PGID. También se contrastan SID/PGID del proceso obtenidos por syscalls con los campos correspondientes de su propio `stat`. Esta observación no prueba origen del PTY ni presencia física.
 
 ## 6. Ejecutable padre
 
@@ -91,7 +91,7 @@ Un modo diagnóstico opcional de duración acotada permite muestrear el TTY y fo
 
 ## 9. Pruebas V2
 
-Las pruebas automatizadas cubren validación de argumentos, límites de lectura, clasificación de errores, pidfd y comparaciones de snapshots mediante funciones auxiliares testeables. Las pruebas de integración manuales en Debian se ejecutarán después de completar la implementación:
+Las pruebas automatizadas cubren validación de argumentos, límites de duración, clasificación de lecturas, estados pidfd simulados, comparación de snapshots y metadatos de ejecutable, además de un smoke test del recolector real. Las pruebas de integración manuales en Debian se ejecutarán después de completar la implementación:
 
 1. invocación ordinaria desde terminal local;
 2. sudo directo desde terminal local, solo si el operador decide ejecutarlo;
@@ -111,7 +111,7 @@ No habilitar NOPASSWD, no cambiar timestamp, no usar sudo -S ni alterar sudoers/
 5. metadatos exe observados desde descriptor y comparación entre muestras.
 6. consulta TTY por llamadas específicas, con ausencia explícita cuando no existe.
 7. estados y códigos de salida no autoritativos y fail-closed.
-8. build estricto y suite automatizada en Debian por el propietario.
+8. build estricto y suite automatizada en Debian por el propietario, incluyendo el smoke test del recolector real.
 9. documentación con comandos exactos y límites.
 
 El cierre de implementación no se declarará validado en el host hasta que el propietario ejecute y comparta las pruebas Debian. Completar V2 no aprueba A, no autoriza PAM, helper privilegiado ni V3/V4.
