@@ -41,7 +41,7 @@ __all__ = [
     "SQLiteRecoveryEvidenceIssuerTrustPolicyRepository",
     "SQLiteRecoveryEvidenceIssuerRegistryRepository",
     "SQLiteRecoveryEvidenceAdmissionRepository",
-    "SQLiteProjectEnvironmentRepository", "SQLiteIdentityAuthority",
+    "SQLiteProjectEnvironmentRepository", "SQLiteWorkspaceRegistryRepository", "SQLiteIdentityAuthority",
     "SQLiteLocalAuthorityUnitOfWork", "SQLiteLocalAuthorityUnitOfWorkFactory",
     "SQLiteAuthorizationUnitOfWork", "SQLiteAuthorizationUnitOfWorkFactory",
     "SQLiteConversationRepository",
