@@ -148,3 +148,22 @@ Ninguna fase puede afirmar anti-rollback externo ni permitir restauraciones de m
 La elección del procedimiento interactivo LOCAL de una sola ejecución queda aprobada. El proveedor de autenticación local, el binding verificable entre sujeto autenticado y propietario canónico, la prueba consumible y el flujo de génesis siguen sin implementar.
 
 ME-D4O-A queda corregido para reflejar los perfiles aprobados. No se añadió código, evento, migración, proveedor externo, autorización local concreta ni apertura del gate. El baseline LOCAL puede continuar por etapas; la habilitación operativa queda condicionada a su bootstrap autenticado, atomicidad y validación. El perfil ANCHORED permanece postergado.
+
+## 2.2 Identidad operativa inicial y binding local aprobado
+
+**Decisión aprobada por el propietario: 16 de noviembre de 2026.**
+
+La cuenta Linux `greed` será el sujeto local que autentique la acción administrativa inicial de bootstrap. Esta decisión identifica al operador local del procedimiento; no convierte el nombre Unix en identidad canónica de Atlas ni hace de la cuenta una autoridad autónoma.
+
+Reglas del binding:
+
+1. El proveedor local de autenticación deberá producir evidencia verificable del sujeto autenticado en el host y de la reautenticación reciente. El identificador del sujeto debe estar cualificado por el dominio/host de autenticación para evitar interpretar un nombre Unix aislado como identidad global.
+2. Una configuración de bootstrap explícita y protegida vinculará ese sujeto local autenticado con el propietario canónico que se está estableciendo. La configuración no podrá ser modificada por el proceso de Atlas Assistant ni por el principal técnico.
+3. La autoridad de identidad generará el `UserId` canónico y la `Identity(USER)` mediante el mecanismo autoritativo existente. No se derivarán UUID, `UserId` ni `identity_id` del texto `greed`, del UID 1000 (o cualquier UID supuesto), de nombres de grupo ni de variables de entorno.
+4. La evidencia de bootstrap deberá enlazar la identidad local autenticada, el binding aprobado, la decisión directa del propietario y el descriptor exacto del dominio. El caller no podrá declarar por sí mismo que el sujeto es el propietario.
+5. La cuenta Unix `atlas` (UID técnico 999 en el entorno inspeccionado) y la cuenta de servicio `atlas-sandbox` permanecen separadas del propietario. No pueden realizar el bootstrap ni heredar su autoridad por pertenecer a grupos, ejecutar servicios o acceder al Broker.
+6. El proceso de servicio central no obtiene privilegios del operador interactivo. La autenticación local de bootstrap es un flujo administrativo explícito, no una sesión permanente ni un permiso implícito para todas las operaciones.
+7. Una vez establecido el propietario canónico, el acceso desde móvil, portátil y web deberá autenticarse mediante el futuro gateway de acceso del servicio central y resolverse a ese mismo `UserId`/Identity(USER). Las sesiones remotas y el registro de dispositivos serán independientes de las cuentas Unix.
+8. La pérdida, cambio o revocación del sujeto local no debe reasignar automáticamente la propiedad canónica. Cualquier sustitución del mecanismo de recuperación o del operador bootstrap requerirá un procedimiento de cambio de autoridad explícito y auditable.
+
+La cuenta `greed` queda seleccionada como sujeto operativo inicial; esto no selecciona todavía PAM ni otro proveedor concreto, no crea el binding en el sistema, no crea la identidad canónica y no inicializa CAM. La implementación deberá verificar primero qué mecanismo de reautenticación local está disponible y cómo puede emitir una prueba no falsificable por el caller.
