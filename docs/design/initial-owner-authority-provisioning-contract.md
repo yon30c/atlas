@@ -174,6 +174,20 @@ La arquitectura elegida debe demostrar mediante pruebas de fallos y concurrencia
 
 Si no puede demostrarse, se pospone la habilitación; no se reduce la garantía.
 
+
+## 6.4 Hallazgos de implementación que condicionan el diseño
+
+La inspección del código actual precisa los siguientes límites:
+
+- La migración v9 crea `atlas_projects` y `atlas_environments` como tablas independientes. Cada una conserva ID, estado y revisión; no existe una FK ni un vínculo canónico Project–Environment en esas tablas. No se debe inventar la relación usando el valor de `environment` del Grant como sustituto de una pertenencia validada.
+- `SQLiteLocalAuthorityUnitOfWork` sí compone en una misma transacción local Identity, Project/Environment, Grants y otras autoridades. Esto permite reutilizar una base transaccional para esas fuentes si todas usan exactamente la misma instancia `SQLiteDatabase`.
+- `SQLiteConsistencyJournal` no participa actualmente en esa UoW compartida. Por tanto, la UoW actual no hace atómica la combinación de identidad, binding, Grant, Project/Environment, evento de génesis y Recovery Gate.
+- `GrantManagementService.issue` exige un contexto de usuario activo no delegado, coincidencia del propietario/proyecto/entorno y una UoW para insertar. Sin embargo, su ruta de emisión no consume una prueba independiente de acción directa del propietario ni demuestra por sí sola que el `OperationContext` provenga de un `VerifiedIdentityContext`. No debe reutilizarse sin cerrar esa frontera de autenticidad.
+- Además, `SQLiteIdentityAuthority` emite un `UserId` y un `identity_id` distintos. La validación de contexto de `GrantManagementService` compara actualmente `actor.identity_id` con `context.user_id`; esta semántica debe reconciliarse con el contrato de identidad/contexto antes de reutilizar el servicio para provisión inicial. No se debe hacer que ambos identificadores coincidan artificialmente ni derivar uno del otro.
+- El modelo `Grant` ya impone scope de recursos no vacío, acciones no vacías, ausencia de wildcard y expiración posterior a emisión. Estas validaciones estructurales son útiles, pero no prueban que el sujeto, propietario, Project, Environment o decisión de emisión sean auténticos y estén autorizados.
+
+Consecuencia: la estrategia no requiere duplicar los repositorios SQLite existentes. Sí requiere diseñar el binding sujeto–propietario, completar la relación Project–Environment, cerrar la autenticidad del contexto/acción directa y coordinar el journal/gate con las escrituras de autoridad. Hasta entonces, ni la emisión directa de `GrantManagementService.issue` ni la UoW compartida son una implementación completa del bootstrap.
+
 ## 7. Modelo de estados propuesto
 
 Estados conceptuales mínimos, sin imponer todavía nombres de tablas:
