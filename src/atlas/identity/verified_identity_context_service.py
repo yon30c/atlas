@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import datetime, timedelta
 import secrets
+import re
 from typing import Protocol
 from uuid import uuid4
 
@@ -20,6 +21,10 @@ from atlas.ports.clock import Clock
 from atlas.ports.verified_identity_context_attestor import (
     VerifiedIdentityContextAttestorPort,
 )
+
+
+_REALM_RE = re.compile(r"[a-z0-9][a-z0-9._-]{1,63}", re.ASCII)
+_AUDIENCE_RE = re.compile(r"[a-z][a-z0-9._:-]{0,127}", re.ASCII)
 
 
 class VerifiedIdentityContextRejected(AtlasError):
@@ -70,10 +75,10 @@ class VerifiedIdentityContextService:
             getattr(attestor, "verify", None)
         ):
             raise ContractError("attestor no implementa sign/verify")
-        if not isinstance(realm, str) or not realm:
-            raise ContractError("realm confiable debe ser no vacío")
-        if not isinstance(audience, str) or not audience:
-            raise ContractError("audience confiable debe ser no vacía")
+        if not isinstance(realm, str) or _REALM_RE.fullmatch(realm) is None:
+            raise ContractError("realm confiable debe ser lowercase ASCII canónico")
+        if not isinstance(audience, str) or _AUDIENCE_RE.fullmatch(audience) is None:
+            raise ContractError("audience confiable debe ser un identificador interno ASCII")
         if not isinstance(context_ttl, timedelta) or not (
             timedelta(0) < context_ttl <= timedelta(minutes=5)
         ):
