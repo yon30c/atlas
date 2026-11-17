@@ -145,6 +145,12 @@ class VerifiedIdentityContextServiceTests(unittest.TestCase):
         with self.assertRaises(VerifiedIdentityContextRejected):
             other_service.verify(context)
 
+    def test_context_cannot_be_replayed_across_audiences(self):
+        context = self._service().admit_proof(self.reference)
+        other_audience_service = self._service(audience="atlas.other")
+        with self.assertRaises(VerifiedIdentityContextRejected):
+            other_audience_service.verify(context)
+
     def test_revoked_binding_invalidates_context(self):
         service = self._service()
         context = service.admit_proof(self.reference)
