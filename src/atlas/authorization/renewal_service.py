@@ -4,20 +4,23 @@ from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime, timedelta
 
+from atlas.authorization.identity_evidence import require_verified_owner_context
 from atlas.authorization.models import (
     Grant,
     GrantRenewalRequest,
     RenewalStatus,
 )
 from atlas.core.context import OperationContext
-from atlas.core.enums import DelegationMode
 from atlas.core.errors import (
     AuthorizationError,
     ConcurrencyError,
     ContractError,
     NotFoundError,
 )
-from atlas.core.identity import IdentityKind, IdentityStatus
+from atlas.core.verified_identity_context import VerifiedIdentityContext
+from atlas.ports.verified_identity_context_verifier import (
+    VerifiedIdentityContextVerifierPort,
+)
 from atlas.ports.authorization_unit_of_work import AuthorizationUnitOfWork
 from atlas.ports.grant_renewals import GrantRenewalRepository
 from atlas.ports.grants import GrantRepository
@@ -27,10 +30,13 @@ class GrantRenewalService:
     def __init__(
         self,
         unit_of_work_factory: Callable[[], AuthorizationUnitOfWork],
+        *,
+        identity_verifier: VerifiedIdentityContextVerifierPort | None = None,
     ) -> None:
         if not callable(unit_of_work_factory):
             raise ContractError("unit_of_work_factory debe ser invocable")
         self._unit_of_work_factory = unit_of_work_factory
+        self._identity_verifier = identity_verifier
 
     def request_renewal(
         self,
@@ -40,57 +46,26 @@ class GrantRenewalService:
         proposed_expires_at: datetime,
         now: datetime,
     ) -> GrantRenewalRequest:
-        self._validate_requester_context(context)
-        self._validate_utc(now, "now")
-        self._validate_utc(proposed_expires_at, "proposed_expires_at")
-        self._validate_identifier(renewal_id, "renewal_id")
-        self._validate_identifier(grant_id, "grant_id")
+        """Fail closed until independent AGENT proof and delegation authority exist.
 
-        with self._unit_of_work_factory() as uow:
-            grant = self._get_grant(uow.grants, grant_id)
-            self._validate_scope(context, grant)
-
-            if (
-                context.user_id != grant.owner_user_id
-                or context.actor.identity_id != grant.subject_identity_id
-            ):
-                raise AuthorizationError(
-                    "Solo la identidad destinataria puede solicitar la renovación"
-                )
-
-            self._validate_grant_active(grant, now)
-
-            if proposed_expires_at <= grant.expires_at:
-                raise ContractError(
-                    "La nueva fecha debe ser posterior al vencimiento actual"
-                )
-
-            if self._get_existing_renewal(uow.renewals, renewal_id):
-                raise ContractError("El renewal_id ya existe")
-
-            request = GrantRenewalRequest(
-                renewal_id=renewal_id,
-                grant_id=grant.grant_id,
-                owner_user_id=grant.owner_user_id,
-                subject_identity_id=grant.subject_identity_id,
-                requested_by_identity_id=context.actor.identity_id,
-                current_expires_at=grant.expires_at,
-                proposed_expires_at=proposed_expires_at,
-                requested_at=now,
-            )
-
-            uow.renewals.create(request)
-            uow.commit()
-
-        return request
+        The current native identity pipeline attests USER identities only.
+        OperationContext and DelegationMode.DELEGATED are caller-controlled
+        metadata and cannot authorize an agent renewal request.
+        """
+        raise AuthorizationError(
+            "Solicitud de renovación por AGENT deshabilitada: "
+            "requiere autenticación AGENT y delegación verificable"
+        )
 
     def approve_renewal(
         self,
         context: OperationContext,
         renewal_id: str,
         now: datetime,
+        *,
+        verified_identity: VerifiedIdentityContext | None = None,
     ) -> Grant:
-        self._validate_owner_context(context)
+        canonical = self._validate_owner_context(context, verified_identity)
         self._validate_utc(now, "now")
         self._validate_identifier(renewal_id, "renewal_id")
 
@@ -98,7 +73,7 @@ class GrantRenewalService:
             request = self._get_renewal(uow.renewals, renewal_id)
             grant = self._get_grant(uow.grants, request.grant_id)
 
-            self._validate_owner_and_scope(context, request, grant)
+            self._validate_owner_and_scope(context, request, grant, canonical)
             self._require_pending(request)
             self._validate_renewal_grant_binding(request, grant)
 
@@ -119,7 +94,7 @@ class GrantRenewalService:
                 request,
                 status=RenewalStatus.APPROVED,
                 decided_at=now,
-                decided_by_user_id=context.user_id,
+                decided_by_user_id=canonical.user_id,
                 version=expected_version + 1,
             )
 
@@ -141,8 +116,10 @@ class GrantRenewalService:
         context: OperationContext,
         renewal_id: str,
         now: datetime,
+        *,
+        verified_identity: VerifiedIdentityContext | None = None,
     ) -> GrantRenewalRequest:
-        self._validate_owner_context(context)
+        canonical = self._validate_owner_context(context, verified_identity)
         self._validate_utc(now, "now")
         self._validate_identifier(renewal_id, "renewal_id")
 
@@ -150,7 +127,7 @@ class GrantRenewalService:
             request = self._get_renewal(uow.renewals, renewal_id)
             grant = self._get_grant(uow.grants, request.grant_id)
 
-            self._validate_owner_and_scope(context, request, grant)
+            self._validate_owner_and_scope(context, request, grant, canonical)
             self._require_pending(request)
             self._validate_renewal_grant_binding(request, grant)
 
@@ -159,7 +136,7 @@ class GrantRenewalService:
                 request,
                 status=RenewalStatus.REJECTED,
                 decided_at=now,
-                decided_by_user_id=context.user_id,
+                decided_by_user_id=canonical.user_id,
                 version=expected_version + 1,
             )
 
@@ -215,38 +192,16 @@ class GrantRenewalService:
             )
         return request
 
-    @staticmethod
-    def _validate_requester_context(context: OperationContext) -> None:
-        if not isinstance(context, OperationContext):
-            raise ContractError("context debe ser OperationContext")
-
-        actor = context.actor
-        if (
-            actor.kind is not IdentityKind.AGENT
-            or actor.status is not IdentityStatus.ACTIVE
-        ):
-            raise AuthorizationError(
-                "Solo un agente activo puede solicitar la renovación"
-            )
-        if context.delegation is not DelegationMode.DELEGATED:
-            raise AuthorizationError(
-                "El agente debe actuar bajo delegación explícita para renovar el Grant"
-            )
-
-    @staticmethod
-    def _validate_owner_context(context: OperationContext) -> None:
-        if not isinstance(context, OperationContext):
-            raise ContractError("context debe ser OperationContext")
-
-        actor = context.actor
-        if (
-            actor.kind is not IdentityKind.USER
-            or actor.status is not IdentityStatus.ACTIVE
-            or actor.identity_id != context.user_id
-        ):
-            raise AuthorizationError(
-                "Se requiere un usuario propietario activo"
-            )
+    def _validate_owner_context(
+        self,
+        context: OperationContext,
+        verified_identity: VerifiedIdentityContext | None,
+    ):
+        return require_verified_owner_context(
+            context,
+            verified_identity,
+            self._identity_verifier,
+        )
 
     @staticmethod
     def _validate_scope(
@@ -267,10 +222,11 @@ class GrantRenewalService:
         context: OperationContext,
         request: GrantRenewalRequest,
         grant: Grant,
+        canonical,
     ) -> None:
         if (
-            context.user_id != request.owner_user_id
-            or context.user_id != grant.owner_user_id
+            canonical.user_id != request.owner_user_id
+            or canonical.user_id != grant.owner_user_id
         ):
             raise AuthorizationError(
                 "Solo el propietario puede decidir la renovación"
