@@ -201,6 +201,11 @@ class SQLiteNativeIdentityAuthority:
                     raise NotFoundError("usuario canónico no encontrado")
                 if canonical["identity_id"] != identity.identity.identity_id:
                     raise IdentityConflictError("la identidad canónica suministrada no coincide con UserId")
+                if (
+                    canonical["identity_status"] != identity.identity.status.value
+                    or canonical["revision"] != identity.identity.revision
+                ):
+                    raise ConcurrencyError("la identidad canónica suministrada está desactualizada")
                 if canonical["identity_kind"] != IdentityKind.USER.value:
                     raise ContractError("el binding nativo requiere Identity(USER)")
                 if canonical["identity_status"] != IdentityStatus.ACTIVE.value:
