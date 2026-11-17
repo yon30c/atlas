@@ -557,6 +557,20 @@ int bo_run_hold(bo_report *report, unsigned milliseconds) {
     return 0;
 }
 
+static void print_escaped(FILE *stream, const char *value) {
+    static const char hex[] = "0123456789abcdef";
+
+    for (const unsigned char *p = (const unsigned char *)value; *p; p++) {
+        if (*p >= 0x20U && *p <= 0x7eU && *p != (unsigned char)'\\') {
+            (void)fputc((int)*p, stream);
+        } else {
+            (void)fputs("\\x", stream);
+            (void)fputc(hex[*p >> 4], stream);
+            (void)fputc(hex[*p & 0x0fU], stream);
+        }
+    }
+}
+
 static const char *result_name(bv_observation_result result) {
     switch (result) {
     case BV_OBSERVATION_CONSISTENT:
