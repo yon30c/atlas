@@ -685,7 +685,9 @@ void bo_print_report(FILE *stream, const bo_report *report) {
         fprintf(stream, "parent_exe_uid=%" PRIu32 "\n", report->exe_uid);
         fprintf(stream, "parent_exe_gid=%" PRIu32 "\n", report->exe_gid);
         if (report->exe_target[0] != '\0') {
-            fprintf(stream, "parent_exe_target=%s\n", report->exe_target);
+            fprintf(stream, "parent_exe_target=");
+            print_escaped(stream, report->exe_target);
+            (void)fputc('\n', stream);
         }
     }
 
