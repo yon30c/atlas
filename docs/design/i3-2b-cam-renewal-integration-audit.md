@@ -596,3 +596,19 @@ Los únicos permisos definidos en este corte son `association.suspend` y `associ
 - No se afirma que las pruebas hayan sido ejecutadas en Debian; el nuevo archivo de pruebas queda preparado para validación del propietario.
 
 **Siguiente:** revisar/validar 7B.1 en Debian; después diseñar persistencia y bootstrap offline en 7B.2, manteniendo el bootstrap fuera de runtime.
+
+
+## 17. I3-2B.7B.1 — validación Debian confirmada (17 de noviembre de 2026)
+
+El propietario ejecutó las comprobaciones en la rama design/verified-agent-delegation-i3-2b, HEAD 8f65c3646987a2402ecd089f9b426568f60f2ec2:
+
+- Pruebas específicas test_platform_admin_domain_contracts.py: **8 tests — OK**.
+- python -m compileall -q src tests: **COMPILE_EXIT_CODE=0**.
+- Suite completa python -m unittest discover -s tests -v: **1,421 tests en 28.292 s — OK**.
+
+La primera invocación focalizada desde el directorio equivocado devolvió Ran 0 tests y no se considera evidencia. La ejecución válida se repitió desde ~/atlas-dev y confirmó los ocho tests. La suite completa y compileall se ejecutaron después en ese mismo checkout.
+
+Esta evidencia valida los contratos de dominio y puertos de 7B.1 en el HEAD indicado. No valida persistencia SQLite, bootstrap offline, servicio lifecycle, CI ni cambios de infraestructura. No se provisionó ningún administrador ni se modificó ninguna asociación.
+
+**Estado:** I3-2B.7B.1 validada por el propietario en Debian. PR #16 permanece Draft, abierto y sin fusionar.
+
