@@ -339,3 +339,30 @@ La implementación se amplió para cubrir el binding persistente sin relajar el 
 Pruebas adicionales en tests/unit/test_sqlite_native_agent_identity_authority.py cubren creación/lookup, rechazo de USER, identidad AGENT suspendida, duplicados, colisión cruzada USER/AGENT en ambos órdenes y revocación CAS.
 
 **Estado:** implementación publicada, pendiente de validación en Debian. La autoridad no autentica credenciales, no emite proofs y no habilita delegación ni solicitudes de renovación.
+
+
+## 13. I3-2B.3A — persistencia canónica de delegaciones (substrato)
+
+**Implementación inicial publicada; pendiente de validación en Debian. No equivale todavía a una autoridad de emisión/verificación.**
+
+Se añadió CORE_SCHEMA_V23 y SQLiteAgentDelegationRepository para persistir el agregado AgentDelegation:
+- FKs a atlas_users, identity_records, authorization_grants y native_identity_issuers.
+- Restricciones de UUID, revisión, estado, timestamps UTC, JSON de scopes y auditoría de revocación.
+- Trigger de inserción que exige USER propietario activo y emparejado con UserId, AGENT activo, Grant vigente y exacto (owner/subject/project/environment/revision), issuer activo y binding AGENT activo.
+- Verificación de subset de resource_ids y actions tanto en el repositorio como en triggers SQLite, para que un INSERT directo no pueda ampliar el Grant.
+- Claims inmutables, revision +1, revocación terminal y no-delete tombstones.
+- El repositorio participa en SQLiteUnitOfWork explícita. SQLiteLocalAuthorityUnitOfWork expone identity, agent_identity, native_identity, native_agent_identity, grants y agent_delegations sobre la misma transacción.
+
+Pruebas añadidas en tests/unit/test_sqlite_agent_delegation_repository.py y ampliación de test_sqlite_local_authority_unit_of_work.py.
+
+### Límite de seguridad y siguiente trabajo
+
+Esto es una capa de persistencia, **no una autoridad de delegación**. El repositorio no verifica VerifiedIdentityContext ni puede decidir por sí solo que quien invoca create/revoke es el propietario. La inspección del repositorio actual confirma que existen puertos de verificación USER/AGENT, pero no un verificador productivo concreto/composición transaccional que pueda revalidar esas evidencias sobre la misma SQLiteUnitOfWork.
+
+Por esa razón:
+- No se implementó todavía AgentDelegationAuthorityPort.create_for_grant, revoke_delegation ni verify_for_operation.
+- No se emiten VerifiedAgentDelegationContext ni attestations.
+- No se habilita request_renewal ni ninguna operación delegada.
+- No debe exponerse el repositorio como API de aplicación ni llamarse sin un servicio de autoridad que valide owner evidence y revalide el Grant dentro de la misma transacción.
+
+I3-2B.3B debe implementar el verificador USER/AGENT transaccional y la autoridad de emisión/revocación; la emisión de contexto verificado queda condicionada a firma/verificación criptográfica y revalidación del Grant/identidad/binding en cada operación. No se afirmará atomicidad fuera de la UoW compartida.
