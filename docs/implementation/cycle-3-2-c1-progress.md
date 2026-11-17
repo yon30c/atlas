@@ -2,7 +2,7 @@
 
 **Rama:** `feature/cycle-3-2-c1-native-credentials`  
 **Base:** PR #8, `design/cycle-3-2-c1-native-authentication-contracts`  
-**Estado:** C1-1 y C1-2 validados en Debian; C1-3 implementado como contratos de Identity Authority y pendiente de validación.
+**Estado:** C1-1, C1-2 y C1-3 validados por suite en Debian; C1-4 implementado y pendiente de validación.
 
 ## Slice C1-1 — credenciales y Argon2id
 
@@ -34,30 +34,40 @@ Se añadieron en `src/atlas/authentication/native.py`:
 - `NativeAuthenticationProof`: metadata persistible digest-only, con issuer, subject, authenticator, revisión, timestamps UTC, audience y estado. La referencia raw no forma parte del registro.
 - Pruebas unitarias para generación/forma de tokens, redacción, digest, invariantes de IDs, PHC, revisión, fechas, audience y estados.
 
-Validación Debian confirmada:
-- Suite completa: 1,239 pruebas, OK.
-- El checkout reportado está alineado con origin y limpio en `c69ebe4`.
-- `compileall` focalizado no fue reportado explícitamente para este slice.
+**Validación Debian confirmada:** suite completa de 1,239 pruebas, OK; checkout limpio y alineado en `c69ebe4`. No se reportó compileall explícito para este slice.
 
-Este slice no implementa repositorios, emisión/consumo atómico de proof, bootstrap, migraciones, sesiones, endpoints ni composición productiva.
+Este slice no implementa repositorios, emisión/consumo atómico de proof, bootstrap, sesiones ni endpoints.
 
 ## Slice C1-3 — Identity Authority: issuer y binding nativo
 
 Se añadieron:
 
-- `src/atlas/core/native_identity.py`:
-  - `NativeIdentityIssuer`, con realm lógico estable, perfil explícito `NATIVE_AUTHORITY_PROOF`, estado y revisión.
-  - `NativeIdentityBinding`, que vincula issuer + digest del subject con un `identity_id` canónico, timestamps UTC, revisión y tombstone terminal de revocación.
-- `src/atlas/ports/native_identity_authority.py`:
-  - puerto de Identity Authority para consultar/crear issuer, consultar/crear binding y revocar con CAS.
-  - La creación de binding recibe `CanonicalUserIdentity`, no un ID elegido libremente por el caller.
-  - El puerto no autentica credenciales, no emite proofs y no concede Grants.
-- Pruebas unitarias para IDs, realm, perfil, digest, timestamps, revisión y estados.
+- `NativeIdentityIssuer`, con realm lógico estable, perfil explícito `NATIVE_AUTHORITY_PROOF`, estado y revisión.
+- `NativeIdentityBinding`, que vincula issuer + digest del subject con un `identity_id` canónico, timestamps UTC, revisión y tombstone terminal de revocación.
+- `NativeIdentityAuthorityPort`, con consulta/creación de issuer y binding y revocación mediante CAS. La creación recibe `CanonicalUserIdentity`.
+- Pruebas unitarias de IDs, realm, perfil, digest, timestamps, revisión y estados.
 
-**Validación C1-3:** pendiente en Debian. Ejecutar:
+**Validación Debian confirmada:** suite completa de 1,245 pruebas, OK; checkout limpio y alineado en `5416a8c`. No se reportó compileall explícito para este slice.
+
+## Slice C1-4 — persistencia SQLite de Identity Authority
+
+Se implementó:
+
+- Migración aditiva v19 `native_identity_issuers_and_subject_bindings`; no sintetiza issuers ni bindings para usuarios existentes.
+- `native_identity_issuers`: realm único, perfil nativo explícito, estado/revisión y tombstones.
+- `native_identity_bindings`: FK a Identity(USER) e issuer, unicidad permanente `(issuer_id, subject_digest)`, digest lowercase, estado/revisión y timestamps.
+- Triggers SQL para identidad inmutable, paso exacto de revisión, revocación terminal y prohibición de DELETE.
+- Triggers SQL exigen Identity(USER) activa e issuer activo al crear binding.
+- `SQLiteNativeIdentityAuthority`: creación/consulta issuer, creación de binding solo tras releer y comparar el UserId/Identity canónico desde SQLite, y revocación CAS.
+- `SQLiteLocalAuthorityUnitOfWork.native_identity`: comparte exactamente la transacción SQLite con la autoridad canónica y demás repositorios locales.
+- Export de adapter y migración v19.
+- Pruebas de persistencia, unicidad, no reasignación tras revocación, identidad canónica stale/mismatch, estado activo, CAS, tombstones y rollback/commit compartido.
+
+**Validación C1-4:** pendiente. Ejecutar en Debian:
 
 ```bash
-python -m unittest discover -s tests/unit -p 'test_native_identity_authority_contracts.py' -v
+python -m unittest discover -s tests/unit -p 'test_sqlite_native_identity_authority.py' -v
+python -m unittest discover -s tests/unit -p 'test_sqlite_local_authority_unit_of_work.py' -v
 python -m compileall -q src tests
 echo "COMPILE_EXIT_CODE=$?"
 python -m unittest discover -s tests -t tests -v
@@ -65,16 +75,17 @@ git status --short --branch
 git log -1 --oneline
 ```
 
-C1-3 todavía no implementa adaptador SQLite ni altera `SQLiteIdentityAuthority` o `SQLiteLocalAuthorityUnitOfWork`.
+La migración v19 solo se ha añadido al código del PR; no se ha aplicado a la base de datos de producción. La validación local de migración debe hacerse en bases de prueba temporales.
 
-## Hallazgos y bloqueos que se conservan
+## Límites y bloqueos de seguridad
 
-1. El contrato legacy `AuthenticatedUserSubject` / `IdentitySubjectBindingPort` existe, pero no acredita autenticación nativa y no se reutiliza.
-2. Identity(USER) y UserId ya existen; la siguiente migración esperada sigue siendo v19, sujeta a confirmar el baseline integrado.
-3. `SQLiteLocalAuthorityUnitOfWork` comparte la transacción física, pero todavía debe ampliarse con repositorios Identity issuer/binding y Authentication Authority. El store de authority changes no equivale a un coordinador de Consistency.
-4. **Grant inicial del bootstrap sin perfil CAM aprobado:** el modelo Grant exige owner_user_id, subject_identity_id, project_id, environment, resource_type, IDs concretos de recurso, acciones explícitas y expiración. Antes de implementar bootstrap hay que resolver la tensión entre bootstrap sin Grant y las pruebas todo-o-nada, mediante un perfil CAM explícito y acotado o aprobación formal de un bootstrap sin activación. No se inventará un Grant global ni un proyecto/entorno ficticio.
+1. Identity Authority administra issuer y binding; Authentication Authority administra credenciales y proofs. Ninguna de ellas concede CAM Grants.
+2. No hay todavía repositorios de NativeAuthenticator/proofs, emisión/consumo atómico, bootstrap, sesiones, endpoints, login ni composición productiva.
+3. `SQLiteLocalAuthorityUnitOfWork` es un límite transaccional físico; no es un coordinador de Consistency ni demuestra fencing distribuido.
+4. **Grant inicial del bootstrap sin perfil CAM aprobado:** el Grant canónico exige owner_user_id, subject_identity_id, project_id, environment, resource_type, IDs concretos de recurso, acciones explícitas y expiración. Antes de implementar bootstrap hay que resolver formalmente si el primer usuario se crea sin activación o si se aprueba un perfil CAM acotado. No se inventará un Grant global ni un proyecto/entorno ficticio.
 5. Los parámetros Argon2id de producción requieren benchmark en el hardware objetivo.
+6. La migración v19 debe probar upgrade desde v18 con preservación de datos, integridad FK y re-aplicación idempotente.
 
 ## Próximo slice
 
-Tras validar C1-3, implementar el adaptador de Identity Authority para issuer/binding con pruebas de unicidad/tombstone/CAS. Después definir repositorios de Authentication Authority y el consumo one-shot de proof bajo la misma UoW física. La migración v19 y bootstrap permanecen bloqueados hasta confirmar baseline y cerrar la decisión CAM.
+Tras validar C1-4, definir e implementar persistencia de `NativeAuthenticator` y proof one-shot con digest-only y consumo atómico bajo la misma UoW. Bootstrap seguirá bloqueado por la decisión CAM; sesiones y endpoints quedan fuera de C1.
