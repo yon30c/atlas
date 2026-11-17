@@ -320,3 +320,14 @@ La autoridad de emisión `SQLiteAgentDelegationAuthority.create_for_grant` ya co
 La autoridad requiere que el binding AGENT activo pertenezca al mismo issuer nativo que el contexto USER verificado, porque CORE_SCHEMA_V23 vincula el issuer de la delegación con ese binding. No basta con que exista cualquier binding activo de la identidad AGENT.
 
 La implementación se limita a emitir consentimiento acotado por un Grant exacto. No añade `revoke_delegation`, verificación operativa ni `VerifiedAgentDelegationContext`; CAM continúa siendo la decisión de autorización final y `GrantRenewalService.request_renewal` permanece fail-closed. Las pruebas focalizadas están pendientes de ejecución en Debian.
+
+
+## 17. I3-2B.4B — revocación owner-verified
+
+La autoridad de delegación ahora implementa revocación terminal owner-only. La operación exige `VerifiedIdentityContext` USER, revalida la evidencia dentro de la misma `SQLiteLocalAuthorityUnitOfWork`, resuelve la delegación canónica y compara el par propietario `user_id + identity_id` con el USER verificado. La revisión esperada se aplica mediante CAS en el repositorio; el timestamp procede del reloj confiable inyectado y el actor de auditoría se deriva del propietario canónico. El rollback cubre la verificación y la mutación.
+
+No se implementa todavía `verify_for_operation`, emisión de `VerifiedAgentDelegationContext`, autorización CAM delegada ni renovación AGENT. `GrantRenewalService.request_renewal` permanece fail-closed.
+
+Tests focalizados añadidos: éxito y auditoría, evidencia manipulada/expirada, otro propietario, revisión obsoleta, registro ausente y rollback tras escritura.
+
+**Validación Debian:** pendiente de ejecución por el propietario; no declarar el slice validado hasta recibir resultados.
