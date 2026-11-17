@@ -319,7 +319,8 @@ bv_observation_result bv_evaluate(const bv_observation *o,
     }
 
     if (o->requested_pid <= 0 || o->helper_pid <= 0 ||
-        o->helper_parent_pid <= 0 || o->requested_pid != o->helper_parent_pid ||
+        o->helper_parent_pid <= 0 || o->helper_pid == o->requested_pid ||
+        o->requested_pid != o->helper_parent_pid ||
         o->parent_stat.pid != o->requested_pid ||
         o->parent_status.ppid != o->parent_stat.ppid ||
         o->parent_starttime_first != o->parent_starttime_second ||
