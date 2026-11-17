@@ -126,6 +126,10 @@ bv_pidfd_state bo_pidfd_state_from_poll(int poll_result, int revents) {
     return BV_PIDFD_NOT_REQUESTED;
 }
 
+bool bo_session_matches(int32_t parent_sid, int32_t observer_sid) {
+    return parent_sid > 0 && observer_sid > 0 && parent_sid == observer_sid;
+}
+
 bool bo_parent_samples_match(const bv_status *status_a,
                              const bv_stat *stat_a,
                              const bv_status *status_b,
@@ -433,7 +437,8 @@ int bo_collect(bo_report *report) {
         report->result = BV_OBSERVATION_INCONSISTENT;
     }
     if (first_ok &&
-        report->parent_stat_first.session != report->process_sid) {
+        !bo_session_matches(report->parent_stat_first.session,
+                            report->process_sid)) {
         report->result = BV_OBSERVATION_INCONSISTENT;
     }
     if (!report->have_self_stat || !first_ok || !second_ok ||
