@@ -75,9 +75,12 @@ operational details.
 - Parent executable inode, ownership, mode, and informational symlink target.
 - Parent `/proc/PID/stat` session, process group, `tty_nr`, and `tpgid` fields.
 - Parent file descriptors 0, 1, and 2 as informational symlink targets.
+- A bounded (12-process) ancestor walk from the immediate parent, reporting each process's UID/GID tuple, executable metadata, PPID/PGID/SID/TTY fields, standard descriptors, pidfd poll state, and whether its PPID remained unchanged during the read.
 - Controlling terminal SID, process SID, foreground process group, process group,
   and device metadata.
 
 The probe deliberately does not compare these values against an allowlist. The
 next design step is to review the observations from the actual C implementation
 before specifying a validator.
+
+The ancestor walk is a sequence of non-atomic `/proc` observations. A stable PPID and a non-signaled pidfd do not prove ancestry cryptographically, prevent all PID/exec races, or establish authorization. The output is for design analysis only.
