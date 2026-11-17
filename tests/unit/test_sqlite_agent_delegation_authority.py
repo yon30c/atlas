@@ -396,5 +396,14 @@ class SQLiteAgentDelegationAuthorityTests(unittest.TestCase):
         self.assertEqual(self._stored(delegation.delegation_id), delegation)
 
 
+    def test_operation_verification_fails_closed_without_configured_verifier(self):
+        with self.assertRaises(AuthorizationError):
+            self.authority.verify_for_operation(
+                str(uuid4()),
+                expected_revision=1,
+                verified_agent_identity=None,
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
