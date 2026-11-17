@@ -128,7 +128,8 @@ class VerifiedIdentityContextServiceTests(unittest.TestCase):
             self._service(audience="atlas.other").admit_proof(self.reference)
         self.assertEqual(self._proof_status(), "PENDING")
         context = self._service().admit_proof(self.reference)
-        self.assertEqual(context.audience if hasattr(context, "audience") else "not-exposed", "not-exposed")
+        self.assertEqual(context.issuer_id, self.issuer.issuer_id)
+        self.assertEqual(self._proof_status(), "CONSUMED")
 
     def test_fabricated_context_claims_fail_hmac_attestation(self):
         service = self._service()
