@@ -1970,9 +1970,13 @@ CORE_SCHEMA_V20 = SQLiteMigration(
           AND a.native_subject = NEW.native_subject
           AND a.credential_revision = NEW.credential_revision
           AND a.status = 'ACTIVE'
+          AND EXISTS (
+              SELECT 1 FROM native_identity_issuers AS i
+              WHERE i.issuer_id = a.issuer_id AND i.status = 'ACTIVE'
+          )
     )
     BEGIN
-        SELECT RAISE(ABORT, 'native proof requires current active authenticator');
+        SELECT RAISE(ABORT, 'native proof requires current active authenticator and issuer');
     END;
 
     CREATE TRIGGER native_proof_identity_immutable

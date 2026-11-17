@@ -275,6 +275,10 @@ class SQLiteNativeAuthenticationAuthority(NativeAuthenticationAuthorityPort):
                         AND a.native_subject = native_authentication_proofs.native_subject
                         AND a.credential_revision = native_authentication_proofs.credential_revision
                         AND a.status = 'ACTIVE'
+                        AND EXISTS (
+                            SELECT 1 FROM native_identity_issuers AS i
+                            WHERE i.issuer_id = a.issuer_id AND i.status = 'ACTIVE'
+                        )
                   )
                 """,
                 (reference.digest, expected_audience, now, now),
@@ -305,6 +309,10 @@ class SQLiteNativeAuthenticationAuthority(NativeAuthenticationAuthorityPort):
                         AND a.native_subject = native_authentication_proofs.native_subject
                         AND a.credential_revision = native_authentication_proofs.credential_revision
                         AND a.status = 'ACTIVE'
+                        AND EXISTS (
+                            SELECT 1 FROM native_identity_issuers AS i
+                            WHERE i.issuer_id = a.issuer_id AND i.status = 'ACTIVE'
+                        )
                   )
                 """,
                 (reference.digest, expected_audience),

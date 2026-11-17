@@ -142,8 +142,12 @@ class SQLiteNativeAuthenticationAuthorityTests(unittest.TestCase):
     def test_v19_to_v20_upgrade_and_foreign_key_check(self):
         legacy = SQLiteDatabase(Path(self.temp_dir.name) / "v19.sqlite")
         legacy.apply_migrations(SQLITE_MIGRATIONS[:-1])
+        legacy_identity = SQLiteNativeIdentityAuthority(legacy)
+        preserved_issuer = legacy_identity.create_native_issuer("atlas.preserved")
         with legacy.connection() as connection:
             self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 19)
+        self.assertEqual(legacy.apply_migrations(SQLITE_MIGRATIONS), 20)
+        self.assertEqual(legacy_identity.get_native_issuer("atlas.preserved"), preserved_issuer)
         self.assertEqual(legacy.apply_migrations(SQLITE_MIGRATIONS), 20)
         with legacy.connection() as connection:
             self.assertEqual(connection.execute("PRAGMA foreign_key_check").fetchall(), [])
