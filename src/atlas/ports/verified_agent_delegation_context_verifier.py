@@ -12,3 +12,8 @@ class VerifiedAgentDelegationContextVerifierPort(Protocol):
         self, context: VerifiedAgentDelegationContext
     ) -> AgentDelegation:
         """Return the current canonical delegation or fail closed; never grants CAM access."""
+
+    def verify_in_unit_of_work(
+        self, context: VerifiedAgentDelegationContext, unit
+    ) -> AgentDelegation:
+        """Revalidate in a caller-owned shared transaction; never commits it."""
