@@ -1,6 +1,6 @@
 # I-2 — Contrato de autenticación nativa y VerifiedIdentityContext
 
-**Estado:** diseño de implementación para revisión; no habilita login operativo.
+**Estado:** implementación inicial en revisión; no habilita login operativo. El contexto incorpora attestation HMAC para impedir la fabricación de claims por callers.
 **Dependencia:** I-1 en `feature/verified-identity-i1-canonical-lookup`.
 **Rama:** `feature/verified-identity-i2-authentication-context`.
 **Alcance:** servicio de autenticación de aplicación, admisión one-shot del proof y emisión/validación efímera de `VerifiedIdentityContext`. Sin endpoints, CLI, sesiones persistentes, bootstrap ni CAM.
@@ -116,11 +116,12 @@ Modelo frozen, efímero y sin secretos. Campos obligatorios conforme B1-B-03D:
 - `authenticated_at`;
 - `verified_at`;
 - `expires_at`;
-- `verification_ref`: referencia opaca aleatoria, distinta del proof raw.
+- `verification_ref`: referencia opaca aleatoria de 256 bits, distinta del proof raw.
+- `attestation`: HMAC-SHA256 sobre todos los claims canónicos del contexto, generado por Identity Authority con una clave secreta de composición confiable.
 
 No contiene password, PHC, NativeSubject raw, NativeProofReference, tokens, Grant, Project, Environment, rol ni acciones.
 
-La construcción pública del dataclass no es una frontera de seguridad en Python. Solo la composición de confianza que controla la fábrica y los servicios consumidores puede garantizar procedencia. No usar booleanos/sellos declarativos como prueba criptográfica.
+La construcción pública del dataclass no es una frontera de seguridad en Python. Por eso el contexto incluye una attestation HMAC-SHA256 calculada sobre todos sus claims, verificada en tiempo constante por un adaptador cuya clave de al menos 256 bits procede de la composición confiable y se comparte de forma segura entre workers autorizados. La clave nunca se persiste junto al contexto ni se acepta del caller. La rotación invalida los contextos emitidos con la clave anterior; no hay refresh automático. La attestation no reemplaza las relecturas de autoridad. No usar booleanos/sellos declarativos como prueba criptográfica.
 
 ## 5. Validación del contexto
 
@@ -128,7 +129,7 @@ Antes de usar el contexto para derivar una operación, el verificador vuelve a c
 
 - expiración y timestamps UTC;
 - issuer configurado, ID exacto y estado ACTIVE;
-- binding por issuer/subject de procedencia interna, ID exacto, estado ACTIVE y revisión igual;
+- binding por `binding_id`, issuer exacto, identidad exacta, estado ACTIVE y revisión igual;
 - Identity(USER) canónica por identity_id, estado ACTIVE, revisión igual y UserId igual.
 
 La referencia opaca identifica evidencia interna, pero no reemplaza las relecturas de autoridad. Ausencia, discrepancia, revisión obsoleta, expiración o indisponibilidad producen DENY. El contexto no se renueva automáticamente; para renovar autenticación se requiere nuevo proof.
@@ -187,3 +188,26 @@ I-2 no habilita:
 - fencing global, coordinación con Consistency Journal o resistencia anti-rollback.
 
 El cierre de I-2 requiere tests unitarios y de integración, suite completa, compileall, revisión del diff y evidencia de rollback UoW. La implementación debe mantener la propiedad de responsabilidades: Authentication Authority verifica credenciales y emite proofs; Identity Authority consume la evidencia, resuelve el binding y emite VerifiedIdentityContext. No se declarará listo para operación mientras el guard de intentos no tenga adaptador compartido aprobado.
+
+## 9. Brecha de procedencia cerrada en la implementación inicial
+
+Una relectura de issuer/binding/identity por sí sola no demuestra que un objeto `VerifiedIdentityContext` haya sido emitido por Identity Authority: un caller podría fabricar un dataclass con IDs y revisiones actuales. Se añadió una attestation HMAC-SHA256 sobre los claims canónicos para que el verificador distinga contextos emitidos por la composición de confianza de objetos fabricados. `verification_ref` continúa siendo una referencia aleatoria independiente; no es la firma ni un bearer proof.
+
+La clave de attestation debe tener al menos 256 bits, venir de configuración secreta del composition root y compartirse entre workers de confianza. No se guarda en SQLite, logs ni el contexto. Cambiar la clave invalida los contextos vivos emitidos con la clave anterior. La clave no se expone a requests, plugins, herramientas ni modelos.
+
+Para revalidar un contexto sin incluir `NativeSubject` ni `subject_digest` en él, se añadió `get_native_binding_by_id(binding_id)` a Native Identity Authority. El binding ID es inmutable; el verificador compara issuer, identity, estado y revisión contra el registro actual.
+
+## 10. Implementación inicial de proof admission y derivación
+
+Implementado en revisión:
+- `VerifiedIdentityContext` frozen con UUIDs canónicos, USER fijo, revisiones positivas, timestamps UTC, referencia aleatoria y attestation HMAC.
+- `HmacVerifiedIdentityContextAttestor` y su puerto. La firma usa HMAC-SHA256 y la verificación es constant-time.
+- `VerifiedIdentityContextService.admit_proof`: consume proof, resuelve issuer por realm confiable, binding por issuer + subject digest derivado del proof y usuario canónico por I-1; crea el contexto y confirma todo dentro de la misma `SQLiteLocalAuthorityUnitOfWork`.
+- Si la resolución de issuer, binding o usuario falla después de consumir el proof, la excepción revierte la transacción y el proof permanece pendiente. Los estados terminales que el adaptador marca al no admitir un proof se confirman antes de devolver DENY.
+- `VerifiedIdentityContextService.verify`: verifica HMAC, TTL, issuer, binding por ID, identidad USER, estado y revisiones actuales.
+- `VerifiedOperationContextFactory`: deriva `OperationContext` con actor y user_id canónicos, delegation/project/environment en None. No acepta actor ni user_id del caller.
+- Tests iniciales para IDs distintos, replay, audience incorrecta, HMAC manipulado, clave diferente, binding revocado, identidad suspendida, rollback tras binding inválido y expiración.
+
+**Límite de uso:** la fábrica de OperationContext no hace seguros por sí sola a los consumidores CAM existentes. Hasta I-3, los servicios sensibles deben seguir considerándose no reconciliados; esta implementación no habilita operaciones protegidas, login operativo ni endpoints.
+
+**Validación:** pendiente de ejecución por el propietario en Debian. No se declara este slice validado hasta ejecutar pruebas focalizadas, suite completa y compileall.
