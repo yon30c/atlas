@@ -311,3 +311,12 @@ Los servicios USER y AGENT ahora ofrecen `verify_in_unit_of_work(context, unit)`
 La composición `SQLiteLocalAuthorityUnitOfWork` expone las autoridades USER/AGENT, bindings nativos y repositorios de Grant/delegación sobre el mismo `SQLiteUnitOfWork`. Esto elimina la necesidad de que la futura autoridad de delegación invoque verificadores que abran transacciones independientes. La garantía sigue limitada a la base SQLite y UoW compartidas; no implica atomicidad con efectos externos ni sustituye CAM.
 
 **Validación del propietario en Debian:** suite completa **1,344/1,344 tests OK** y `python -m compileall -q src tests` con `COMPILE_EXIT_CODE=0`. No se habilita todavía la autoridad de emisión/revocación/verificación de delegaciones; `GrantRenewalService.request_renewal` permanece fail-closed.
+
+
+## 16. I3-2B.4A — emisión owner-verified de delegación
+
+La autoridad de emisión `SQLiteAgentDelegationAuthority.create_for_grant` ya consume el seam UoW compartido. El USER verifier revalida el contexto del propietario dentro de la misma transacción que resuelve AGENT, binding nativo, Grant y persiste la delegación.
+
+La autoridad requiere que el binding AGENT activo pertenezca al mismo issuer nativo que el contexto USER verificado, porque CORE_SCHEMA_V23 vincula el issuer de la delegación con ese binding. No basta con que exista cualquier binding activo de la identidad AGENT.
+
+La implementación se limita a emitir consentimiento acotado por un Grant exacto. No añade `revoke_delegation`, verificación operativa ni `VerifiedAgentDelegationContext`; CAM continúa siendo la decisión de autorización final y `GrantRenewalService.request_renewal` permanece fail-closed. Las pruebas focalizadas están pendientes de ejecución en Debian.
