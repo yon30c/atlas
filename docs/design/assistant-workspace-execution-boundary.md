@@ -194,3 +194,19 @@ El primer perfil propuesto es read-only (`workspace.list` y `workspace.read`). E
 La inspección confirma que la composición actual no permite una transacción compartida entre Identity, Grant, Project, Environment y journal. Identity crea su propia SQLiteDatabase y cambia estado mediante CAS directo; Grant carece de adaptador SQLite concreto, su UoW cubre solo Grant/renovaciones y emisión escribe directo; Project/Environment solo tienen contratos de metadatos bajo Memory; journal y store de cambios de autoridad no están conectados a esas fuentes.
 
 Por tanto, no hay coordinador de invalidación/fencing que pueda cerrar las carreras de autorización. El siguiente paso requiere decidir si se construye una composición canónica local con las cuatro fuentes y se migran todos los caminos de mutación, o si se aplaza CAM integrado para el primer perfil read-only. No se ha conectado el runtime.
+
+## 11. Ciclo 3.1 — Gate CAM local para capacidades de lectura
+
+Se añade `WorkspaceCapabilityExecutionService` para ejecutar únicamente `workspace.list` y `workspace.read` sobre el workspace configurado. El servicio exige un plan de un paso, coincidencia exacta entre intención y paso, confirmación explícita de revisión y riesgo `READ_ONLY`. La confirmación expresa intención humana; no altera la decisión CAM.
+
+Antes de leer/listar, el servicio abre `SQLiteLocalAuthorityUnitOfWork` (`BEGIN IMMEDIATE`), compara el actor completo con la Identity canónica obtenida mediante `context.user_id`, valida proyecto y entorno activos y evalúa el Grant exacto con `AuthorizationEvaluator`. El propietario del workspace en este primer perfil es el UserId canónico de la sesión. El ID de un archivo se serializa como JSON canónico `[workspace_id, path]`, evitando colisiones entre workspace y ruta. La lectura/listado del filesystem se ejecuta antes de cerrar la UoW.
+
+Se corrige `SQLiteProjectEnvironmentRepository.get_environment()` para utilizar `_read_connection()`, respetando la conexión transaccional inyectada. Se añade una prueba que comprueba visibilidad de una revisión no confirmada dentro de la UoW y rollback exterior.
+
+**Límites:** esta implementación reutiliza el evaluador CAM y la autoridad SQLite local, pero no crea un adaptador genérico de `OperationAuthorizationPort`, no emite evidencia criptográfica, no implementa Approval Manager ni coordinador distribuido. `REQUIRE_APPROVAL` no permite continuar. No se conecta a CLI/runtime y no expone escritura. **Pendiente de validación local por el propietario.**
+
+## 12. Requisito para el Ciclo 3.2 — contexto confiable de consola
+
+La consola actual usa `LocalConsoleRequestFactory`, que fabrica `Identity` sintética (`local-user:<os-user>`), `user_id` no canónico y `project_id=None`. Ese contexto no puede ser elevado a una identidad CAM válida ni debe mapearse automáticamente a un UserId existente. Antes de conectar el runtime se necesita un bootstrap explícito del propietario, una relación estable y verificable entre la sesión local y la identidad canónica, proyecto/entorno seleccionados desde configuración confiable y un registro explícito de workspaces/owners.
+
+Hasta completar ese paso, el servicio de ejecución permanece como caso de uso aislado y probado por tests; no se altera la composición de `cli.py`.
