@@ -85,12 +85,12 @@ Se añadieron en el branch:
 ## Límites y bloqueos de seguridad
 
 1. Identity Authority administra issuer y binding; Authentication Authority administra credenciales y proofs. Ninguna de ellas concede CAM Grants.
-2. No hay todavía repositorios de NativeAuthenticator/proofs, emisión/consumo atómico, bootstrap, sesiones, endpoints, login ni composición productiva.
+2. C1-5 añade persistencia interna de autenticadores/proofs y consumo one-shot; todavía no hay bootstrap, sesiones, endpoints ni login operativo.
 3. `SQLiteLocalAuthorityUnitOfWork` es un límite transaccional físico; no es un coordinador de Consistency ni demuestra fencing distribuido.
 4. **Grant inicial del bootstrap sin perfil CAM aprobado:** el Grant canónico exige owner_user_id, subject_identity_id, project_id, environment, resource_type, IDs concretos de recurso, acciones explícitas y expiración. Antes de implementar bootstrap hay que resolver formalmente si el primer usuario se crea sin activación o si se aprueba un perfil CAM acotado. No se inventará un Grant global ni un proyecto/entorno ficticio.
 5. Los parámetros Argon2id de producción requieren benchmark en el hardware objetivo.
-6. La migración v19 debe probar upgrade desde v18 con preservación de datos, integridad FK y re-aplicación idempotente.
+6. La migración v20 debe probar upgrade desde v19 con preservación de datos, integridad FK y re-aplicación idempotente.
 
 ## Próximo slice
 
-Tras validar C1-4, definir e implementar persistencia de `NativeAuthenticator` y proof one-shot con digest-only y consumo atómico bajo la misma UoW. Bootstrap seguirá bloqueado por la decisión CAM; sesiones y endpoints quedan fuera de C1.
+Tras validar C1-5, resolver formalmente el perfil CAM mínimo antes de diseñar bootstrap. Bootstrap permanece bloqueado hasta esa decisión; sesiones y endpoints quedan fuera de C1.
