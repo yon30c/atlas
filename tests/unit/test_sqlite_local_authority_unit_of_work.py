@@ -34,12 +34,14 @@ class SQLiteLocalAuthorityUnitOfWorkTests(unittest.TestCase):
     def test_one_unit_exposes_all_canonical_authority_repositories(self):
         with self.factory() as unit:
             self.assertIsNotNone(unit.identity)
+            self.assertIsNotNone(unit.native_identity)
             self.assertIsNotNone(unit.grants)
             self.assertIsNotNone(unit.renewals)
             self.assertIsNotNone(unit.project_environments)
             self.assertIsNotNone(unit.authority_changes)
             self.assertIs(unit.authority_changes._unit_of_work, unit._unit)
             self.assertIs(unit.identity._unit_of_work, unit._unit)
+            self.assertIs(unit.native_identity._unit_of_work, unit._unit)
             self.assertIs(unit.project_environments._unit_of_work, unit._unit)
             self.assertIs(unit.grants._unit_of_work, unit._unit)
             self.assertIs(unit.renewals._unit_of_work, unit._unit)
