@@ -2,7 +2,7 @@
 
 from typing import Protocol
 
-from atlas.core.agent_delegation import VerifiedAgentDelegationContext
+from atlas.core.agent_delegation import AgentDelegation, VerifiedAgentDelegationContext
 
 
 class VerifiedAgentDelegationContextVerifierPort(Protocol):
@@ -10,5 +10,5 @@ class VerifiedAgentDelegationContextVerifierPort(Protocol):
 
     def verify(
         self, context: VerifiedAgentDelegationContext
-    ) -> VerifiedAgentDelegationContext:
-        """Return current verified claims or fail closed; never grants CAM access."""
+    ) -> AgentDelegation:
+        """Return the current canonical delegation or fail closed; never grants CAM access."""
