@@ -58,6 +58,7 @@ Atlas Terminal ya es una superficie funcional en `feature/terminal-commands`: in
 - [Diseño V1 del validador bootstrap](docs/design/local-bootstrap-validator-v1-design.md)
 - [Diseño V2 del observador LOCAL de procesos](docs/design/local-bootstrap-observer-v2-design.md)
 - [Diseño V3 del observador de cadena sudo](docs/design/local-bootstrap-chain-observer-v3-design.md)
+- [Evaluación Candidate A/B y separación de privilegios](docs/design/local-bootstrap-candidate-evaluation-2026-11-16.md)
 - [Hoja de ruta general por fases](docs/roadmap.md)
 - [Fase 3 — Inteligencia y comportamiento seguro](docs/phase-3-intelligence.md)
 - [Atlas Terminal](docs/terminal/README.md)
