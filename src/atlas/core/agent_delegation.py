@@ -69,8 +69,11 @@ class AgentDelegation:
     owner_user_id: str
     owner_identity_id: str
     agent_identity_id: str
+    agent_identity_revision: int
+    agent_context_id: str
+    agent_binding_id: str
+    agent_binding_revision: int
     grant_id: str
-    grant_revision: int
     project_id: str
     environment: str
     scope: AgentDelegationScope
@@ -145,14 +148,14 @@ class VerifiedAgentDelegationContext:
     def __post_init__(self) -> None:
         for name in (
             "context_id", "delegation_id", "owner_user_id", "owner_identity_id",
-            "agent_identity_id", "issuer_id",
+            "agent_identity_id", "agent_context_id", "agent_binding_id", "issuer_id",
         ):
             validate_canonical_uuid4(getattr(self, name), name)
         if self.owner_identity_id == self.agent_identity_id:
             raise ContractError("owner y agent deben ser identidades distintas")
         for name in ("grant_id", "project_id", "environment", "realm", "audience"):
             _required(getattr(self, name), name)
-        for name in ("delegation_revision", "grant_revision"):
+        for name in ("delegation_revision", "agent_identity_revision", "agent_binding_revision", "grant_revision"):
             _revision(getattr(self, name), name)
         if not isinstance(self.scope, AgentDelegationScope):
             raise ContractError("scope debe ser AgentDelegationScope")
@@ -174,6 +177,10 @@ class VerifiedAgentDelegationContext:
             "owner_user_id": self.owner_user_id,
             "owner_identity_id": self.owner_identity_id,
             "agent_identity_id": self.agent_identity_id,
+            "agent_identity_revision": self.agent_identity_revision,
+            "agent_context_id": self.agent_context_id,
+            "agent_binding_id": self.agent_binding_id,
+            "agent_binding_revision": self.agent_binding_revision,
             "grant_id": self.grant_id,
             "grant_revision": self.grant_revision,
             "project_id": self.project_id,
