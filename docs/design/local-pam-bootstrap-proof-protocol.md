@@ -185,3 +185,29 @@ El perfil LOCAL acepta explícitamente la limitación anti-rollback descrita por
 8. Binding protegido entre sujeto local greed y la decisión de establecer el propietario canónico, sin derivar UserId del UID.
 
 No se debe comenzar el helper ejecutable hasta cerrar estas decisiones. El siguiente trabajo es inspeccionar los contratos y primitivas existentes en Atlas para determinar si el verificador y el consumo pueden componerse sin duplicar autoridad ni crear una segunda fuente de verdad.
+## 13. Inspección de contratos existentes en Atlas (16-11-2026)
+
+La revisión de la rama confirma los siguientes puntos relevantes:
+
+- DM-01 §9.3.4 ya define el contrato lógico de OwnerDecisionProof y OwnerDecisionVerifier para approve/reject/forget de Memory. No existe una implementación de emisor/verificador confiable ni debe reutilizarse ese contrato de Memory como si ya resolviera el bootstrap de dominio.
+- SQLiteIdentityAuthority es el único emisor local de los pares canónicos UserId/Identity(USER). Su responsabilidad declarada excluye autenticación, binding externo, recuperación y autorización. Por tanto, el helper PAM no debe llamar a esta autoridad ni generar esos IDs.
+- SQLiteIdentityAuthority admite recibir una SQLiteUnitOfWork compartida. Su create_user() puede participar en una transacción mayor si la composición usa exactamente la misma instancia SQLiteDatabase y la misma UoW.
+- SQLiteUnitOfWork usa BEGIN IMMEDIATE y controla commit/rollback. Es una primitiva útil para consumo único y génesis local dentro de una transacción común, pero por sí sola no implementa el evento DOMAIN_BOOTSTRAPPED, el verificador de prueba ni el binding del propietario.
+- ME-D4O indica que no existe todavía un evento de activación inicial ni una composición completa de la autoridad de recuperación. El dominio nuevo permanece cerrado; no se debe abrir mediante UPDATE manual ni confundir con recuperación vacía.
+- El proyecto ya declara cryptography>=42 como dependencia Python. Esto respalda la posibilidad de verificar Ed25519 en Python, pero no confirma la disponibilidad de OpenSSL development headers/libraries para compilar el helper C en Debian.
+
+### Consecuencia de composición
+
+La futura transacción de génesis debe coordinar, en una sola SQLiteUnitOfWork y sobre la misma SQLiteDatabase, al menos: consumo del desafío/prueba, creación canónica UserId/Identity(USER), binding explícito del sujeto local con el propietario canónico, evento de génesis, idempotencia y estado/gate materializado. La transacción no debe aceptar que el caller proporcione una identidad canónica ni un binding ya verificado.
+
+Esta lista es una meta de composición, no una afirmación de que las tablas, puertos o adaptadores de todos esos elementos existan. La inspección actual solo confirma la primitiva UoW y la autoridad de identidad; el modelo persistente de binding y el flujo de génesis siguen pendientes.
+
+### Bloqueadores que permanecen abiertos
+
+1. No se ha definido un emisor de desafíos confiable para el estado previo a CAM. El desafío no puede firmarlo Assistant ni un caller arbitrario. Debe resolverse junto con el estado protegido de bootstrap pendiente.
+2. No existe todavía un binding persistente y verificable entre el sujeto Linux greed y el UserId/Identity(USER) que se creará. No derivar el ID canónico del UID ni del nombre.
+3. No existe el evento DOMAIN_BOOTSTRAPPED ni su coordinador transaccional integrado.
+4. No está decidido cómo el helper demuestra que su TTY y su invocación privilegiada son confiables.
+5. No se han comprobado OpenSSL EVP headers/libs ni la custodia viable de la clave privada en el host.
+
+Por estos bloqueadores, el protocolo queda documentado como diseño propuesto, pero no está listo para implementación del helper. El próximo incremento debe resolver el modelo de emisor/desafío y el binding del propietario antes de fijar el layout binario.
