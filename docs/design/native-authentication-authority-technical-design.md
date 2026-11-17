@@ -255,3 +255,25 @@ Identity Authority no valida contraseñas ni administra hashes.
 7. Implementar en ramas aisladas con pruebas; no activar autenticación operativa hasta cerrar gates.
 
 **Conclusión:** esta propuesta integra autenticación nativa con las autoridades y evidencia ya definidas. No introduce identidad paralela ni concede permisos por autenticación. Permanece pendiente de revisión y aprobación; no autoriza código, migraciones, bootstrap operativo ni cambios de host.
+
+## 15. Hallazgos de compatibilidad con B1-B-03A/B/C/D
+
+La revisión documental inicial encuentra compatibilidad conceptual, pero deja decisiones de contrato que deben resolverse antes de implementar:
+
+| Baseline | Compatibilidad | Trabajo pendiente |
+|---|---|---|
+| B1-B-03A | El subject nativo puede usar el binding exacto (issuer_id, subject) hacia Identity(USER), manteniendo UserId separado. | Confirmar que el binding nativo comparte unicidad y tombstones con los bindings externos, sin usar login handle como subject. |
+| B1-B-03B | identity_records y atlas_users siguen siendo la autoridad canónica; Authentication Authority es un agregado separado. | El modelo identity_issuers actual contempla configuration_ref/keyset_ref de issuer externo. Definir un verification_profile/tipo de issuer nativo sin exigir keyset externo ni debilitar la confianza. Definir la persistencia protegida del subject nativo y del login handle. |
+| B1-B-03C | Estados, revisiones, revocación, no-reasignación y recuperación deshabilitada son aplicables. | Precisar cómo suspensión/revocación de autenticador nativo coordina sesiones, bindings, Identity y Consistency; no eliminar el último método utilizable. |
+| B1-B-03D | Se conserva VerifiedIdentityContext y su semántica efímera. | Añadir un perfil de verificación nativo basado en prueba interna de Authentication Authority; especificar procedencia no falsificable, replay, expiración y revisión. No exigir firma de token externo a una prueba de contraseña ni relajar el perfil externo. |
+
+La compatibilidad no significa que el esquema físico actual ya soporte autenticación nativa. En particular, no se debe insertar un issuer nativo en producción hasta definir cómo se distingue del issuer externo, cómo se protege el subject y qué evidencia acredita la verificación.
+
+La primera implementación debe conservar separadas las tablas/propiedad de Authentication Authority y Identity Authority. Un binding identifica la cuenta autenticada; el autenticador almacena el verificador de contraseña; ninguno de los dos sustituye al otro.
+
+## 16. Separación del bootstrap de usuario y el bootstrap privilegiado del host
+
+El bootstrap descrito en este documento crea el primer usuario Atlas y cierra el registro inicial de cuentas. No es el bootstrap de privilegios del host ni una autorización para instalar helpers, modificar PAM, sudoers, systemd, usuarios, grupos, sockets o permisos del sistema.
+
+Los trabajos B0-B7, PAM y Recovery Gate permanecen independientes y sujetos a sus propias decisiones y autorizaciones. La prueba one-shot de alta del primer usuario Atlas no puede convertirse en evidencia para elevar privilegios del host, y una identidad Linux o prueba del host no puede crear ni autenticar por sí sola al primer usuario Atlas.
+
