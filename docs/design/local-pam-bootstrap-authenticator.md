@@ -19,6 +19,12 @@ No es:
 
 La cuenta `greed` es el sujeto operativo inicial aprobado en el host actual. La cuenta técnica `atlas` y la cuenta de servicio `atlas-sandbox` no son propietarios.
 
+## Política de terminal: local y SSH con PTY
+
+Se admite tanto un terminal local como una sesión SSH interactiva con PTY. SSH sin PTY y cualquier invocación no interactiva se rechazan. Un PTY válido demuestra una sesión de terminal interactiva, no presencia física ante el servidor.
+
+La confirmación del descriptor se captura directamente del TTY controlador validado; nunca de stdin, argumentos, entorno, pipes ni callbacks. PAM debe autenticar nuevamente al sujeto configurado y aprobar `pam_acct_mgmt`; una sesión SSH ya autenticada o la caché de sudo no sustituyen esta reautenticación. La pérdida de TTY, foreground o sesión cancela el flujo sin emitir prueba. Los detalles y pruebas negativas están en [Frontera de privilegios del bootstrap LOCAL](local-bootstrap-privilege-boundary.md).
+
 ## 2. Datos de entorno confirmados
 
 - Debian con PAM `1.7.0-5`.
