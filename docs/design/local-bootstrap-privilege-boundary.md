@@ -115,6 +115,22 @@ El modelo de amenaza ya excluye al propietario administrador actuando maliciosam
 
 **Siguiente comprobación:** repetir solo la inspección de TTY usando la función libc `tcgetsid(2)` mediante `ctypes`, además de `tcgetpgrp`, `getsid(0)`, `getpgrp` y `fstat` del descriptor. No cambiar sudoers ni instalar/configurar nada. Después se decidirá si el mecanismo A puede sostenerse con los metadatos efectivos de sudo y el modelo de amenaza, o si conviene B (socket Unix + `SO_PEERCRED` + TTY transferido).
 
+## 4.2 Segunda prueba de sesión/TTY (16-11-2026)
+
+El propietario ejecutó la comprobación mediante `sudo python3`:
+
+- UID real/efectivo: 0/0.
+- `SUDO_UID=1000`, `SUDO_USER=greed`.
+- Terminal SID: 10931.
+- Proceso SID: 10931.
+- Grupo foreground del terminal: 10931.
+- Grupo de proceso del comando: 10932.
+- `/dev/tty` abrió correctamente; propietario UID 0, GID 5.
+
+**Conclusión:** el proceso y el TTY comparten sesión, pero el proceso no pertenece al grupo foreground reportado por el terminal. El requisito de foreground-control no está satisfecho en esta ejecución. El propietario del dispositivo TTY tampoco identifica al operador. No se aprueba el mecanismo A.
+
+**Siguiente diagnóstico:** repetir con un comando simple, sin heredoc, para observar PID/PPID/SID/PGID/TPGID del proceso y su cadena de padres. Comparar la salida con el comportamiento de `sudo use_pty`. No cambiar configuración. Si el desacoplamiento se debe a la asignación de PTY de sudo y no puede resolverse de forma robusta, seleccionar mecanismo B (servicio/socket Unix con `SO_PEERCRED` y transferencia explícita del TTY), sin debilitar la comprobación del terminal.
+
 ## 5. Entorno, argumentos y descriptores
 
 - Rechazar argc distinto del valor fijo esperado.
