@@ -13,3 +13,8 @@ class VerifiedAgentIdentityContextVerifierPort(Protocol):
         self, context: VerifiedAgentIdentityContext
     ) -> CanonicalAgentIdentity:
         """Return the current canonical AGENT aggregate or fail closed."""
+
+    def verify_in_unit_of_work(
+        self, context: VerifiedAgentIdentityContext, unit
+    ) -> CanonicalAgentIdentity:
+        """Revalidate within a caller-owned UoW; never commits or closes it."""
