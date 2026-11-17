@@ -208,7 +208,7 @@ Para cada siguiente incremento:
 6. Revisar los resultados antes de continuar.
 7. Actualizar esta documentación con evidencia, commit y estado real.
 
-**Siguiente acción:** abordar el Ciclo 3.2 para resolver el contexto canónico de la consola y la configuración confiable de workspaces antes de conectar planificación/ejecución al runtime. No se debe adaptar `LocalConsoleRequestFactory` actual como identidad autorizada: hoy genera una identidad sintética, sin UserId canónico ni proyecto.
+**Siguiente acción vigente:** Ciclo 3.2: resolver el contexto canónico de la consola y la configuración confiable/ownership de workspaces. No adaptar `LocalConsoleRequestFactory` como identidad autorizada: genera una identidad sintética, sin UserId canónico ni proyecto. Después, continuar F3 y F4/F5. La integración de Memory Engine y Atlas Broker se planifica en las secciones 10 y 11; no se conecta ningún runtime privilegiado antes de cerrar identidad, contexto y autorización.
 
 
 ### F2.3.3b — Inspección de autoridad y consistencia
@@ -550,3 +550,98 @@ El trabajo se organiza en W0–W6:
 - W6: experiencia multiplataforma.
 
 Workstation no es una autorización independiente. CAM y las aprobaciones siguen siendo obligatorias; Assistant, agentes y Skills no reciben Docker socket, root ni shell irrestricta. El siguiente paso inmediato continúa siendo el Ciclo 3.2 (bootstrap confiable, contexto canónico y ownership de workspaces). La documentación W0 no implica ejecución habilitada ni cambios en el servidor.
+
+
+## 10. Subsistema transversal — Memory Engine
+
+**Estado: infraestructura de dominio y autoridad parcialmente implementada; ciclo de memoria de producto e integración con Assistant pendientes.** Memory Engine es un subsistema propio de Atlas, no un sinónimo del historial conversacional ni una tabla adicional de conversaciones.
+
+### 10.1 Base implementada conocida
+
+- Modelos y contratos de memoria, versiones, propuestas, scopes, clasificación, estado y procedencia.
+- Ámbitos PRIVATE y PROJECT y reglas de acceso asociadas.
+- Memory Gateway y servicios/adaptadores de autorización de memoria.
+- Journal de consistencia, posiciones, checkpoints y mecanismos/reducers de recuperación parcialmente implementados.
+- Persistencia SQLite para parte de la autoridad, identidad, Grants, cambios de autoridad y estructuras de consistencia.
+- UoW SQLite compartida para Identity, Grants, renovaciones, Project, Environment y ledger de cambios de autoridad, con operaciones transaccionales y pruebas de commit/rollback.
+- Contratos y persistencia para inventario/política de emisores, verificación y admisión de evidencia de recuperación, con auditorías de integridad.
+- El trabajo F2.3.40 y Cycle 3.1 valida un gate CAM local para lectura de workspace; no equivale a cerrar el Recovery Gate ni a completar Memory Engine.
+
+### 10.2 Límites y trabajo pendiente
+
+- No declarar durable y completo el contenido de memoria: la persistencia integral del contenido/versiones y sus adaptadores de producto aún debe verificarse y completarse.
+- Completar los flujos de crear/proponer, revisar, almacenar, recuperar, actualizar, invalidar y olvidar recuerdos.
+- Completar autorización de lectura y control de salida (egress) en el flujo real, no solo en contratos o servicios aislados.
+- Completar composición protegida, autoridad confiable y condiciones de recuperación; el Recovery Gate permanece cerrado.
+- Definir e implementar el ciclo de vida, retención, procedencia, aislamiento PRIVATE/PROJECT y auditoría de cada operación.
+- Integrar Memory Engine con Assistant y el contexto de tareas sin duplicar el historial conversacional.
+- Demostrar pruebas de reinicio, recuperación, revocación, aislamiento entre proyectos y resultados verificables.
+- Evaluar y demostrar su desacoplamiento ejecutable de Atlas Core; no afirmar independencia de despliegue hasta probarla.
+
+### 10.3 Relación con el contexto conversacional
+
+El historial SQLite de conversaciones sigue siendo la fuente de continuidad de chat. La proyección actual al modelo está limitada a ocho turnos y 2.000 caracteres por mensaje. Memory Engine tendrá una función diferente: conservar conocimiento seleccionado y durable con autorización, scope, procedencia y políticas de ciclo de vida. No se sustituirá el historial por Memory Engine ni se copiarán todos los mensajes automáticamente.
+
+**Criterio de salida:** Memory Engine puede completar operaciones reales de memoria, con persistencia y recuperación comprobables, autorización y aislamiento, auditoría y una integración explícita con Assistant. Contratos, reducers o pruebas unitarias aisladas no bastan para marcarlo como producto funcional.
+
+## 11. Subsistema transversal — Atlas Broker
+
+**Estado conocido al último reporte operativo del propietario: servicio separado desplegado en Debian para acceso controlado a Docker rootless; integración end-to-end con Atlas Core/Assistant no demostrada.** Broker es una frontera de ejecución acotada, no el planificador, la autoridad central ni una API para que el modelo ejecute comandos arbitrarios.
+
+### 11.1 Despliegue y base operativa reportada
+
+- Repositorio independiente `yon30c/atlas-broker`, separado del repositorio Atlas.
+- Servicio systemd `atlas-broker.service`.
+- Proceso de ejecución separado bajo la identidad técnica `atlas-sandbox`.
+- Acceso al daemon Docker rootless mediante el socket de ese usuario técnico.
+- Socket IPC Unix del Broker en `/run/atlas-broker/broker.sock`.
+- Registry SQLite, perfiles de recursos y auditoría de operaciones.
+- Controles de identidad del proceso cliente mediante credenciales del socket (SO_PEERCRED).
+- Endurecimiento del servicio mediante restricciones systemd y separación del proceso de servicio.
+- El propietario reportó pruebas automatizadas del Broker en distintos incrementos; los recuentos históricos pertenecen al repositorio Broker y no deben sumarse a la suite de Atlas Core.
+- Este estado es una referencia documental del último reporte operativo conocido, no una verificación en vivo del servicio en este cambio documental.
+
+### 11.2 Responsabilidades y límites
+
+- Broker valida al caller y la forma/perfil de la operación según su política local.
+- Ejecuta únicamente operaciones Docker predefinidas y limitadas; no debe convertirse en un proxy de shell ni aceptar argumentos arbitrarios del LLM.
+- El modelo, Assistant, agentes, Skills y contenedores de tareas nunca reciben directamente docker.sock ni privilegios del host.
+- Broker no sustituye CAM: Atlas Core conserva identidad canónica, proyecto, entorno, Grants, aprobaciones, tareas y decisión de autoridad.
+- SO_PEERCRED identifica credenciales del proceso conectado, pero por sí solo no prueba que la operación esté autorizada en CAM ni que el proceso represente una sesión humana válida.
+- El despliegue separado no demuestra que exista integración con `cli.py`, Assistant, Task Manager o Workstation Coordinator.
+- Una operación con resultado incierto requiere estado durable, idempotencia y reconciliación; no se reintenta por asumir que no ocurrió.
+
+### 11.3 Integración pendiente con Atlas Core y Workstation
+
+1. Definir un contrato tipado y versionado Core–Broker: operación, caller, proyecto, entorno, workspace, tarea, perfil, límites, idempotency key y correlación.
+2. Definir cómo la decisión CAM y la aprobación humana se vinculan a la solicitud exacta y cómo Broker verifica el binding sin convertirse en autoridad paralela.
+3. Definir autenticación IPC, autorización por operación, protección contra replay, timeouts, cancelación y semántica de resultado desconocido.
+4. Definir lifecycle de runtime: crear, inspeccionar, detener, destruir, expiración/lease, limpieza y recuperación.
+5. Vincular auditoría de Core y Broker mediante IDs y digests correlacionables.
+6. Implementar un adaptador de Workstation que invoque solo operaciones Broker permitidas.
+7. Ejecutar pruebas E2E en entorno descartable: denegación, permisos mínimos, aislamiento entre proyectos, límites de recursos, red deshabilitada por defecto, crash, timeout, replay, reconciliación y limpieza.
+8. Verificar el servicio y su configuración en Debian antes de modificar el despliegue. No cambiar systemd, usuarios, grupos, socket, Docker ni privilegios sin autorización explícita del propietario.
+
+**Criterio de salida:** una tarea autorizada en Atlas Core llega al runtime confinado a través de un adaptador Broker; la operación y el resultado quedan correlacionados y auditados; los casos de denegación, fallo, incertidumbre, recuperación y aislamiento pasan E2E. El despliegue independiente del Broker no basta.
+
+## 12. Orden de integración y dependencias
+
+La secuencia de trabajo queda actualizada así:
+
+1. **Cycle 3.2 — contexto canónico y workspace confiable:** cerrar la identidad canónica de la consola, la selección de proyecto/entorno y el ownership/ruta confiable del workspace. No convertir la identidad sintética actual en autoridad.
+2. **F3 — Task Manager mínimo:** entidad durable, pasos secuenciales, estados, progreso, resultados, cancelación y recuperación conservadora de tareas interrumpidas.
+3. **F4 — continuidad + Memory Engine:** mantener el historial conversacional como historial; integrar memoria de producto mediante sus APIs autorizadas y persistencia real. Priorizar un flujo vertical pequeño de guardar/recuperar/invalidar con aislamiento y auditoría.
+4. **F5 — experiencia E2E del Assistant:** conectar interpretación, revisión, autorización, ejecución de capacidades locales, Task Manager, continuidad y presentación de resultados verificables. No marcar escritura como disponible hasta cerrar su frontera transaccional y de efectos.
+5. **Workstation W1/W2 — workspace persistente y contrato del runtime:** formalizar bindings y contrato de adaptador; evaluar Broker contra ese contrato sin habilitar aún operaciones Docker desde Assistant.
+6. **Broker integration — Core–Broker–runtime:** implementar el adaptador solo después de cerrar identidad/contexto, autorización exacta, contratos y política de ejecución; comenzar con perfiles de prueba estrechos y recursos descartables.
+7. **Bootstrap/privilege separation — B0–B7:** retomar la evaluación de separación de privilegios y bootstrap antes de conceder al servicio/helper nuevas capacidades privilegiadas. Candidate A no está aprobado; Candidate B sigue siendo alternativa de diseño. Recovery Gate permanece cerrado.
+8. **Consolidación de producto:** Project/Environment Manager completos, Skills Manager, Agents, Scheduler, Approval Manager, Event Collector, Notification Manager y Atlas Workstation multiplataforma, siguiendo sus dependencias.
+
+### Reglas de secuenciación
+
+- Se puede continuar desarrollo aislado, documentación y pruebas no privilegiadas de Memory Engine y Broker mientras avanza Fase 4.
+- No conectar Broker al runtime del Assistant solo porque el servicio esté activo.
+- No abrir Recovery Gate para acelerar F4 ni tratar la persistencia parcial como autoridad protegida.
+- No entregar Docker socket, root, shell irrestricta o permisos de host a modelos, Skills, agentes o contenedores.
+- Cada estado se etiqueta separadamente como **implementado**, **desplegado**, **validado localmente**, **integrado** o **E2E verificado**.
+- La prueba de un subsistema no se suma automáticamente a la suite de otro repositorio.
