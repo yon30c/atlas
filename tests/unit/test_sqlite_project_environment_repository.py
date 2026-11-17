@@ -167,6 +167,24 @@ class SQLiteProjectEnvironmentRepositoryTests(unittest.TestCase):
         self.assertEqual(self.repository.get_project("atlas"), self.project)
         self.assertEqual(self.repository.get_environment("test"), self.environment)
 
+    def test_environment_read_joins_outer_transaction(self):
+        self.repository.create_environment(self.environment)
+        updated = replace(self.environment, status="suspended", revision=2)
+
+        with self.assertRaisesRegex(RuntimeError, "force outer rollback"):
+            with self.database.unit_of_work() as unit:
+                joined = SQLiteProjectEnvironmentRepository(
+                    self.database,
+                    unit_of_work=unit,
+                )
+                joined.update_environment(updated, expected_revision=1)
+                # The read must observe the uncommitted revision on the exact
+                # transaction connection, not a second connection's old snapshot.
+                self.assertEqual(joined.get_environment("test"), updated)
+                raise RuntimeError("force outer rollback")
+
+        self.assertEqual(self.repository.get_environment("test"), self.environment)
+
     def test_project_environment_repository_rejects_foreign_unit_of_work(self):
         other = SQLiteDatabase(Path(self.temp_dir.name) / "other.sqlite")
         other.apply_migrations(SQLITE_MIGRATIONS)
