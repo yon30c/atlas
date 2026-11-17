@@ -51,7 +51,6 @@ def require_verified_owner_context(
     return canonical
 
 
-
 def require_verified_owner_context_in_unit_of_work(
     context: OperationContext,
     verified_identity: VerifiedIdentityContext | None,
