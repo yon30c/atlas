@@ -455,3 +455,33 @@ La revocación no modifica el Grant, no reactiva ni edita claims, y no emite `Ve
 Tests añadidos en `tests/unit/test_sqlite_agent_delegation_authority.py`: revocación válida/auditoría, evidencia USER manipulada o expirada, owner distinto, CAS obsoleto, delegación ausente y rollback después de la escritura.
 
 **Validación Debian:** pendiente de ejecución por el propietario. No se afirma que las pruebas hayan pasado.
+
+
+## 18. I3-2B.5 — verificación de operación y evidencia efímera de delegación
+
+Se incorpora `VerifiedAgentDelegationContextService` como verificador separado, con composición confiable de reloj UTC, attestor, realm, audience y TTL (máximo un minuto). Ninguno de esos parámetros de seguridad se acepta del caller. `SQLiteAgentDelegationAuthority.verify_for_operation` delega a este servicio solo cuando se configura; sin él, deniega explícitamente.
+
+### 18.1 Emisión de evidencia para una operación
+
+`verify_for_operation(delegation_id, expected_revision, verified_agent_identity)`:
+- exige `VerifiedAgentIdentityContext` AGENT y lo revalida con `verify_in_unit_of_work` dentro de la UoW recibida;
+- requiere que el AGENT canónico coincida con el destinatario y que el issuer del proof coincida con el issuer de la delegación;
+- carga delegación y Grant canónicos dentro de la misma `SQLiteLocalAuthorityUnitOfWork`;
+- compara revisión esperada, ACTIVE, ventana temporal, owner USER activo, AGENT activo, binding AGENT activo del issuer exacto, Grant no revocado y revisión exacta;
+- comprueba owner, subject, proyecto, entorno, resource type, subconjuntos de recursos/acciones y límites de expiración;
+- emite `VerifiedAgentDelegationContext` HMAC domain-separated, con realm/audience configurados y TTL acotado por la delegación y el Grant.
+
+La lectura de identidad AGENT, delegación, Grant y propietario ocurre bajo la misma UoW local. La operación no declara atomicidad con sistemas externos ni reemplaza CAM.
+
+### 18.2 Revalidación de evidencia
+
+`verify(context)` y `verify_in_unit_of_work(context, unit)` validan firma, realm/audience, TTL, expiración, claims exactos, estado/revisión actual de delegación, Grant, propietario USER, AGENT y binding nativo. La variante UoW no abre, confirma ni cierra la transacción del caller. Una delegación revocada, Grant cambiado/revocado, identidad suspendida o binding/issuer inactivo invalida la evidencia aunque la HMAC siga siendo criptográficamente válida.
+
+### 18.3 Límites de seguridad
+
+- `VerifiedAgentDelegationContext` prueba identidad AGENT autenticada más consentimiento delegado vigente; no es un resultado CAM ni concede acceso por sí solo.
+- Cada consumidor sensible debe revalidar la evidencia dentro de su frontera transaccional y después pedir decisión CAM para acción/recurso.
+- `GrantRenewalService.request_renewal` permanece fail-closed; no se conectó esta evidencia a la ruta de renovación ni a endpoints/runtime.
+- La integración de `SQLiteAgentDelegationAuthority` es fail-closed: si no se configura el verificador delegado, `verify_for_operation` deniega.
+
+**Validación Debian:** pendiente del propietario. Los tests nuevos cubren emisión firmada, AGENT incorrecto, revisión obsoleta, expiración/revocación, Grant cambiado, propietario no canónico, manipulación de attestation y revalidación tras cambios. No declarar I3-2B.5 validado hasta recibir la suite completa y compileall del propietario.
