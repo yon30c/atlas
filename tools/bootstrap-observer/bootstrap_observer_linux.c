@@ -432,6 +432,10 @@ int bo_collect(bo_report *report) {
           report->self_stat.tpgid != report->foreground_pgrp))) {
         report->result = BV_OBSERVATION_INCONSISTENT;
     }
+    if (first_ok &&
+        report->parent_stat_first.session != report->process_sid) {
+        report->result = BV_OBSERVATION_INCONSISTENT;
+    }
     if (!report->have_self_stat || !first_ok || !second_ok ||
         !report->exe_first_available || !report->exe_second_available ||
         !report->tty_available ||
