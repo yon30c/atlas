@@ -1601,6 +1601,13 @@ CORE_SCHEMA_V18 = SQLiteMigration(
     CREATE INDEX atlas_project_environments_by_environment
         ON atlas_project_environments(environment_id, status, project_id);
 
+    CREATE TRIGGER atlas_project_environment_identity_immutable
+    BEFORE UPDATE OF project_id, environment_id ON atlas_project_environments
+    WHEN NEW.project_id != OLD.project_id OR NEW.environment_id != OLD.environment_id
+    BEGIN
+        SELECT RAISE(ABORT, 'Project/Environment association identity is immutable');
+    END;
+
     CREATE TRIGGER atlas_project_environment_revision_step
     BEFORE UPDATE ON atlas_project_environments
     WHEN NEW.revision != OLD.revision + 1
