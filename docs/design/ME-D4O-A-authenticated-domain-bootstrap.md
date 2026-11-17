@@ -167,3 +167,29 @@ Reglas del binding:
 8. La pérdida, cambio o revocación del sujeto local no debe reasignar automáticamente la propiedad canónica. Cualquier sustitución del mecanismo de recuperación o del operador bootstrap requerirá un procedimiento de cambio de autoridad explícito y auditable.
 
 La cuenta `greed` queda seleccionada como sujeto operativo inicial; esto no selecciona todavía PAM ni otro proveedor concreto, no crea el binding en el sistema, no crea la identidad canónica y no inicializa CAM. La implementación deberá verificar primero qué mecanismo de reautenticación local está disponible y cómo puede emitir una prueba no falsificable por el caller.
+
+
+## 2.3 Proveedor local aprobado: helper C con libpam
+
+**Decisión aprobada por el propietario: 16 de noviembre de 2026.**
+
+El proveedor candidato seleccionado para la autenticación reciente del bootstrap LOCAL será un helper pequeño en C que utilice la API de PAM del sistema. El helper será un componente separado del proceso Python de Atlas. Esta selección no significa que el proveedor esté implementado, instalado ni habilitado.
+
+El contrato de seguridad y los límites de implementación se detallan en [Diseño del autenticador PAM local](local-pam-bootstrap-authenticator.md).
+
+Reglas obligatorias:
+
+1. Utilizar un servicio PAM dedicado de Atlas; no modificar ni incluir cambios en `common-auth`, `login`, `sshd`, `sudo` ni otros servicios PAM generales.
+2. Autenticar exclusivamente al sujeto local aprobado para el bootstrap inicial (`greed` en el host actual). El nombre y UID se verificarán contra una configuración protegida; no serán parámetros libres del caller.
+3. Ejecutar autenticación y comprobación de cuenta PAM; no interpretar solo `pam_authenticate` como autorización.
+4. La contraseña se solicita mediante una conversación PAM interactiva y nunca se acepta por argv, variables de entorno, archivos, stdin redirigido ni argumentos de IPC. No se registra ni persiste.
+5. El helper no inicializa CAM, no crea Users/Grants, no modifica el binding de propietario y no ejecuta operaciones de Atlas.
+6. Una prueba emitida debe vincularse al desafío/request_id, acción bootstrap exacta, descriptor canónico y sujeto autenticado. Debe expirar y ser consumible una sola vez por un verificador confiable.
+7. El caller no puede proporcionar un resultado PAM exitoso, firmar pruebas, seleccionar una identidad canónica ni alterar el binding protegido.
+8. El material privado de firma, si se utiliza, será accesible únicamente al componente autenticador privilegiado. El verificador de Atlas utilizará material público o un canal autenticado equivalente; no compartirá el secreto de emisión con el proceso ordinario de Assistant.
+9. El helper debe fallar cerrado ante ausencia de TTY confiable, error PAM, cuenta bloqueada/inactiva, configuración inválida, descriptor no canónico, prueba expirada o fallo de emisión.
+10. El bloqueo por intentos fallidos se configurará exclusivamente en el stack dedicado. La política (umbral, intervalo y duración) debe quedar documentada antes de habilitarlo; no se alterará la política PAM general del host.
+
+La frontera de privilegios para instalar y ejecutar el helper, el formato criptográfico de la prueba, el transporte entre helper y verificador, y la política exacta de bloqueo siguen pendientes de diseño detallado. No se implementará un binario setuid ni se concederá privilegio mediante una decisión implícita. La implementación deberá justificar y probar su mecanismo de invocación privilegiada antes de instalarlo.
+
+La selección de C/libpam no sustituye el binding sujeto-local/propietario-canónico, la decisión directa del propietario ni la atomicidad de génesis descritos en las secciones anteriores.
