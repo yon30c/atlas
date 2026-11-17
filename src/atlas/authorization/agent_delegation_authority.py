@@ -1,0 +1,134 @@
+"""Owner-consented AGENT delegation issuance over one local authority UoW."""
+
+from datetime import datetime, timedelta
+from typing import Protocol
+from uuid import uuid4
+
+from atlas.authorization.models import Grant
+from atlas.core.agent_delegation import AgentDelegation, AgentDelegationScope
+from atlas.core.errors import AuthorizationError, ContractError, NotFoundError
+from atlas.core.identity import IdentityStatus
+from atlas.core.user_identity import validate_canonical_uuid4
+from atlas.core.verified_identity_context import VerifiedIdentityContext
+from atlas.ports.clock import Clock
+
+
+def _require_utc(value: datetime, field: str) -> None:
+    if (
+        not isinstance(value, datetime)
+        or value.tzinfo is None
+        or value.utcoffset() != timedelta(0)
+    ):
+        raise ContractError(f"{field} debe ser datetime UTC")
+
+
+class _OwnerContextVerifier(Protocol):
+    def verify_in_unit_of_work(self, context: VerifiedIdentityContext, unit): ...
+
+
+class SQLiteAgentDelegationAuthority:
+    """Issues delegations only after same-transaction owner verification.
+
+    This slice deliberately implements issuance only. Revocation and delegated
+    operation verification remain unavailable; this class is not a CAM engine.
+    """
+
+    def __init__(self, *, unit_of_work_factory, owner_context_verifier: _OwnerContextVerifier, clock: Clock) -> None:
+        if not callable(unit_of_work_factory):
+            raise ContractError("unit_of_work_factory debe ser invocable")
+        if not callable(getattr(owner_context_verifier, "verify_in_unit_of_work", None)):
+            raise ContractError("owner_context_verifier no admite verificación en UoW")
+        if not callable(getattr(clock, "now", None)):
+            raise ContractError("clock no implementa now()")
+        self._uow_factory = unit_of_work_factory
+        self._owner_verifier = owner_context_verifier
+        self._clock = clock
+
+    def create_for_grant(
+        self, *, grant_id: str, agent_identity_id: str,
+        scope: AgentDelegationScope, not_before: datetime, expires_at: datetime,
+        verified_owner_identity: VerifiedIdentityContext,
+    ) -> AgentDelegation:
+        """Issue owner consent bound to the exact active Grant and AGENT."""
+        if not isinstance(grant_id, str) or not grant_id.strip():
+            raise ContractError("grant_id debe ser una cadena no vacía")
+        validate_canonical_uuid4(agent_identity_id, "agent_identity_id")
+        if not isinstance(scope, AgentDelegationScope):
+            raise ContractError("scope debe ser AgentDelegationScope")
+        _require_utc(not_before, "not_before")
+        _require_utc(expires_at, "expires_at")
+        if not isinstance(verified_owner_identity, VerifiedIdentityContext):
+            raise AuthorizationError("se requiere evidencia USER verificada")
+
+        now = self._clock.now()
+        _require_utc(now, "clock.now()")
+        if not_before < now:
+            raise ContractError("not_before no puede preceder la emisión")
+        if expires_at <= not_before or expires_at <= now:
+            raise ContractError("la ventana de delegación debe estar vigente y ser positiva")
+
+        try:
+            with self._uow_factory() as unit:
+                owner = self._owner_verifier.verify_in_unit_of_work(
+                    verified_owner_identity, unit
+                )
+                if (
+                    owner.user_id != verified_owner_identity.user_id
+                    or owner.identity.identity_id != verified_owner_identity.identity_id
+                    or owner.identity.status is not IdentityStatus.ACTIVE
+                ):
+                    raise AuthorizationError("el propietario USER no está verificado")
+
+                agent = unit.agent_identity.get_agent_by_identity_id(agent_identity_id)
+                if (
+                    agent is None
+                    or agent.identity.identity_id != agent_identity_id
+                    or agent.identity.status is not IdentityStatus.ACTIVE
+                ):
+                    raise AuthorizationError("la identidad AGENT no está activa")
+                if not unit.native_agent_identity.has_active_native_agent_binding(agent_identity_id):
+                    raise AuthorizationError("el AGENT no tiene un binding nativo activo")
+
+                grant = unit.grants.get(grant_id)
+                if grant is None:
+                    raise NotFoundError("Grant no encontrado")
+                if not isinstance(grant, Grant):
+                    raise ContractError("el repositorio devolvió un Grant inválido")
+                if (
+                    grant.owner_user_id != owner.user_id
+                    or grant.subject_identity_id != agent_identity_id
+                    or grant.revoked_at is not None
+                    or grant.issued_at > now
+                    or grant.expires_at <= now
+                ):
+                    raise AuthorizationError("el Grant no está vigente para este propietario y AGENT")
+                if (
+                    scope.resource_type != grant.resource_type
+                    or not scope.resource_ids.issubset(grant.resource_ids)
+                    or not scope.actions.issubset(grant.actions)
+                ):
+                    raise AuthorizationError("el alcance solicitado excede el Grant")
+                if not_before < grant.issued_at or expires_at > grant.expires_at:
+                    raise AuthorizationError("la ventana de delegación excede la vigencia del Grant")
+
+                delegation = AgentDelegation(
+                    delegation_id=str(uuid4()),
+                    owner_user_id=owner.user_id,
+                    owner_identity_id=owner.identity.identity_id,
+                    agent_identity_id=agent.identity.identity_id,
+                    grant_id=grant.grant_id,
+                    grant_revision=grant.revision,
+                    project_id=grant.project_id,
+                    environment=grant.environment,
+                    scope=scope,
+                    issuer_id=verified_owner_identity.issuer_id,
+                    issued_at=now,
+                    not_before=not_before,
+                    expires_at=expires_at,
+                    created_by_user_identity_id=owner.identity.identity_id,
+                )
+                unit.agent_delegations.create(delegation)
+                unit.commit()
+                return delegation
+        except (AuthorizationError, ContractError, NotFoundError):
+            raise
