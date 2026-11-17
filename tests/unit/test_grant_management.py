@@ -127,7 +127,7 @@ class GrantManagementTests(unittest.TestCase):
     def test_issue_requires_active_user_matching_context_user(self):
         invalid_actors = (
             Identity(
-                identity_id="user-001",
+                identity_id=OWNER_IDENTITY_ID,
                 kind=IdentityKind.AGENT,
                 status=IdentityStatus.ACTIVE,
             ),
@@ -145,16 +145,16 @@ class GrantManagementTests(unittest.TestCase):
         for actor in invalid_actors:
             with self.subTest(actor=actor):
                 with self.assertRaises(AuthorizationError):
-                    self.service.issue(
+                    self.issue(
                         replace(self.context, actor=actor),
                         self.grant,
                         NOW,
                     )
 
     def test_issue_cannot_grant_for_another_owner(self):
-        grant = replace(self.grant, owner_user_id="user-002")
+        grant = replace(self.grant, owner_user_id="f6b2b66f-7c72-4d77-8d84-7d0a8c5a1006")
         with self.assertRaises(AuthorizationError):
-            self.service.issue(self.context, grant, NOW)
+            self.issue(self.context, grant, NOW)
 
     def test_issue_requires_matching_project_and_environment(self):
         mismatches = (
@@ -164,29 +164,21 @@ class GrantManagementTests(unittest.TestCase):
         for grant in mismatches:
             with self.subTest(grant=grant):
                 with self.assertRaises(AuthorizationError):
-                    self.service.issue(self.context, grant, NOW)
+                    self.issue(self.context, grant, NOW)
 
     def test_duplicate_grant_id_is_rejected(self):
-        self.service.issue(self.context, self.grant, NOW)
+        self.issue(self.context, self.grant, NOW)
         with self.assertRaises(ContractError):
-            self.service.issue(self.context, self.grant, NOW)
+            self.issue(self.context, self.grant, NOW)
 
     def test_issue_requires_utc_now_matching_issued_at(self):
         with self.assertRaises(ContractError):
-            self.service.issue(
-                self.context,
-                self.grant,
-                datetime(2026, 11, 12, 15, 0),
-            )
+            self.issue(now=datetime(2026, 11, 12, 15, 0))
         with self.assertRaises(ContractError):
-            self.service.issue(
-                self.context,
-                self.grant,
-                NOW + timedelta(seconds=1),
-            )
+            self.issue(now=NOW + timedelta(seconds=1))
 
     def test_revoke_fails_closed_without_coordinator_and_cam_ports(self):
-        self.service.issue(self.context, self.grant, NOW)
+        self.issue(self.context, self.grant, NOW)
         with self.assertRaises(ContractError):
             self.service.revoke(
                 self.context,
