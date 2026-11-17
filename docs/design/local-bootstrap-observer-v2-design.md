@@ -39,7 +39,7 @@ Para el padre directo:
 4. Leer `/proc/PID/stat` y `/proc/PID/status` con límites explícitos, acumulando lecturas hasta EOF y detectando exceso.
 5. Abrir `/proc/PID/exe` como descriptor de ruta (`O_PATH`) y obtener metadatos con `fstat`; el destino de `readlink` es solo informativo.
 6. Repetir las lecturas de status/stat y volver a abrir exe. Comparar PID, starttime, PPID, credenciales, estado, SID, PGID, TTY y metadatos del ejecutable.
-7. Comprobar pidfd antes y después. Revalidar que `getppid()` no cambió.
+7. Comprobar pidfd antes y después. Revalidar que `getppid()` no cambió y que el padre directo observado comparte el SID del observador.
 8. Cualquier fallo de lectura, truncamiento, terminación, cambio o imposibilidad de comparar se clasifica como incompleto o inconsistente, nunca consistente.
 
 Estas medidas reducen ventanas de confusión, pero no hacen atómicas las lecturas de procfs ni congelan el proceso. El documento y la salida deben conservar esa limitación explícita.
@@ -54,7 +54,7 @@ Abrir `/dev/tty` sin adquirir un terminal de control (`O_NOCTTY`) y consultar:
 
 Si no existe TTY controlador o la consulta no está disponible, mostrar un estado explícito `TTY_UNAVAILABLE`/incompleto. No inferir TTY a partir de stdin/stdout, propietario del dispositivo, `tty_nr` aislado o variables de entorno.
 
-La coherencia limitada se comprueba con igualdad de SID y correspondencia del PGID con el foreground PGID. También se contrastan SID/PGID del proceso obtenidos por syscalls con los campos correspondientes de su propio `stat`. Esta observación no prueba origen del PTY ni presencia física.
+La coherencia limitada se comprueba con igualdad de SID entre terminal, observador y padre directo, y correspondencia del PGID con el foreground PGID. También se contrastan SID/PGID del proceso obtenidos por syscalls con los campos correspondientes de su propio `stat`. Esta observación no prueba origen del PTY ni presencia física.
 
 ## 6. Ejecutable padre
 
