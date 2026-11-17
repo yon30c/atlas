@@ -1684,8 +1684,346 @@ CORE_SCHEMA_V18 = SQLiteMigration(
 )
 
 
+# v19 introduces native Authentication Authority issuer metadata and immutable
+# Identity Authority subject bindings. No identities or bindings are synthesized.
+CORE_SCHEMA_V19 = SQLiteMigration(
+    version=19,
+    name="native_identity_issuers_and_subject_bindings",
+    sql="""
+    CREATE TABLE native_identity_issuers (
+        issuer_id TEXT PRIMARY KEY CHECK (
+            length(issuer_id) = 36
+            AND issuer_id = lower(issuer_id)
+            AND length(replace(issuer_id, '-', '')) = 32
+            AND substr(issuer_id, 9, 1) = '-'
+            AND substr(issuer_id, 14, 1) = '-'
+            AND substr(issuer_id, 19, 1) = '-'
+            AND substr(issuer_id, 24, 1) = '-'
+            AND substr(issuer_id, 15, 1) = '4'
+            AND substr(issuer_id, 20, 1) IN ('8', '9', 'a', 'b')
+            AND issuer_id NOT GLOB '*[^0-9a-f-]*'
+        ),
+        realm TEXT NOT NULL UNIQUE CHECK (
+            length(realm) BETWEEN 2 AND 64
+            AND realm = lower(realm)
+            AND realm NOT GLOB '*[^a-z0-9._-]*'
+            AND substr(realm, 1, 1) GLOB '[a-z0-9]'
+        ),
+        profile TEXT NOT NULL CHECK (profile = 'NATIVE_AUTHORITY_PROOF'),
+        status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'REVOKED')),
+        revision INTEGER NOT NULL CHECK (revision > 0),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+
+    CREATE TRIGGER native_identity_issuer_identity_immutable
+    BEFORE UPDATE OF issuer_id, realm, profile ON native_identity_issuers
+    WHEN NEW.issuer_id != OLD.issuer_id
+      OR NEW.realm != OLD.realm
+      OR NEW.profile != OLD.profile
+    BEGIN
+        SELECT RAISE(ABORT, 'native issuer identity is immutable');
+    END;
+
+    CREATE TRIGGER native_identity_issuer_revision_step
+    BEFORE UPDATE ON native_identity_issuers
+    WHEN NEW.revision != OLD.revision + 1
+    BEGIN
+        SELECT RAISE(ABORT, 'native issuer revision must increase by exactly one');
+    END;
+
+    CREATE TRIGGER native_identity_issuer_revoked_terminal
+    BEFORE UPDATE OF status ON native_identity_issuers
+    WHEN OLD.status = 'REVOKED' AND NEW.status != 'REVOKED'
+    BEGIN
+        SELECT RAISE(ABORT, 'revoked native issuer is terminal');
+    END;
+
+    CREATE TRIGGER native_identity_issuer_no_delete
+    BEFORE DELETE ON native_identity_issuers
+    BEGIN
+        SELECT RAISE(ABORT, 'native issuers are retained as tombstones');
+    END;
+
+    CREATE TABLE native_identity_bindings (
+        binding_id TEXT PRIMARY KEY CHECK (
+            length(binding_id) = 36
+            AND binding_id = lower(binding_id)
+            AND length(replace(binding_id, '-', '')) = 32
+            AND substr(binding_id, 9, 1) = '-'
+            AND substr(binding_id, 14, 1) = '-'
+            AND substr(binding_id, 19, 1) = '-'
+            AND substr(binding_id, 24, 1) = '-'
+            AND substr(binding_id, 15, 1) = '4'
+            AND substr(binding_id, 20, 1) IN ('8', '9', 'a', 'b')
+            AND binding_id NOT GLOB '*[^0-9a-f-]*'
+        ),
+        identity_id TEXT NOT NULL,
+        issuer_id TEXT NOT NULL,
+        subject_digest TEXT NOT NULL CHECK (
+            length(subject_digest) = 64
+            AND subject_digest NOT GLOB '*[^0-9a-f]*'
+        ),
+        status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'REVOKED')),
+        revision INTEGER NOT NULL CHECK (revision > 0),
+        created_at TEXT NOT NULL,
+        verified_at TEXT NOT NULL,
+        revoked_at TEXT,
+        UNIQUE (issuer_id, subject_digest),
+        FOREIGN KEY (identity_id) REFERENCES identity_records(identity_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+        FOREIGN KEY (issuer_id) REFERENCES native_identity_issuers(issuer_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+        CHECK (
+            (status = 'ACTIVE' AND revoked_at IS NULL)
+            OR (status = 'REVOKED' AND revoked_at IS NOT NULL)
+        )
+    );
+
+    CREATE INDEX native_identity_bindings_by_identity
+        ON native_identity_bindings(identity_id, status);
+
+    CREATE TRIGGER native_identity_binding_requires_active_user
+    BEFORE INSERT ON native_identity_bindings
+    WHEN NOT EXISTS (
+        SELECT 1 FROM identity_records
+        WHERE identity_id = NEW.identity_id
+          AND identity_kind = 'user'
+          AND identity_status = 'active'
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'native binding requires an active canonical USER identity');
+    END;
+
+    CREATE TRIGGER native_identity_binding_requires_active_issuer
+    BEFORE INSERT ON native_identity_bindings
+    WHEN NOT EXISTS (
+        SELECT 1 FROM native_identity_issuers
+        WHERE issuer_id = NEW.issuer_id AND status = 'ACTIVE'
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'native binding requires an active native issuer');
+    END;
+
+    CREATE TRIGGER native_identity_binding_identity_immutable
+    BEFORE UPDATE OF binding_id, identity_id, issuer_id, subject_digest, created_at, verified_at
+    ON native_identity_bindings
+    WHEN NEW.binding_id != OLD.binding_id
+      OR NEW.identity_id != OLD.identity_id
+      OR NEW.issuer_id != OLD.issuer_id
+      OR NEW.subject_digest != OLD.subject_digest
+      OR NEW.created_at != OLD.created_at
+      OR NEW.verified_at != OLD.verified_at
+    BEGIN
+        SELECT RAISE(ABORT, 'native identity binding identity is immutable');
+    END;
+
+    CREATE TRIGGER native_identity_binding_revision_step
+    BEFORE UPDATE ON native_identity_bindings
+    WHEN NEW.revision != OLD.revision + 1
+    BEGIN
+        SELECT RAISE(ABORT, 'native identity binding revision must increase by exactly one');
+    END;
+
+    CREATE TRIGGER native_identity_binding_revoked_terminal
+    BEFORE UPDATE OF status ON native_identity_bindings
+    WHEN OLD.status = 'REVOKED' AND NEW.status != 'REVOKED'
+    BEGIN
+        SELECT RAISE(ABORT, 'revoked native identity binding is terminal');
+    END;
+
+    CREATE TRIGGER native_identity_binding_no_delete
+    BEFORE DELETE ON native_identity_bindings
+    BEGIN
+        SELECT RAISE(ABORT, 'native identity bindings are retained as tombstones');
+    END;
+    """,
+)
+
+
+CORE_SCHEMA_V20 = SQLiteMigration(
+    version=20,
+    name="native_authenticators_and_one_shot_proofs",
+    sql="""
+    CREATE TABLE native_authenticators (
+        authenticator_id TEXT PRIMARY KEY CHECK (
+            length(authenticator_id) = 36
+            AND authenticator_id = lower(authenticator_id)
+            AND length(replace(authenticator_id, '-', '')) = 32
+            AND substr(authenticator_id, 15, 1) = '4'
+            AND substr(authenticator_id, 20, 1) IN ('8', '9', 'a', 'b')
+            AND authenticator_id NOT GLOB '*[^0-9a-f-]*'
+        ),
+        issuer_id TEXT NOT NULL,
+        native_subject TEXT NOT NULL CHECK (
+            length(native_subject) = 43
+            AND native_subject NOT GLOB '*[^A-Za-z0-9_-]*'
+        ),
+        login_handle TEXT NOT NULL CHECK (
+            length(login_handle) BETWEEN 3 AND 64
+            AND login_handle = lower(login_handle)
+            AND login_handle NOT GLOB '*[^a-z0-9._-]*'
+            AND substr(login_handle, 1, 1) GLOB '[a-z0-9]'
+        ),
+        password_hash_phc TEXT NOT NULL CHECK (
+            substr(password_hash_phc, 1, 15) = '$argon2id$v=19$'
+        ),
+        credential_revision INTEGER NOT NULL CHECK (credential_revision > 0),
+        status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'SUSPENDED', 'REVOKED')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (issuer_id, native_subject),
+        UNIQUE (issuer_id, login_handle),
+        UNIQUE (authenticator_id, issuer_id, native_subject),
+        FOREIGN KEY (issuer_id) REFERENCES native_identity_issuers(issuer_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE TRIGGER native_authenticator_requires_active_issuer
+    BEFORE INSERT ON native_authenticators
+    WHEN NOT EXISTS (
+        SELECT 1 FROM native_identity_issuers
+        WHERE issuer_id = NEW.issuer_id AND status = 'ACTIVE'
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'native authenticator requires active issuer');
+    END;
+
+    CREATE TRIGGER native_authenticator_identity_immutable
+    BEFORE UPDATE OF authenticator_id, issuer_id, native_subject ON native_authenticators
+    WHEN NEW.authenticator_id != OLD.authenticator_id
+      OR NEW.issuer_id != OLD.issuer_id
+      OR NEW.native_subject != OLD.native_subject
+    BEGIN
+        SELECT RAISE(ABORT, 'native authenticator identity is immutable');
+    END;
+
+    CREATE TRIGGER native_authenticator_credential_revision
+    BEFORE UPDATE ON native_authenticators
+    WHEN (
+        NEW.password_hash_phc != OLD.password_hash_phc
+        AND NEW.credential_revision != OLD.credential_revision + 1
+    ) OR (
+        NEW.password_hash_phc = OLD.password_hash_phc
+        AND NEW.credential_revision != OLD.credential_revision
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'credential revision must advance exactly once when PHC changes');
+    END;
+
+    CREATE TRIGGER native_authenticator_revoked_terminal
+    BEFORE UPDATE OF status ON native_authenticators
+    WHEN OLD.status = 'REVOKED' AND NEW.status != 'REVOKED'
+    BEGIN
+        SELECT RAISE(ABORT, 'revoked native authenticator is terminal');
+    END;
+
+    CREATE TRIGGER native_authenticator_no_delete
+    BEFORE DELETE ON native_authenticators
+    BEGIN
+        SELECT RAISE(ABORT, 'native authenticators are retained as tombstones');
+    END;
+
+    CREATE TABLE native_authentication_proofs (
+        proof_id TEXT PRIMARY KEY CHECK (
+            length(proof_id) = 36
+            AND proof_id = lower(proof_id)
+            AND length(replace(proof_id, '-', '')) = 32
+            AND substr(proof_id, 15, 1) = '4'
+            AND substr(proof_id, 20, 1) IN ('8', '9', 'a', 'b')
+            AND proof_id NOT GLOB '*[^0-9a-f-]*'
+        ),
+        reference_digest TEXT NOT NULL UNIQUE CHECK (
+            length(reference_digest) = 64
+            AND reference_digest NOT GLOB '*[^0-9a-f]*'
+        ),
+        issuer_id TEXT NOT NULL,
+        native_subject TEXT NOT NULL,
+        authenticator_id TEXT NOT NULL,
+        credential_revision INTEGER NOT NULL CHECK (credential_revision > 0),
+        authenticated_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        audience TEXT NOT NULL CHECK (
+            length(audience) BETWEEN 1 AND 128
+            AND audience = lower(audience)
+            AND substr(audience, 1, 1) GLOB '[a-z]'
+            AND audience NOT GLOB '*[^a-z0-9._:-]*'
+        ),
+        status TEXT NOT NULL CHECK (status IN ('PENDING', 'CONSUMED', 'EXPIRED', 'REVOKED')),
+        CHECK (expires_at > authenticated_at),
+        FOREIGN KEY (authenticator_id, issuer_id, native_subject)
+            REFERENCES native_authenticators(authenticator_id, issuer_id, native_subject)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
+    CREATE INDEX native_authentication_proofs_pending_expiry
+        ON native_authentication_proofs(status, expires_at);
+    CREATE INDEX native_authentication_proofs_by_authenticator
+        ON native_authentication_proofs(authenticator_id, status);
+
+    CREATE TRIGGER native_proof_requires_current_active_authenticator
+    BEFORE INSERT ON native_authentication_proofs
+    WHEN NEW.status != 'PENDING' OR NOT EXISTS (
+        SELECT 1 FROM native_authenticators AS a
+        WHERE a.authenticator_id = NEW.authenticator_id
+          AND a.issuer_id = NEW.issuer_id
+          AND a.native_subject = NEW.native_subject
+          AND a.credential_revision = NEW.credential_revision
+          AND a.status = 'ACTIVE'
+          AND EXISTS (
+              SELECT 1 FROM native_identity_issuers AS i
+              WHERE i.issuer_id = a.issuer_id AND i.status = 'ACTIVE'
+          )
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'native proof requires current active authenticator and issuer');
+    END;
+
+    CREATE TRIGGER native_proof_identity_immutable
+    BEFORE UPDATE OF proof_id, reference_digest, issuer_id, native_subject,
+        authenticator_id, credential_revision, authenticated_at, expires_at, audience
+    ON native_authentication_proofs
+    WHEN NEW.proof_id != OLD.proof_id
+      OR NEW.reference_digest != OLD.reference_digest
+      OR NEW.issuer_id != OLD.issuer_id
+      OR NEW.native_subject != OLD.native_subject
+      OR NEW.authenticator_id != OLD.authenticator_id
+      OR NEW.credential_revision != OLD.credential_revision
+      OR NEW.authenticated_at != OLD.authenticated_at
+      OR NEW.expires_at != OLD.expires_at
+      OR NEW.audience != OLD.audience
+    BEGIN
+        SELECT RAISE(ABORT, 'native proof identity is immutable');
+    END;
+
+    CREATE TRIGGER native_proof_terminal_status
+    BEFORE UPDATE OF status ON native_authentication_proofs
+    WHEN OLD.status != 'PENDING' OR NEW.status NOT IN ('CONSUMED', 'EXPIRED', 'REVOKED')
+    BEGIN
+        SELECT RAISE(ABORT, 'native proof terminal status cannot be changed');
+    END;
+
+    CREATE TRIGGER native_proof_no_delete
+    BEFORE DELETE ON native_authentication_proofs
+    BEGIN
+        SELECT RAISE(ABORT, 'native proofs are retained as tombstones');
+    END;
+
+    CREATE TRIGGER native_authenticator_invalidates_pending_proofs
+    AFTER UPDATE OF credential_revision, status ON native_authenticators
+    WHEN NEW.credential_revision != OLD.credential_revision
+      OR (OLD.status = 'ACTIVE' AND NEW.status != 'ACTIVE')
+    BEGIN
+        UPDATE native_authentication_proofs
+        SET status = 'REVOKED'
+        WHERE authenticator_id = NEW.authenticator_id AND status = 'PENDING';
+    END;
+    """,
+)
+
+
 SQLITE_MIGRATIONS = (
     CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
     CORE_SCHEMA_V5, CORE_SCHEMA_V6, CORE_SCHEMA_V7, CORE_SCHEMA_V8,
-    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13, CORE_SCHEMA_V14, CORE_SCHEMA_V15, CORE_SCHEMA_V16, CORE_SCHEMA_V17, CORE_SCHEMA_V18,
+    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13, CORE_SCHEMA_V14, CORE_SCHEMA_V15, CORE_SCHEMA_V16, CORE_SCHEMA_V17, CORE_SCHEMA_V18, CORE_SCHEMA_V19, CORE_SCHEMA_V20,
 )
