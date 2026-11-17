@@ -16,7 +16,7 @@ from atlas.adapters.sqlite.identity_authority import SQLiteIdentityAuthority
 from atlas.adapters.sqlite.project_environment_repository import (
     SQLiteProjectEnvironmentRepository,
 )
-from atlas.adapters.sqlite.recovery_evidence_issuer_registry_repository import (
+from atlas.adapters.sqlite.workspace_registry_repository import (\n    SQLiteWorkspaceRegistryRepository,\n)\nfrom atlas.adapters.sqlite.recovery_evidence_issuer_registry_repository import (
     SQLiteRecoveryEvidenceIssuerRegistryRepository,
 )
 from atlas.adapters.sqlite.recovery_evidence_admission_repository import (
@@ -35,7 +35,7 @@ class SQLiteLocalAuthorityUnitOfWork(SQLiteAuthorizationUnitOfWork):
         super().__init__(database)
         self.identity = None
         self.project_environments = None
-        self.authority_changes = None
+        self.workspaces = None\n        self.authority_changes = None
         self.recovery_evidence_trust_policies = None
         self.recovery_evidence_issuer_registry = None
         self.recovery_evidence_admissions = None
@@ -51,7 +51,7 @@ class SQLiteLocalAuthorityUnitOfWork(SQLiteAuthorizationUnitOfWork):
                 self._database,
                 unit_of_work=self._unit,
             )
-            self.authority_changes = SQLiteAuthorityChangeStore(
+            self.workspaces = SQLiteWorkspaceRegistryRepository(\n                self._database,\n                unit_of_work=self._unit,\n            )\n            self.authority_changes = SQLiteAuthorityChangeStore(
                 self._database,
                 unit_of_work=self._unit,
             )
