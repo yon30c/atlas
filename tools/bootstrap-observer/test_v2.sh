@@ -26,5 +26,5 @@ $CC $COMMON_FLAGS -O2 \
   tools/bootstrap-observer/bootstrap_observer_linux.c \
   tools/bootstrap-observer/bootstrap_observer_main.c
 
-printf '%s\\n' "V2 build and automated tests completed."
-printf '%s\\n' "Observer binary: /tmp/atlas-bootstrap-observer"
+printf '%s\n' "V2 build and automated tests completed."
+printf '%s\n' "Observer binary: /tmp/atlas-bootstrap-observer"
