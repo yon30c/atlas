@@ -344,10 +344,19 @@ Tests añadidos en `tests/unit/test_agent_renewal_approval_lifecycle.py`:
 - rechazo USER owner permitido incluso después de suspensión y revocación;
 - reloj confiable ausente: aprobación AGENT fail-closed.
 
-**Validación pendiente del propietario en Debian:** ejecutar suite completa y compileall sobre el HEAD actualizado. No se afirma ejecución local de tests ni CI. Los tests nuevos todavía deben ejecutarse en el entorno del propietario.
+**Validación confirmada por el propietario en Debian (HEAD `8f65c3646987a2402ecd089f9b426568f60f2ec2`):** suite completa **1,413 tests en 22.259 s — OK**; `python -m compileall -q src tests` → **COMPILE_EXIT_CODE=0**. La suite incluye los ocho casos de lifecycle añadidos para I3-2B.7A. Esta evidencia procede de la ejecución reportada por el propietario; no implica que GitHub Actions/CI haya corrido.
 
 ### Límites deliberados
 
 - No se propagan suspensiones a Workspaces existentes.
 - No se revocan Grants ni delegaciones automáticamente.
 - No se añade todavía autoridad de lifecycle para suspender/reactivar asociaciones ni un ledger de actor/motivo. Esa es la siguiente parte de I3-2B.7 y requiere un contrato explícito de autorización: el servicio no debe asumir que cualquier USER autenticado puede administrar asociaciones.
+
+
+### Validación I3-2B.7A — confirmada por el propietario
+
+Sobre el HEAD `8f65c3646987a2402ecd089f9b426568f60f2ec2`, el propietario ejecutó en Debian:
+- Suite completa: **1,413 tests en 22.259 s — OK**.
+- `python -m compileall -q src tests`: **COMPILE_EXIT_CODE=0**.
+
+La validación incluye la suite `tests/unit/test_agent_renewal_approval_lifecycle.py`, incluida la corrección de los dos tests que preparaban el fixture `SimpleNamespace` mediante `dataclasses.replace`. No se afirma ejecución de CI. I3-2B.7A queda validada por el propietario en Debian.
