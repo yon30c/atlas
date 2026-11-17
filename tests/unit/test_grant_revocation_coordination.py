@@ -251,7 +251,7 @@ class GrantRevocationCoordinationTests(unittest.TestCase):
         )
 
     def revoke(self, context=None, grant_id=None, idempotency_key="idem-001", now=NOW, *, verified_identity=VERIFIED_OWNER):
-        return self.revoke(
+        return self.service.revoke(
             context or self.context,
             grant_id or self.grant.grant_id,
             idempotency_key,
@@ -265,7 +265,7 @@ class GrantRevocationCoordinationTests(unittest.TestCase):
         self.assertEqual(self.coordinator.reserve_calls, 0)
 
     def test_revoke_uses_coordinator_and_never_repository_update(self):
-        result = self.service.revoke(
+        result = self.revoke(
             self.context, self.grant.grant_id, "idem-001", NOW
         )
         self.assertIsInstance(result, GrantRevocationResult)
@@ -275,10 +275,10 @@ class GrantRevocationCoordinationTests(unittest.TestCase):
         self.assertEqual(self.coordinator.apply_calls, 1)
 
     def test_revoke_replay_returns_same_operation_without_second_effect(self):
-        first = self.service.revoke(
+        first = self.revoke(
             self.context, self.grant.grant_id, "idem-001", NOW
         )
-        second = self.service.revoke(
+        second = self.revoke(
             self.context, self.grant.grant_id, "idem-001", NOW + timedelta(seconds=2)
         )
         self.assertEqual(first.operation_id, second.operation_id)
@@ -298,14 +298,14 @@ class GrantRevocationCoordinationTests(unittest.TestCase):
             user_id="user-002",
         )
         with self.assertRaises(AuthorizationError):
-            self.service.revoke(
+            self.revoke(
                 other_context, self.grant.grant_id, "idem-002", NOW
             )
         self.assertEqual(self.coordinator.reserve_calls, 0)
 
     def test_cam_denial_aborts_only_when_coordinator_confirms_source_unchanged(self):
         self.service._revocation_authorizer = DenyingCAM()
-        result = self.service.revoke(
+        result = self.revoke(
             self.context, self.grant.grant_id, "idem-denied", NOW
         )
         self.assertEqual(result.status, AuthorityChangeStatus.ABORTED)
@@ -314,7 +314,7 @@ class GrantRevocationCoordinationTests(unittest.TestCase):
 
     def test_uncertain_proof_consumption_never_starts_or_aborts_change(self):
         self.service._proof_authorization = UncertainProofAuthorization()
-        result = self.service.revoke(
+        result = self.revoke(
             self.context, self.grant.grant_id, "idem-uncertain", NOW
         )
         self.assertEqual(result.status, AuthorityChangeStatus.BLOCKED)
@@ -324,7 +324,7 @@ class GrantRevocationCoordinationTests(unittest.TestCase):
     def test_revoke_requires_direct_non_delegated_owner_action(self):
         delegated = replace(self.context, delegation=DelegationMode.DELEGATED)
         with self.assertRaises(AuthorizationError):
-            self.service.revoke(
+            self.revoke(
                 delegated, self.grant.grant_id, "idem-003", NOW
             )
         self.assertEqual(self.coordinator.reserve_calls, 0)
