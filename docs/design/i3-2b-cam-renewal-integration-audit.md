@@ -167,3 +167,40 @@ Auditoría documental completada. El usuario aprobó la política conservadora: 
 - No se ha fusionado PR #16.
 
 La primera versión deniega deliberadamente cualquier delegación con cobertura parcial, y los Grants históricos sin la acción explícita `grant.renewal.request` no pueden iniciar solicitudes AGENT.
+
+## 11. Seguimiento — 17 de noviembre de 2026
+
+### Validación del checkpoint I3-2B.6B/6C
+
+El propietario ejecutó en Debian sobre el checkpoint anterior a este endurecimiento adicional:
+
+- Suite completa: **1,396 tests, OK** (22.894 s).
+- `python -m compileall -q src tests`: **COMPILE_EXIT_CODE=0**.
+
+Esta evidencia valida el checkpoint 6B/6C informado por el propietario. No debe atribuirse automáticamente a los commits posteriores de I3-2B.6D descritos abajo; esos cambios requieren una nueva validación focalizada y luego la suite completa.
+
+### I3-2B.6D — revalidación USER owner dentro de la UoW
+
+La revisión posterior detectó que `approve_renewal` y `reject_renewal` llamaban al verificador USER standalone antes de abrir la UoW. Eso dejaba la validación de identidad fuera de la transacción que lee la solicitud/Grant y escribe la decisión.
+
+Cambio aplicado en la rama:
+- El puerto `VerifiedIdentityContextVerifierPort` declara `verify_in_unit_of_work(context, unit)`.
+- `identity_evidence.py` añade una validación owner USER que exige el método transaccional, compara identidad canónica, tipo USER, estado ACTIVE, revisiones, UserId, actor y ausencia de delegación.
+- `approve_renewal` y `reject_renewal` abren primero la UoW y revalidan la evidencia USER mediante la misma UoW antes de leer y decidir la renovación.
+- Si el verificador no implementa la ruta compartida, la operación falla cerrada.
+- Los tests verifican que no se invoque el método standalone y que ambas decisiones usen la ruta transaccional; se añadió un caso para verificador legacy-only.
+
+**Validación de I3-2B.6D pendiente:** los tests y compileall deben ejecutarse en Debian sobre el HEAD actualizado.
+
+### Relación Project/Environment — resultado de inspección
+
+El adaptador canónico actual expone `get_project(project_id)` y `get_environment(environment_id)` sobre catálogos separados (`atlas_projects` y `atlas_environments`). Los modelos recuperados solo contienen identificador, estado y revisión; no existe una tabla, clave o contrato de asociación Project-Environment en esta capa.
+
+Por tanto, 6C puede comprobar que ambos registros existen, están activos y coinciden con los IDs del Grant, pero no puede afirmar que el Environment pertenezca al Project. No se añadió una asociación implícita ni una regla ad hoc. Si el producto requiere esa relación, deberá modelarse explícitamente —incluyendo migración, autoridad/puerto, reglas de lifecycle y pruebas— antes de hacerla obligatoria en la renovación.
+
+### Estado
+
+- I3-2B.6B/6C: checkpoint validado por el propietario con 1,396 tests y compileall 0.
+- I3-2B.6D: implementación publicada en la rama; validación pendiente.
+- Project-Environment association: no representada por el modelo canónico actual; decisión de diseño pendiente.
+- PR #16 continúa Draft, abierto y sin fusionar.
