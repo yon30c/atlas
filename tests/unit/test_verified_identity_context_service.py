@@ -60,7 +60,7 @@ class VerifiedIdentityContextServiceTests(unittest.TestCase):
                 self.user,
                 self.issuer.issuer_id,
                 self.subject.digest,
-                verified_at=self.clock.now(),
+                verified_at=self.clock.now() - timedelta(seconds=2),
             )
             self.authenticator = NativeAuthenticator(
                 authenticator_id=str(uuid4()),
