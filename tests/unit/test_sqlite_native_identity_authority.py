@@ -78,6 +78,19 @@ class SQLiteNativeIdentityAuthorityTests(unittest.TestCase):
         with self.assertRaises(IdentityConflictError):
             self._binding(identity=mismatched)
 
+        from atlas.core.identity import Identity
+        stale = type(self.user)(
+            user_id=self.user.user_id,
+            identity=Identity(
+                identity_id=self.user.identity.identity_id,
+                kind=self.user.identity.kind,
+                status=IdentityStatus.SUSPENDED,
+                revision=self.user.identity.revision + 1,
+            ),
+        )
+        with self.assertRaises(ConcurrencyError):
+            self._binding(identity=stale, digest="f" * 64)
+
         suspended = self.identity_authority.update_user_status(
             self.user.user_id,
             expected_revision=1,
