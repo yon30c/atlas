@@ -251,6 +251,37 @@ Estas pruebas se diseñarán primero como pruebas unitarias/integración sin pri
 A se aprobará únicamente si la implementación puede cumplir y demostrar todos los controles anteriores en el Debian real. Si pidfd, procfs, política sudo, sesión/TTY o pruebas negativas no permiten una validación coherente, se seleccionará B. No se relajarán las condiciones para conservar A.
 
 
+
+## 4.4 Prototipo C de observación (diagnóstico, no validador)
+
+Se añadió `tools/bootstrap-probe/bootstrap_probe.c` con instrucciones en `tools/bootstrap-probe/README.md`.
+
+El programa únicamente observa e imprime:
+- PID/PPID, UID/GID real y efectivo, SID y PGID del proceso actual;
+- PID padre directo, UID/GID y PPID desde `/proc/PID/status`;
+- disponibilidad de `pidfd_open` y estado inmediato observado mediante `poll`;
+- metadatos del objeto ejecutable abierto mediante `/proc/PID/exe` y su destino textual informativo;
+- SID del TTY, SID del proceso, grupo foreground, PGID y metadatos del dispositivo.
+
+**No es un helper de seguridad.** No compara contra una allowlist, no decide si el padre es confiable, no autentica, no invoca PAM, no lee configuración ni claves, no firma, no emite prueba y no toca CAM. No debe instalarse en rutas privilegiadas ni recibir setuid/capabilities. Los resultados son observaciones no atómicas y no constituyen autorización.
+
+Compilación propuesta por el usuario en su checkout Debian (binario temporal en `/tmp`):
+
+```sh
+cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+  -o /tmp/atlas-bootstrap-probe \
+  tools/bootstrap-probe/bootstrap_probe.c
+```
+
+Ejecuciones para comparar:
+- `/tmp/atlas-bootstrap-probe` desde shell interactiva normal;
+- `sudo -- /tmp/atlas-bootstrap-probe` desde esa misma shell;
+- `ssh -t HOST 'sudo -- /tmp/atlas-bootstrap-probe'` desde cliente SSH con PTY;
+- `ssh -T HOST 'sudo -- /tmp/atlas-bootstrap-probe'` sin PTY, que debe informar que no puede abrir `/dev/tty`.
+
+Reemplazar `HOST` por el alias/destino SSH real. No cambiar sudoers ni instalar el binario. Revisar la salida antes de compartirla. Todavía no se han compilado ni ejecutado estas fuentes en el Debian del propietario; no declarar el prototipo validado hasta recibir resultados.
+
+
 ## 5. Entorno, argumentos y descriptores
 
 - Rechazar argc distinto del valor fijo esperado.
