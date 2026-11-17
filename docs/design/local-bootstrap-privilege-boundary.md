@@ -343,6 +343,50 @@ Límites:
 
 **Prueba siguiente:** compilar el probe actualizado en `/tmp` y comparar la ejecución local interactiva, local con sudo y SSH con PTY. La prueba SSH sin PTY con sudo solo es informativa si sudo llega a ejecutar el probe; un rechazo por falta de terminal/credenciales no observa el proceso hijo ni permite concluir sobre `use_pty`. No alterar sudoers, timestamp policy ni PAM para forzar esa ejecución.
 
+
+## 4.7 Resultados de la segunda ronda de diagnóstico C (16-11-2026)
+
+El propietario compiló y ejecutó el probe ampliado. Se recibieron tres ejecuciones:
+
+### Shell interactiva local, sin sudo
+
+- Proceso probe UID/EUID 1000/1000; padre directo bash UID real/efectivo 1000/1000.
+- Padre bash: `tty_nr=34816`, `tpgid=11353`; FD 0/1/2 apuntan a `/dev/pts/0`.
+- El probe: SID 2320, PGID 11353; TTY SID 2320, foreground PGID 11353.
+- Resultado: terminal interactivo normal observado.
+
+### Shell interactiva local, con sudo
+
+- Proceso probe UID/EUID 0/0; padre directo `/usr/bin/sudo`.
+- Padre sudo: UID real/efectivo/saved/fs 1000/0/0/0; GID 0/0/0/0.
+- Padre sudo: `tty_nr=34818`, `tpgid=11357`; FD 0/1/2 apuntan a `/dev/pts/0`.
+- Padre y probe comparten SID 11356; el PGID del probe 11357 coincide con el foreground TPGID.
+- TTY controlador del probe válido; terminal SID 11356 y foreground 11357.
+- Ejecutable padre observado: dispositivo 2082, inode 3270762, UID/GID 0/0, modo 4755, destino `/usr/bin/sudo`.
+
+### SSH con PTY y sudo
+
+- Proceso probe UID/EUID 0/0; padre directo `/usr/bin/sudo`.
+- Padre sudo: UID real/efectivo/saved/fs 1000/0/0/0; GID 0/0/0/0.
+- Padre sudo: `tty_nr=34819`, `tpgid=11371`; FD 0/1/2 apuntan a `/dev/pts/2`.
+- Padre y probe comparten SID 11370; el PGID del probe 11371 coincide con el foreground TPGID.
+- TTY controlador del probe válido; terminal SID 11370 y foreground 11371.
+- Ejecutable padre observado: dispositivo 2082, inode 3270762, UID/GID 0/0, modo 4755, destino `/usr/bin/sudo`.
+
+### Interpretación
+
+Las tres observaciones son compatibles con el contrato esperado para terminales interactivos. En las dos ejecuciones privilegiadas, el padre sudo tiene un `tty_nr` distinto de cero y sus descriptores 0/1/2 apuntan a un PTY. El hijo comparte SID con el padre y queda en el grupo foreground.
+
+Esto no demuestra que el TTY del padre sudo sea necesariamente el PTY originalmente solicitado por el cliente SSH: `tty_nr`, SID, PGID y enlaces FD solo describen el estado actual observado del proceso. No prueban procedencia del terminal ni presencia física. La prueba SSH con PTY no responde al caso SSH sin PTY.
+
+### Caso SSH sin PTY pendiente
+
+La prueba previa `ssh -T ... sudo -- /tmp/atlas-bootstrap-probe` fue rechazada por sudo antes de ejecutar el probe porque no había terminal para solicitar contraseña. Por ello no observó el proceso sudo ni un posible PTY para el hijo.
+
+No se debe cambiar la política de timestamp, habilitar NOPASSWD, usar `sudo -S` ni alterar sudoers para forzar la ejecución. Primero se debe inspeccionar el `timestamp_type` efectivo y determinar si existe un método de prueba aprobado que no modifique el host ni eluda la autenticación. Si no existe, se documentará el caso como no reproducible bajo la configuración actual y A no podrá afirmar que detecta de forma independiente la ausencia de PTY en el transporte SSH basándose en las observaciones actuales.
+
+**Conclusión provisional:** el probe aporta evidencia favorable de que el patrón sudo + TTY interactivo se comporta como se esperaba. No se aprueba A todavía. La distinción entre SSH con PTY y SSH sin PTY sigue sin demostrarse en presencia de `use_pty`.
+
 ## 5. Entorno, argumentos y descriptores
 
 - Rechazar argc distinto del valor fijo esperado.
