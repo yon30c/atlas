@@ -252,7 +252,7 @@ La autoridad crea UUIDv4, resuelve solo registros AGENT, actualiza estado median
 
 Pruebas: tests/unit/test_sqlite_agent_identity_authority.py. Cubren UUID canónico, no resolución cruzada USER/AGENT, ausencia, duplicados, CAS, estados terminales, entradas inválidas, concurrencia y UoW.
 
-**Estado:** implementación publicada en PR #16, pendiente de ejecución por el propietario en Debian. No se declara suite ni compileall exitosos.
+**Estado:** implementación publicada en PR #16. La suite completa del branch fue validada posteriormente en Debian: 1,329/1,329 tests OK y compileall exit 0. No se habilita autenticación AGENT.
 
 
 ### 12.1. Extensión de I3-2B.2: binding nativo AGENT
@@ -263,7 +263,7 @@ Se completó el slice de binding persistente AGENT:
 - SQLiteNativeAgentIdentityAuthority valida CanonicalAgentIdentity contra identity_records, exige AGENT ACTIVE y issuer ACTIVE, y permite lookup y revocación CAS terminal.
 - Se conserva intacta la tabla y el trigger USER native_identity_bindings.
 
-Tests añadidos: tests/unit/test_sqlite_native_agent_identity_authority.py. La validación focalizada, suite completa y compileall siguen pendientes de ejecución en Debian. No se declara éxito de pruebas.
+Tests añadidos: tests/unit/test_sqlite_native_agent_identity_authority.py. La suite completa del branch fue validada posteriormente en Debian: 1,329/1,329 tests OK y compileall exit 0.
 
 
 ### 13. I3-2B.3A — persistencia de delegaciones
@@ -275,3 +275,5 @@ La inserción valida mediante SQLite el propietario canónico activo, identidad 
 SQLiteLocalAuthorityUnitOfWork ahora expone USER identity, AGENT identity, USER/AGENT native bindings, Grants, renewals y delegations sobre una sola SQLiteUnitOfWork.
 
 **Bloqueo explícito:** no existe todavía implementación productiva de los puertos VerifiedIdentityContextVerifierPort, VerifiedAgentIdentityContextVerifierPort y VerifiedAgentDelegationContextVerifierPort. El repositorio no prueba consentimiento del owner y no debe usarse como API de aplicación. I3-2B.3B debe implementar verificación transaccional y servicio de autoridad; no se emiten contextos verificados ni se habilitan operaciones delegated.
+
+**Validación del slice de persistencia:** suite completa del branch ejecutada por el propietario en Debian: 1,329/1,329 tests OK en 17.000s; `python -m compileall -q src tests` con `COMPILE_EXIT_CODE=0`. Esta validación no elimina el bloqueo de autoridad descrito arriba.
