@@ -23,6 +23,26 @@ Este documento **no reemplaza ni duplica** las especificaciones ya existentes:
 
 Las propuestas técnicas previas de autenticación continúan siendo propuestas donde así se declaran. Este documento adopta decisiones de integración para el ciclo, pero **no modifica por sí solo los contratos normativos B1, las migraciones ni el estado de aprobación de los diseños físicos existentes**.
 
+## 1.1 Hallazgos del baseline inspeccionado (PR #6)
+
+La inspección directa del código en `feature/cycle-3-2-b-trusted-workspace-mount-cam-gate` @ `9a80ba3b8b9c5f8f5048f0ad98905faaf0b5bf7c` confirma estas capacidades y límites:
+
+- `SQLiteLocalAuthorityUnitOfWork` abre una transacción SQLite compartida y expone repositorios de Identity, Project/Environment, Workspaces, Grants (heredado), authority-change storage y repositorios de evidencia de recuperación. Esta es una frontera transaccional local real para los repositorios que participan en esa misma UoW.
+- El propio módulo declara que la UoW es una composición de persistencia, no un coordinador de autorización o consistencia: no invalida Grants, no aplica fencing de efectos ni libera claims.
+- `IdentityAuthorityPort` actualmente expone `create_user()`, `get_user()` y `update_user_status()`. `SQLiteIdentityAuthority` crea UserId e Identity(USER) en una transacción, pero declara expresamente que no implementa issuer externo, binding, autenticación, recovery ni autorización.
+- El baseline no contiene todavía en esa composición una Authentication Authority, almacenamiento de autenticadores/sesiones/proofs ni el flujo operativo de issuer/binding nativo.
+- `SQLiteAuthorityChangeStore` persiste reservas, identidad de operación e idempotencia. Su propio contrato aclara que no calcula admisiones afectadas, no aplica fencing a rutas, no muta autoridades fuente ni declara reconciliación.
+- Los contratos/modelos de Consistency existentes no demuestran por sí solos que haya un coordinador concreto capaz de ejecutar invalidación y fencing de extremo a extremo.
+
+Referencias de código del baseline:
+- [SQLiteLocalAuthorityUnitOfWork](../../src/atlas/adapters/sqlite/local_authority_unit_of_work.py)
+- [IdentityAuthorityPort](../../src/atlas/ports/identity_authority.py)
+- [SQLiteIdentityAuthority](../../src/atlas/adapters/sqlite/identity_authority.py)
+- [SQLiteAuthorityChangeStore](../../src/atlas/adapters/sqlite/authority_changes.py)
+- [Límite de consistencia de operaciones del Assistant](assistant-operation-consistency-boundary.md)
+
+**Consecuencia:** la UoW compartida es una base viable para atomicidad local, pero no se puede afirmar todavía que bootstrap sea atómico entre todas las autoridades ni que Consistency proporcione fencing genérico. C0 debe verificar la composición exacta y cerrar el contrato de issuer/binding y la coordinación requerida. No se reutilizarán los contratos de consistencia específicos de Memory como si fueran un coordinador universal.
+
 ## 2. Objetivo de seguridad y cadena de confianza
 
 Ninguna capacidad protegida de consola podrá ejecutarse salvo que se cumpla la cadena completa:
