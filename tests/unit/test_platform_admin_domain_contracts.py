@@ -84,7 +84,12 @@ class PlatformAdminDomainContractTests(unittest.TestCase):
             revoked_at=self.now,
             revoked_by_user_id=self.user_id,
         )
-        expired = replace(self.grant, expires_at=self.now)
+        expired = replace(
+            self.grant,
+            issued_at=self.now - timedelta(minutes=2),
+            not_before=self.now - timedelta(minutes=1),
+            expires_at=self.now,
+        )
         for grant in (revoked, expired):
             with self.subTest(grant=grant.status), self.assertRaises(AuthorizationError):
                 require_platform_admin_permission(
