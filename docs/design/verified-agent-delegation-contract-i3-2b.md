@@ -485,3 +485,6 @@ La lectura de identidad AGENT, delegación, Grant y propietario ocurre bajo la m
 - La integración de `SQLiteAgentDelegationAuthority` es fail-closed: si no se configura el verificador delegado, `verify_for_operation` deniega.
 
 **Validación Debian:** pendiente del propietario. Los tests nuevos cubren emisión firmada, AGENT incorrecto, revisión obsoleta, expiración/revocación, Grant cambiado, propietario no canónico, manipulación de attestation y revalidación tras cambios. No declarar I3-2B.5 validado hasta recibir la suite completa y compileall del propietario.
+
+
+**Endurecimiento de I3-2B.5:** el payload attested también fija el `context_id` AGENT, `agent_identity_revision`, `agent_binding_id` y `agent_binding_revision`. La revalidación posterior exige el mismo binding exacto y sus revisiones; un binding alternativo recién creado no mantiene viva evidencia emitida para un binding revocado.
