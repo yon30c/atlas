@@ -135,6 +135,8 @@ class VerifiedAgentDelegationContext:
     environment: str
     scope: AgentDelegationScope
     issuer_id: str
+    realm: str
+    audience: str
     verified_at: datetime
     expires_at: datetime
     verification_ref: str = field(repr=False)
@@ -146,7 +148,7 @@ class VerifiedAgentDelegationContext:
             "agent_identity_id", "issuer_id",
         ):
             validate_canonical_uuid4(getattr(self, name), name)
-        for name in ("grant_id", "project_id", "environment"):
+        for name in ("grant_id", "project_id", "environment", "realm", "audience"):
             _required(getattr(self, name), name)
         for name in ("delegation_revision", "grant_revision"):
             _revision(getattr(self, name), name)
@@ -178,6 +180,8 @@ class VerifiedAgentDelegationContext:
             "resource_ids": sorted(self.scope.resource_ids),
             "actions": sorted(self.scope.actions),
             "issuer_id": self.issuer_id,
+            "realm": self.realm,
+            "audience": self.audience,
             "verified_at": self.verified_at.isoformat(timespec="microseconds"),
             "expires_at": self.expires_at.isoformat(timespec="microseconds"),
             "verification_ref": self.verification_ref,
