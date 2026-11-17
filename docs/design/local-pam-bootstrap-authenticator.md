@@ -35,26 +35,29 @@ Estos datos describen el diagnóstico del host, no una prueba de funcionamiento 
 
 ## 3. Componentes y límites de confianza
 
-1. **Bootstrap coordinator:** crea una solicitud con request_id y descriptor canónico; no puede declarar autenticación exitosa.
-2. **Helper C privilegiado y mínimo:** valida el contexto de invocación, muestra el descriptor exacto en un TTY confiable, solicita reautenticación PAM del sujeto configurado y produce una prueba limitada a esa solicitud.
-3. **PAM service `atlas-bootstrap`:** aplica autenticación Unix y comprobaciones de cuenta usando módulos del sistema. La política de fallos pertenece exclusivamente a este servicio.
-4. **Proof verifier/consumer:** valida emisor, sujeto, acción, descriptor, request_id, expiración y nonce; consume la prueba de forma atómica y de un solo uso.
-5. **CAM bootstrap:** después de verificar la prueba y la decisión explícita del propietario, genera la identidad canónica y aplica génesis conforme a ME-D4O-A. El helper no accede a SQLite CAM.
+1. **Configuración protegida del host:** declara el descriptor exacto, sujeto local, binding slot, perfil y clave pública/emisor permitidos. No es modificable por Assistant ni por procesos Atlas ordinarios.
+2. **Helper C/libpam:** lee esa configuración por ruta fija, valida host/sujeto/TTY, presenta el descriptor, recoge confirmación directa, ejecuta PAM y emite una prueba firmada. No recibe del caller los campos que definen la operación.
+3. **PAM service `atlas-bootstrap`:** aplica autenticación Unix y comprobaciones de cuenta con módulos del sistema. La política de fallos pertenece exclusivamente a este servicio.
+4. **Proof verifier/consumer:** valida la firma y todos los vínculos, y consume la prueba dentro de la misma UoW que la génesis.
+5. **CAM bootstrap:** verifica que el dominio sigue pendiente, genera identidad canónica, persiste binding y evento de génesis y actualiza gate en una transacción.
 
-La prueba no debe ser un JSON autocertificado ni un objeto Python que el caller pueda construir como `VERIFIED`. El emisor debe autenticarse criptográficamente o mediante un canal local autenticado cuya frontera y permisos estén demostrados.
+La arquitectura de coordinación vigente está en [local-bootstrap-coordination-architecture.md](local-bootstrap-coordination-architecture.md). La frontera de privilegios e invocación se define en [local-bootstrap-privilege-boundary.md](local-bootstrap-privilege-boundary.md).
+
+La prueba no es un JSON autocertificado ni un objeto Python que el caller pueda construir como VERIFIED. La clave privada está reservada al helper; Python solo posee la clave pública. El estado pendiente y el consumo único se comprueban en CAM.
 
 ## 4. Flujo previsto
 
-1. El coordinador obtiene el descriptor canónico y crea un request_id impredecible.
-2. El helper recibe la solicitud por un canal definido y comprueba que corresponde al único tipo de operación permitido: bootstrap LOCAL inicial.
-3. El helper verifica que el proceso invocador y el TTY satisfacen la política local protegida. No confía en nombre de usuario, UID, variables de entorno ni argumentos aislados como prueba suficiente.
-4. El helper muestra al operador el dominio, época, perfil, identidad/binding que se pretende establecer y commitment exacto. La confirmación se captura directamente en el helper.
-5. PAM autentica al sujeto configurado y comprueba el estado de la cuenta. La contraseña se solicita por conversación PAM; nunca se recibe por argv, variables de entorno, archivo, stdin redirigido o log.
-6. El helper emite una prueba temporal que enlaza request_id, nonce, sujeto cualificado por host/dominio de autenticación, acción y digest del descriptor exacto.
-7. El verificador comprueba la autenticidad de la prueba, su vigencia y todos los vínculos, y consume nonce/request_id de forma atómica. Repetición, expiración, mismatch o emisor desconocido se rechazan.
-8. Solo entonces el flujo de bootstrap puede presentar la evidencia de autenticación y la decisión directa del propietario al componente CAM. La creación canónica de UserId/Identity(USER), evento de génesis y estado asociado permanece dentro de la autoridad/UoW prevista.
+1. Un operador inicia explícitamente el procedimiento local.
+2. El mecanismo privilegiado ejecuta el helper sin argumentos y con acceso al TTY confiable.
+3. El helper lee y valida el descriptor desde configuración protegida del host; no recibe descriptor ni acción desde Python.
+4. El helper presenta el dominio, época, perfil LOCAL, slot de propietario y huella/revisión del descriptor.
+5. El operador confirma directamente en el TTY del helper.
+6. El helper ejecuta `pam_start`, `pam_authenticate` y `pam_acct_mgmt` para el sujeto local configurado.
+7. El helper genera request_id, nonce y proof_id, firma la prueba ligada al descriptor/configuración y sujeto observados y la entrega por el canal de salida definido.
+8. El coordinador CAM verifica firma y campos, comprueba que no existe génesis previa y consume la prueba, crea UserId/Identity(USER), persiste el binding, registra DOMAIN_BOOTSTRAPPED y actualiza head/gate en una única SQLiteUnitOfWork.
+9. Una verificación posterior independiente comprueba evento, firma, descriptor, binding, head y gate antes de habilitar operaciones.
 
-La autenticación PAM prueba la posesión de la credencial local en ese momento. No prueba por sí sola la decisión directa sobre el descriptor; esa decisión requiere confirmación independiente, mostrada y capturada por la frontera confiable.
+PAM prueba autenticación reciente del sujeto configurado. La confirmación TTY prueba la decisión directa sobre los términos mostrados. Ninguna de las dos, aislada, abre el gate.
 
 ## 5. Requisitos del servicio PAM dedicado
 
