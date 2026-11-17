@@ -129,18 +129,18 @@ El objetivo es impedir que Assistant, Skills, atlas, atlas-sandbox o un caller s
 Ejecutar localmente y compartir las salidas, revisando/ocultando cualquier dato sensible que aparezca:
 
 ```bash
-printf '%s\\n' '===== IDENTIDAD Y SESION ====='
+printf '%s\n' '===== IDENTIDAD Y SESION ====='
 id
 printf 'tty: '; tty || true
 printf 'session: '; ps -o pid,ppid,sid,pgid,tpgid,tty,ruid,euid,comm -p $$
-printf '%s\\n' '===== SUDO DISPONIBLE ====='
+printf '%s\n' '===== SUDO DISPONIBLE ====='
 command -v sudo
 sudo -V | sed -n '1,35p'
-printf '%s\\n' '===== PERMISOS EFECTIVOS ====='
+printf '%s\n' '===== PERMISOS EFECTIVOS ====='
 sudo -l
-printf '%s\\n' '===== DEFAULTS RELEVANTES (SI ESTAN EXPUESTOS) ====='
+printf '%s\n' '===== DEFAULTS RELEVANTES (SI ESTAN EXPUESTOS) ====='
 sudo -ll 2>/dev/null | sed -n '1,180p'
-printf '%s\\n' '===== CONFIGURACION SUDO RELEVANTE ====='
+printf '%s\n' '===== CONFIGURACION SUDO RELEVANTE ====='
 sudo grep -RInE '^[[:space:]]*(Defaults|#includedir|@includedir)|env_reset|env_keep|env_delete|setenv|secure_path|timestamp_type|requiretty|!authenticate|NOPASSWD|SETENV' /etc/sudoers /etc/sudoers.d 2>/dev/null
 ```
 
