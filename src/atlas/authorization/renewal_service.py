@@ -218,6 +218,13 @@ class GrantRenewalService:
             self._require_pending(request)
             self._validate_renewal_grant_binding(request, grant)
 
+            if (
+                request.grant_revision is not None
+                and request.grant_revision != grant.revision
+            ):
+                raise ContractError(
+                    "La revisión del Grant cambió desde la solicitud AGENT"
+                )
             if grant.expires_at != request.current_expires_at:
                 raise ContractError(
                     "El vencimiento del Grant cambió desde la solicitud"
