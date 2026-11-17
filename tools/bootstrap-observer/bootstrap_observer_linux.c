@@ -82,27 +82,29 @@ static bool read_process_snapshot(pid_t pid, bv_status *status,
     unsigned char stat_buffer[ATLAS_PROC_STAT_MAX + 1U];
     char path[64];
     size_t length;
+    bool status_ok = false;
+    bool stat_ok = false;
 
     if (make_proc_path(path, sizeof(path), pid, "status") != 0 ||
         read_bounded_file(path, status_buffer, ATLAS_PROC_STATUS_MAX,
                           &length) != 0) {
         *status_result = bo_classify_read(0U, ATLAS_PROC_STATUS_MAX, errno);
-        return false;
-    }
-    *status_result = bv_parse_status(status_buffer, length, status);
-    if (*status_result != BV_OK) {
-        return false;
+    } else {
+        *status_result = bv_parse_status(status_buffer, length, status);
+        status_ok = *status_result == BV_OK;
     }
 
     if (make_proc_path(path, sizeof(path), pid, "stat") != 0 ||
         read_bounded_file(path, stat_buffer, ATLAS_PROC_STAT_MAX,
                           &length) != 0) {
         *stat_result = bo_classify_read(0U, ATLAS_PROC_STAT_MAX, errno);
-        return false;
+    } else {
+        *stat_result = bv_parse_stat(stat_buffer, length, (int32_t)pid,
+                                     stat_value);
+        stat_ok = *stat_result == BV_OK;
     }
-    *stat_result = bv_parse_stat(stat_buffer, length, (int32_t)pid,
-                                 stat_value);
-    return *stat_result == BV_OK;
+
+    return status_ok && stat_ok;
 }
 
 bv_parse_result bo_classify_read(size_t bytes_read, size_t maximum,
