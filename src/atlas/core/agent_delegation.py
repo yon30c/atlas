@@ -196,8 +196,7 @@ class VerifiedAgentDelegationContext:
         return (
             "VerifiedAgentDelegationContext("
             f"context_id={self.context_id!r}, delegation_id={self.delegation_id!r}, "
-            f"agent_identity_id={self.agent_identity_id!r}, grant_id={self.grant_id!r}, "
-            "verification_ref=<redacted>, attestation=<redacted>)"
+            f"agent_identity_id={self.agent_identity_id!r}, grant_id={self.grant_id!r})"
         )
 
 
