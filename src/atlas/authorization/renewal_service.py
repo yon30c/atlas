@@ -6,7 +6,9 @@ from datetime import datetime, timedelta
 
 from atlas.authorization.agent_renewal_policy import require_agent_renewal_cam_allow
 from atlas.authorization.evaluator import AuthorizationEvaluator
-from atlas.authorization.identity_evidence import require_verified_owner_context
+from atlas.authorization.identity_evidence import (
+    require_verified_owner_context_in_unit_of_work,
+)
 from atlas.authorization.models import (
     Grant,
     GrantRenewalRequest,
@@ -217,11 +219,13 @@ class GrantRenewalService:
         *,
         verified_identity: VerifiedIdentityContext | None = None,
     ) -> Grant:
-        canonical = self._validate_owner_context(context, verified_identity)
         self._validate_utc(now, "now")
         self._validate_identifier(renewal_id, "renewal_id")
 
         with self._unit_of_work_factory() as uow:
+            canonical = self._validate_owner_context(
+                context, verified_identity, uow
+            )
             request = self._get_renewal(uow.renewals, renewal_id)
             grant = self._get_grant(uow.grants, request.grant_id)
 
@@ -278,11 +282,13 @@ class GrantRenewalService:
         *,
         verified_identity: VerifiedIdentityContext | None = None,
     ) -> GrantRenewalRequest:
-        canonical = self._validate_owner_context(context, verified_identity)
         self._validate_utc(now, "now")
         self._validate_identifier(renewal_id, "renewal_id")
 
         with self._unit_of_work_factory() as uow:
+            canonical = self._validate_owner_context(
+                context, verified_identity, uow
+            )
             request = self._get_renewal(uow.renewals, renewal_id)
             grant = self._get_grant(uow.grants, request.grant_id)
 
@@ -341,11 +347,13 @@ class GrantRenewalService:
         self,
         context: OperationContext,
         verified_identity: VerifiedIdentityContext | None,
+        unit_of_work: AuthorizationUnitOfWork,
     ) -> CanonicalUserIdentity:
-        return require_verified_owner_context(
+        return require_verified_owner_context_in_unit_of_work(
             context,
             verified_identity,
             self._identity_verifier,
+            unit_of_work,
         )
 
     @staticmethod
