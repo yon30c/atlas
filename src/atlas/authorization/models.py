@@ -192,8 +192,32 @@ class GrantRenewalRequest:
     decided_at: datetime | None = None
     decided_by_user_id: str | None = None
     version: int = 1
+    grant_revision: int | None = None
+    delegation_id: str | None = None
+    delegation_revision: int | None = None
 
     def __post_init__(self) -> None:
+        audit_values = (
+            self.grant_revision,
+            self.delegation_id,
+            self.delegation_revision,
+        )
+        if any(value is not None for value in audit_values):
+            if any(value is None for value in audit_values):
+                raise ContractError(
+                    "la evidencia de solicitud AGENT requiere revisión Grant y delegación completas"
+                )
+            if (
+                isinstance(self.grant_revision, bool)
+                or not isinstance(self.grant_revision, int)
+                or self.grant_revision < 1
+                or isinstance(self.delegation_revision, bool)
+                or not isinstance(self.delegation_revision, int)
+                or self.delegation_revision < 1
+            ):
+                raise ContractError("las revisiones de auditoría deben ser enteros positivos")
+            if not isinstance(self.delegation_id, str) or not self.delegation_id.strip():
+                raise ContractError("delegation_id debe ser texto no vacío")
         if (
             isinstance(self.version, bool)
             or not isinstance(self.version, int)
