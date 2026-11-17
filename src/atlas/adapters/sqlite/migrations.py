@@ -2376,6 +2376,53 @@ CORE_SCHEMA_V24 = SQLiteMigration(
         SELECT RAISE(ABORT, 'AGENT renewal authority evidence must be complete');
     END;
 
+    CREATE TRIGGER authorization_grant_renewals_agent_evidence_matches_authority
+    BEFORE INSERT ON authorization_grant_renewals
+    WHEN NEW.delegation_id IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM agent_delegations d
+        JOIN authorization_grants g ON g.grant_id = d.grant_id
+        JOIN native_identity_issuers issuer ON issuer.issuer_id = d.issuer_id
+        JOIN native_agent_identity_bindings binding
+          ON binding.identity_id = d.agent_identity_id
+         AND binding.issuer_id = d.issuer_id
+        WHERE d.delegation_id = NEW.delegation_id
+          AND d.revision = NEW.delegation_revision
+          AND d.status = 'active'
+          AND d.not_before <= NEW.requested_at
+          AND d.expires_at > NEW.requested_at
+          AND d.grant_id = NEW.grant_id
+          AND d.grant_revision = NEW.grant_revision
+          AND d.owner_user_id = NEW.owner_user_id
+          AND d.agent_identity_id = NEW.subject_identity_id
+          AND NEW.requested_by_identity_id = d.agent_identity_id
+          AND d.project_id = g.project_id
+          AND d.environment = g.environment
+          AND d.resource_type = g.resource_type
+          AND d.resource_ids_json = g.resource_ids_json
+          AND EXISTS (
+              SELECT 1 FROM json_each(g.actions_json)
+              WHERE value = 'grant.renewal.request'
+          )
+          AND EXISTS (
+              SELECT 1 FROM json_each(d.actions_json)
+              WHERE value = 'grant.renewal.request'
+          )
+          AND g.owner_user_id = NEW.owner_user_id
+          AND g.subject_identity_id = NEW.subject_identity_id
+          AND g.revision = NEW.grant_revision
+          AND g.expires_at = NEW.current_expires_at
+          AND g.issued_at <= NEW.requested_at
+          AND g.expires_at > NEW.requested_at
+          AND g.revoked_at IS NULL
+          AND issuer.status = 'ACTIVE'
+          AND binding.status = 'ACTIVE'
+      )
+    BEGIN
+        SELECT RAISE(ABORT, 'AGENT renewal evidence does not match active canonical authority');
+    END;
+
     CREATE TRIGGER authorization_grant_renewals_agent_evidence_immutable
     BEFORE UPDATE OF grant_revision, delegation_id, delegation_revision
     ON authorization_grant_renewals
