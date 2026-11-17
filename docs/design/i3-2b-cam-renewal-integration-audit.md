@@ -123,14 +123,14 @@ También debe definirse idempotencia de renewal_id y si se permite más de una s
 ### I3-2B.6A — Auditoría CAM
 Auditoría documental completada. El usuario aprobó la política conservadora: cobertura exacta de recursos, acción explícita en Grant/delegación y decisiones USER owner-only.
 
-### I3-2B.6B — Contrato y pruebas CAM (implementado; validación pendiente)
+### I3-2B.6B — Contrato y pruebas CAM (implementado; checkpoint validado por el propietario)
 - Nuevo módulo `src/atlas/authorization/agent_renewal_policy.py` define `grant.renewal.request`.
 - Exige contexto AGENT activo con `DelegationMode.DELEGATED` y evidencia AGENT/delegación coincidente.
 - Exige que la delegación cubra exactamente todos los `resource_ids` del Grant y que la acción esté explícita en ambos.
 - Ejecuta `AuthorizationEvaluator` para cada recurso y exige ALLOW del mismo Grant y revisión.
 - Tests cubren scope parcial, acción ausente, actor/owner/project/environment, binding/revisiones, Grant expirado/revocado y evaluación de todos los recursos.
 
-### I3-2B.6C — Solicitud AGENT bajo UoW compartida (implementado; validación pendiente)
+### I3-2B.6C — Solicitud AGENT bajo UoW compartida (implementado; checkpoint validado por el propietario)
 - `GrantRenewalService` recibe verificadores AGENT/delegación, reloj confiable y CAM evaluator por composición.
 - Revalida evidencia AGENT y `VerifiedAgentDelegationContext` dentro de la misma UoW local.
 - Resuelve Grant y Project/Environment canónicos dentro de esa UoW y ejecuta CAM antes de escribir.
@@ -155,7 +155,7 @@ Auditoría documental completada. El usuario aprobó la política conservadora: 
 - aprobación/rechazo por AGENT: DENY; solo USER owner verificado puede decidir.
 - la solicitud no cambia `Grant.expires_at`; solo la aprobación USER puede hacerlo.
 
-**Validación Debian de I3-2B.6B/6C pendiente del propietario.** Ejecutar tests focalizados, suite completa y `compileall`. PR #16 permanece Draft; no fusionar sin autorización explícita.
+**Checkpoint Debian de I3-2B.6B/6C confirmado por el propietario:** 1,396 tests OK y `compileall` exit 0. La validación es anterior al endurecimiento 6D documentado en la sección 11; el HEAD actual requiere nueva validación.
 
 ## 10. Estado y conclusión
 
