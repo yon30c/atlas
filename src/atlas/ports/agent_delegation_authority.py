@@ -1,6 +1,6 @@
 """Authority port for owner-issued AGENT delegation records."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Protocol
 
 from atlas.core.agent_delegation import AgentDelegation, VerifiedAgentDelegationContext
@@ -43,6 +43,8 @@ class AgentDelegationAuthorityPort(Protocol):
         *,
         expected_revision: int,
         verified_at: datetime,
-        maximum_context_ttl_seconds: int,
+        realm: str,
+        audience: str,
+        maximum_context_ttl: timedelta,
     ) -> VerifiedAgentDelegationContext:
         """Revalidate live delegation/Grant bindings and issue short-lived evidence."""
