@@ -3,7 +3,11 @@
 from datetime import datetime, timedelta
 from typing import Protocol
 
-from atlas.core.agent_delegation import AgentDelegation, VerifiedAgentDelegationContext
+from atlas.core.agent_delegation import (
+    AgentDelegation,
+    AgentDelegationScope,
+    VerifiedAgentDelegationContext,
+)
 from atlas.core.verified_identity_context import VerifiedIdentityContext
 
 
@@ -15,9 +19,7 @@ class AgentDelegationAuthorityPort(Protocol):
         *,
         grant_id: str,
         agent_identity_id: str,
-        resource_scope: frozenset[str],
-        resource_type: str,
-        actions: frozenset[str],
+        scope: AgentDelegationScope,
         not_before: datetime,
         expires_at: datetime,
         verified_owner_identity: VerifiedIdentityContext,
