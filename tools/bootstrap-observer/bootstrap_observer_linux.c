@@ -314,6 +314,8 @@ int bo_collect(bo_report *report) {
     }
     report->self_pid = self_pid;
     report->parent_pid = parent_pid;
+    report->process_sid = (int32_t)getsid(0);
+    report->process_pgrp = (int32_t)getpgrp();
 
     pidfd = open_pidfd(parent_pid);
     if (pidfd >= 0) {
@@ -378,8 +380,6 @@ int bo_collect(bo_report *report) {
     report->tty_errno = tty.error_number;
     if (tty.available) {
         report->terminal_sid = tty.terminal_sid;
-        report->process_sid = tty.process_sid;
-        report->process_pgrp = tty.process_pgrp;
         report->foreground_pgrp = tty.foreground_pgrp;
     }
 
@@ -586,6 +586,8 @@ void bo_print_report(FILE *stream, const bo_report *report) {
     fprintf(stream, "observer_pid=%ld\n", (long)report->self_pid);
     fprintf(stream, "observed_parent_pid=%ld\n", (long)report->parent_pid);
     fprintf(stream, "result=%s\n", result_name(report->result));
+    fprintf(stream, "observer_sid=%" PRId32 "\n", report->process_sid);
+    fprintf(stream, "observer_pgrp=%" PRId32 "\n", report->process_pgrp);
     fprintf(stream, "pidfd=%s\n", pidfd_name(report->pidfd_state));
     if (report->pidfd_errno != 0) {
         fprintf(stream, "pidfd_errno=%d (%s)\n", report->pidfd_errno,
@@ -647,8 +649,6 @@ void bo_print_report(FILE *stream, const bo_report *report) {
     if (report->tty_available) {
         fprintf(stream, "tty=AVAILABLE\n");
         fprintf(stream, "terminal_sid=%" PRId32 "\n", report->terminal_sid);
-        fprintf(stream, "process_sid=%" PRId32 "\n", report->process_sid);
-        fprintf(stream, "process_pgrp=%" PRId32 "\n", report->process_pgrp);
         fprintf(stream, "foreground_pgrp=%" PRId32 "\n",
                 report->foreground_pgrp);
     } else {
