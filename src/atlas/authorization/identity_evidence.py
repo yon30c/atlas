@@ -1,6 +1,8 @@
 """Validación común de operaciones directas del propietario USER."""
 
-from atlas.ports.verified_identity_context_verifier import VerifiedIdentityContextVerifierPort
+from atlas.ports.verified_identity_context_verifier import (
+    VerifiedIdentityContextVerifierPort,
+)
 from atlas.core.context import OperationContext
 from atlas.core.errors import AuthorizationError, ContractError
 from atlas.core.identity import IdentityKind, IdentityStatus
@@ -28,7 +30,9 @@ def require_verified_owner_context(
     try:
         canonical = verifier.verify(verified_identity)
     except Exception as exc:
-        raise AuthorizationError("La identidad del propietario no pudo verificarse") from exc
+        raise AuthorizationError(
+            "La identidad del propietario no pudo verificarse"
+        ) from exc
     if (
         not isinstance(canonical, CanonicalUserIdentity)
         or canonical.identity.kind is not IdentityKind.USER
