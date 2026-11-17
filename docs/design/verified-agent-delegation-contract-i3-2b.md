@@ -418,3 +418,21 @@ Se añadieron pruebas para ambos protocolos que llaman al verificador dentro de 
 ### Validación Debian — I3-2B.3B.3
 
 El propietario validó el HEAD que incorpora los dos tests de UoW compartida: suite completa **1,344/1,344 tests OK**; `python -m compileall -q src tests` devolvió `COMPILE_EXIT_CODE=0`. La validación confirma el soporte transaccional de los verificadores USER y AGENT, pero no equivale a una implementación de la autoridad de delegación ni habilita operaciones AGENT.
+
+
+## 16. I3-2B.4A — autoridad de emisión de delegaciones (implementación publicada; validación pendiente)
+
+Se añadió `SQLiteAgentDelegationAuthority.create_for_grant` como autoridad de emisión. El slice requiere `VerifiedIdentityContext` USER y revalida su attestation, TTL, issuer, binding y canonical identity mediante `verify_in_unit_of_work` dentro de la misma `SQLiteLocalAuthorityUnitOfWork` que lee AGENT/Grant y persiste la delegación.
+
+Antes de insertar, la autoridad exige:
+- propietario USER canónico ACTIVE; los IDs de propietario y `created_by_user_identity_id` proceden exclusivamente del resultado canónico del verificador;
+- AGENT canónico ACTIVE y al menos un native binding AGENT ACTIVE cuyo issuer también esté ACTIVE;
+- Grant exacto, vigente, no revocado, cuyo owner coincide con el USER autenticado y cuyo subject coincide con el AGENT solicitado;
+- `resource_type`, `resource_ids` y `actions` solicitados estrictamente dentro del Grant;
+- ventana UTC con `issued_at` tomado después de adquirir la transacción, `not_before >= issued_at` y `expires_at <= grant.expires_at`.
+
+El issuer persistido se toma del contexto USER ya verificado. La escritura del repositorio participa en la misma UoW; cualquier excepción antes de `commit()` provoca rollback. Se añadió `has_active_native_agent_binding` al puerto/adaptador AGENT para que el chequeo de binding e issuer ocurra en esa misma transacción.
+
+Pruebas nuevas: `tests/unit/test_sqlite_agent_delegation_authority.py`. Incluyen emisión canónica, contexto manipulado/expirado, binding revocado, Grant revocado, scope expansion, tipo de recurso distinto, ventana inválida y rollback después de insertar.
+
+**Límite del slice:** solo se implementa emisión `create_for_grant`. No implementa revocación de autoridad, `verify_for_operation`, emisión de `VerifiedAgentDelegationContext`, CAM final, runtime/login AGENT ni renueva Grants. `GrantRenewalService.request_renewal` continúa fail-closed. La suite y compileall están pendientes de ejecución por el propietario en Debian.
