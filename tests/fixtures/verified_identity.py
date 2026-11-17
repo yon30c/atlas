@@ -32,6 +32,16 @@ class FakeVerifiedIdentityContextVerifier:
     def verify(self, context):
         if context != VERIFIED_OWNER:
             raise ValueError("invalid test evidence")
+        return self._canonical()
+
+    def verify_in_unit_of_work(self, context, unit):
+        self.last_unit_of_work = unit
+        if context != VERIFIED_OWNER:
+            raise ValueError("invalid test evidence")
+        return self._canonical()
+
+    @staticmethod
+    def _canonical():
         return CanonicalUserIdentity(
             user_id=OWNER_USER_ID,
             identity=Identity(
