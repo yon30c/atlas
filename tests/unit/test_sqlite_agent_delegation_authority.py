@@ -22,7 +22,7 @@ from atlas.authorization.agent_delegation_authority import SQLiteAgentDelegation
 from atlas.authorization.models import Grant, GrantResourceScope
 from atlas.core.agent_delegation import AgentDelegationScope
 from atlas.core.errors import AuthorizationError, ContractError
-from atlas.identity.verified_identity_context_service import VerifiedIdentityContextService
+from atlas.identity.verified_identity_context_service import (\n    VerifiedIdentityContextRejected,\n    VerifiedIdentityContextService,\n)
 
 
 _PHC = "$argon2id$v=19$m=8,t=1,p=1$c2FsdHNhbHRzYWx0c2FsdA$aGFzaGhhc2hoYXNo"
