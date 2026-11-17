@@ -301,3 +301,13 @@ El propietario ejecutó `test_agent_delegation_domain_contracts.py`: `Ran 12 tes
 ### I3-2B.3B.3 — revalidación dentro de UoW compartida
 
 Ambos servicios de contexto ahora exponen `verify_in_unit_of_work(context, unit)`, que revalida la evidencia sin abrir ni confirmar transacciones. Los métodos `verify(context)` conservan compatibilidad y usan una UoW propia. La futura autoridad de delegación podrá validar owner USER, AGENT y estado de Grant/delegación en una única transacción, evitando la falsa atomicidad de verificadores que abren conexiones independientes.
+
+
+
+## 15. I3-2B.3B.3 — verificación de identidad dentro de UoW compartida
+
+Los servicios USER y AGENT ahora ofrecen `verify_in_unit_of_work(context, unit)`. Esta ruta usa las autoridades de issuer, binding e identidad canónica que expone la UoW recibida y deja commit/rollback bajo control del llamador. `verify(context)` conserva el uso autónomo con una UoW propia.
+
+La composición `SQLiteLocalAuthorityUnitOfWork` expone las autoridades USER/AGENT, bindings nativos y repositorios de Grant/delegación sobre el mismo `SQLiteUnitOfWork`. Esto elimina la necesidad de que la futura autoridad de delegación invoque verificadores que abran transacciones independientes. La garantía sigue limitada a la base SQLite y UoW compartidas; no implica atomicidad con efectos externos ni sustituye CAM.
+
+**Validación del propietario en Debian:** suite completa **1,344/1,344 tests OK** y `python -m compileall -q src tests` con `COMPILE_EXIT_CODE=0`. No se habilita todavía la autoridad de emisión/revocación/verificación de delegaciones; `GrantRenewalService.request_renewal` permanece fail-closed.
