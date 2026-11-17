@@ -5,7 +5,6 @@ from typing import Protocol
 
 from atlas.ports.grant_renewals import GrantRenewalRepository
 from atlas.ports.grants import GrantRepository
-from atlas.ports.project_environment_associations import ProjectEnvironmentAssociationReaderPort
 from atlas.ports.project_environment_associations import (
     ProjectEnvironmentAssociationReaderPort,
 )
