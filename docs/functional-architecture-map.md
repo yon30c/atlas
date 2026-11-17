@@ -549,3 +549,25 @@ La prueba de corrupción controlada confirma que una revisión posterior retroda
 ## Ciclo 3.1 — Validación del gate CAM read-only
 
 El propietario ejecutó la suite completa: **1,194 tests en 9.318 s, todos OK**. El gate local para `workspace.list`/`workspace.read` y la lectura dentro de la UoW SQLite quedan validados. No está conectado a CLI/runtime y no habilita escritura, shell ni ejecución multi-paso. El siguiente paso es diseñar el bootstrap confiable de consola, identidad canónica, proyecto/entorno y ownership de workspaces.
+
+## 51. Decisión arquitectónica — Servicio central y clientes multiplataforma
+
+**Decisión aprobada por el propietario: 16 de noviembre de 2026.**
+
+Atlas se desplegará como un servicio central en el servidor Debian del propietario. La terminal, la futura aplicación móvil, el cliente de portátil y la interfaz web serán adaptadores de presentación que consumirán las mismas capacidades de aplicación mediante una frontera de acceso autenticada.
+
+Principios obligatorios:
+
+- **Autoridad central:** identidad canónica, CAM, Grants, proyectos, entornos, aprobaciones, estado de tareas, auditoría y coordinación de operaciones permanecen bajo control del servicio central.
+- **Independencia de interfaz:** ninguna identidad, permiso o capacidad depende de usar una terminal, una cuenta Unix o un dispositivo específico.
+- **Autenticación por cliente:** cada acceso remoto establece una sesión autenticada asociada a la identidad canónica y al dispositivo/sesión correspondiente. El UID Unix y las credenciales técnicas de servicios no se convierten en identidad del propietario.
+- **Autorización centralizada:** todos los clientes pasan por los mismos controles CAM y las mismas políticas de aprobación. La interfaz no puede conceder, ampliar ni omitir permisos.
+- **Aprobación remota:** las solicitudes que requieran intervención humana podrán presentarse y resolverse desde cualquier cliente autenticado, respetando el binding de la operación y la política de aprobación.
+- **Revocación y auditoría:** las sesiones y dispositivos deberán poder revocarse; los accesos, decisiones y operaciones relevantes deberán ser auditables.
+- **Ejecución confinada:** los clientes no ejecutan operaciones directamente en el servidor. Solicitan operaciones al servicio, que valida autoridad y delega en adaptadores confinados.
+
+El bootstrap LOCAL inicial seguirá siendo un procedimiento administrativo explícito y separado del inicio de sesión cotidiano. Una vez establecida la identidad canónica del propietario, los clientes móviles/web se vincularán mediante un mecanismo de autenticación remota diseñado para ese propósito. No se presupone ni se implementa todavía un proveedor concreto de autenticación, protocolo de sesión, API pública, exposición a Internet o aplicación cliente.
+
+El Trust Anchor externo continúa siendo opcional y diferido. Esta decisión no inicializa CAM, no crea identidades/Grants, no expone servicios de red y no habilita ejecución adicional.
+
+**Consecuencia para la hoja de ruta:** antes de conectar clientes remotos, diseñar la frontera de autenticación, sesiones, registro/revocación de dispositivos y transporte seguro del servicio central. La CLI actual se conserva como un cliente/adaptador local, no como autoridad de seguridad.
