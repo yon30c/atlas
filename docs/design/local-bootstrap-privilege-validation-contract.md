@@ -1,6 +1,6 @@
 # Contrato de validación de privilegios para bootstrap LOCAL (candidato A)
 
-**Estado:** contrato general de validación pendiente de cierre; alcance V1 del validador aislado aprobado para implementación sin privilegios. Candidato A no aprobado para ejecución privilegiada.  
+**Estado:** contrato general de validación pendiente de cierre; V1 del validador aislado completada y validada sin privilegios. Candidato A no aprobado para ejecución privilegiada.  
 **Rama:** `feature/terminal-commands`.  
 **Fecha:** 16 de noviembre de 2026.  
 **Relacionado:** `local-bootstrap-privilege-boundary.md`, `local-pam-bootstrap-authenticator.md`, `local-pam-bootstrap-proof-protocol.md`, `local-bootstrap-coordination-architecture.md`.
@@ -9,7 +9,7 @@
 
 Este documento convierte las observaciones del prototipo C en requisitos verificables para evaluar el candidato A: helper C root-owned, ejecutado directamente mediante sudo, con autenticación PAM propia.
 
-El contrato no aprueba A ni autoriza implementar o instalar el helper privilegiado. Define las condiciones que deberán demostrarse antes de considerar ese candidato. Por decisión del propietario del 16-11-2026, queda aprobado únicamente el alcance V1 descrito en `local-bootstrap-validator-v1-design.md`: parser/evaluador aislado basado en fixtures, sin recolector de procesos real, privilegios, PAM, claves, configuración protegida, SQLite ni CAM.
+El contrato no aprueba A ni autoriza implementar o instalar el helper privilegiado. Define las condiciones que deberán demostrarse antes de considerar ese candidato. Por decisión del propietario del 16-11-2026, el alcance V1 descrito en `local-bootstrap-validator-v1-design.md` quedó implementado y validado: parser/evaluador aislado basado en fixtures, sin recolector de procesos real, privilegios, PAM, claves, configuración protegida, SQLite ni CAM.
 
 **Decisión provisional:** A continúa como candidato preferido por su menor superficie operativa. B (servicio privilegiado con socket Unix, `SO_PEERCRED` y TTY transferido) permanece como alternativa. Si una condición obligatoria de A no puede demostrarse en el Debian real, no se debilita el requisito: A se descarta y se reevalúa B.
 
@@ -224,7 +224,7 @@ No ejecutar todavía pruebas que requieran instalar el helper, modificar host o 
 - Revisar todos los caminos de error y asegurar que ninguno continúa.
 - Mantener el probe separado del futuro helper.
 
-### Etapa V1 — parser/evaluador aislado (APROBADA PARA IMPLEMENTACIÓN)
+### Etapa V1 — parser/evaluador aislado (COMPLETADA Y VALIDADA)
 
 El alcance aprobado se limita estrictamente al documento [Diseño V1 del validador aislado](local-bootstrap-validator-v1-design.md).
 
@@ -248,7 +248,7 @@ Condiciones obligatorias:
 7. Los fixtures y binarios se mantienen en el checkout o en rutas temporales no privilegiadas.
 8. Compilación estricta y pruebas negativas deben demostrar los estados exactos previstos; los datos incompletos fallan de forma cerrada.
 
-La aprobación de V1 autoriza únicamente este trabajo aislado. No autoriza V2, integración con procesos reales, cambios del host ni ejecución privilegiada.
+V1 quedó validada mediante compilación estricta, suite ampliada y ejecución con AddressSanitizer/UndefinedBehaviorSanitizer en Debian, según los resultados comunicados por el propietario. Este cierre no autoriza V2, integración con procesos reales, cambios del host ni ejecución privilegiada.
 
 ### Etapa V2 — integración de solo observación en Debian
 
@@ -316,4 +316,4 @@ No:
 - conectar el helper con el runtime;
 - aceptar observaciones diagnósticas como autorización.
 
-**Estado de aprobación:** el propietario aprobó el alcance V1 aislado el 16-11-2026. El contrato general permanece abierto y el candidato A no está aprobado. Cualquier ampliación a V2, recolector real, PAM, helper privilegiado o cambios del host requiere diseño, revisión y aprobación separados.
+**Estado:** V1 aislada completada y validada el 16-11-2026. El contrato general permanece abierto y el candidato A no está aprobado. Cualquier ampliación a V2, recolector real, PAM, helper privilegiado o cambios del host requiere diseño, revisión y aprobación separados.
