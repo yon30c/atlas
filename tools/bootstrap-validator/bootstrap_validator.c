@@ -228,8 +228,8 @@ bv_parse_result bv_parse_stat(const unsigned char *d, size_t n,
     while (first < end && d[first] != ' ') {
         first++;
     }
-    if (first == n || !pidnum(d, first, &parsed_pid) ||
-        parsed_pid != expected || first + 1 >= n || d[first + 1] != '(') {
+    if (first == end || !pidnum(d, first, &parsed_pid) ||
+        parsed_pid != expected || first + 1 >= end || d[first + 1] != '(') {
         return BV_INVALID;
     }
 
