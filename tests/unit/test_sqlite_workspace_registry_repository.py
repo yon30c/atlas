@@ -101,6 +101,10 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
         self.repository.create_workspace(self.workspace)
         self.assertEqual(self.repository.get_workspace("workspace-main"), self.workspace)
 
+    def test_workspace_requires_an_explicit_project_environment_association(self):
+        with self.assertRaises(ContractError):
+            self.repository.create_workspace(self.workspace)
+
     def test_workspace_status_cas_and_immutable_scope(self):
         self.repository.create_association(self.association)
         self.repository.create_workspace(self.workspace)
