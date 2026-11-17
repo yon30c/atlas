@@ -39,6 +39,7 @@ class SQLiteAgentDelegationAuthority:
         unit_of_work_factory,
         owner_context_verifier: _OwnerContextVerifier,
         clock: Clock,
+        operation_verifier=None,
     ) -> None:
         if not callable(unit_of_work_factory):
             raise ContractError("unit_of_work_factory debe ser invocable")
@@ -48,7 +49,26 @@ class SQLiteAgentDelegationAuthority:
             raise ContractError("clock no implementa now()")
         self._uow_factory = unit_of_work_factory
         self._owner_verifier = owner_context_verifier
+        if operation_verifier is not None and not callable(getattr(operation_verifier, "verify_for_operation", None)):
+            raise ContractError("operation_verifier no implementa verify_for_operation")
         self._clock = clock
+        self._operation_verifier = operation_verifier
+
+    def verify_for_operation(
+        self,
+        delegation_id: str,
+        *,
+        expected_revision: int,
+        verified_agent_identity,
+    ):
+        """Delegate operation evidence issuance to the separately configured verifier."""
+        if self._operation_verifier is None:
+            raise AuthorizationError("la verificación de delegaciones AGENT no está configurada")
+        return self._operation_verifier.verify_for_operation(
+            delegation_id,
+            expected_revision=expected_revision,
+            verified_agent_identity=verified_agent_identity,
+        )
 
     def create_for_grant(
         self, *, grant_id: str, agent_identity_id: str,
