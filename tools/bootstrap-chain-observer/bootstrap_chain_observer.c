@@ -100,9 +100,9 @@ static bool read_executable(pid_t pid, aco_node *node) {
         (void)close(fd);
         return false;
     }
-    length = readlinkat(fd, "", node->exe_target,
-                        sizeof(node->exe_target) - 1U);
     (void)close(fd);
+    length = readlink(path, node->exe_target,
+                      sizeof(node->exe_target) - 1U);
     if (length < 0 || (size_t)length >= sizeof(node->exe_target) - 1U) {
         return false;
     }
