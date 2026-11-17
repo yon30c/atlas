@@ -253,3 +253,14 @@ La autoridad crea UUIDv4, resuelve solo registros AGENT, actualiza estado median
 Pruebas: tests/unit/test_sqlite_agent_identity_authority.py. Cubren UUID canónico, no resolución cruzada USER/AGENT, ausencia, duplicados, CAS, estados terminales, entradas inválidas, concurrencia y UoW.
 
 **Estado:** implementación publicada en PR #16, pendiente de ejecución por el propietario en Debian. No se declara suite ni compileall exitosos.
+
+
+### 12.1. Extensión de I3-2B.2: binding nativo AGENT
+
+Se completó el slice de binding persistente AGENT:
+- CORE_SCHEMA_V21 añade native_agent_identity_bindings con FK a identidad/issuer, restricciones UUID/digest, estado y revisión.
+- CORE_SCHEMA_V22 añade exclusividad cruzada de subject: un issuer+subject_digest no puede estar vinculado simultáneamente a USER y AGENT. La protección se aplica tanto si se inserta primero USER como si se inserta primero AGENT.
+- SQLiteNativeAgentIdentityAuthority valida CanonicalAgentIdentity contra identity_records, exige AGENT ACTIVE y issuer ACTIVE, y permite lookup y revocación CAS terminal.
+- Se conserva intacta la tabla y el trigger USER native_identity_bindings.
+
+Tests añadidos: tests/unit/test_sqlite_native_agent_identity_authority.py. La validación focalizada, suite completa y compileall siguen pendientes de ejecución en Debian. No se declara éxito de pruebas.
