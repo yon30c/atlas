@@ -9,6 +9,7 @@ from atlas.core.agent_delegation import (
     VerifiedAgentDelegationContext,
 )
 from atlas.core.verified_identity_context import VerifiedIdentityContext
+from atlas.core.verified_agent_identity_context import VerifiedAgentIdentityContext
 
 
 class AgentDelegationAuthorityPort(Protocol):
@@ -50,13 +51,16 @@ class AgentDelegationAuthorityPort(Protocol):
         delegation_id: str,
         *,
         expected_revision: int,
+        verified_agent_identity: VerifiedAgentIdentityContext,
         verified_at: datetime,
         realm: str,
         audience: str,
         maximum_context_ttl: timedelta,
     ) -> VerifiedAgentDelegationContext:
-        """Revalidate live delegation/Grant bindings and issue short-lived evidence.
+        """Revalidate the requesting AGENT and live delegation/Grant bindings.
 
-        Implementations must reject revoked delegations and stale Grant or
+        The AGENT context must resolve to the delegation's exact agent_identity_id;
+        possession of delegation_id alone is never sufficient. Implementations
+        must reject revoked delegations and stale Grant or
         delegation revisions on every operation; this is not a CAM decision.
         """
