@@ -51,6 +51,7 @@ Atlas Terminal ya es una superficie funcional en `feature/terminal-commands`: in
 - [Estado vigente de Atlas](docs/status-current.md)
 - [Plan de Atlas funcional de prueba](docs/functional-test-roadmap.md)
 - [Mapa de composición funcional F0](docs/functional-architecture-map.md)
+- [Atlas Workstation — entorno operativo aislado](docs/design/atlas-workstation.md)
 - [Hoja de ruta general por fases](docs/roadmap.md)
 - [Fase 3 — Inteligencia y comportamiento seguro](docs/phase-3-intelligence.md)
 - [Atlas Terminal](docs/terminal/README.md)
