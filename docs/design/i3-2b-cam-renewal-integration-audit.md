@@ -79,7 +79,7 @@ Alternativa futura, fuera del primer slice: modelar solicitudes de renovación d
 
 ## 5. Semántica CAM propuesta
 
-No se encontró en el código la acción grant.renewal.request; tampoco hay un contrato existente que la defina. Se propone introducirla como acción explícita, no inferirla de DelegationMode.DELEGATED.
+La acción `grant.renewal.request` fue incorporada explícitamente en I3-2B.6B y se exige tanto en el Grant como en la delegación. No se infiere de DelegationMode.DELEGATED.
 
 Para reutilizar el evaluador actual sin convertir la delegación en ALLOW:
 1. Definir una constante de dominio grant.renewal.request.
@@ -204,3 +204,24 @@ Por tanto, 6C puede comprobar que ambos registros existen, están activos y coin
 - I3-2B.6D: implementación publicada en la rama; validación pendiente.
 - Project-Environment association: no representada por el modelo canónico actual; decisión de diseño pendiente.
 - PR #16 continúa Draft, abierto y sin fusionar.
+
+
+### 11. Seguimiento — 17 de noviembre de 2026 (actualización)
+
+#### I3-2B.6B/6C — validación confirmada
+
+El propietario confirmó en Debian:
+- Suite completa: **1,396 tests en 22.894 s — OK**.
+- `python -m compileall -q src tests`: **COMPILE_EXIT_CODE=0**.
+
+#### I3-2B.6D — validación confirmada
+
+Tras implementar la revalidación USER owner dentro de la misma UoW para `approve_renewal` y `reject_renewal`, el propietario confirmó:
+- Suite completa: **1,397 tests en 21.871 s — OK**.
+- `python -m compileall -q src tests`: **COMPILE_EXIT_CODE=0**.
+
+El servicio productivo `VerifiedIdentityContextService` ya implementa `verify_in_unit_of_work(context, unit)`: valida attestation, TTL, issuer, binding y revisión canónica USER mediante los repositorios de la UoW recibida, sin abrir ni confirmar la transacción del caller. Por tanto, 6D no queda limitado al fake de tests.
+
+**Estado de validación:** I3-2B.6B/6C y 6D están validados por el propietario en Debian. La evidencia se refiere al HEAD correspondiente a los cambios 6D reportados; confirmar SHA local/remoto antes de etiquetar releases o habilitar runtime.
+
+**Límites sin cambio:** no se ha modelado una asociación canónica Project-Environment; no se habilitan endpoints, login ni runtime AGENT. PR #16 permanece Draft, abierto y sin fusionar.
