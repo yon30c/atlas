@@ -399,3 +399,8 @@ El propietario ejecutó la suite completa sobre el HEAD de esta fase: `Ran 1341 
 The `AgentDelegationAuthorityPort.verify_for_operation` contract now requires a `VerifiedAgentIdentityContext` argument. A delegation identifier is not a bearer credential: implementations must revalidate the supplied AGENT evidence and require its canonical identity ID to equal the delegation's `agent_identity_id` before issuing any `VerifiedAgentDelegationContext`.
 
 A focused domain-contract test asserts that this argument is mandatory and typed. This is a contract-hardening slice only; no production authority implementation or delegated operation is enabled.
+
+
+### Validación Debian — I3-2B.3B.2
+
+El propietario ejecutó `test_agent_delegation_domain_contracts.py`: `Ran 12 tests in 0.486s`, `OK`; `python -m compileall -q src tests` devolvió `COMPILE_EXIT_CODE=0`.
