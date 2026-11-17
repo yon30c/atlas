@@ -140,3 +140,10 @@ El contrato detallado de desafío autenticado, presentación del descriptor, con
 **No autorizado por esta decisión:** instalar paquetes, crear/modificar archivos en `/etc`, habilitar servicios, crear usuarios/identidades/Grants, inicializar CAM, abrir Recovery Gate o conectar runtime.
 
 La implementación se realizará por entregas pequeñas: primero cerrar el protocolo y la frontera de privilegios; después helper y pruebas unitarias; finalmente integración PAM aislada y pruebas de integración en el host, con instalación manual aprobada.
+
+
+## 10. Arquitectura de coordinación vigente
+
+El flujo y la frontera de confianza quedan detallados en [Arquitectura de coordinación del bootstrap LOCAL](local-bootstrap-coordination-architecture.md). Esta arquitectura sustituye el coordinador emisor de desafíos separado descrito en las primeras secciones de este documento: el helper lee el descriptor de configuración protegida del host, genera request_id/nonce/proof_id por sí mismo y firma la prueba después de la confirmación directa y PAM. No acepta del caller los campos que definen la operación.
+
+La configuración protegida declara el bootstrap permitido, pero CAM comprueba que siga pendiente dentro de la misma UoW que consume la prueba y registra la génesis. El helper nunca consulta SQLite/CAM. El binding se realiza mediante bootstrap_binding_id y la autoridad de identidad genera el UserId canónico durante la transacción. No se reutiliza OwnerDecisionVerifier de Memory para el bootstrap.
