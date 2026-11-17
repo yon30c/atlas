@@ -278,9 +278,16 @@ Estas órdenes son de inspección. No modifican sudoers, PAM, systemd ni permiso
 
 ## 9. Decisión pendiente
 
-No se aprueba todavía el mecanismo A ni B. Tras inspeccionar el host se elegirá:
+**A (helper root-owned invocado por sudo) es el candidato preferido, pero todavía no está aprobado ni implementado.** Las pruebas aportadas muestran un patrón compatible: sudo conserva RUID 1000/EUID 0 y el hijo root comparte sesión y puede quedar en el grupo foreground. No demuestran por sí solas que el helper pueda validar toda la relación sin carreras.
 
-- **A** solo si sudo establece metadatos de invocador confiables, el entorno está saneado y el TTY se puede vincular inequívocamente al sujeto.
-- **B** si cualquiera de esas condiciones no puede demostrarse.
+B (servicio privilegiado con socket Unix, `SO_PEERCRED` y TTY transferido mediante `SCM_RIGHTS`) permanece como alternativa de reserva si el contrato de A no puede implementarse y probarse rigurosamente.
 
-Después se fijarán la ruta del binario, los permisos exactos, el contrato de stdout, el cierre de descriptores y las pruebas negativas. No se instalará helper, no se cambiará sudoers ni systemd y no se tocará PAM hasta que el diseño se cierre y el propietario apruebe la implementación.
+Antes de aprobar A se requiere:
+1. cerrar la política sobre PTY remoto/SSH frente a consola local;
+2. verificar configuración efectiva de sudo, ejecutable y entorno para la invocación exacta;
+3. implementar un prototipo mínimo de validación C en un entorno de prueba controlado, sin PAM, claves ni escritura CAM;
+4. demostrar validación del padre directo, pidfd/procfs, SID, foreground TTY y fallo cerrado ante inconsistencias;
+5. completar las pruebas negativas de §4.3;
+6. revisar el código y aprobar explícitamente la implementación privilegiada.
+
+No se modificará sudoers, PAM, systemd, Broker, usuarios/grupos ni permisos del host; no se instalará helper ni se generarán claves hasta cerrar el diseño y recibir aprobación explícita. Si cualquiera de los controles no puede demostrarse, se elige B sin debilitar los requisitos.
