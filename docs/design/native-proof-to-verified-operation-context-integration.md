@@ -235,3 +235,19 @@ Criterio de salida: ningún servicio sensible acepta un `OperationContext` no ve
 3. I-3: pruebas de todos los consumidores CAM y regresión de flujos USER/AGENT; suite completa y `compileall`.
 
 Cada incremento debe ejecutarse en una rama/PR de implementación separada del PR C1, que conserva su alcance de primitivas y persistencia. Los tres incrementos no habilitan por sí solos bootstrap, emisión inicial de Grant, sesiones C2, endpoints públicos, PAM, cambios de host ni capacidades protegidas. No se declara fencing global: la garantía transaccional aquí descrita es local a la misma UoW SQLite.
+
+
+## 11. Estado de I-1 — implementación inicial
+
+**Rama de implementación:** `feature/verified-identity-i1-canonical-lookup`.
+
+Implementado:
+- `IdentityAuthorityPort.get_user_by_identity_id(identity_id)`.
+- `SQLiteIdentityAuthority.get_user_by_identity_id(identity_id)`, con validación UUIDv4 canónica y JOIN interno entre `identity_records` y `atlas_users`.
+- Filtro explícito `identity_kind = 'user'`; identidades AGENT/SERVICE/SYSTEM no se resuelven como usuarios.
+- Reutilización de `_read_connection()`, por lo que la lectura se incorpora a la misma conexión de `SQLiteUnitOfWork` cuando la autoridad se compone con una UoW externa.
+- Pruebas añadidas para pareja canónica con IDs distintos, identidad inexistente, identidad no USER, UUID inválido y lectura dentro de UoW con rollback externo.
+
+**Validación completada:** el usuario ejecutó la suite completa en Debian: `Ran 1262 tests ... OK`; `python -m compileall -q src tests` terminó con `COMPILE_EXIT_CODE=0`. Las pruebas específicas de I-1 forman parte de esa suite. El workflow CI actual no se dispara para esta rama `feature/**`; la validación fue manual y los resultados fueron compartidos en la conversación.
+
+**Límite:** no se modificó esquema/migración, no se alteró la relación canónica, no se añadió acceso SQL desde Native Identity Authority y no se implementó todavía I-2.

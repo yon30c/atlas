@@ -680,5 +680,63 @@ class SQLiteIdentityAuthorityTests(unittest.TestCase):
                 joined.create_user()
 
 
+    def test_get_user_by_identity_id_resolves_distinct_canonical_pair(self):
+        user = self.authority.create_user()
+        self.assertNotEqual(user.user_id, user.identity.identity_id)
+        self.assertEqual(
+            self.authority.get_user_by_identity_id(user.identity.identity_id),
+            user,
+        )
+
+    def test_get_user_by_identity_id_returns_none_for_unknown_identity(self):
+        self.assertIsNone(
+            self.authority.get_user_by_identity_id(
+                "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+            )
+        )
+
+    def test_get_user_by_identity_id_does_not_resolve_non_user_identity(self):
+        agent_identity_id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        with self.database.connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO identity_records (
+                    identity_id, identity_kind, identity_status, revision,
+                    created_at, updated_at
+                ) VALUES (?, 'agent', 'active', 1, 'now', 'now')
+                """,
+                (agent_identity_id,),
+            )
+        self.assertIsNone(
+            self.authority.get_user_by_identity_id(agent_identity_id)
+        )
+
+    def test_get_user_by_identity_id_rejects_noncanonical_uuid(self):
+        for value in ("not-a-uuid", "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",
+                      "11111111-1111-1111-8111-111111111111"):
+            with self.subTest(identity_id=value):
+                with self.assertRaises(ContractError):
+                    self.authority.get_user_by_identity_id(value)
+
+    def test_get_user_by_identity_id_joins_outer_unit_of_work_and_rolls_back(self):
+        created = None
+        with self.assertRaisesRegex(RuntimeError, "force outer rollback"):
+            with self.database.unit_of_work() as unit:
+                joined = SQLiteIdentityAuthority(
+                    self.database,
+                    unit_of_work=unit,
+                )
+                created = joined.create_user()
+                self.assertEqual(
+                    joined.get_user_by_identity_id(created.identity.identity_id),
+                    created,
+                )
+                raise RuntimeError("force outer rollback")
+        self.assertIsNotNone(created)
+        self.assertIsNone(
+            self.authority.get_user_by_identity_id(created.identity.identity_id)
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

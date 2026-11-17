@@ -126,6 +126,28 @@ class SQLiteIdentityAuthority(IdentityAuthorityPort):
             row = self._select_user(connection, user_id)
             return None if row is None else self._from_row(row)
 
+    def get_user_by_identity_id(
+        self, identity_id: str
+    ) -> CanonicalUserIdentity | None:
+        """Resolve a canonical USER pair from its identity UUID.
+
+        The JOIN is intentionally owned by Identity Authority and participates
+        in the configured SQLite unit of work when one is supplied.
+        """
+        validate_canonical_uuid4(identity_id, "identity_id")
+        with self._read_connection() as connection:
+            row = connection.execute(
+                """
+                SELECT u.user_id, i.identity_id, i.identity_kind,
+                       i.identity_status, i.revision
+                FROM identity_records AS i
+                JOIN atlas_users AS u ON u.identity_id = i.identity_id
+                WHERE i.identity_id = ? AND i.identity_kind = 'user'
+                """,
+                (identity_id,),
+            ).fetchone()
+            return None if row is None else self._from_row(row)
+
     def update_user_status(
         self,
         user_id: str,
