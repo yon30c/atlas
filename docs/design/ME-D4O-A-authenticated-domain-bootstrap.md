@@ -1,7 +1,7 @@
 # ME-D4O-A — Contrato de bootstrap de dominio por perfil
 
 **Estado:** diseño contractual corregido; no implementado.  
-**Rama:** `feature/atlas-functional-f1`.  
+**Rama:** `feature/terminal-commands`.  
 **Alcance:** definir la activación inicial de un dominio SQLite sin confundir autenticidad local con anti-rollback externo.
 
 ## 1. Decisión de arquitectura
@@ -31,6 +31,24 @@ La activación requiere:
 La autorización del propietario no equivale a Trust Anchor. Una credencial local puede demostrar quién autorizó la activación conforme al mecanismo implementado, pero no demuestra que el conjunto SQLite restaurado sea el más reciente.
 
 El formato de evidencia de acción directa del propietario sigue sujeto al contrato de identidad/CAM y a la decisión pendiente registrada en `docs/contracts/memory.md` §8. No se inventará un bypass ni se tratará UID, variable de entorno, flag o fila SQLite como aprobación por sí solos.
+
+## 2.1 Procedimiento interactivo LOCAL aprobado
+
+**Decisión aprobada por el propietario del proyecto:** el bootstrap inicial se realizará mediante un procedimiento local interactivo, autenticado y de una sola ejecución, independiente de Atlas Assistant.
+
+Requisitos del procedimiento:
+
+1. Se inicia explícitamente desde una sesión administrativa local y presenta el descriptor canónico exacto que se pretende activar.
+2. Antes de aceptar la decisión, exige una autenticación reciente del operador mediante un mecanismo confiable del sistema operativo. La autenticación de la sesión ya abierta, la pertenencia a un grupo, el UID del proceso, una variable de entorno o la ejecución con `sudo` sin reautenticación no bastan por sí solos.
+3. La identidad autenticada debe estar vinculada a la identidad de propietario que se está estableciendo mediante una configuración/procedencia verificable; no se infiere que el usuario del servicio `atlas`, el usuario del Broker o el usuario que ejecuta la CLI sea automáticamente el propietario.
+4. Muestra la acción, el dominio, la época, el perfil LOCAL y el compromiso que se autorizarán. La confirmación debe ser explícita y vinculada a esos valores exactos.
+5. Produce una prueba tipada, de un solo uso, con identificador de solicitud, sujeto autenticado, acción y descriptor/recursos exactos. El verificador valida y consume esa prueba; el caller no puede construir un resultado verificado.
+6. El procedimiento no pasa por el modelo, la conversación, una Skill ni una decisión del Assistant.
+7. Tras el consumo exitoso, el bootstrap aplica el evento de génesis y su estado materializado de forma atómica. Un reintento exacto devuelve el resultado previo; un descriptor distinto o una prueba consumida se rechazan.
+
+La integración de autenticación del sistema operativo (por ejemplo, mediante PAM en Linux) se debe evaluar como proveedor local concreto. No se declara implementada ni se acepta una implementación que solo compruebe UID, grupo, variable de entorno, flag, texto de confirmación o caché de autenticación de una sesión anterior.
+
+Este procedimiento no introduce Trust Anchor externo, no ofrece anti-rollback y no convierte al principal técnico `atlas` en propietario. El mapeo entre el sujeto autenticado y el propietario canónico debe quedar explícito y auditable.
 
 ## 3. Descriptor canónico
 
@@ -126,5 +144,7 @@ La autorización directa del propietario y su evidencia tipada siguen siendo una
 Ninguna fase puede afirmar anti-rollback externo ni permitir restauraciones de memoria no reconciliadas.
 
 ## 9. Estado
+
+La elección del procedimiento interactivo LOCAL de una sola ejecución queda aprobada. El proveedor de autenticación local, el binding verificable entre sujeto autenticado y propietario canónico, la prueba consumible y el flujo de génesis siguen sin implementar.
 
 ME-D4O-A queda corregido para reflejar los perfiles aprobados. No se añadió código, evento, migración, proveedor externo, autorización local concreta ni apertura del gate. El baseline LOCAL puede continuar por etapas; la habilitación operativa queda condicionada a su bootstrap autenticado, atomicidad y validación. El perfil ANCHORED permanece postergado.
