@@ -4,6 +4,7 @@ from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import cast
 
+from atlas.authorization.identity_evidence import require_verified_owner_context
 from atlas.authorization.grant_revocation import (
     GrantRevocationAuthorityChangeAuthorization,
     GrantRevocationAuthorizationResult,
@@ -21,9 +22,11 @@ from atlas.core.errors import (
     ContractError,
     NotFoundError,
 )
+from atlas.core.user_identity import CanonicalUserIdentity
 from atlas.core.verified_identity_context import VerifiedIdentityContext
-from atlas.ports.verified_identity_context_verifier import VerifiedIdentityContextVerifierPort
-from atlas.authorization.identity_evidence import require_verified_owner_context
+from atlas.ports.verified_identity_context_verifier import (
+    VerifiedIdentityContextVerifierPort,
+)
 from atlas.memory.authority_changes import (
     AuthorityChangeIntent,
     AuthorityChangeReservation,
@@ -532,7 +535,7 @@ class GrantManagementService:
         self,
         context: OperationContext,
         verified_identity: VerifiedIdentityContext | None,
-    ):
+    ) -> CanonicalUserIdentity:
         return require_verified_owner_context(
             context,
             verified_identity,
