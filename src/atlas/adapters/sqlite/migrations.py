@@ -2346,8 +2346,54 @@ CORE_SCHEMA_V23 = SQLiteMigration(
 )
 
 
+# v24 binds AGENT renewal requests to the exact Grant and owner delegation
+# revisions that were revalidated and authorized at request time.
+CORE_SCHEMA_V24 = SQLiteMigration(
+    version=24,
+    name="agent_grant_renewal_authority_evidence",
+    sql="""
+    ALTER TABLE authorization_grant_renewals
+        ADD COLUMN grant_revision INTEGER
+        CHECK (grant_revision IS NULL OR grant_revision > 0);
+    ALTER TABLE authorization_grant_renewals
+        ADD COLUMN delegation_id TEXT
+        REFERENCES agent_delegations(delegation_id)
+        ON UPDATE RESTRICT ON DELETE RESTRICT;
+    ALTER TABLE authorization_grant_renewals
+        ADD COLUMN delegation_revision INTEGER
+        CHECK (delegation_revision IS NULL OR delegation_revision > 0);
+
+    CREATE TRIGGER authorization_grant_renewals_agent_evidence_complete
+    BEFORE INSERT ON authorization_grant_renewals
+    WHEN NOT (
+        (NEW.grant_revision IS NULL AND NEW.delegation_id IS NULL
+         AND NEW.delegation_revision IS NULL)
+        OR
+        (NEW.grant_revision IS NOT NULL AND NEW.delegation_id IS NOT NULL
+         AND NEW.delegation_revision IS NOT NULL)
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'AGENT renewal authority evidence must be complete');
+    END;
+
+    CREATE TRIGGER authorization_grant_renewals_agent_evidence_immutable
+    BEFORE UPDATE OF grant_revision, delegation_id, delegation_revision
+    ON authorization_grant_renewals
+    WHEN NEW.grant_revision IS NOT OLD.grant_revision
+      OR NEW.delegation_id IS NOT OLD.delegation_id
+      OR NEW.delegation_revision IS NOT OLD.delegation_revision
+    BEGIN
+        SELECT RAISE(ABORT, 'Grant renewal authority evidence is immutable');
+    END;
+
+    CREATE INDEX authorization_grant_renewals_delegation
+        ON authorization_grant_renewals(delegation_id, delegation_revision);
+    """,
+)
+
+
 SQLITE_MIGRATIONS = (
     CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
     CORE_SCHEMA_V5, CORE_SCHEMA_V6, CORE_SCHEMA_V7, CORE_SCHEMA_V8,
-    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13, CORE_SCHEMA_V14, CORE_SCHEMA_V15, CORE_SCHEMA_V16, CORE_SCHEMA_V17, CORE_SCHEMA_V18, CORE_SCHEMA_V19, CORE_SCHEMA_V20, CORE_SCHEMA_V21, CORE_SCHEMA_V22, CORE_SCHEMA_V23,
+    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13, CORE_SCHEMA_V14, CORE_SCHEMA_V15, CORE_SCHEMA_V16, CORE_SCHEMA_V17, CORE_SCHEMA_V18, CORE_SCHEMA_V19, CORE_SCHEMA_V20, CORE_SCHEMA_V21, CORE_SCHEMA_V22, CORE_SCHEMA_V23, CORE_SCHEMA_V24,
 )
