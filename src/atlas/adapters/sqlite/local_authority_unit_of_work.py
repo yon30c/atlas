@@ -13,6 +13,9 @@ from atlas.adapters.sqlite.authorization_unit_of_work import (
 from atlas.adapters.sqlite.database import SQLiteDatabase
 from atlas.adapters.sqlite.authority_changes import SQLiteAuthorityChangeStore
 from atlas.adapters.sqlite.identity_authority import SQLiteIdentityAuthority
+from atlas.adapters.sqlite.agent_identity_authority import SQLiteAgentIdentityAuthority
+from atlas.adapters.sqlite.native_agent_identity_authority import SQLiteNativeAgentIdentityAuthority
+from atlas.adapters.sqlite.agent_delegation_repository import SQLiteAgentDelegationRepository
 from atlas.adapters.sqlite.native_identity_authority import SQLiteNativeIdentityAuthority
 from atlas.adapters.sqlite.native_authentication_authority import SQLiteNativeAuthenticationAuthority
 from atlas.adapters.sqlite.project_environment_repository import (
@@ -39,6 +42,9 @@ class SQLiteLocalAuthorityUnitOfWork(SQLiteAuthorizationUnitOfWork):
     def __init__(self, database: SQLiteDatabase) -> None:
         super().__init__(database)
         self.identity = None
+        self.agent_identity = None
+        self.native_agent_identity = None
+        self.agent_delegations = None
         self.native_identity = None
         self.native_authentication = None
         self.project_environments = None
@@ -52,6 +58,18 @@ class SQLiteLocalAuthorityUnitOfWork(SQLiteAuthorizationUnitOfWork):
         super().__enter__()
         try:
             self.identity = SQLiteIdentityAuthority(
+                self._database,
+                unit_of_work=self._unit,
+            )
+            self.agent_identity = SQLiteAgentIdentityAuthority(
+                self._database,
+                unit_of_work=self._unit,
+            )
+            self.native_agent_identity = SQLiteNativeAgentIdentityAuthority(
+                self._database,
+                unit_of_work=self._unit,
+            )
+            self.agent_delegations = SQLiteAgentDelegationRepository(
                 self._database,
                 unit_of_work=self._unit,
             )
