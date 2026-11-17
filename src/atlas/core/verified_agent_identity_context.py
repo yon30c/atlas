@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 import json
 import re
 
-from atlas.core.agent_identity import CanonicalAgentIdentity
 from atlas.core.errors import ContractError
 from atlas.core.identity import IdentityKind
 from atlas.core.user_identity import validate_canonical_uuid4
