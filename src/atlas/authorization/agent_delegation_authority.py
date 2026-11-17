@@ -1,4 +1,4 @@
-"""Owner-consented AGENT delegation issuance over one local authority UoW."""
+"""Owner-consented AGENT delegation lifecycle over one local authority UoW."""
 
 from datetime import datetime, timedelta
 from typing import Protocol
@@ -27,10 +27,10 @@ class _OwnerContextVerifier(Protocol):
 
 
 class SQLiteAgentDelegationAuthority:
-    """Issues delegations only after same-transaction owner verification.
+    """Issues and revokes delegations after same-transaction owner verification.
 
-    This slice deliberately implements issuance only. Revocation and delegated
-    operation verification remain unavailable; this class is not a CAM engine.
+    Delegated operation verification remains unavailable; this class is not a
+    CAM engine. Revocation timestamps are read from the injected trusted clock.
     """
 
     def __init__(
@@ -142,5 +142,59 @@ class SQLiteAgentDelegationAuthority:
                 unit.agent_delegations.create(delegation)
                 unit.commit()
                 return delegation
+        except (AuthorizationError, ContractError, NotFoundError):
+            raise
+
+    def revoke_delegation(
+        self,
+        delegation_id: str,
+        *,
+        expected_revision: int,
+        verified_owner_identity: VerifiedIdentityContext,
+    ) -> AgentDelegation:
+        """Revoke an existing delegation after revalidating its canonical owner."""
+        validate_canonical_uuid4(delegation_id, "delegation_id")
+        if (
+            isinstance(expected_revision, bool)
+            or not isinstance(expected_revision, int)
+            or expected_revision < 1
+        ):
+            raise ContractError("expected_revision debe ser entero positivo")
+        if not isinstance(verified_owner_identity, VerifiedIdentityContext):
+            raise AuthorizationError("se requiere evidencia USER verificada")
+
+        try:
+            with self._uow_factory() as unit:
+                owner = self._owner_verifier.verify_in_unit_of_work(
+                    verified_owner_identity, unit
+                )
+                if (
+                    owner.user_id != verified_owner_identity.user_id
+                    or owner.identity.identity_id != verified_owner_identity.identity_id
+                    or owner.identity.status is not IdentityStatus.ACTIVE
+                ):
+                    raise AuthorizationError("el propietario USER no está verificado")
+
+                delegation = unit.agent_delegations.get(delegation_id)
+                if delegation is None:
+                    raise NotFoundError("delegación no encontrada")
+                if (
+                    delegation.owner_user_id != owner.user_id
+                    or delegation.owner_identity_id != owner.identity.identity_id
+                ):
+                    raise AuthorizationError(
+                        "el propietario verificado no puede revocar esta delegación"
+                    )
+
+                revoked_at = self._clock.now()
+                _require_utc(revoked_at, "clock.now()")
+                revoked = unit.agent_delegations.revoke(
+                    delegation_id,
+                    expected_revision=expected_revision,
+                    revoked_at=revoked_at,
+                    revoked_by_user_id=owner.user_id,
+                )
+                unit.commit()
+                return revoked
         except (AuthorizationError, ContractError, NotFoundError):
             raise
