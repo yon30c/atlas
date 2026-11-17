@@ -147,7 +147,7 @@ class SQLiteAgentDelegationAuthorityTests(unittest.TestCase):
         with self.assertRaises(VerifiedIdentityContextRejected):
             self._create(verified_owner_identity=forged)
         self.clock.value += timedelta(minutes=3)
-        with self.assertRaises(Exception):
+        with self.assertRaises(VerifiedIdentityContextRejected):
             self._create()
 
     def test_inactive_agent_or_revoked_native_binding_is_rejected(self):
@@ -168,11 +168,57 @@ class SQLiteAgentDelegationAuthorityTests(unittest.TestCase):
             ).fetchone()
         return row["binding_id"]
 
-    def test_grant_owner_subject_revocation_and_expiry_are_revalidated(self):
+    def test_revoked_grant_is_rejected(self):
         changed = replace(self.grant, revoked_at=self.clock.now(), revision=2)
         SQLiteGrantRepository(self.database).update(changed)
         with self.assertRaises(AuthorizationError):
             self._create()
+
+
+    def test_expired_grant_is_rejected(self):
+        changed = replace(
+            self.grant,
+            expires_at=self.clock.now() - timedelta(seconds=1),
+            revision=2,
+        )
+        SQLiteGrantRepository(self.database).update(changed)
+        with self.assertRaises(AuthorizationError):
+            self._create()
+
+    def test_valid_but_different_owner_context_cannot_issue_for_this_grant(self):
+        with self.factory() as unit:
+            other_owner = unit.identity.create_user()
+            other_subject = NativeSubject.generate()
+            unit.native_identity.create_native_binding(
+                other_owner, self.issuer.issuer_id, other_subject.digest,
+                verified_at=self.clock.now() - timedelta(seconds=2),
+            )
+            other_authenticator = NativeAuthenticator(
+                authenticator_id=str(uuid4()),
+                issuer_id=self.issuer.issuer_id,
+                native_subject=other_subject,
+                login_handle=LoginHandle("atlas.other-owner"),
+                password_hash_phc=_PHC,
+            )
+            unit.native_authentication.create_native_authenticator(other_authenticator)
+            other_reference = NativeProofReference.generate()
+            unit.native_authentication.create_native_authentication_proof(
+                NativeAuthenticationProof(
+                    proof_id=str(uuid4()),
+                    reference_digest=other_reference.digest,
+                    issuer_id=self.issuer.issuer_id,
+                    native_subject=other_subject,
+                    authenticator_id=other_authenticator.authenticator_id,
+                    credential_revision=1,
+                    authenticated_at=self.clock.now() - timedelta(seconds=1),
+                    expires_at=self.clock.now() + timedelta(minutes=1),
+                    audience="atlas.internal",
+                )
+            )
+            unit.commit()
+        other_context = self.owner_context_service.admit_proof(other_reference)
+        with self.assertRaises(AuthorizationError):
+            self._create(verified_owner_identity=other_context)
 
     def test_scope_expansion_and_resource_type_mismatch_are_rejected(self):
         with self.assertRaises(AuthorizationError):
