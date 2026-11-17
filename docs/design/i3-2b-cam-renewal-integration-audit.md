@@ -247,3 +247,74 @@ El propietario confirmó en Debian, sobre el HEAD `b98c091243475d3c660e8b67e3414
 - `python -m compileall -q src tests`: **COMPILE_EXIT_CODE=0**.
 
 La validación cubre la consulta transaccional de la asociación canónica Project/Environment y las denegaciones fail-closed añadidas para asociación inexistente, suspendida o autoridad ausente. No implica habilitar runtime AGENT, endpoints ni login.
+
+
+## 12. I3-2B.7 — auditoría de lifecycle y revocación efectiva (17 de noviembre de 2026)
+
+### Alcance y método
+
+Auditoría estática de la rama `design/verified-agent-delegation-i3-2b` en el HEAD inspeccionado. Se siguieron:
+- `CORE_SCHEMA_V18` y sus triggers para `atlas_project_environments` y `atlas_workspaces`.
+- `ProjectEnvironmentAssociation`, `ProjectEnvironmentStatus` y `SQLiteWorkspaceRegistryRepository`.
+- `GrantRenewalService.request_renewal/approve_renewal/reject_renewal`.
+- `VerifiedAgentDelegationContextService` y la persistencia V24 de evidencia de renovación.
+- Tests de lifecycle de la asociación y de decisiones de renovación.
+
+Esta sección documenta comportamiento observado; no afirma validación de runtime ni introduce cambios de implementación.
+
+### Hallazgos confirmados
+
+**F1 — suspender la asociación no propaga el estado a Workspaces.**
+
+`update_association` realiza CAS de estado/revisión y actualiza `updated_at`. No actualiza Workspaces asociados. V18 exige asociación ACTIVE al insertar un Workspace, pero no contiene trigger equivalente para una transición posterior ACTIVE → SUSPENDED. Por tanto, los Workspaces existentes conservan su estado ACTIVE. La asociación suspendida impide crear nuevos Workspaces, no demuestra por sí sola que todo consumidor de un Workspace existente vaya a denegar operaciones.
+
+**F2 — la suspensión sí bloquea nuevas solicitudes AGENT de renovación, pero no decisiones pendientes.**
+
+Desde 6E, `request_renewal` consulta la asociación exacta dentro de la UoW y exige estado ACTIVE. Sin embargo, `approve_renewal` vuelve a validar USER owner, solicitud PENDING, vínculo/revisión/vencimiento del Grant y vigencia del Grant, pero no consulta la asociación Project/Environment. Una solicitud AGENT creada antes de suspender la asociación todavía puede ser aprobada mientras el Grant siga vigente y su revisión no haya cambiado. La aprobación incrementaría la revisión y extendería el Grant a pesar de la suspensión.
+
+**F3 — revocar la delegación después de la solicitud tampoco bloquea actualmente su aprobación.**
+
+La solicitud V24 conserva `delegation_id` y `delegation_revision` inmutables, pero `approve_renewal` no carga ni revalida la delegación actual. La verificación de evidencia durante la solicitud no es una garantía permanente para la decisión posterior. Si la delegación se revoca o cambia después de crear la solicitud, el camino de aprobación actual no detecta ese cambio; la revocación no tiene efecto retroactivo sobre la solicitud pendiente.
+
+**F4 — la revocación/suspensión no equivale a un cambio del Grant.**
+
+La asociación Project/Environment, el Grant y la delegación son autoridades separadas. El estado de asociación no actualiza el Grant ni la delegación. La revocación de delegación tampoco modifica la solicitud V24. No hay en V18/V24 una cascada que convierta solicitudes PENDING en un estado terminal. El enum actual de renovación solo contiene PENDING, APPROVED y REJECTED.
+
+**F5 — la asociación es reactivable y la transición no lleva actor/motivo en su registro.**
+
+El dominio solo define ACTIVE/SUSPENDED; el trigger exige incremento exacto de revisión e identidad inmutable, pero no impone una máquina de estados terminal. `update_association` persiste estado, revisión y timestamp, no actor ni motivo. Esto limita la trazabilidad de quién suspendió/reactivó la relación y por qué, al menos en el registro canónico inspeccionado.
+
+### Matriz del comportamiento actual
+
+| Evento | Solicitud AGENT nueva | Solicitud AGENT ya PENDING |
+|---|---|---|
+| Asociación suspendida | DENY desde 6E | **Puede aprobarse actualmente**; F2 |
+| Delegación revocada | DENY si se vuelve a verificar evidencia actual | **Puede aprobarse actualmente**; F3 |
+| Grant revocado/expirado | DENY | La aprobación ya valida Grant vigente y deniega |
+| Grant cambia de revisión | La nueva evidencia/delegación debe coincidir con Grant actual | La aprobación AGENT deniega revisión obsoleta |
+| Asociación reactivada | Puede volver a pasar el gate de asociación | No hay invalidación terminal automática; sigue sujeto a las demás validaciones |
+
+El rechazo USER owner debe seguir disponible para cerrar una solicitud PENDING aunque la asociación esté suspendida o la delegación haya sido revocada: rechazar no amplía autoridad ni modifica el Grant.
+
+### Política recomendada para aprobación explícita
+
+1. **Revalidación de asociación en el momento de aprobar.** Para toda solicitud con evidencia AGENT, exigir dentro de la misma UoW que la asociación canónica (Project, Environment) exista, permanezca ACTIVE y coincida exactamente con el Grant. No basta con haberla validado al solicitar.
+2. **Revalidación de delegación en el momento de aprobar.** Para toda solicitud con `delegation_id`, exigir dentro de esa misma UoW que la delegación siga ACTIVE, coincida en ID/revisión, owner, AGENT, Grant/revisión, Project/Environment, issuer, acción `grant.renewal.request`, scope exacto y ventana temporal. Si fue revocada, sustituida o expiró, denegar aprobación.
+3. **No cascada automática de autoridad por defecto.** Suspender una asociación no debe revocar silenciosamente Grants ni delegaciones: son autoridades separadas y la cascada podría destruir permisos ajenos a esta operación. La suspensión debe funcionar como gate de nuevas operaciones y decisiones que dependan de la asociación.
+4. **No cambiar silenciosamente Workspaces existentes.** Mantener su estado histórico; cada consumidor que ejecute operaciones sobre ellos debe comprobar la asociación activa en su propio límite transaccional. Una futura política de suspensión/cascada de Workspaces requeriría identificar todos los consumidores y definir recuperación/reactivación.
+5. **Solicitud PENDING preservada, aprobación bloqueada.** No convertir automáticamente una solicitud en REJECTED ni borrarla. Si asociación o delegación deja de estar vigente, mantener el registro PENDING para auditoría, denegar APPROVE y permitir al owner REJECT. Si se desea invalidación terminal automática, diseñar un estado explícito (por ejemplo CANCELLED/INVALIDATED), actor/motivo y reglas de concurrencia en una etapa separada.
+6. **Auditoría de lifecycle.** Añadir una autoridad de transición que registre actor USER verificado, motivo, timestamp confiable, revisión anterior/nueva y decisión. El repositorio CAS debe permanecer como mecanismo de persistencia, no como sustituto de la autorización de la transición.
+
+### Decisiones que requieren confirmación del propietario
+
+- Adoptar los puntos 1–6 como política normativa para I3-2B.7.
+- Confirmar si la reactivación de una asociación permite reanudar una solicitud PENDING que nunca fue aprobada, siempre que la delegación siga ACTIVE y vigente. La recomendación es sí, porque conserva el registro y no revive una delegación revocada.
+- Confirmar si Workspaces existentes deben permanecer ACTIVE pero sujetos a gate de asociación en cada operación, o si se desea suspensión explícita en cascada.
+- Definir quién puede suspender/reactivar una asociación y qué motivo es obligatorio.
+
+### Estado
+
+- Auditoría estática completada; no se modificó código, esquema ni datos.
+- Hallazgos críticos F2 y F3 requieren resolver el gate de aprobación antes de considerar efectivo el lifecycle de revocación.
+- No se atribuyen pruebas ejecutadas ni validación Debian a esta auditoría.
+- PR #16 permanece Draft, abierto y sin fusionar.
