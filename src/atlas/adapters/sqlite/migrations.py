@@ -2124,8 +2124,36 @@ CORE_SCHEMA_V21 = SQLiteMigration(
 )
 
 
+
+CORE_SCHEMA_V22 = SQLiteMigration(
+    version=22,
+    name="exclusive_native_subject_binding_kind",
+    sql="""
+    CREATE TRIGGER native_agent_subject_cannot_bind_user
+    BEFORE INSERT ON native_agent_identity_bindings
+    WHEN EXISTS (
+        SELECT 1 FROM native_identity_bindings
+        WHERE issuer_id = NEW.issuer_id AND subject_digest = NEW.subject_digest
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'native subject is already bound to a USER identity');
+    END;
+
+    CREATE TRIGGER native_user_subject_cannot_bind_agent
+    BEFORE INSERT ON native_identity_bindings
+    WHEN EXISTS (
+        SELECT 1 FROM native_agent_identity_bindings
+        WHERE issuer_id = NEW.issuer_id AND subject_digest = NEW.subject_digest
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'native subject is already bound to an AGENT identity');
+    END;
+    """,
+)
+
+
 SQLITE_MIGRATIONS = (
     CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
     CORE_SCHEMA_V5, CORE_SCHEMA_V6, CORE_SCHEMA_V7, CORE_SCHEMA_V8,
-    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13, CORE_SCHEMA_V14, CORE_SCHEMA_V15, CORE_SCHEMA_V16, CORE_SCHEMA_V17, CORE_SCHEMA_V18, CORE_SCHEMA_V19, CORE_SCHEMA_V20, CORE_SCHEMA_V21,
+    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13, CORE_SCHEMA_V14, CORE_SCHEMA_V15, CORE_SCHEMA_V16, CORE_SCHEMA_V17, CORE_SCHEMA_V18, CORE_SCHEMA_V19, CORE_SCHEMA_V20, CORE_SCHEMA_V21, CORE_SCHEMA_V22,
 )
