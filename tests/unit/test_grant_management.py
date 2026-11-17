@@ -185,6 +185,7 @@ class GrantManagementTests(unittest.TestCase):
                 self.grant.grant_id,
                 "idem-001",
                 NOW + timedelta(seconds=1),
+                verified_identity=VERIFIED_OWNER,
             )
 
 
