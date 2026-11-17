@@ -645,3 +645,36 @@ La secuencia de trabajo queda actualizada así:
 - No entregar Docker socket, root, shell irrestricta o permisos de host a modelos, Skills, agentes o contenedores.
 - Cada estado se etiqueta separadamente como **implementado**, **desplegado**, **validado localmente**, **integrado** o **E2E verificado**.
 - La prueba de un subsistema no se suma automáticamente a la suite de otro repositorio.
+
+## 13. Decisión de despliegue: imagen Linux autónoma
+
+**Estado: DECISIÓN ARQUITECTÓNICA ADOPTADA el 17 de noviembre de 2026.** Documento normativo: [Imagen Linux autónoma para desplegar Atlas](design/linux-image-deployment-decision.md).
+
+Atlas tendrá como objetivo de despliegue una imagen Linux autónoma distribuida como imagen OCI compatible con Docker. Debian es la primera base candidata, pendiente de selección/versionado y validación durante la implementación. La decisión no cambia el entorno de desarrollo actual ni autoriza cambios en el host.
+
+Principios:
+- Atlas Runtime no dependerá del usuario Linux anfitrión ni se ejecutará como `greed` por necesidad.
+- Identidad humana canónica de Atlas (`UserId`), identidad técnica del proceso y permisos del host permanecen separados.
+- Atlas Broker continúa independiente; Atlas Runtime no recibe `docker.sock`, root ni modo privileged.
+- Workspaces se entregan mediante mounts explícitos y configuración confiable; las rutas internas no se presumen iguales a las del host.
+- SQLite, conversaciones, estado, memoria y demás datos durables deben residir en almacenamiento persistente explícito, no en la capa efímera del contenedor.
+- Configuración, secretos, endpoints LLM y rutas se inyectan explícitamente; loopback dentro del contenedor no equivale al loopback del host.
+- La imagen deberá construirse de forma reproducible, con dependencias fijadas, usuario no root y pruebas de aislamiento/recuperación.
+
+### Impacto en trabajo existente
+
+La decisión no invalida ni exige reescribir contratos Identity/CAM, Grants, Projects/Environments, Workspace adapters, el protocolo de escritura ni el gate read-only de Cycle 3.1. Introduce requisitos para su futura composición/despliegue:
+- Cycle 3.2 debe resolver identidad canónica sin inferirla del UID/GID del proceso, y workspace confiable/ownership con rutas configuradas.
+- Los límites de rutas y symlinks del adaptador local siguen siendo válidos; la raíz debe venir de configuración confiable y mounts explícitos.
+- La garantía SQLite/UoW de Cycle 3.1 es local a la misma base/archivo y UoW; no se extiende automáticamente a réplicas, múltiples contenedores o filesystem de red.
+- La ruta de conversaciones `~/.local/state/atlas/conversations.sqlite3` requiere volumen persistente explícito.
+- Ollama configurado en `127.0.0.1:11434` dentro de un contenedor apunta al contenedor, no al host; el endpoint deberá configurarse según la topología.
+- Los diseños de bootstrap/PAM no se convierten automáticamente en autenticación del contenedor.
+
+**Cycle 3.2 sigue siendo la siguiente acción funcional y debe permanecer agnóstico al despliegue.** No es necesario construir la imagen para completarlo. No se modifica el estado de F2, F3–F5 ni se declara integración de runtime.
+
+### Fuera de alcance
+
+No se autoriza quitar `sudo` a `greed`, modificar sudoers/PAM/systemd/usuarios/grupos/SSH/Docker del host, cambiar sockets/permisos, instalar paquetes, mover Broker, montar directorios personales o migrar datos. Cualquier cambio de infraestructura requiere propuesta y autorización explícitas.
+
+**Estado de implementación:** decisión documental adoptada; inventario de dependencias, contrato de runtime, Dockerfile, persistencia, pruebas de aislamiento y migración controlada siguen pendientes.
