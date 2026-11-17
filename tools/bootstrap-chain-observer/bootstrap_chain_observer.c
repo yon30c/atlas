@@ -238,6 +238,16 @@ aco_result aco_evaluate(aco_report *report) {
         return report->result = ACO_CHAIN_INCOMPLETE;
     }
 
+    for (i = 0U; i < report->node_count; i++) {
+        if (!report->nodes[i].have_status ||
+            !report->nodes[i].have_stat ||
+            !report->nodes[i].have_exe ||
+            !report->nodes[i].pidfd_open) {
+            report->reason = "ANCESTOR_EVIDENCE_OR_PIDFD_MISSING";
+            return report->result = ACO_CHAIN_INCOMPLETE;
+        }
+    }
+
     direct = &report->nodes[0];
     if (!aco_is_sudo_candidate(direct)) {
         report->reason = "DIRECT_PARENT_IS_NOT_ROOT_OWNED_SETUID_SUDO";
