@@ -711,3 +711,10 @@ Cycle 3.2 debe implementar contexto canónico sin depender de la máquina:
 La consola no puede fabricar identidad ni contexto verificado. La conversación sin login, si se permite, no habilita capacidades protegidas.
 
 **Estado de implementación:** decisión adoptada; contratos detallados, autenticación, bootstrap, portabilidad de datos, empaquetado, migración y pruebas siguen pendientes. No se autoriza cambiar el host ni migrar datos existentes.
+
+
+### F2 — Cycle 3.2-A: registro canónico de Workspaces
+
+**Estado:** implementación en rama de trabajo; pendiente de verificación del propietario. La migración aditiva v18 añade asociaciones explícitas muchos-a-muchos Project–Environment y registros de workspace con owner canónico, ámbito compuesto y `root_ref` simbólico `mount:<id>`. No se infieren asociaciones históricas ni se crean workspaces por defecto. Los registros conservan tombstones; identidad, owner, ámbito y root_ref del workspace son inmutables; las actualizaciones de estado usan revisión CAS. La creación requiere un owner existente y una asociación Project–Environment activa. `SQLiteWorkspaceRegistryRepository` queda expuesto como `unit.workspaces` dentro de `SQLiteLocalAuthorityUnitOfWork`. Se añadieron pruebas unitarias para integridad referencial, ownership, asociación activa, CAS, inmutabilidad, validación de root_ref y rollback. **No declarar validado hasta recibir la salida de la suite en Debian.**
+
+Cycle 3.2-A no conecta CLI/runtime, no modifica `WorkspaceCapabilityExecutionService`, no resuelve mounts a rutas físicas y no habilita autenticación ni capacidades protegidas. El siguiente incremento es 3.2-B: resolver `root_ref` desde configuración confiable y revalidar owner, Project, Environment, asociación activa y Grant exacto dentro de la misma UoW antes de filesystem.
