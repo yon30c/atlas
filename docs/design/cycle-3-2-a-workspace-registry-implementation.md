@@ -56,7 +56,7 @@ El propietario debe ejecutar en Debian desde el checkout actualizado de la rama:
 
 ```bash
 python -m unittest tests.unit.test_sqlite_workspace_registry_repository -v
-python -m unittest discover -s tests/unit -v
+python -m unittest discover -s tests -t tests -v
 python -m compileall -q src tests
 ```
 
