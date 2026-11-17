@@ -324,3 +324,18 @@ Pruebas añadidas en tests/unit/test_sqlite_agent_identity_authority.py: creaci�
 **Límite:** el esquema común identity_records es el almacenamiento de identidad canónica ya existente; la autoridad AGENT mantiene API y responsabilidad separadas. Este slice no implementa proof admission, NativeAgentIdentityBinding persistente, delegación, composition root de producción ni habilita GrantRenewalService.request_renewal.
 
 **Validación:** el código y las pruebas están publicados, pero no se declara que hayan sido ejecutados. Se requiere validación focalizada, suite completa y compileall en Debian antes de cerrar I3-2B.2.
+
+
+### 12.1. Binding nativo AGENT y separación de subject
+
+La implementación se amplió para cubrir el binding persistente sin relajar el trigger existente que reserva native_identity_bindings a Identity(USER).
+
+- CORE_SCHEMA_V21 crea native_agent_identity_bindings, con FK a identity_records y native_identity_issuers, UUIDv4, digest SHA-256, revisión, estado y tombstone.
+- El trigger de inserción exige una identidad AGENT canónica ACTIVE con user_id=NULL y un issuer ACTIVE.
+- SQLiteNativeAgentIdentityAuthority implementa lookup, creación de binding y revocación CAS terminal, aceptando una CanonicalAgentIdentity y revalidándola contra el registro persistido.
+- CORE_SCHEMA_V22 impide que el mismo par issuer_id/subject_digest se vincule a la vez con USER y AGENT, en cualquiera de los dos órdenes de inserción.
+- La tabla native_identity_bindings y su trigger USER no se amplían ni se debilitan.
+
+Pruebas adicionales en tests/unit/test_sqlite_native_agent_identity_authority.py cubren creación/lookup, rechazo de USER, identidad AGENT suspendida, duplicados, colisión cruzada USER/AGENT en ambos órdenes y revocación CAS.
+
+**Estado:** implementación publicada, pendiente de validación en Debian. La autoridad no autentica credenciales, no emite proofs y no habilita delegación ni solicitudes de renovación.
