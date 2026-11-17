@@ -275,10 +275,7 @@ class VerifiedAgentDelegationContextServiceTests(unittest.TestCase):
             expected_revision=1,
             verified_agent_identity=self.agent_context,
         )
-        self.binding = replace(
-            self.binding,
-            revision=3,
-        )
+        self.binding.revision = 3
         with self.assertRaises(VerifiedAgentDelegationContextRejected):
             self.service.verify(context)
 
