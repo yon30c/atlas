@@ -242,3 +242,14 @@ La prueba unitaria focalizada es `tests/unit/test_agent_delegation_domain_contra
 **Límite transaccional confirmado:** la auditoría `assistant-operation-consistency-boundary.md` describe UoWs/SQLite independientes para Identity y CAM/Grant/Renewal. No existe evidencia de una transacción común entre esas fuentes. I3-2B.5 debe resolver y probar ese límite o mantener fail-closed. No afirmar atomicidad global en el diseño actual.
 
 **Estado de validación:** pruebas añadidas pero todavía no ejecutadas en Debian por el propietario.
+
+
+## 12. I3-2B.2 — autoridad canónica AGENT
+
+Se añadió la autoridad SQLite separada SQLiteAgentIdentityAuthority y su suite focalizada. Reutiliza exclusivamente el almacenamiento identity_records ya existente: los registros AGENT tienen identity_kind='agent' y user_id=NULL, mientras que atlas_users sigue reservado para pares USER.
+
+La autoridad crea UUIDv4, resuelve solo registros AGENT, actualiza estado mediante CAS/revision y respeta revocación terminal. Acepta una SQLiteUnitOfWork explícita para participar en una transacción ya compuesta. No gestiona autenticación, proof, binding, delegación ni CAM; request_renewal permanece fail-closed.
+
+Pruebas: tests/unit/test_sqlite_agent_identity_authority.py. Cubren UUID canónico, no resolución cruzada USER/AGENT, ausencia, duplicados, CAS, estados terminales, entradas inválidas, concurrencia y UoW.
+
+**Estado:** implementación publicada en PR #16, pendiente de ejecución por el propietario en Debian. No se declara suite ni compileall exitosos.
