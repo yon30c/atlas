@@ -488,3 +488,22 @@ La lectura de identidad AGENT, delegación, Grant y propietario ocurre bajo la m
 
 
 **Endurecimiento de I3-2B.5:** el payload attested también fija el `context_id` AGENT, `agent_identity_revision`, `agent_binding_id` y `agent_binding_revision`. La revalidación posterior exige el mismo binding exacto y sus revisiones; un binding alternativo recién creado no mantiene viva evidencia emitida para un binding revocado.
+
+
+### 18.4 Validación Debian — I3-2B.5
+
+El propietario ejecutó la suite completa sobre el HEAD que incorpora I3-2B.5A/B/C: **1,369 tests, OK**. También ejecutó `python -m compileall -q src tests`, con `COMPILE_EXIT_CODE=0`.
+
+Esta validación cubre el estado de I3-2B.5, incluidos los contratos, el servicio de contexto delegado, la revalidación del binding exacto y las pruebas negativas añadidas. No habilita CAM, runtime AGENT, endpoints ni solicitudes de renovación.
+
+### 18.5 Auditoría de integración CAM — I3-2B.6A
+
+La auditoría de integración está documentada en [i3-2b-cam-renewal-integration-audit.md](i3-2b-cam-renewal-integration-audit.md).
+
+Hallazgos que bloquean la habilitación:
+- AuthorizationEvaluator es una evaluación pura de Grant/recurso/acción; no autentica ni verifica delegaciones.
+- SQLiteLocalAuthorityUnitOfWork permite compartir la transacción local entre identidad, binding, delegación, Grant, renovación y Project/Environment, pero no sustituye el coordinador general de admisión/fencing.
+- GrantRenewalRequest renueva el Grant completo, mientras AgentDelegationScope admite subconjuntos. La primera integración debe exigir cobertura exacta de todos los recursos del Grant para evitar que una delegación parcial inicie la renovación de permisos no delegados.
+- La acción explícita grant.renewal.request no existe todavía y requiere aprobación de semántica antes de añadirla a CAM.
+
+I3-2B.6A es solo auditoría documental. GrantRenewalService.request_renewal permanece fail-closed; I3-2B.6B/6C no están implementados.
