@@ -15,6 +15,7 @@ from atlas.adapters.sqlite.recovery_evidence_trust_policy_repository import (
 )
 from atlas.adapters.sqlite.project_environment_repository import SQLiteProjectEnvironmentRepository
 from atlas.adapters.sqlite.identity_authority import SQLiteIdentityAuthority
+from atlas.adapters.sqlite.agent_identity_authority import SQLiteAgentIdentityAuthority
 from atlas.adapters.sqlite.native_identity_authority import SQLiteNativeIdentityAuthority
 from atlas.adapters.sqlite.native_authentication_authority import SQLiteNativeAuthenticationAuthority
 from atlas.adapters.sqlite.local_authority_unit_of_work import (
@@ -43,13 +44,18 @@ __all__ = [
     "SQLiteRecoveryEvidenceIssuerTrustPolicyRepository",
     "SQLiteRecoveryEvidenceIssuerRegistryRepository",
     "SQLiteRecoveryEvidenceAdmissionRepository",
-    "SQLiteProjectEnvironmentRepository", "SQLiteWorkspaceRegistryRepository", "SQLiteIdentityAuthority", "SQLiteNativeIdentityAuthority", "SQLiteNativeAuthenticationAuthority",
+    "SQLiteProjectEnvironmentRepository", "SQLiteWorkspaceRegistryRepository",
+    "SQLiteIdentityAuthority", "SQLiteAgentIdentityAuthority",
+    "SQLiteNativeIdentityAuthority", "SQLiteNativeAuthenticationAuthority",
     "SQLiteLocalAuthorityUnitOfWork", "SQLiteLocalAuthorityUnitOfWorkFactory",
     "SQLiteAuthorizationUnitOfWork", "SQLiteAuthorizationUnitOfWorkFactory",
     "SQLiteConversationRepository",
     "ConversationBackup", "ConversationExport", "prepare_conversation_database_path",
     "LocalSQLiteRecoveryGateAdapter", "SQLITE_MIGRATIONS",
     "CORE_SCHEMA_V1", "CORE_SCHEMA_V2", "CORE_SCHEMA_V3",
-    "CORE_SCHEMA_V4", "CORE_SCHEMA_V5", "CORE_SCHEMA_V6", "CORE_SCHEMA_V7", "CORE_SCHEMA_V8", "CORE_SCHEMA_V9", "CORE_SCHEMA_V10", "CORE_SCHEMA_V11", "CORE_SCHEMA_V12", "CORE_SCHEMA_V13", "CORE_SCHEMA_V14", "CORE_SCHEMA_V15", "CORE_SCHEMA_V16", "CORE_SCHEMA_V17", "CORE_SCHEMA_V18", "CORE_SCHEMA_V19", "CORE_SCHEMA_V20",
+    "CORE_SCHEMA_V4", "CORE_SCHEMA_V5", "CORE_SCHEMA_V6", "CORE_SCHEMA_V7", "CORE_SCHEMA_V8",
+    "CORE_SCHEMA_V9", "CORE_SCHEMA_V10", "CORE_SCHEMA_V11", "CORE_SCHEMA_V12",
+    "CORE_SCHEMA_V13", "CORE_SCHEMA_V14", "CORE_SCHEMA_V15", "CORE_SCHEMA_V16",
+    "CORE_SCHEMA_V17", "CORE_SCHEMA_V18", "CORE_SCHEMA_V19", "CORE_SCHEMA_V20",
     "CONVERSATION_MIGRATIONS", "CONVERSATION_SCHEMA_V1",
 ]
