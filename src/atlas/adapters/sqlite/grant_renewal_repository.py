@@ -66,6 +66,9 @@ class SQLiteGrantRenewalRepository(GrantRenewalRepository):
                 ),
                 decided_by_user_id=row["decided_by_user_id"],
                 version=row["version"],
+                grant_revision=row["grant_revision"],
+                delegation_id=row["delegation_id"],
+                delegation_revision=row["delegation_revision"],
             )
         except (TypeError, ValueError, KeyError) as exc:
             raise ContractError("registro de renovación SQLite corrupto o inválido") from exc
@@ -87,6 +90,9 @@ class SQLiteGrantRenewalRepository(GrantRenewalRepository):
             None if request.decided_at is None else _timestamp(request.decided_at),
             request.decided_by_user_id,
             request.version,
+            request.grant_revision,
+            request.delegation_id,
+            request.delegation_revision,
         )
 
     def create(self, request: GrantRenewalRequest) -> None:
@@ -99,8 +105,9 @@ class SQLiteGrantRenewalRepository(GrantRenewalRepository):
                         renewal_id, grant_id, owner_user_id, subject_identity_id,
                         requested_by_identity_id, current_expires_at,
                         proposed_expires_at, requested_at, status, decided_at,
-                        decided_by_user_id, version
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        decided_by_user_id, version, grant_revision,
+                        delegation_id, delegation_revision
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     values,
                 )
