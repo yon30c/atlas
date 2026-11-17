@@ -291,6 +291,20 @@ class AgentRenewalServiceTests(unittest.TestCase):
         self.assertEqual(self.renewals.items, {})
         self.assertFalse(self.units[-1].committed)
 
+    def test_missing_workspace_association_authority_fails_closed(self):
+        self.units = []
+        original = FakeUnit
+        def factory():
+            unit = original(self.grant, self.renewals)
+            del unit.workspaces
+            self.units.append(unit)
+            return unit
+        self.service._unit_of_work_factory = factory
+        with self.assertRaises(AuthorizationError):
+            self.request()
+        self.assertEqual(self.renewals.items, {})
+        self.assertFalse(self.units[-1].committed)
+
     def test_missing_project_environment_association_denies_without_write(self):
         self.units = []
         original = FakeUnit
