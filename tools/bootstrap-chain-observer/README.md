@@ -44,8 +44,9 @@ configuration and independent host/package review, which are out of scope.
 
 The collector opens pidfds for observed ancestors, captures bounded
 status/stat and executable metadata twice, checks PID/starttime/credentials
-and parent links, checks pidfd liveness, and rechecks the caller's PPID,
-session, process group and TTY. These are bounded observations, not an atomic
+and parent links, checks pidfd liveness, and rechecks the caller's own stat record, PPID, session, process group and
+TTY. It also requires the helper's tty_nr to match the direct sudo parent's
+tty_nr. These are bounded observations, not an atomic
 kernel snapshot. pidfd does not freeze credentials, PPID, executable or TTY.
 
 ## Build and automated tests
@@ -56,8 +57,9 @@ From the repository root on Debian:
 
 The suite uses strict C11 warnings as errors, fixture tests for the direct
 sudo pattern, wrapper rejection, credential/session/TTY mismatches, missing
-evidence, unstable observations, executable metadata and non-authoritative
-output, plus a live unprivileged smoke test.
+evidence, unstable observations, executable metadata, self/parent TTY binding,
+output escaping and non-authoritative output, plus a live unprivileged smoke
+test and argument rejection.
 
 ## Manual scenarios
 
