@@ -209,4 +209,4 @@ Se corrige `SQLiteProjectEnvironmentRepository.get_environment()` para utilizar 
 
 La consola actual usa `LocalConsoleRequestFactory`, que fabrica `Identity` sintética (`local-user:<os-user>`), `user_id` no canónico y `project_id=None`. Ese contexto no puede ser elevado a una identidad CAM válida ni debe mapearse automáticamente a un UserId existente. Antes de conectar el runtime se necesita un bootstrap explícito del propietario, una relación estable y verificable entre la sesión local y la identidad canónica, proyecto/entorno seleccionados desde configuración confiable y un registro explícito de workspaces/owners.
 
-Hasta completar ese paso, el servicio de ejecución permanece como caso de uso aislado y probado por tests; no se altera la composición de `cli.py`.
+Hasta completar ese paso, el servicio de ejecución permanece como caso de uso aislado, con pruebas unitarias añadidas pero pendientes de ejecución local; no se altera la composición de `cli.py`.
