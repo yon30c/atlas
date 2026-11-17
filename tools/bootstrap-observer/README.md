@@ -71,15 +71,20 @@ diagnostic exercise only; it does not authenticate the terminal or operator.
 Exit codes:
 
 - 0: observations complete and consistent under V1's limited rules;
-- 2: incomplete observation (for example, no controlling TTY or unavailable
-  pidfd);
-- 3: an observed contradiction or a process/TTY/executable change;
+- 2: incomplete observation when required evidence is unavailable and no
+  independent contradiction was observed;
+- 3: an observed contradiction or a process/TTY/executable change. A
+  contradiction takes precedence over missing evidence;
 - 1: internal/system error;
 - 64: invalid command-line arguments.
 
-The observer may return 2 in environments without a controlling TTY or a
-working pidfd. That is an expected fail-closed result, not a reason to weaken
-the checks.
+Without a controlling TTY, the observer will normally be incomplete (exit 2)
+if the other observations do not contradict the limited rules. It can return
+inconsistent (exit 3) when an independent contradiction is also observed. For
+example, in the tested SSH-without-PTY case the direct parent and observer
+belonged to different sessions, so the session mismatch took precedence over
+the unavailable TTY. This is an expected fail-closed result, not a reason to
+weaken the checks.
 
 Optional manual scenarios, chosen and run by the operator:
 
@@ -96,7 +101,8 @@ ssh -t greed@10.0.0.81 'sudo -- /tmp/atlas-bootstrap-observer'
 # SSH with PTY and an intermediate shell; direct parent should be the shell
 ssh -t greed@10.0.0.81 'sudo -- sh -c "/tmp/atlas-bootstrap-observer"'
 
-# SSH without PTY, ordinary unprivileged observation
+# SSH without PTY, ordinary unprivileged observation.
+# TTY absence alone is incomplete; an independent session mismatch is inconsistent.
 ssh -T greed@10.0.0.81 '/tmp/atlas-bootstrap-observer'
 ```
 
@@ -129,5 +135,6 @@ execve. A PTY does not reveal whether it originated from SSH, a local terminal
 or sudo's use_pty behavior.
 
 V2 does not approve candidate A, implement a bootstrap helper, authenticate
-the operator, or open Recovery Gate. V3/V4 and any privileged integration
-require separate design and explicit approval.
+the operator, or open Recovery Gate. A consistent generic observation does
+not mean that a sudo invocation or its ancestor chain is accepted. V3/V4 and
+any privileged integration require separate design and explicit approval.
