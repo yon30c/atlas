@@ -39,6 +39,8 @@ typedef struct {
     pid_t self_parent_pid;
     int32_t self_sid;
     int32_t self_pgrp;
+    bool self_stat_available;
+    bv_stat self_stat;
     bool tty_available;
     int tty_errno;
     int32_t terminal_sid;
