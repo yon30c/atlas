@@ -203,6 +203,25 @@ class VerifiedAgentIdentityContextService:
     def verify(
         self, context: VerifiedAgentIdentityContext
     ) -> CanonicalAgentIdentity:
+        """Revalidate using an owned transaction."""
+        try:
+            with self._uow_factory() as unit:
+                return self.verify_in_unit_of_work(context, unit)
+        except (VerifiedAgentIdentityContextRejected, ContractError):
+            raise
+        except Exception as exc:
+            raise VerifiedAgentIdentityContextUnavailable(
+                "Identity Authority no pudo revalidar el contexto AGENT"
+            ) from exc
+
+    def verify_in_unit_of_work(
+        self, context: VerifiedAgentIdentityContext, unit
+    ) -> CanonicalAgentIdentity:
+        """Revalidate AGENT evidence inside a caller-owned shared transaction.
+
+        The caller retains commit/rollback ownership. This method never opens,
+        commits, or closes a unit of work.
+        """
         if not isinstance(context, VerifiedAgentIdentityContext):
             raise VerifiedAgentIdentityContextRejected("contexto AGENT no válido")
         now = self._now()
@@ -215,54 +234,36 @@ class VerifiedAgentIdentityContextService:
             or context.expires_at - context.verified_at > self._context_ttl
         ):
             raise VerifiedAgentIdentityContextRejected("contexto AGENT no válido")
-        try:
-            if not self._attestor.verify(
-                self._attestation_payload(context), context.attestation
-            ):
-                raise VerifiedAgentIdentityContextRejected("contexto AGENT no válido")
-            with self._uow_factory() as unit:
-                issuer = unit.native_identity.get_native_issuer(self._realm)
-                if (
-                    issuer is None
-                    or issuer.issuer_id != context.issuer_id
-                    or issuer.profile is not NativeIssuerProfile.NATIVE_AUTHORITY_PROOF
-                    or issuer.status is not NativeIssuerStatus.ACTIVE
-                ):
-                    raise VerifiedAgentIdentityContextRejected(
-                        "contexto AGENT no válido"
-                    )
-
-                binding = unit.native_agent_identity.get_native_agent_binding_by_id(
-                    context.binding_id
-                )
-                if (
-                    binding is None
-                    or binding.status.value != "active"
-                    or binding.issuer_id != context.issuer_id
-                    or binding.identity_id != context.identity_id
-                    or binding.revision != context.binding_revision
-                ):
-                    raise VerifiedAgentIdentityContextRejected(
-                        "contexto AGENT no válido"
-                    )
-
-                canonical = unit.agent_identity.get_agent_by_identity_id(
-                    context.identity_id
-                )
-                if (
-                    canonical is None
-                    or canonical.identity.identity_id != context.identity_id
-                    or canonical.identity.kind is not IdentityKind.AGENT
-                    or canonical.identity.status is not IdentityStatus.ACTIVE
-                    or canonical.identity.revision != context.identity_revision
-                ):
-                    raise VerifiedAgentIdentityContextRejected(
-                        "contexto AGENT no válido"
-                    )
-                return canonical
-        except VerifiedAgentIdentityContextRejected:
-            raise
-        except Exception as exc:
-            raise VerifiedAgentIdentityContextUnavailable(
-                "Identity Authority no pudo revalidar el contexto AGENT"
-            ) from exc
+        if not self._attestor.verify(
+            self._attestation_payload(context), context.attestation
+        ):
+            raise VerifiedAgentIdentityContextRejected("contexto AGENT no válido")
+        issuer = unit.native_identity.get_native_issuer(self._realm)
+        if (
+            issuer is None
+            or issuer.issuer_id != context.issuer_id
+            or issuer.profile is not NativeIssuerProfile.NATIVE_AUTHORITY_PROOF
+            or issuer.status is not NativeIssuerStatus.ACTIVE
+        ):
+            raise VerifiedAgentIdentityContextRejected("contexto AGENT no válido")
+        binding = unit.native_agent_identity.get_native_agent_binding_by_id(
+            context.binding_id
+        )
+        if (
+            binding is None
+            or binding.status.value != "active"
+            or binding.issuer_id != context.issuer_id
+            or binding.identity_id != context.identity_id
+            or binding.revision != context.binding_revision
+        ):
+            raise VerifiedAgentIdentityContextRejected("contexto AGENT no válido")
+        canonical = unit.agent_identity.get_agent_by_identity_id(context.identity_id)
+        if (
+            canonical is None
+            or canonical.identity.identity_id != context.identity_id
+            or canonical.identity.kind is not IdentityKind.AGENT
+            or canonical.identity.status is not IdentityStatus.ACTIVE
+            or canonical.identity.revision != context.identity_revision
+        ):
+            raise VerifiedAgentIdentityContextRejected("contexto AGENT no válido")
+        return canonical
