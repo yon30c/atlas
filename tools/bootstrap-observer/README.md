@@ -8,7 +8,7 @@ executable metadata and the controlling TTY when available.
 
 - Read-only procfs access, pidfd open/poll, executable metadata via O_PATH and
   fstat, and TTY queries only.
-- No shell-outs, no network, no writes, no PAM, no keys, no protected config,
+- No shell-outs, no network, no filesystem or host writes, no PAM, no keys, no protected config,
   no sudo API, no systemd/SSH/Broker/SQLite/CAM/runtime integration.
 - The program never invokes sudo or asks for privileges.
 - Running the diagnostic manually through sudo is an optional test scenario,
@@ -52,7 +52,7 @@ cc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
 Expected unit-test output:
 
 - `bootstrap-validator V1: tests passed`
-- `bootstrap-observer V2: unit tests passed`
+- `bootstrap-observer V2: unit and live smoke tests passed`
 
 ## Manual Debian observations
 
