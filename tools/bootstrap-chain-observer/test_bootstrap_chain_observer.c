@@ -229,7 +229,7 @@ static void test_output_does_not_claim_authority(void) {
     valid_fixture(&report);
     (void)snprintf(report.nodes[2].exe_target,
                    sizeof(report.nodes[2].exe_target),
-                   "/tmp/odd\\nAUTHORIZATION=FORGED");
+                   "/tmp/odd\nAUTHORIZATION=FORGED");
     (void)aco_evaluate(&report);
     aco_print_report(stream, &report);
     rewind(stream);
@@ -237,8 +237,8 @@ static void test_output_does_not_claim_authority(void) {
     output[count] = '\0';
     assert(strstr(output, "AUTHORIZATION=NOT_PROVIDED") != NULL);
     assert(strstr(output,
-                  "chain[2].exe=/tmp/odd\\x5cnAUTHORIZATION=FORGED") != NULL);
-    assert(strstr(output, "\\nAUTHORIZATION=FORGED\\n") == NULL);
+                  "chain[2].exe=/tmp/odd\\x0aAUTHORIZATION=FORGED") != NULL);
+    assert(strstr(output, "\nAUTHORIZATION=FORGED\n") == NULL);
     assert(strstr(output, "AUTHORIZED") == NULL);
     assert(fclose(stream) == 0);
 }
