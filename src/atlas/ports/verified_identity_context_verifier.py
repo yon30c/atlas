@@ -13,3 +13,8 @@ class VerifiedIdentityContextVerifierPort(Protocol):
         self, context: VerifiedIdentityContext
     ) -> CanonicalUserIdentity:
         """Devuelve el par canónico vigente o falla cerrado."""
+
+    def verify_in_unit_of_work(
+        self, context: VerifiedIdentityContext, unit
+    ) -> CanonicalUserIdentity:
+        """Revalida evidencia dentro de la transacción compartida del caller."""
