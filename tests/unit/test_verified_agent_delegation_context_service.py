@@ -163,6 +163,15 @@ class VerifiedAgentDelegationContextServiceTests(unittest.TestCase):
                 verified_agent_identity=other,
             )
 
+    def test_rejects_agent_authenticated_by_different_issuer(self):
+        other = replace(self.agent_context, issuer_id=uid())
+        with self.assertRaises(VerifiedAgentDelegationContextRejected):
+            self.service.verify_for_operation(
+                self.delegation.delegation_id,
+                expected_revision=1,
+                verified_agent_identity=other,
+            )
+
     def test_rejects_stale_delegation_revision(self):
         with self.assertRaises(VerifiedAgentDelegationContextRejected):
             self.service.verify_for_operation(
@@ -226,6 +235,17 @@ class VerifiedAgentDelegationContextServiceTests(unittest.TestCase):
         tampered = replace(context, project_id="other-project")
         with self.assertRaises(VerifiedAgentDelegationContextRejected):
             self.service.verify(tampered)
+
+    def test_shared_uow_verification_does_not_commit_caller_transaction(self):
+        context = self.service.verify_for_operation(
+            self.delegation.delegation_id,
+            expected_revision=1,
+            verified_agent_identity=self.agent_context,
+        )
+        self.unit.committed = False
+        verified = self.service.verify_in_unit_of_work(context, self.unit)
+        self.assertEqual(verified, self.delegation)
+        self.assertFalse(self.unit.committed)
 
     def test_rejects_context_after_delegation_revision_changes(self):
         context = self.service.verify_for_operation(
