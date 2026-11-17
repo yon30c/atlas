@@ -523,3 +523,17 @@ Implementación:
 - Esta UoW es una transacción SQLite local, no el coordinador general de admisión/fencing ni atomicidad distribuida.
 
 **Validación Debian I3-2B.6B/6C: pendiente del propietario.** No declarar esta integración validada hasta recibir tests focalizados, suite completa y compileall. No se habilitaron endpoints, login ni runtime AGENT.
+
+### 18.7 I3-2B.6D — owner USER decisions revalidated in the shared UoW
+
+The renewal decision path was hardened after review found that USER owner evidence was verified through the standalone verifier before opening the renewal transaction.
+
+The updated contract now requires `VerifiedIdentityContextVerifierPort.verify_in_unit_of_work(context, unit)` for approval and rejection. Both operations open the authorization UoW first, revalidate the attestation and canonical USER identity through that exact UoW, and only then read the renewal/Grant and perform the owner decision. The check remains fail-closed if a verifier exposes only standalone `verify`.
+
+The transactional owner check compares the canonical USER kind/status/revision, identity ID, UserId, OperationContext actor/UserId, and absence of delegation. Tests assert the standalone verifier is not called for approval/rejection and that a legacy-only verifier cannot decide a renewal.
+
+**Validation pending:** this follow-on hardening was committed after the owner-reported 1,396-test checkpoint for I3-2B.6B/6C. The updated HEAD requires fresh focused tests, full unit suite and compileall on Debian.
+
+#### Project/Environment association boundary
+
+The current canonical metadata adapter stores Project and Environment as independent records and exposes independent lookups. No Project-to-Environment relationship is represented in the current schema/port. Renewal therefore verifies both records are individually present and active and that their IDs match the Grant, but cannot assert membership. Do not infer or fabricate that relationship. If required, introduce an explicit canonical association contract and migration in a separately reviewed slice before enforcing it.
