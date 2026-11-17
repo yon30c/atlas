@@ -139,6 +139,11 @@ class GrantManagementTests(unittest.TestCase):
         with self.assertRaises(AuthorizationError):
             self.issue(service=service)
 
+    def test_issue_preserves_distinct_user_and_identity_ids(self):
+        self.assertNotEqual(self.context.user_id, self.context.actor.identity_id)
+        result = self.issue(self.context, self.grant, NOW)
+        self.assertEqual(result.owner_user_id, self.context.user_id)
+
     def test_issue_stores_and_returns_grant(self):
         result = self.issue(self.context, self.grant, NOW)
         self.assertEqual(result, self.grant)
