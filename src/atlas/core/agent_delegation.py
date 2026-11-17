@@ -148,6 +148,8 @@ class VerifiedAgentDelegationContext:
             "agent_identity_id", "issuer_id",
         ):
             validate_canonical_uuid4(getattr(self, name), name)
+        if self.owner_identity_id == self.agent_identity_id:
+            raise ContractError("owner y agent deben ser identidades distintas")
         for name in ("grant_id", "project_id", "environment", "realm", "audience"):
             _required(getattr(self, name), name)
         for name in ("delegation_revision", "grant_revision"):
