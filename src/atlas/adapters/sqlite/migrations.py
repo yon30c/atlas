@@ -1639,6 +1639,18 @@ CORE_SCHEMA_V18 = SQLiteMigration(
             ON UPDATE RESTRICT ON DELETE RESTRICT
     );
 
+    CREATE TRIGGER atlas_workspace_requires_active_project_environment
+    BEFORE INSERT ON atlas_workspaces
+    WHEN NOT EXISTS (
+        SELECT 1 FROM atlas_project_environments
+        WHERE project_id = NEW.project_id
+          AND environment_id = NEW.environment_id
+          AND status = 'active'
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'Workspace requires an active Project/Environment association');
+    END;
+
     CREATE INDEX atlas_workspaces_by_owner
         ON atlas_workspaces(owner_user_id, status, workspace_id);
     CREATE INDEX atlas_workspaces_by_project_environment
