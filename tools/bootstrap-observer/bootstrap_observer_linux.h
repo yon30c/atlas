@@ -48,6 +48,7 @@ typedef struct {
 bv_parse_result bo_classify_read(size_t bytes_read, size_t maximum,
                                  int read_error);
 bv_pidfd_state bo_pidfd_state_from_poll(int poll_result, int revents);
+bool bo_session_matches(int32_t parent_sid, int32_t observer_sid);
 bool bo_parent_samples_match(const bv_status *status_a,
                              const bv_stat *stat_a,
                              const bv_status *status_b,
