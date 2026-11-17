@@ -296,3 +296,8 @@ El propietario ejecutó la suite completa sobre el HEAD de esta fase: `Ran 1341 
 ### Validación Debian — I3-2B.3B.2
 
 El propietario ejecutó `test_agent_delegation_domain_contracts.py`: `Ran 12 tests in 0.486s`, `OK`; `python -m compileall -q src tests` devolvió `COMPILE_EXIT_CODE=0`.
+
+
+### I3-2B.3B.3 — revalidación dentro de UoW compartida
+
+Ambos servicios de contexto ahora exponen `verify_in_unit_of_work(context, unit)`, que revalida la evidencia sin abrir ni confirmar transacciones. Los métodos `verify(context)` conservan compatibilidad y usan una UoW propia. La futura autoridad de delegación podrá validar owner USER, AGENT y estado de Grant/delegación en una única transacción, evitando la falsa atomicidad de verificadores que abren conexiones independientes.
