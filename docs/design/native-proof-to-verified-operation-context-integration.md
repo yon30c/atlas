@@ -258,7 +258,7 @@ Implementado:
 
 La emisión de `VerifiedIdentityContext` pertenece a Identity Authority conforme B1-B-03D. Native Authentication Authority verifica credenciales y emite proofs; no resuelve bindings ni usuarios.
 
-**Estado:** contrato documentado; primer slice de Authentication Authority implementado en revisión, todavía sin validación local.
+**Estado:** I-2 implementado en dos slices y validado localmente en Debian.
 
 La inspección confirmó:
 - La persistencia C1 acepta un `NativeAuthenticationProof` ya construido; no verifica contraseña ni demuestra cómo se obtuvo.
@@ -277,7 +277,7 @@ Decisiones registradas:
 - La derivación de OperationContext queda limitada a USER directo y no concede autorización CAM.
 - No hay actualmente un puerto de throttling. Se exige un guard compartido, atómico y fail-closed; un contador en memoria no se acepta para producción.
 
-**Pendiente:** implementar un adaptador de guard de intentos compartido y fail-closed; ampliar pruebas de issuer inactivo, autenticadores suspendidos/revocados, CAS concurrente y secret hygiene; ejecutar la suite completa y compileall para el segundo slice. El diseño no habilita login operativo ni capacidades protegidas.
+**Pendiente:** implementar un adaptador de guard de intentos compartido y fail-closed antes de cualquier composición operativa. La validación de pruebas de este incremento no sustituye esa dependencia ni habilita login operativo o capacidades protegidas.
 
 ## 13. I-2 — primer slice de Authentication Authority
 
@@ -297,12 +297,12 @@ Añadido:
 
 Pruebas añadidas en `tests/unit/test_native_authentication_service.py`: emisión correcta y persistencia digest-only; contraseña incorrecta y handle desconocido con dummy verify; bloqueo antes del hash; guard indisponible con fail-closed; rehash y revisión vinculada al proof; rechazo de TTL no positivo.
 
-**Validación:** aún no ejecutada en Debian. No declarar este slice validado ni operativo hasta que el usuario ejecute las pruebas focalizadas, la suite completa y `compileall`. El fake del guard existe solo en tests; no se ha creado un guard productivo ni se permite componer el servicio para un entrypoint operativo.
+**Validación:** el usuario ejecutó la suite completa en Debian después de este slice: `Ran 1274 tests ... OK`; `python -m compileall -q src tests` terminó con `COMPILE_EXIT_CODE=0`. El fake del guard existe solo en tests; no se ha creado un guard productivo ni se permite componer el servicio para un entrypoint operativo.
 
 **Límites:** no consume proofs, no emite `VerifiedIdentityContext`, no deriva `OperationContext`, no implementa endpoints/CLI/sesiones/bootstrap/CAM y no modifica migraciones, DB productiva ni infraestructura.
 ## 14. I-2 — proof admission, VerifiedIdentityContext y derivación USER
 
-**Implementación añadida en la rama del PR #11; validación local pendiente.**
+**Implementación añadida en la rama del PR #11; validación local completada por el usuario en Debian.**
 
 Archivos:
 - `src/atlas/core/verified_identity_context.py`: modelo frozen y efímero, UUIDs canónicos, USER fijo, revisiones/timestamps validados, `verification_ref` aleatoria y `attestation` HMAC.
@@ -318,4 +318,6 @@ El servicio de Identity Authority consume proof, resuelve issuer por realm confi
 
 **Límite importante:** `VerifiedOperationContextFactory` no vuelve seguros automáticamente los consumidores existentes. I-3 debe exigir/verificar la evidencia en cada servicio sensible y reconciliar `actor.identity_id` con `context.user_id` sin equiparar esos identificadores. No habilitar endpoints, CLI, sesiones, bootstrap ni CAM.
 
-**Validación:** pendiente de ejecución en Debian. Ejecutar primero los tests focalizados de proof admission y factory, después suite completa y compileall. No declarar el segundo slice validado hasta recibir los resultados.
+**Validación completada:** el usuario ejecutó la suite completa en Debian: `Ran 1288 tests in 14.646s — OK`; `python -m compileall -q src tests` terminó con `COMPILE_EXIT_CODE=0`. Esto incluye los tests focalizados de proof admission, factory y lookup por binding ID. El segundo slice queda validado localmente.
+
+**Límites que permanecen:** no existe adaptador productivo compartido para `AuthenticationAttemptGuardPort`; la clave HMAC aún debe provisionarse mediante composición secreta confiable; no hay composición operativa, endpoints, CLI, sesiones, bootstrap ni CAM. I-3 sigue siendo necesario para proteger los consumidores sensibles que reciben `OperationContext`.
