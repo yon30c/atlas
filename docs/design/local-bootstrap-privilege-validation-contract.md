@@ -248,7 +248,7 @@ Condiciones obligatorias:
 7. Los fixtures y binarios se mantienen en el checkout o en rutas temporales no privilegiadas.
 8. Compilación estricta y pruebas negativas deben demostrar los estados exactos previstos; los datos incompletos fallan de forma cerrada.
 
-V1 quedó validada mediante compilación estricta, suite ampliada y ejecución con AddressSanitizer/UndefinedBehaviorSanitizer en Debian, según los resultados comunicados por el propietario. La aprobación posterior y explícita del propietario del 16-11-2026 autoriza únicamente la V2 definida en `local-bootstrap-observer-v2-design.md`, bajo sus límites de solo observación, sin instalación ni cambios del host.
+V1 quedó validada mediante compilación estricta, suite ampliada y ejecución con AddressSanitizer/UndefinedBehaviorSanitizer en Debian, según los resultados comunicados por el propietario. La aprobación explícita del propietario del 16-11-2026 autorizó V2 bajo sus límites de solo observación; posteriormente, el propietario confirmó su validación en Debian. La aprobación adicional para V3 se limita al observador diagnóstico de cadena sudo descrito en `local-bootstrap-chain-observer-v3-design.md`, sin instalación ni cambios del host.
 
 ### Etapa V2 — observador Linux de solo lectura (COMPLETADA Y VALIDADA EN DEBIAN)
 
@@ -318,7 +318,7 @@ Observaciones recibidas del propietario:
 
 El recorrido de ancestros y el pidfd del probe son lecturas diagnósticas no atómicas. No se ha ejecutado un validador, no se ha probado PAM dentro de helper, no se han emitido pruebas y no se ha modificado el host.
 
-## 12. Prohibiciones fuera del alcance V1 aprobado
+## 12. Prohibiciones fuera del alcance V1–V3 aprobado
 
 No:
 - escribir o instalar helper privilegiado;
