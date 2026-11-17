@@ -203,7 +203,10 @@ class SQLiteCoreSchemaTests(unittest.TestCase):
             ("legacy-operation", "legacy-key", 1, "legacy-record"),
         )
         self.assertTrue(operation["append_id"].startswith("legacy-v2:"))
-        self.assertEqual([row[0] for row in versions], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17])
+        self.assertEqual(
+            [row[0] for row in versions],
+            list(range(1, len(SQLITE_MIGRATIONS) + 1)),
+        )
         self.assertEqual(
             {row["from"] for row in foreign_keys},
             {"domain_id", "authority_epoch", "sequence", "record_id", "operation_id"},
