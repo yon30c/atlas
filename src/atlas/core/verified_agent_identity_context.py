@@ -38,6 +38,8 @@ class VerifiedAgentIdentityContext:
     binding_id: str
     binding_revision: int
     issuer_id: str
+    realm: str
+    audience: str
     authenticated_at: datetime
     verified_at: datetime
     expires_at: datetime
@@ -47,6 +49,9 @@ class VerifiedAgentIdentityContext:
     def __post_init__(self) -> None:
         for name in ("context_id", "identity_id", "binding_id", "issuer_id"):
             validate_canonical_uuid4(getattr(self, name), name)
+        for name in ("realm", "audience"):
+            if not isinstance(getattr(self, name), str) or not getattr(self, name).strip():
+                raise ContractError(f"{name} debe ser una cadena no vacía")
         if self.identity_type is not IdentityKind.AGENT:
             raise ContractError(
                 "VerifiedAgentIdentityContext solo admite Identity(AGENT)"
@@ -75,6 +80,8 @@ class VerifiedAgentIdentityContext:
             "binding_id": self.binding_id,
             "binding_revision": self.binding_revision,
             "issuer_id": self.issuer_id,
+            "realm": self.realm,
+            "audience": self.audience,
             "authenticated_at": self.authenticated_at.isoformat(timespec="microseconds"),
             "verified_at": self.verified_at.isoformat(timespec="microseconds"),
             "expires_at": self.expires_at.isoformat(timespec="microseconds"),
