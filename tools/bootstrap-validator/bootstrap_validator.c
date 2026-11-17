@@ -60,7 +60,7 @@ bv_parse_result bv_parse_stat(const unsigned char *d,size_t n,int32_t expected,b
  p=close+1; if(p>=n||d[p]!=' ')return BV_INVALID; while(p<n&&d[p]==' ')p++;
  for(unsigned field=3;field<=22;field++){
   size_t st=p,e; while(p<n&&!ws(d[p]))p++; e=p; if(st==e)return BV_TRUNCATED;
-  if(field==3){if(e-st!=1)return BV_INVALID;v.state=(char)d[st];}
+  if(field==3){if(e-st!=1||!strchr("RSDZTWtXxKWPI",d[st]))return BV_INVALID;v.state=(char)d[st];}
   else if(field>=4&&field<=6){int32_t *dst=field==4?&v.ppid:(field==5?&v.pgrp:&v.session);if(!pidnum(d+st,e-st,dst))return BV_RANGE;}
   else if(field==7||field==8){if(!i64(d+st,e-st,INT32_MIN,INT32_MAX,&sv))return BV_RANGE;if(field==7)v.tty_nr=sv;else v.tpgid=(int32_t)sv;}
   else if(field==22){if(!u64(d+st,e-st,UINT64_MAX,&uv))return BV_RANGE;v.starttime=uv;}
@@ -81,7 +81,7 @@ bv_observation_result bv_evaluate(const bv_observation *o,const bv_fixture_polic
     o->parent_starttime_first!=o->parent_starttime_second||
     o->parent_stat.starttime!=o->parent_starttime_first)
   return BV_OBSERVATION_INCONSISTENT;
- if(o->parent_pidfd==BV_PIDFD_SIGNALED||o->parent_pidfd==BV_PIDFD_ERROR)
+ if(o->parent_pidfd!=BV_PIDFD_OPEN_UNSIGNALED)
   return BV_OBSERVATION_INCONSISTENT;
  if(p->enforce_parent_uid&&o->parent_status.uid[0]!=p->expected_parent_uid)return BV_OBSERVATION_INCONSISTENT;
  if(p->enforce_parent_gid&&o->parent_status.gid[0]!=p->expected_parent_gid)return BV_OBSERVATION_INCONSISTENT;
