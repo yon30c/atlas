@@ -277,7 +277,7 @@ Decisiones registradas:
 - La derivación de OperationContext queda limitada a USER directo y no concede autorización CAM.
 - No hay actualmente un puerto de throttling. Se exige un guard compartido, atómico y fail-closed; un contador en memoria no se acepta para producción.
 
-**Pendiente:** completar Identity Authority proof admission + VerifiedIdentityContext + validación + derivación OperationContext; implementar un adaptador de guard compartido; ampliar pruebas de errores uniformes, issuer inactivo, estados suspendidos/revocados, CAS concurrente y secret hygiene; ejecutar suite completa y compileall. El diseño no habilita login operativo ni capacidades protegidas.
+**Pendiente:** implementar un adaptador de guard de intentos compartido y fail-closed; ampliar pruebas de issuer inactivo, autenticadores suspendidos/revocados, CAS concurrente y secret hygiene; ejecutar la suite completa y compileall para el segundo slice. El diseño no habilita login operativo ni capacidades protegidas.
 
 ## 13. I-2 — primer slice de Authentication Authority
 
@@ -300,3 +300,22 @@ Pruebas añadidas en `tests/unit/test_native_authentication_service.py`: emisió
 **Validación:** aún no ejecutada en Debian. No declarar este slice validado ni operativo hasta que el usuario ejecute las pruebas focalizadas, la suite completa y `compileall`. El fake del guard existe solo en tests; no se ha creado un guard productivo ni se permite componer el servicio para un entrypoint operativo.
 
 **Límites:** no consume proofs, no emite `VerifiedIdentityContext`, no deriva `OperationContext`, no implementa endpoints/CLI/sesiones/bootstrap/CAM y no modifica migraciones, DB productiva ni infraestructura.
+## 14. I-2 — proof admission, VerifiedIdentityContext y derivación USER
+
+**Implementación añadida en la rama del PR #11; validación local pendiente.**
+
+Archivos:
+- `src/atlas/core/verified_identity_context.py`: modelo frozen y efímero, UUIDs canónicos, USER fijo, revisiones/timestamps validados, `verification_ref` aleatoria y `attestation` HMAC.
+- `src/atlas/ports/verified_identity_context_attestor.py` y `src/atlas/adapters/hmac_verified_identity_context_attestor.py`: puerto y adaptador HMAC-SHA256. La clave requiere 256 bits como mínimo y debe proceder de configuración secreta confiable.
+- `src/atlas/ports/native_identity_authority.py` y `src/atlas/adapters/sqlite/native_identity_authority.py`: `get_native_binding_by_id` para revalidar por binding ID inmutable sin almacenar NativeSubject en el contexto.
+- `src/atlas/identity/verified_identity_context_service.py`: `admit_proof` y `verify`.
+- `src/atlas/identity/verified_operation_context_factory.py`: derivación USER directa, sin delegación y sin aceptar actor/UserId del caller.
+- Tests: `test_verified_identity_context_service.py`, `test_verified_operation_context_factory.py`, y ampliación de `test_sqlite_native_identity_authority.py`.
+
+El servicio de Identity Authority consume proof, resuelve issuer por realm configurado, binding por issuer + digest del NativeSubject del proof y usuario canónico por I-1, todo dentro de una única UoW. Si una resolución falla después del consumo, se revierte el proof. El verificador exige attestation válida, contexto no expirado, issuer activo, binding activo con revisión exacta e identidad USER activa con UserId/revisión exactos.
+
+**Brecha de procedencia:** una simple relectura de los registros no impedía fabricar un dataclass con IDs válidos. Se cerró en este slice con HMAC-SHA256 sobre todos los claims. La clave no se persiste ni se acepta del caller; la rotación invalida los contextos anteriores. La attestation no sustituye la relectura de autoridades.
+
+**Límite importante:** `VerifiedOperationContextFactory` no vuelve seguros automáticamente los consumidores existentes. I-3 debe exigir/verificar la evidencia en cada servicio sensible y reconciliar `actor.identity_id` con `context.user_id` sin equiparar esos identificadores. No habilitar endpoints, CLI, sesiones, bootstrap ni CAM.
+
+**Validación:** pendiente de ejecución en Debian. Ejecutar primero los tests focalizados de proof admission y factory, después suite completa y compileall. No declarar el segundo slice validado hasta recibir los resultados.
