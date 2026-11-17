@@ -116,7 +116,16 @@ No introducir llamadas de red, Broker, shell, runtime, Skills, escritura ni muta
 - Suite completa: `python -m unittest discover -s tests -t tests -v`.
 - Compilación: `python -m compileall -q src tests`.
 
-## 7. Implementación inicial publicada\n\n- `TrustedWorkspaceMountResolver` resuelve exclusivamente `mount:<id>` desde un mapa inyectado por composición confiable. Valida IDs, rutas absolutas, existencia, directorio real y canonicalidad al construir y al resolver.\n- `WorkspaceCapabilityExecutionService` ya no usa mapas estáticos de `workspace_id -> path`; carga el Workspace y la asociación desde la UoW canónica, valida owner/scope/estados y Grant exacto, y solo entonces resuelve el mount y construye el adaptador local confinado.\n- Se actualizaron pruebas de ejecución para crear asociación y workspace canónicos, y cubrir owner distinto, ámbito distinto, workspace suspendido, asociación suspendida y mount desconocido.\n- Se añadieron pruebas unitarias del resolver para configuración inválida, referencias inválidas, symlink de raíz y sustitución posterior.\n\n**Pendiente:** ejecutar pruebas focalizadas y suite completa en Debian. No declarar 3.2-B validada hasta recibir resultados del propietario.\n\n## 8. Criterio de salida
+## 7. Implementación inicial publicada
+
+- `TrustedWorkspaceMountResolver` resuelve exclusivamente `mount:<id>` desde un mapa inyectado por composición confiable. Valida IDs, rutas absolutas, existencia, directorio real y canonicalidad al construir y al resolver.
+- `WorkspaceCapabilityExecutionService` ya no usa mapas estáticos de `workspace_id -> path`; carga el Workspace y la asociación desde la UoW canónica, valida owner/scope/estados y Grant exacto, y solo entonces resuelve el mount y construye el adaptador local confinado.
+- Se actualizaron pruebas de ejecución para crear asociación y workspace canónicos, y cubrir owner distinto, ámbito distinto, workspace suspendido, asociación suspendida y mount desconocido.
+- Se añadieron pruebas unitarias del resolver para configuración inválida, referencias inválidas, symlink de raíz y sustitución posterior.
+
+**Pendiente:** ejecutar pruebas focalizadas y suite completa en Debian. No declarar 3.2-B validada hasta recibir resultados del propietario.
+
+## 8. Criterio de salida
 
 3.2-B solo se considera validada cuando todas las pruebas focalizadas y la suite completa pasan en el checkout local del propietario, y `compileall` finaliza sin errores.
 
