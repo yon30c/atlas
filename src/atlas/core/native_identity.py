@@ -86,9 +86,9 @@ class NativeIdentityBinding:
     issuer_id: str
     subject_digest: str
     status: NativeIdentityBindingStatus
+    created_at: datetime
+    verified_at: datetime
     revision: int = 1
-    created_at: datetime | None = None
-    verified_at: datetime | None = None
     revoked_at: datetime | None = None
 
     def __post_init__(self) -> None:
@@ -100,17 +100,15 @@ class NativeIdentityBinding:
         if not isinstance(self.status, NativeIdentityBindingStatus):
             raise ContractError("status debe ser NativeIdentityBindingStatus")
         _revision(self.revision)
-        for field_name in ("created_at", "verified_at", "revoked_at"):
-            value = getattr(self, field_name)
-            if value is not None:
-                _utc(value, field_name)
-        if self.created_at is not None and self.verified_at is not None:
-            if self.verified_at < self.created_at:
-                raise ContractError("verified_at no puede preceder created_at")
+        _utc(self.created_at, "created_at")
+        _utc(self.verified_at, "verified_at")
+        if self.verified_at < self.created_at:
+            raise ContractError("verified_at no puede preceder created_at")
+        if self.revoked_at is not None:
+            _utc(self.revoked_at, "revoked_at")
+            if self.revoked_at < self.created_at:
+                raise ContractError("revoked_at no puede preceder created_at")
         if self.status is NativeIdentityBindingStatus.ACTIVE and self.revoked_at is not None:
             raise ContractError("un binding activo no puede tener revoked_at")
         if self.status is NativeIdentityBindingStatus.REVOKED and self.revoked_at is None:
             raise ContractError("un binding revocado requiere revoked_at")
-        if self.created_at is not None and self.revoked_at is not None:
-            if self.revoked_at < self.created_at:
-                raise ContractError("revoked_at no puede preceder created_at")
