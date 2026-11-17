@@ -117,9 +117,10 @@ class SQLiteNativeAgentIdentityAuthority(NativeAgentIdentityAuthorityPort):
             ).fetchone()
             return None if row is None else self._from_row(row)
 
-    def has_active_native_agent_binding(self, identity_id: str) -> bool:
-        """Require an active binding whose native issuer is also active."""
+    def has_active_native_agent_binding(self, identity_id: str, issuer_id: str) -> bool:
+        """Require the exact issuer/AGENT binding and an active issuer."""
         validate_canonical_uuid4(identity_id, "identity_id")
+        validate_canonical_uuid4(issuer_id, "issuer_id")
         with self._read_connection() as connection:
             row = connection.execute(
                 """
@@ -128,11 +129,12 @@ class SQLiteNativeAgentIdentityAuthority(NativeAgentIdentityAuthorityPort):
                 JOIN native_identity_issuers AS issuer
                   ON issuer.issuer_id = binding.issuer_id
                 WHERE binding.identity_id = ?
+                  AND binding.issuer_id = ?
                   AND binding.status = 'ACTIVE'
                   AND issuer.status = 'ACTIVE'
                 LIMIT 1
                 """,
-                (identity_id,),
+                (identity_id, issuer_id),
             ).fetchone()
         return row is not None
 
