@@ -4,6 +4,27 @@
 #include <errno.h>
 #include <poll.h>
 #include <stdio.h>
+#include <string.h>
+
+static void test_output_escaping(void) {
+    bo_report report = {0};
+    FILE *stream = tmpfile();
+    char output[2048];
+    size_t count;
+
+    assert(stream != NULL);
+    report.exe_first_available = true;
+    strcpy(report.exe_target, "parent\\nAUTHORIZATION=FORGED");
+    bo_print_report(stream, &report);
+    rewind(stream);
+    count = fread(output, 1U, sizeof(output) - 1U, stream);
+    output[count] = '\\0';
+
+    assert(strstr(output,
+                  "parent_exe_target=parent\\x5cnAUTHORIZATION=FORGED") != NULL);
+    assert(strstr(output, "\\nAUTHORIZATION=FORGED\\n") == NULL);
+    assert(fclose(stream) == 0);
+}
 
 static void test_read_classification(void) {
     assert(bo_classify_read(10U, 10U, 0) == BV_OK);
@@ -105,6 +126,7 @@ static void test_live_observation_smoke(void) {
 }
 
 int main(void) {
+    test_output_escaping();
     test_read_classification();
     test_pidfd_classification();
     test_snapshot_comparison();
