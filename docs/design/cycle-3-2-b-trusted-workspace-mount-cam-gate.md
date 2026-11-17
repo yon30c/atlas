@@ -1,6 +1,6 @@
 # Cycle 3.2-B — Trusted Workspace Mount Resolver y CAM Gate
 
-**Estado:** diseño preparado; implementación pendiente de revisión y pruebas locales.
+**Estado:** implementación inicial publicada; pruebas focalizadas y suite completa pendientes de ejecución local.
 **Base:** rama Cycle 3.2-A, commit `9ce3a4875b09888f6b3e9867df37fadd0875f55d`.
 **Rama de trabajo:** `feature/cycle-3-2-b-trusted-workspace-mount-cam-gate`.
 **No habilita la consola ni capacidades protegidas.**
@@ -116,13 +116,13 @@ No introducir llamadas de red, Broker, shell, runtime, Skills, escritura ni muta
 - Suite completa: `python -m unittest discover -s tests -t tests -v`.
 - Compilación: `python -m compileall -q src tests`.
 
-## 7. Criterio de salida
+## 7. Implementación inicial publicada\n\n- `TrustedWorkspaceMountResolver` resuelve exclusivamente `mount:<id>` desde un mapa inyectado por composición confiable. Valida IDs, rutas absolutas, existencia, directorio real y canonicalidad al construir y al resolver.\n- `WorkspaceCapabilityExecutionService` ya no usa mapas estáticos de `workspace_id -> path`; carga el Workspace y la asociación desde la UoW canónica, valida owner/scope/estados y Grant exacto, y solo entonces resuelve el mount y construye el adaptador local confinado.\n- Se actualizaron pruebas de ejecución para crear asociación y workspace canónicos, y cubrir owner distinto, ámbito distinto, workspace suspendido, asociación suspendida y mount desconocido.\n- Se añadieron pruebas unitarias del resolver para configuración inválida, referencias inválidas, symlink de raíz y sustitución posterior.\n\n**Pendiente:** ejecutar pruebas focalizadas y suite completa en Debian. No declarar 3.2-B validada hasta recibir resultados del propietario.\n\n## 8. Criterio de salida
 
 3.2-B solo se considera validada cuando todas las pruebas focalizadas y la suite completa pasan en el checkout local del propietario, y `compileall` finaliza sin errores.
 
 La implementación de 3.2-B no habilita la consola. La activación de capacidades protegidas sigue bloqueada hasta que la autenticación nativa y la frontera de sesión verificada estén implementadas y probadas en 3.2-C.
 
-## 8. Decisiones aplazadas
+## 9. Decisiones aplazadas
 
 - Carga/recarga dinámica de configuración de mounts y su política de permisos.
 - Montajes múltiples por workspace, bind mounts y namespaces.
