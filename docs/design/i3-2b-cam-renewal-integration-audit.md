@@ -555,3 +555,44 @@ El bootstrap offline no es una API administrativa ni una operación de runtime. 
 No se añade cascada automática a Grants, delegaciones ni Workspaces. Los consumidores protegidos deben continuar comprobando asociación ACTIVE en su propia frontera transaccional.
 
 **Checkpoint:** decisión del propietario recibida. Aún no hay implementación, migración, pruebas ni validación Debian para I3-2B.7B.
+
+## 16. I3-2B.7B.1 — contratos de dominio de autoridad administrativa
+
+**Estado:** contratos de dominio y puertos iniciales implementados; persistencia, bootstrap operativo y servicio lifecycle todavía pendientes.
+
+Archivos añadidos:
+- `src/atlas/core/platform_admin.py`
+- `src/atlas/ports/platform_admin_authority.py`
+- `tests/unit/test_platform_admin_domain_contracts.py`
+
+### 16.1 Modelo
+
+`PlatformAdminGrant` vincula una concesión a:
+- UserId e Identity(USER) canónicos UUIDv4;
+- revisión exacta de Identity(USER);
+- conjunto no vacío de permisos enumerados y no wildcard;
+- método de provisión explícito `OFFLINE_BOOTSTRAP`;
+- identificador UUIDv4 del evento de bootstrap;
+- ventana temporal UTC;
+- estado ACTIVE/REVOKED, revisión y datos obligatorios de revocación.
+
+Los únicos permisos definidos en este corte son `association.suspend` y `association.reactivate`. No existe permiso administrativo general ni herencia implícita.
+
+`require_platform_admin_permission` comprueba el permiso exacto, sujeto, identidad, revisión y ventana temporal. Esta función solo comprueba claims del grant: **no autentica al actor ni sustituye la relectura de identidad USER y autoridad canónica dentro de la misma UoW**. Su consumidor transaccional debe hacer esas comprobaciones y convertir cualquier ausencia/discrepancia en DENY.
+
+### 16.2 Separación de capacidades
+
+`PlatformAdminAuthorityReaderPort` es read-only y se limita a resolver grants canónicos, incluidos tombstones revocados.
+
+`PlatformAdminBootstrapPort` separa la capacidad de provisión inicial y expone únicamente `provision_first_admin`. Su contrato exige que la implementación sea cableada exclusivamente a un comando offline operado localmente; no debe inyectarse en servicios HTTP, composición runtime ni solicitudes de usuario. La implementación y sus controles de despliegue aún no existen.
+
+### 16.3 Límites deliberados de este corte
+
+- No se ha creado ni concedido ninguna autoridad administrativa real.
+- No hay migración SQLite ni tabla de grants todavía.
+- No hay adapter de persistencia ni composición UoW todavía.
+- No hay servicio de suspensión/reactivación todavía.
+- No se ha cambiado el repositorio de asociaciones ni se ha debilitado su protección.
+- No se afirma que las pruebas hayan sido ejecutadas en Debian; el nuevo archivo de pruebas queda preparado para validación del propietario.
+
+**Siguiente:** revisar/validar 7B.1 en Debian; después diseñar persistencia y bootstrap offline en 7B.2, manteniendo el bootstrap fuera de runtime.
