@@ -219,6 +219,14 @@ class VerifiedIdentityContextServiceTests(unittest.TestCase):
         with self.assertRaises(VerifiedIdentityContextRejected):
             service.verify(context)
 
+    def test_verify_in_caller_owned_unit_of_work_does_not_open_nested_transaction(self):
+        service = self._service()
+        context = service.admit_proof(self.reference)
+        with self.factory() as unit:
+            canonical = service.verify_in_unit_of_work(context, unit)
+            self.assertEqual(canonical.user_id, self.user.user_id)
+            self.assertTrue(unit._unit._connection_for(self.database).in_transaction)
+
     def test_context_requires_user_identity_and_positive_revisions(self):
         context = self._service().admit_proof(self.reference)
         with self.assertRaises(ContractError):
