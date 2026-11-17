@@ -210,3 +210,19 @@ Por tanto, no es correcto reutilizar la evidencia USER del propietario para aute
 - `python -m compileall -q src tests`: `COMPILE_EXIT_CODE=0`.
 
 I3-2A queda validado. I3-2B (autenticación AGENT y autoridad verificable de delegación) sigue pendiente y la ruta de solicitud AGENT permanece bloqueada.
+
+
+## 10. I3-2B — contrato de identidad AGENT y delegación verificable
+
+**Diseño documentado en la rama `design/verified-agent-delegation-i3-2b`; implementación pendiente.**
+
+Se añadió `docs/design/verified-agent-delegation-contract-i3-2b.md`, que define:
+- identidad AGENT canónica y prueba de autenticación independiente de USER;
+- autoridad de delegación emitida por el propietario USER autenticado;
+- delegación vinculada a un Grant concreto y limitada por su revisión, acciones, recursos, proyecto, entorno y expiración;
+- revalidación de identidad, binding, delegación y Grant, incluida revocación;
+- CAM como autorización final y `DelegationMode.DELEGATED` como metadata, nunca evidencia;
+- requisitos de UoW/fencing, concurrencia, idempotencia y pruebas negativas;
+- secuencia de slices I3-2B.1 a I3-2B.6.
+
+**Estado:** solo documentación. `GrantRenewalService.request_renewal` permanece fail-closed. No se amplían tipos USER, no se crea persistencia ni se habilitan rutas AGENT.
