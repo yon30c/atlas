@@ -4,6 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from atlas.adapters.sqlite import SQLITE_MIGRATIONS
 from atlas.adapters.sqlite.local_authority_composition import (
     SQLiteLocalAuthorityFoundation,
     compose_sqlite_local_authority,
@@ -50,10 +51,15 @@ class SQLiteLocalAuthorityCompositionTests(unittest.TestCase):
                     "SELECT name FROM sqlite_master WHERE type='table'"
                 )
             }
-        self.assertEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17])
+        self.assertEqual(
+            versions,
+            list(range(1, len(SQLITE_MIGRATIONS) + 1)),
+        )
         self.assertIn("authorization_grants", tables)
         self.assertIn("atlas_projects", tables)
         self.assertIn("atlas_environments", tables)
+        self.assertIn("atlas_project_environments", tables)
+        self.assertIn("atlas_workspaces", tables)
         self.assertIn("authority_change_operations", tables)
         self.assertIn("multi_authority_change_operations", tables)
         self.assertIn("multi_authority_change_targets", tables)
