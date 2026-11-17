@@ -1,6 +1,6 @@
 # Diseño V1 del validador aislado de bootstrap LOCAL
 
-**Estado:** propuesta de diseño para revisión; no implementada ni aprobada para ejecución privilegiada.  
+**Estado:** alcance V1 aprobado por el propietario el 16-11-2026 para implementación aislada sin privilegios; todavía no implementado. No aprobado para ejecución privilegiada.  
 **Rama objetivo:** `feature/terminal-commands`.  
 **Fecha:** 16 de noviembre de 2026.  
 **Relacionado:** `local-bootstrap-privilege-validation-contract.md`, `local-bootstrap-privilege-boundary.md`, `tools/bootstrap-probe/README.md`.
@@ -197,6 +197,8 @@ V1 se considera completo únicamente cuando:
 
 Cerrar V1 no aprueba A, no autoriza PAM ni helper privilegiado y no resuelve la procedencia de TTY. Después de V1 se decidirá si existe una vía técnicamente defendible para un recolector de observaciones V2 o si corresponde descartar A y reabrir el diseño de B.
 
-## 10. Decisión solicitada
+## 10. Decisión registrada
 
-Revisar y aprobar este alcance V1 antes de escribir código. La aprobación de V1 autorizaría únicamente un parser/evaluador aislado y pruebas sin privilegios; no autorizaría integración con el sistema real ni cambios de host.
+El propietario aprobó este alcance el 16-11-2026. Queda autorizada únicamente la implementación del parser/evaluador aislado y sus pruebas sin privilegios, respetando todas las exclusiones de este documento.
+
+La aprobación no autoriza recolector real de procesos, integración con procfs/TTY/pidfd, validación del sudo real, V2, PAM, helper privilegiado, claves, configuración protegida, cambios del host, SQLite/CAM ni integración con runtime. Cualquier ampliación requiere una propuesta separada y aprobación explícita.
