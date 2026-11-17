@@ -8,6 +8,7 @@ import unittest
 
 from atlas.adapters.sqlite.database import SQLiteDatabase
 from atlas.adapters.sqlite.identity_authority import SQLiteIdentityAuthority
+from atlas.adapters.sqlite.local_authority_unit_of_work import SQLiteLocalAuthorityUnitOfWork
 from atlas.adapters.sqlite.migrations import SQLITE_MIGRATIONS
 from atlas.adapters.sqlite.project_environment_repository import SQLiteProjectEnvironmentRepository
 from atlas.adapters.sqlite.workspace_registry_repository import SQLiteWorkspaceRegistryRepository
@@ -151,6 +152,18 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
                 joined.create_workspace(self.workspace)
                 self.assertEqual(
                     joined.get_workspace("workspace-main"), self.workspace
+                )
+                raise RuntimeError("force outer rollback")
+        self.assertIsNone(self.repository.get_workspace("workspace-main"))
+
+    def test_local_authority_uow_exposes_workspace_registry_on_same_transaction(self):
+        self.repository.create_association(self.association)
+        with self.assertRaisesRegex(RuntimeError, "force outer rollback"):
+            with SQLiteLocalAuthorityUnitOfWork(self.database) as unit:
+                self.assertIs(unit.workspaces._database, self.database)
+                unit.workspaces.create_workspace(self.workspace)
+                self.assertEqual(
+                    unit.workspaces.get_workspace("workspace-main"), self.workspace
                 )
                 raise RuntimeError("force outer rollback")
         self.assertIsNone(self.repository.get_workspace("workspace-main"))
