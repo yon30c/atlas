@@ -6,21 +6,22 @@ cd "$ROOT"
 
 CC=${CC:-cc}
 COMMON_FLAGS="-std=c11 -Wall -Wextra -Wpedantic -Werror"
+INCLUDE_FLAGS="-Itools/bootstrap-validator"
 
-$CC $COMMON_FLAGS -O2 \
+$CC $COMMON_FLAGS $INCLUDE_FLAGS -O2 \
   -o /tmp/atlas-bootstrap-validator-tests \
   tools/bootstrap-validator/bootstrap_validator.c \
   tools/bootstrap-validator/test_bootstrap_validator.c
 /tmp/atlas-bootstrap-validator-tests
 
-$CC $COMMON_FLAGS -O2 \
+$CC $COMMON_FLAGS $INCLUDE_FLAGS -O2 \
   -o /tmp/atlas-bootstrap-observer-tests \
   tools/bootstrap-validator/bootstrap_validator.c \
   tools/bootstrap-observer/bootstrap_observer_linux.c \
   tools/bootstrap-observer/test_bootstrap_observer_linux.c
 /tmp/atlas-bootstrap-observer-tests
 
-$CC $COMMON_FLAGS -O2 \
+$CC $COMMON_FLAGS $INCLUDE_FLAGS -O2 \
   -o /tmp/atlas-bootstrap-observer \
   tools/bootstrap-validator/bootstrap_validator.c \
   tools/bootstrap-observer/bootstrap_observer_linux.c \
