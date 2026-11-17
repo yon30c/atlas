@@ -1,6 +1,6 @@
 # Cycle 3.2 — consola confiable y registro de workspaces
 
-**Estado:** propuesta técnica derivada de la inspección de `main`; pendiente de aprobación del contrato antes de implementar migraciones o comportamiento ejecutable.
+**Estado:** contrato técnico aprobado por el propietario. Cycle 3.2-A está implementado en rama de trabajo y pendiente de verificación local; ver `cycle-3-2-a-workspace-registry-implementation.md`.
 
 **Base inspeccionada:** `1a0523280d42e14986c370ebb88887ce527a6403`.
 
@@ -177,3 +177,16 @@ La UoW compartida debe exponer las nuevas lecturas de Workspace y asociación Pr
 - Cambios de host, Docker, Broker, mounts o systemd.
 - Escritura de workspace, shell, ejecución de Skills o runtime conectado.
 - Multi-nodo, almacenamiento compartido o fencing distribuido.
+
+
+## 11. Registro de aprobación e implementación
+
+El propietario aprobó las cinco decisiones de la sección 9:
+
+1. Project–Environment muchos-a-muchos mediante `atlas_project_environments`.
+2. Un único `owner_user_id` canónico por workspace en el perfil inicial.
+3. `root_ref` simbólico en SQLite, resuelto posteriormente por configuración confiable del despliegue.
+4. Capacidades protegidas de consola deshabilitadas hasta disponer de autenticación verificable operacional.
+5. Orden de implementación 3.2-A, 3.2-B y 3.2-C.
+
+La primera implementación usa `mount:<id>` como formato de `root_ref`. El detalle del esquema v18, repositorio, UoW y pruebas añadidas está en `cycle-3-2-a-workspace-registry-implementation.md`. La implementación no se considera validada hasta ejecutar las pruebas en Debian.
