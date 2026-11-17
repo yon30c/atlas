@@ -183,6 +183,7 @@ class AgentDelegationDomainContractTests(unittest.TestCase):
             revoked_by_user_id=self.owner_user_id,
         )
         self.assertEqual(revoked.status, AgentDelegationStatus.REVOKED)
+        validate_agent_delegation_transition(active, revoked)
         with self.assertRaises(ContractError):
             validate_agent_delegation_transition(
                 revoked, replace(revoked, revision=3)
