@@ -21,6 +21,8 @@ executable metadata and the controlling TTY when available.
 A consistent result means only that the bounded observations available to this
 program did not contradict the limited V1 rules during this sample. procfs
 reads are not atomic and a process may change immediately after observation.
+Executable target text is escaped before printing so control characters cannot
+forge additional report lines.
 
 ## Build and run automated tests
 
