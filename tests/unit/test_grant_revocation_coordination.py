@@ -20,7 +20,9 @@ from atlas.core.errors import AuthorizationError
 from atlas.core.enums import DelegationMode
 from atlas.core.identity import Identity, IdentityKind, IdentityStatus
 from tests.fixtures.verified_identity import (
-    OWNER_USER_ID, OWNER_IDENTITY_ID, VERIFIED_OWNER,
+    OWNER_IDENTITY_ID,
+    OWNER_USER_ID,
+    VERIFIED_OWNER,
     FakeVerifiedIdentityContextVerifier,
 )
 from atlas.memory.authority_changes import (
@@ -250,7 +252,15 @@ class GrantRevocationCoordinationTests(unittest.TestCase):
             identity_verifier=self.identity_verifier,
         )
 
-    def revoke(self, context=None, grant_id=None, idempotency_key="idem-001", now=NOW, *, verified_identity=VERIFIED_OWNER):
+    def revoke(
+        self,
+        context=None,
+        grant_id=None,
+        idempotency_key="idem-001",
+        now=NOW,
+        *,
+        verified_identity=VERIFIED_OWNER,
+    ):
         return self.service.revoke(
             context or self.context,
             grant_id or self.grant.grant_id,
