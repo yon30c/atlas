@@ -2400,7 +2400,20 @@ CORE_SCHEMA_V24 = SQLiteMigration(
           AND d.project_id = g.project_id
           AND d.environment = g.environment
           AND d.resource_type = g.resource_type
-          AND d.resource_ids_json = g.resource_ids_json
+          AND NOT EXISTS (
+              SELECT 1 FROM json_each(g.resource_ids_json) granted
+              WHERE NOT EXISTS (
+                  SELECT 1 FROM json_each(d.resource_ids_json) delegated
+                  WHERE delegated.value = granted.value
+              )
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM json_each(d.resource_ids_json) delegated
+              WHERE NOT EXISTS (
+                  SELECT 1 FROM json_each(g.resource_ids_json) granted
+                  WHERE granted.value = delegated.value
+              )
+          )
           AND EXISTS (
               SELECT 1 FROM json_each(g.actions_json)
               WHERE value = 'grant.renewal.request'
