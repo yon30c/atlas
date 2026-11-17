@@ -21,6 +21,7 @@ from atlas.authentication.native import (
     NativeProofReference,
     NativeSubject,
 )
+from atlas.core.errors import ContractError
 from atlas.core.identity import IdentityStatus
 from atlas.identity.verified_identity_context_service import (
     VerifiedIdentityContextRejected,
