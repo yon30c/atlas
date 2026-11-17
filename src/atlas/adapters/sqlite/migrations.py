@@ -2446,6 +2446,18 @@ CORE_SCHEMA_V24 = SQLiteMigration(
         SELECT RAISE(ABORT, 'Grant renewal authority evidence is immutable');
     END;
 
+    CREATE TRIGGER authorization_grant_renewals_one_pending_per_grant
+    BEFORE INSERT ON authorization_grant_renewals
+    WHEN NEW.status = 'pending'
+      AND EXISTS (
+          SELECT 1 FROM authorization_grant_renewals existing
+          WHERE existing.grant_id = NEW.grant_id
+            AND existing.status = 'pending'
+      )
+    BEGIN
+        SELECT RAISE(ABORT, 'a Grant may have only one pending renewal request');
+    END;
+
     CREATE INDEX authorization_grant_renewals_delegation
         ON authorization_grant_renewals(delegation_id, delegation_revision);
     """,
