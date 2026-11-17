@@ -266,3 +266,30 @@ El contrato queda listo para implementación cuando la revisión confirme:
 - pruebas negativas y fail-closed definidas.
 
 **Estado actual:** propuesta documental únicamente. `GrantRenewalService.request_renewal` permanece bloqueado. No se ha añadido código, migración, autoridad productiva ni endpoint.
+
+
+## 11. I3-2B.1 — contratos de dominio y puertos
+
+**Implementación contractual en curso en la rama `design/verified-agent-delegation-i3-2b`; sin adaptadores ni persistencia.**
+
+Tipos añadidos:
+- `CanonicalAgentIdentity`, separado de `CanonicalUserIdentity` y sin `UserId`.
+- `VerifiedAgentIdentityContext`, AGENT-only, con revisión de identidad/binding, issuer, realm, audience, timestamps, reference y attestation redactadas en repr.
+- `NativeAgentIdentityBinding`, binding separado de USER y con revocación terminal.
+- `AgentDelegationScope`, `AgentDelegation` y `VerifiedAgentDelegationContext`, con recursos/acciones explícitos, vínculo al Grant/revisión, propietario/identidad AGENT, estado, revocación, realm/audience y payload canónico de attestation.
+- Puertos separados para autoridad AGENT, binding AGENT, verificación de identidad AGENT, ciclo de vida de delegación y verificación de evidencia de delegación.
+
+Invariantes en modelos:
+- AGENT canónico exige UUIDv4 y `IdentityKind.AGENT`; USER no se acepta.
+- La evidencia AGENT rechaza `IdentityKind.USER`, revisiones inválidas, timestamps no UTC y TTL inválido.
+- Scope no admite conjuntos vacíos ni wildcards.
+- Delegación exige owner/agent distintos, atribución al IdentityId del propietario, revisión del Grant, ventana temporal y auditoría de revocación coherentes.
+- La evidencia de delegación incluye protocolo, realm/audience, owner/agent, Grant/revisión, proyecto/entorno, scope y vigencia en serialización canónica ordenada.
+
+**Límite:** los modelos validan estructura e invariantes locales; no demuestran autenticidad, estado canónico, subset contra un Grant real ni autorización CAM. Esas verificaciones pertenecen a las autoridades/verificadores y deben fallar cerrado.
+
+### Hallazgo de consistencia que condiciona I3-2B.5
+
+La auditoría existente `docs/design/assistant-operation-consistency-boundary.md` registra que la composición actual de Identity abre su propia SQLite/UoW y que Grants/Renewals usan una UoW distinta; no se ha demostrado una base/UoW canónica compartida entre esas autoridades. Por ello no se puede afirmar hoy atomicidad entre Identity, binding, delegación, Grant y renovación. I3-2B.5 deberá diseñar y probar una UoW compartida o un mecanismo de fencing/consistencia equivalente antes de habilitar cualquier solicitud AGENT. Si no se demuestra, la ruta permanece bloqueada.
+
+**Validación:** se añadieron pruebas unitarias focalizadas en `tests/unit/test_agent_delegation_domain_contracts.py`. No se ha ejecutado la suite en Debian desde esta rama; la validación queda pendiente del entorno del propietario.
