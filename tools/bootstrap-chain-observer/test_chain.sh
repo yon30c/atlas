@@ -36,5 +36,16 @@ case "$status" in
 esac
 grep -qx 'AUTHORIZATION=NOT_PROVIDED' /tmp/atlas-bootstrap-chain-smoke.txt
 
+if /tmp/atlas-bootstrap-chain-observer unexpected-argument >/dev/null 2>&1; then
+  printf '%s\n' "Observer unexpectedly accepted command-line arguments." >&2
+  exit 1
+else
+  status=$?
+  if [ "$status" -ne 64 ]; then
+    printf '%s\n' "Unexpected argument exit code: $status" >&2
+    exit 1
+  fi
+fi
+
 printf '%s\n' "Bootstrap chain observer build and tests completed."
 printf '%s\n' "Observer binary: /tmp/atlas-bootstrap-chain-observer"
