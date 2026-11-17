@@ -360,3 +360,68 @@ Sobre el HEAD `8f65c3646987a2402ecd089f9b426568f60f2ec2`, el propietario ejecut�
 - `python -m compileall -q src tests`: **COMPILE_EXIT_CODE=0**.
 
 La validación incluye la suite `tests/unit/test_agent_renewal_approval_lifecycle.py`, incluida la corrección de los dos tests que preparaban el fixture `SimpleNamespace` mediante `dataclasses.replace`. No se afirma ejecución de CI. I3-2B.7A queda validada por el propietario en Debian.
+
+
+## 14. I3-2B.7B — auditoría de autoridad para lifecycle Project/Environment
+
+**Estado:** inspección de diseño completada; implementación de transiciones suspend/reactivate aún no iniciada.  
+**Base inspeccionada:** commit `2fe3386535a29a89075998c82f46401eba5c90bf` (incluye el registro de validación 7A).
+
+### 14.1 Comportamiento actual confirmado
+
+- `ProjectEnvironmentAssociation` contiene únicamente `project_id`, `environment_id`, `status` y `revision`. No conserva actor, motivo ni timestamp de la decisión.
+- `SQLiteWorkspaceRegistryRepository.update_association` acepta directamente una asociación y `expected_revision`; ejecuta CAS y escribe `updated_at` usando el reloj del sistema dentro del adaptador. No recibe `OperationContext`, evidencia USER verificada, política de autorización ni motivo.
+- El puerto `ProjectEnvironmentAssociationPort` expone `update_association` como mutación de persistencia, sin distinguir una operación autorizada de un cambio administrativo interno.
+- El modelo de asociación permite ACTIVE ↔ SUSPENDED y el repositorio no define por sí mismo quién puede realizar ninguna de las dos transiciones.
+- No se encontró un servicio de aplicación dedicado a suspender/reactivar asociaciones dentro de `src/atlas/workspace`. El repositorio es una primitiva de persistencia, no una frontera de autorización.
+- `SQLiteAuthorityChangeStore` es una infraestructura genérica de reserva/idempotencia y declara expresamente que no es el coordinador de autoridad. No se debe reutilizar como si autorizara o ejecutara por sí solo el lifecycle de Project/Environment.
+
+### 14.2 Consumers y gate de asociación
+
+- `WorkspaceCapabilityExecutionService.execute` lee la asociación exacta dentro de `SQLiteLocalAuthorityUnitOfWork` y exige ACTIVE antes de resolver el mount y ejecutar listado/lectura. Este es el gate de ejecución observado para esas capacidades.
+- `WorkspaceListingService`, `WorkspaceFileReadingService` y `WorkspaceFileWritingService` son coordinadores de adaptadores de bajo nivel; no validan identidad, asociación ni CAM por sí solos. No deben exponerse como fronteras de capacidad protegida.
+- `LocalWorkspaceWriteAdapter` declara expresamente que no sustituye CAM ni coordina autoridad. Su uso debe permanecer detrás de una frontera de aplicación autorizada.
+- Los Workspaces existentes no se modifican automáticamente al suspender la asociación. Los consumidores protegidos deben seguir comprobando la asociación activa dentro de su propia frontera transaccional.
+
+### 14.3 Contrato técnico propuesto para 7B
+
+La transición debe componerse en una sola UoW SQLite local y fallar cerrada:
+
+1. Recibir una solicitud explícita con Project/Environment, estado destino, `expected_revision`, motivo y `OperationContext`; no aceptar actor, owner ni timestamp como claims libres.
+2. Verificar identidad USER y evidencia verificada con `verify_in_unit_of_work(context, unit)` dentro de la UoW.
+3. Leer asociación canónica y comprobar identidad exacta, estado actual, revisión esperada y transición permitida.
+4. Exigir un puerto de autorización específico de lifecycle, por ejemplo `ProjectEnvironmentAssociationLifecycleAuthorizerPort`. La ausencia de implementación o una decisión no-ALLOW debe denegar. No crear un authorizer permisivo por defecto.
+5. Obtener timestamp exclusivamente de un `Clock` confiable inyectado.
+6. Persistir un evento inmutable con asociación, estado anterior/nuevo, revisión anterior/nueva, actor USER canónico, motivo, timestamp confiable y referencia de contexto.
+7. Ejecutar CAS de la asociación y escribir evento dentro de la misma UoW; cualquier fallo debe revertir ambos.
+8. Rechazar transición redundante, revisión obsoleta, motivo vacío, actor no USER, identidad inactiva/no verificada o falta de política.
+
+### 14.4 Integridad de persistencia propuesta
+
+Se recomienda una migración aditiva (siguiente versión disponible después de V24) para un ledger de lifecycle dedicado, sin alterar el significado de V18:
+
+- FK a la asociación compuesta y a la identidad USER canónica.
+- estado anterior/nuevo restringidos a ACTIVE/SUSPENDED;
+- revisiones positivas y consecutivas;
+- motivo obligatorio y normalizado;
+- timestamp UTC;
+- unicidad por asociación y revisión resultante;
+- triggers que impidan UPDATE/DELETE de eventos;
+- trigger que exija un evento compatible para cada cambio de estado de la asociación, evitando que una escritura directa omita la auditoría;
+- evento y cambio canónico dentro de la misma transacción.
+
+La creación inicial de la asociación debe conservar una semántica separada; este ledger cubre transiciones posteriores ACTIVE ↔ SUSPENDED. No se deben inventar actor ni motivo para filas históricas.
+
+### 14.5 Decisión de autorización aún necesaria
+
+El repositorio no define si la autoridad corresponde al propietario USER del Project, a un administrador de plataforma, a un rol organizacional o a una combinación. No hay evidencia suficiente para escoger una de esas políticas.
+
+Por seguridad, 7B no debe conceder la transición a cualquier USER autenticado ni inferir autoridad de `context.user_id`, `origin`, pertenencia a un Project o posesión de un Grant ordinario. El puerto específico propuesto deja esta política explícita y fail-closed hasta que se defina una autoridad concreta.
+
+### Estado de 7B
+
+- Auditoría estática y contrato técnico propuesto completados.
+- No se modificó código productivo ni esquema.
+- No se afirma validación de tests ni CI para 7B.
+- 7A permanece validada por el propietario: 1,413 tests OK y compileall exit 0 sobre HEAD `8f65c3646987a2402ecd089f9b426568f60f2ec2`.
+- PR #16 permanece Draft, abierto y sin fusionar.
