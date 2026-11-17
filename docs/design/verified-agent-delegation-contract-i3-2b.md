@@ -304,3 +304,23 @@ Un dataclass inmutable valida un **snapshot**, pero no conoce el snapshot anteri
 La irreversibilidad histórica se valida con `validate_agent_delegation_transition(current, updated)`: una fila REVOKED no puede volver a ACTIVE ni alterar su auditoría de revocación; la revisión debe avanzar exactamente en una unidad. La autoridad debe invocar esta función tras leer el registro canónico y dentro de la misma transacción o frontera de fencing que realiza CAS. La función aislada no sustituye el control transaccional.
 
 Las pruebas de redacción deben comprobar que el **valor secreto** no aparece en `repr`, no que desaparezca el nombre del campo: `verification_ref=<redacted>` y `attestation=<redacted>` son marcadores esperados y no revelan los valores.
+
+
+## 12. I3-2B.2 — autoridad canónica de identidad AGENT
+
+**Implementación inicial añadida en la rama de trabajo; pendiente de validación del propietario en Debian.**
+
+La inspección de CORE_SCHEMA_V6 confirmó que identity_records ya admite los tipos user, agent, service, watcher y system, y exige user_id IS NULL para todo tipo distinto de USER. Por tanto, I3-2B.2 no introduce una tabla paralela ni modifica el esquema histórico.
+
+Implementación:
+- SQLiteAgentIdentityAuthority crea Identity(AGENT) con UUIDv4 y user_id=NULL.
+- La resolución filtra simultáneamente por identity_id, identity_kind='agent' y user_id IS NULL; identidades USER y otros tipos nunca se devuelven.
+- Los cambios de estado usan compare-and-swap sobre revision, mantienen revocación terminal y participan en una SQLiteUnitOfWork suministrada cuando existe.
+- La autoridad no crea atlas_users, no gestiona credenciales/proofs, bindings, autenticación, delegaciones ni autorización.
+- El adaptador se exporta desde atlas.adapters.sqlite.
+
+Pruebas añadidas en tests/unit/test_sqlite_agent_identity_authority.py: creación UUIDv4, aislamiento USER/AGENT, desconocidos, UUID inválido, duplicados, CAS, revocación terminal, entradas inválidas, concurrencia y UoW suministrada.
+
+**Límite:** el esquema común identity_records es el almacenamiento de identidad canónica ya existente; la autoridad AGENT mantiene API y responsabilidad separadas. Este slice no implementa proof admission, NativeAgentIdentityBinding persistente, delegación, composition root de producción ni habilita GrantRenewalService.request_renewal.
+
+**Validación:** el código y las pruebas están publicados, pero no se declara que hayan sido ejecutados. Se requiere validación focalizada, suite completa y compileall en Debian antes de cerrar I3-2B.2.
