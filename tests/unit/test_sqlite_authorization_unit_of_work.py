@@ -14,11 +14,13 @@ from atlas.adapters.sqlite.authorization_unit_of_work import (
 )
 from atlas.adapters.sqlite.migrations import SQLITE_MIGRATIONS
 from atlas.authorization.grant_management import GrantManagementService
+from atlas.authorization.renewal_service import GrantRenewalService
 from tests.fixtures.verified_identity import (
-    OWNER_USER_ID, OWNER_IDENTITY_ID, VERIFIED_OWNER,
+    OWNER_IDENTITY_ID,
+    OWNER_USER_ID,
+    VERIFIED_OWNER,
     FakeVerifiedIdentityContextVerifier,
 )
-from atlas.authorization.renewal_service import GrantRenewalService
 from atlas.core.context import OperationContext
 from atlas.core.enums import DelegationMode
 from atlas.core.identity import Identity, IdentityKind, IdentityStatus
