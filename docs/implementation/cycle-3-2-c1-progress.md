@@ -65,7 +65,7 @@ Se implementó:
 
 **Validación C1-4 confirmada por el propietario:** suite completa 1,254 OK; `python -m compileall -q src tests` con `COMPILE_EXIT_CODE=0`; HEAD `e153a5c`; rama limpia y alineada con origin.
 
-La migración v19/ solo se ha añadido al código del PR; no se ha aplicado a la base de datos de producción. La validación local de migración debe hacerse en bases de prueba temporales.
+La migración v19 solo se ha añadido al código del PR; no se ha aplicado a la base de datos de producción. La validación local de migración debe hacerse en bases de prueba temporales.
 
 ## Slice C1-5 — persistencia Authentication Authority y proofs one-shot
 
