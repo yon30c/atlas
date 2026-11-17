@@ -71,6 +71,8 @@ class GrantRenewalService:
         The legacy positional now parameter is intentionally ignored.
         Security time is obtained only from the trusted injected Clock.
         """
+        if not isinstance(context, OperationContext):
+            raise ContractError("context debe ser OperationContext")
         if (
             not isinstance(verified_agent_identity, VerifiedAgentIdentityContext)
             or not isinstance(verified_delegation, VerifiedAgentDelegationContext)
