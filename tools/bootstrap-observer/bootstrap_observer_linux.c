@@ -119,7 +119,7 @@ static bool same_stat(const bv_stat *a, const bv_stat *b) {
            a->tpgid == b->tpgid && a->starttime == b->starttime;
 }
 
-static bv_pidfd_state inspect_pidfd(int fd) {
+static bv_pidfd_state inspect_pidfd(int fd, int *error_number) {
     struct pollfd item;
     int result;
 
@@ -131,10 +131,16 @@ static bv_pidfd_state inspect_pidfd(int fd) {
         return BV_PIDFD_OPEN_UNSIGNALED;
     }
     if (result < 0) {
+        if (error_number != NULL) {
+            *error_number = errno;
+        }
         return BV_PIDFD_NOT_REQUESTED;
     }
-    if ((item.revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL)) != 0) {
+    if ((item.revents & POLLIN) != 0) {
         return BV_PIDFD_SIGNALED;
+    }
+    if (error_number != NULL) {
+        *error_number = EIO;
     }
     return BV_PIDFD_NOT_REQUESTED;
 }
@@ -267,6 +273,10 @@ int bo_collect(bo_report *report) {
     memset(report, 0, sizeof(*report));
     report->result = BV_OBSERVATION_INCOMPLETE;
     report->pidfd_state = BV_PIDFD_NOT_REQUESTED;
+    report->status_parse_first = BV_TRUNCATED;
+    report->status_parse_second = BV_TRUNCATED;
+    report->stat_parse_first = BV_TRUNCATED;
+    report->stat_parse_second = BV_TRUNCATED;
 
     self_pid = getpid();
     parent_pid = getppid();
@@ -279,7 +289,7 @@ int bo_collect(bo_report *report) {
 
     pidfd = open_pidfd(parent_pid);
     if (pidfd >= 0) {
-        report->pidfd_state = inspect_pidfd(pidfd);
+        report->pidfd_state = inspect_pidfd(pidfd, &report->pidfd_errno);
     } else {
         report->pidfd_errno = errno;
     }
@@ -397,12 +407,17 @@ int bo_collect(bo_report *report) {
     }
 
     if (pidfd >= 0) {
-        bv_pidfd_state final_state = inspect_pidfd(pidfd);
+        int final_pidfd_error = 0;
+        bv_pidfd_state final_state =
+            inspect_pidfd(pidfd, &final_pidfd_error);
         if (final_state == BV_PIDFD_SIGNALED) {
             report->pidfd_state = final_state;
             report->result = BV_OBSERVATION_INCONSISTENT;
         } else if (final_state != BV_PIDFD_OPEN_UNSIGNALED) {
             report->pidfd_state = BV_PIDFD_NOT_REQUESTED;
+            if (report->pidfd_errno == 0) {
+                report->pidfd_errno = final_pidfd_error;
+            }
             if (report->result != BV_OBSERVATION_INCONSISTENT) {
                 report->result = BV_OBSERVATION_INCOMPLETE;
             }
@@ -452,10 +467,18 @@ int bo_run_hold(bo_report *report, unsigned milliseconds) {
     }
     baseline = inspect_tty();
     if (!baseline.available) {
-        report->tty_changed = true;
         if (report->result != BV_OBSERVATION_INCONSISTENT) {
             report->result = BV_OBSERVATION_INCOMPLETE;
         }
+        return 0;
+    }
+    if (!report->tty_available ||
+        baseline.terminal_sid != report->terminal_sid ||
+        baseline.process_sid != report->process_sid ||
+        baseline.process_pgrp != report->process_pgrp ||
+        baseline.foreground_pgrp != report->foreground_pgrp) {
+        report->tty_changed = true;
+        report->result = BV_OBSERVATION_INCONSISTENT;
         return 0;
     }
 
@@ -467,8 +490,11 @@ int bo_run_hold(bo_report *report, unsigned milliseconds) {
             struct timespec remaining = interval;
             tty_observation current;
 
-            while (nanosleep(&remaining, &remaining) != 0 && errno == EINTR) {
-                continue;
+            while (nanosleep(&remaining, &remaining) != 0) {
+                if (errno == EINTR) {
+                    continue;
+                }
+                return -1;
             }
             current = inspect_tty();
             if (!current.available ||
