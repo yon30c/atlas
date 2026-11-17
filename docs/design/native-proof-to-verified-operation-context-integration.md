@@ -256,6 +256,8 @@ Implementado:
 
 **Documento de detalle:** `docs/design/native-authentication-i2-verified-context-contract.md`.
 
+La emisión de `VerifiedIdentityContext` pertenece a Identity Authority conforme B1-B-03D. Native Authentication Authority verifica credenciales y emite proofs; no resuelve bindings ni usuarios.
+
 **Estado:** contrato de implementación documentado; código I-2 pendiente.
 
 La inspección confirmó:
