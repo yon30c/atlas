@@ -264,6 +264,35 @@ class GrantRevocationCoordinationTests(unittest.TestCase):
             self.service.revoke(self.context, self.grant.grant_id, "idem-no-proof", NOW)
         self.assertEqual(self.coordinator.reserve_calls, 0)
 
+    def test_revoke_rejects_tampered_verified_identity_context(self):
+        from dataclasses import replace as dataclass_replace
+        tampered = dataclass_replace(
+            VERIFIED_OWNER,
+            identity_id="f6b2b66f-7c72-4d77-8d84-7d0a8c5a1006",
+        )
+        with self.assertRaises(AuthorizationError):
+            self.revoke(verified_identity=tampered, idempotency_key="idem-tampered")
+        self.assertEqual(self.coordinator.reserve_calls, 0)
+
+    def test_revoke_fails_closed_when_identity_verifier_is_unavailable(self):
+        service = GrantManagementService(
+            self.repository,
+            consumer_id="atlas-consumer-001",
+            revocation_authorizer=FakeCAM(),
+            proof_authorization=FakeProofAuthorization(),
+            change_coordinator=self.coordinator,
+            clock=FakeClock(),
+        )
+        with self.assertRaises(AuthorizationError):
+            service.revoke(
+                self.context,
+                self.grant.grant_id,
+                "idem-no-verifier",
+                NOW,
+                verified_identity=VERIFIED_OWNER,
+            )
+        self.assertEqual(self.coordinator.reserve_calls, 0)
+
     def test_revoke_uses_coordinator_and_never_repository_update(self):
         result = self.revoke(
             self.context, self.grant.grant_id, "idem-001", NOW
