@@ -294,6 +294,15 @@ class SQLiteAgentDelegationAuthorityTests(unittest.TestCase):
         self.assertEqual(revoked.revoked_at, self.clock.now())
         self.assertEqual(self._stored(delegation.delegation_id), revoked)
 
+        # Repeating with the current revision is idempotent and cannot rewrite
+        # the terminal audit timestamp or advance the revision again.
+        repeated = self.authority.revoke_delegation(
+            delegation.delegation_id,
+            expected_revision=2,
+            verified_owner_identity=self.owner_context,
+        )
+        self.assertEqual(repeated, revoked)
+
     def test_revocation_rejects_forged_or_expired_owner_evidence(self):
         delegation = self._create()
         forged = replace(self.owner_context, user_id=str(uuid4()))
