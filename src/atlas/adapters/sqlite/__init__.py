@@ -16,6 +16,7 @@ from atlas.adapters.sqlite.recovery_evidence_trust_policy_repository import (
 from atlas.adapters.sqlite.project_environment_repository import SQLiteProjectEnvironmentRepository
 from atlas.adapters.sqlite.identity_authority import SQLiteIdentityAuthority
 from atlas.adapters.sqlite.agent_identity_authority import SQLiteAgentIdentityAuthority
+from atlas.adapters.sqlite.agent_delegation_repository import SQLiteAgentDelegationRepository
 from atlas.adapters.sqlite.native_agent_identity_authority import SQLiteNativeAgentIdentityAuthority
 from atlas.adapters.sqlite.native_identity_authority import SQLiteNativeIdentityAuthority
 from atlas.adapters.sqlite.native_authentication_authority import SQLiteNativeAuthenticationAuthority
@@ -36,7 +37,7 @@ from atlas.adapters.sqlite.recovery_gate import LocalSQLiteRecoveryGateAdapter
 from atlas.adapters.sqlite.migrations import (
     SQLITE_MIGRATIONS, CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3,
     CORE_SCHEMA_V4, CORE_SCHEMA_V5, CORE_SCHEMA_V6, CORE_SCHEMA_V7, CORE_SCHEMA_V8,
-    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13, CORE_SCHEMA_V14, CORE_SCHEMA_V15, CORE_SCHEMA_V16, CORE_SCHEMA_V17, CORE_SCHEMA_V18, CORE_SCHEMA_V19, CORE_SCHEMA_V20, CORE_SCHEMA_V21, CORE_SCHEMA_V22,
+    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13, CORE_SCHEMA_V14, CORE_SCHEMA_V15, CORE_SCHEMA_V16, CORE_SCHEMA_V17, CORE_SCHEMA_V18, CORE_SCHEMA_V19, CORE_SCHEMA_V20, CORE_SCHEMA_V21, CORE_SCHEMA_V22, CORE_SCHEMA_V23,
 )
 
 __all__ = [
@@ -46,7 +47,7 @@ __all__ = [
     "SQLiteRecoveryEvidenceIssuerRegistryRepository",
     "SQLiteRecoveryEvidenceAdmissionRepository",
     "SQLiteProjectEnvironmentRepository", "SQLiteWorkspaceRegistryRepository",
-    "SQLiteIdentityAuthority", "SQLiteAgentIdentityAuthority", "SQLiteNativeAgentIdentityAuthority",
+    "SQLiteIdentityAuthority", "SQLiteAgentIdentityAuthority", "SQLiteNativeAgentIdentityAuthority", "SQLiteAgentDelegationRepository",
     "SQLiteNativeIdentityAuthority", "SQLiteNativeAuthenticationAuthority",
     "SQLiteLocalAuthorityUnitOfWork", "SQLiteLocalAuthorityUnitOfWorkFactory",
     "SQLiteAuthorizationUnitOfWork", "SQLiteAuthorizationUnitOfWorkFactory",
@@ -57,6 +58,6 @@ __all__ = [
     "CORE_SCHEMA_V4", "CORE_SCHEMA_V5", "CORE_SCHEMA_V6", "CORE_SCHEMA_V7", "CORE_SCHEMA_V8",
     "CORE_SCHEMA_V9", "CORE_SCHEMA_V10", "CORE_SCHEMA_V11", "CORE_SCHEMA_V12",
     "CORE_SCHEMA_V13", "CORE_SCHEMA_V14", "CORE_SCHEMA_V15", "CORE_SCHEMA_V16",
-    "CORE_SCHEMA_V17", "CORE_SCHEMA_V18", "CORE_SCHEMA_V19", "CORE_SCHEMA_V20", "CORE_SCHEMA_V21", "CORE_SCHEMA_V22",
+    "CORE_SCHEMA_V17", "CORE_SCHEMA_V18", "CORE_SCHEMA_V19", "CORE_SCHEMA_V20", "CORE_SCHEMA_V21", "CORE_SCHEMA_V22", "CORE_SCHEMA_V23",
     "CONVERSATION_MIGRATIONS", "CONVERSATION_SCHEMA_V1",
 ]
