@@ -20,7 +20,6 @@ from atlas.core.agent_delegation import (
 )
 from atlas.core.errors import AuthorizationError, ContractError, NotFoundError
 from atlas.core.identity import IdentityKind, IdentityStatus
-from atlas.core.native_identity import NativeIssuerStatus
 from atlas.core.verified_agent_identity_context import VerifiedAgentIdentityContext
 from atlas.identity.verified_agent_identity_context_service import (
     VerifiedAgentIdentityContextRejected,
@@ -142,9 +141,6 @@ class VerifiedAgentDelegationContextService:
         ):
             raise VerifiedAgentDelegationContextRejected("la identidad o vinculación AGENT no está activa")
 
-        issuer = unit.native_identity.get_native_issuer(delegation.issuer_id)
-        if issuer is None or issuer.issuer_id != delegation.issuer_id or issuer.status is not NativeIssuerStatus.ACTIVE:
-            raise VerifiedAgentDelegationContextRejected("issuer de delegación no activo")
 
     def verify_for_operation(
         self,
@@ -173,8 +169,11 @@ class VerifiedAgentDelegationContextService:
                     raise NotFoundError("delegación no encontrada")
                 if delegation.revision != expected_revision:
                     raise VerifiedAgentDelegationContextRejected("revisión de delegación obsoleta")
-                if delegation.agent_identity_id != canonical_agent.identity.identity_id:
-                    raise VerifiedAgentDelegationContextRejected("el AGENT autenticado no es el destinatario")
+                if (
+                    delegation.agent_identity_id != canonical_agent.identity.identity_id
+                    or delegation.issuer_id != verified_agent_identity.issuer_id
+                ):
+                    raise VerifiedAgentDelegationContextRejected("el AGENT autenticado no es el destinatario o issuer delegado")
                 grant = unit.grants.get(delegation.grant_id)
                 if grant is None:
                     raise VerifiedAgentDelegationContextRejected("Grant canónico no encontrado")
