@@ -172,6 +172,27 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
         with self.assertRaises(AuthorizationError):
             self.service.execute(plan, self.context, NOW, review_confirmed=True)
 
+    def test_missing_grant_denies_before_mount_resolution(self):
+        class ResolverMustNotRun:
+            called = False
+
+            def resolve(self, root_ref):
+                self.called = True
+                raise AssertionError("mount resolver must not run before CAM ALLOW")
+
+        resolver = ResolverMustNotRun()
+        service = WorkspaceCapabilityExecutionService(
+            unit_of_work_factory=self.uow_factory,
+            mount_resolver=resolver,
+        )
+        plan = self._plan(
+            IntentKind.WORKSPACE_LIST,
+            (("workspace_id", "demo"),),
+        )
+        with self.assertRaises(AuthorizationError):
+            service.execute(plan, self.context, NOW, review_confirmed=True)
+        self.assertFalse(resolver.called)
+
     def test_unconfirmed_plan_is_denied(self):
         plan = self._plan(
             IntentKind.WORKSPACE_LIST,
