@@ -1,6 +1,6 @@
 # Contrato de validación de privilegios para bootstrap LOCAL (candidato A)
 
-**Estado:** contrato general de validación pendiente de cierre; V1 del validador aislado completada y validada sin privilegios. Candidato A no aprobado para ejecución privilegiada.  
+**Estado:** V1 aislada completada; V2 de observación Linux aprobada para implementación y pendiente de pruebas Debian del propietario. Contrato general abierto; candidato A no aprobado para ejecución privilegiada.  
 **Rama:** `feature/terminal-commands`.  
 **Fecha:** 16 de noviembre de 2026.  
 **Relacionado:** `local-bootstrap-privilege-boundary.md`, `local-pam-bootstrap-authenticator.md`, `local-pam-bootstrap-proof-protocol.md`, `local-bootstrap-coordination-architecture.md`.
@@ -248,19 +248,23 @@ Condiciones obligatorias:
 7. Los fixtures y binarios se mantienen en el checkout o en rutas temporales no privilegiadas.
 8. Compilación estricta y pruebas negativas deben demostrar los estados exactos previstos; los datos incompletos fallan de forma cerrada.
 
-V1 quedó validada mediante compilación estricta, suite ampliada y ejecución con AddressSanitizer/UndefinedBehaviorSanitizer en Debian, según los resultados comunicados por el propietario. Este cierre no autoriza V2, integración con procesos reales, cambios del host ni ejecución privilegiada.
+V1 quedó validada mediante compilación estricta, suite ampliada y ejecución con AddressSanitizer/UndefinedBehaviorSanitizer en Debian, según los resultados comunicados por el propietario. La aprobación posterior y explícita del propietario del 16-11-2026 autoriza únicamente la V2 definida en `local-bootstrap-observer-v2-design.md`, bajo sus límites de solo observación, sin instalación ni cambios del host.
 
-### Etapa V2 — integración de solo observación en Debian
+### Etapa V2 — observador Linux de solo lectura (APROBADA PARA IMPLEMENTACIÓN)
 
-Solo después de revisión del contrato y sin PAM, claves, instalación ni cambios de configuración:
-1. ejecución ordinaria sin sudo;
-2. sudo directo desde terminal local;
+El propietario aprobó expresamente el 16-11-2026 la implementación de V2 según `local-bootstrap-observer-v2-design.md`. El alcance incluye un adaptador Linux separado que observa el proceso actual y su padre directo mediante lecturas acotadas de procfs, pidfd, metadatos de `/proc/PID/exe` y consultas TTY. Reutiliza los parsers/evaluador puros V1, sin modificar su semántica.
+
+La aprobación permite escribir y documentar el observador no privilegiado, su suite automatizada y comandos de pruebas manuales. No autoriza instalación, paquetes, cambios del host, PAM, claves, configuración protegida, sudoers, systemd, SSH, Broker, SQLite, CAM, red ni runtime. El programa no invoca sudo ni solicita privilegios; los escenarios sudo/SSH son decisiones manuales del propietario después de recibir el código.
+
+Escenarios de integración previstos:
+1. ejecución ordinaria desde terminal local;
+2. sudo directo desde terminal local, si el propietario decide probarlo;
 3. sudo directo desde SSH con PTY;
-4. shell intermediario;
-5. SSH sin PTY, únicamente si el probe puede ejecutarse bajo la autenticación ya disponible sin alterar políticas;
-6. pérdida de TTY/foreground durante una interacción simulada.
+4. shell intermediario, que debe aparecer como padre directo y no aceptar un sudo ancestro;
+5. SSH sin PTY: registrar ausencia de TTY; si sudo rechaza la ejecución antes de iniciar el observador, el caso queda no concluyente;
+6. muestreo de TTY/foreground y cambios observables durante una ventana acotada.
 
-El caso SSH sin PTY no se declara superado si sudo rechaza antes de ejecutar el probe. No se cambia timestamp, no se habilita NOPASSWD y no se usa stdin para introducir contraseña.
+No se cambia timestamp, no se habilita NOPASSWD, no se usa sudo -S y no se altera ninguna política. Los binarios se ejecutan desde `/tmp`. La salida nunca autoriza bootstrap ni prueba la procedencia del PTY.
 
 ### Etapa V3 — pruebas negativas de autoridad
 
@@ -316,4 +320,4 @@ No:
 - conectar el helper con el runtime;
 - aceptar observaciones diagnósticas como autorización.
 
-**Estado:** V1 aislada completada y validada el 16-11-2026. El contrato general permanece abierto y el candidato A no está aprobado. Cualquier ampliación a V2, recolector real, PAM, helper privilegiado o cambios del host requiere diseño, revisión y aprobación separados.
+**Estado:** V1 aislada completada y validada. V2 de observación Linux aprobada para implementación el 16-11-2026 según su diseño dedicado; las pruebas del propietario en Debian quedan pendientes. El contrato general permanece abierto y el candidato A no está aprobado. V3/V4, PAM, helper privilegiado o cambios del host requieren diseño, revisión y aprobación separados.
