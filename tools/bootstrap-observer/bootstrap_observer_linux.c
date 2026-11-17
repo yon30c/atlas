@@ -87,7 +87,7 @@ static bool read_process_snapshot(pid_t pid, bv_status *status,
     if (make_proc_path(path, sizeof(path), pid, "status") != 0 ||
         read_bounded_file(path, status_buffer, ATLAS_PROC_STATUS_MAX,
                           &length) != 0) {
-        *status_result = errno == EOVERFLOW ? BV_TOO_LARGE : BV_TRUNCATED;
+        *status_result = bo_classify_read(0U, ATLAS_PROC_STATUS_MAX, errno);
         return false;
     }
     *status_result = bv_parse_status(status_buffer, length, status);
@@ -98,7 +98,7 @@ static bool read_process_snapshot(pid_t pid, bv_status *status,
     if (make_proc_path(path, sizeof(path), pid, "stat") != 0 ||
         read_bounded_file(path, stat_buffer, ATLAS_PROC_STAT_MAX,
                           &length) != 0) {
-        *stat_result = errno == EOVERFLOW ? BV_TOO_LARGE : BV_TRUNCATED;
+        *stat_result = bo_classify_read(0U, ATLAS_PROC_STAT_MAX, errno);
         return false;
     }
     *stat_result = bv_parse_stat(stat_buffer, length, (int32_t)pid,
@@ -106,17 +106,53 @@ static bool read_process_snapshot(pid_t pid, bv_status *status,
     return *stat_result == BV_OK;
 }
 
-static bool same_status(const bv_status *a, const bv_status *b) {
-    return a->ppid == b->ppid &&
-           memcmp(a->uid, b->uid, sizeof(a->uid)) == 0 &&
-           memcmp(a->gid, b->gid, sizeof(a->gid)) == 0;
+bv_parse_result bo_classify_read(size_t bytes_read, size_t maximum,
+                                 int read_error) {
+    if (read_error == EOVERFLOW || bytes_read > maximum) {
+        return BV_TOO_LARGE;
+    }
+    if (read_error != 0 || bytes_read == 0U) {
+        return BV_TRUNCATED;
+    }
+    return BV_OK;
 }
 
-static bool same_stat(const bv_stat *a, const bv_stat *b) {
-    return a->pid == b->pid && a->state == b->state &&
-           a->ppid == b->ppid && a->pgrp == b->pgrp &&
-           a->session == b->session && a->tty_nr == b->tty_nr &&
-           a->tpgid == b->tpgid && a->starttime == b->starttime;
+bv_pidfd_state bo_pidfd_state_from_poll(int poll_result, int revents) {
+    if (poll_result == 0) {
+        return BV_PIDFD_OPEN_UNSIGNALED;
+    }
+    if (poll_result > 0 && (revents & POLLIN) != 0) {
+        return BV_PIDFD_SIGNALED;
+    }
+    return BV_PIDFD_NOT_REQUESTED;
+}
+
+bool bo_parent_samples_match(const bv_status *status_a,
+                             const bv_stat *stat_a,
+                             const bv_status *status_b,
+                             const bv_stat *stat_b) {
+    if (status_a == NULL || stat_a == NULL ||
+        status_b == NULL || stat_b == NULL) {
+        return false;
+    }
+    return status_a->ppid == status_b->ppid &&
+           memcmp(status_a->uid, status_b->uid, sizeof(status_a->uid)) == 0 &&
+           memcmp(status_a->gid, status_b->gid, sizeof(status_a->gid)) == 0 &&
+           stat_a->pid == stat_b->pid && stat_a->state == stat_b->state &&
+           stat_a->ppid == stat_b->ppid && stat_a->pgrp == stat_b->pgrp &&
+           stat_a->session == stat_b->session &&
+           stat_a->tty_nr == stat_b->tty_nr &&
+           stat_a->tpgid == stat_b->tpgid &&
+           stat_a->starttime == stat_b->starttime;
+}
+
+bool bo_executable_samples_match(uint64_t device_a, uint64_t inode_a,
+                                 uint32_t mode_a, uint32_t uid_a,
+                                 uint32_t gid_a, uint64_t device_b,
+                                 uint64_t inode_b, uint32_t mode_b,
+                                 uint32_t uid_b, uint32_t gid_b) {
+    return device_a == device_b && inode_a == inode_b &&
+           mode_a == mode_b && uid_a == uid_b && gid_a == gid_b;
 }
 
 static bv_pidfd_state inspect_pidfd(int fd, int *error_number) {
@@ -127,22 +163,13 @@ static bv_pidfd_state inspect_pidfd(int fd, int *error_number) {
     item.events = POLLIN;
     item.revents = 0;
     result = poll(&item, 1, 0);
-    if (result == 0) {
-        return BV_PIDFD_OPEN_UNSIGNALED;
-    }
-    if (result < 0) {
-        if (error_number != NULL) {
-            *error_number = errno;
-        }
-        return BV_PIDFD_NOT_REQUESTED;
-    }
-    if ((item.revents & POLLIN) != 0) {
-        return BV_PIDFD_SIGNALED;
-    }
-    if (error_number != NULL) {
+    if (result < 0 && error_number != NULL) {
+        *error_number = errno;
+    } else if (result > 0 && (item.revents & POLLIN) == 0 &&
+               error_number != NULL) {
         *error_number = EIO;
     }
-    return BV_PIDFD_NOT_REQUESTED;
+    return bo_pidfd_state_from_poll(result, item.revents);
 }
 
 static int open_pidfd(pid_t pid) {
@@ -206,8 +233,9 @@ static exe_observation inspect_executable(pid_t pid, char *target,
 static bool same_executable(const exe_observation *a,
                             const exe_observation *b) {
     return a->available && b->available &&
-           a->device == b->device && a->inode == b->inode &&
-           a->mode == b->mode && a->uid == b->uid && a->gid == b->gid;
+           bo_executable_samples_match(
+               a->device, a->inode, a->mode, a->uid, a->gid,
+               b->device, b->inode, b->mode, b->uid, b->gid);
 }
 
 typedef struct {
@@ -339,10 +367,10 @@ int bo_collect(bo_report *report) {
 
     if (first_ok && second_ok) {
         report->parent_stable =
-            same_status(&report->parent_status_first,
-                        &report->parent_status_second) &&
-            same_stat(&report->parent_stat_first,
-                      &report->parent_stat_second);
+            bo_parent_samples_match(&report->parent_status_first,
+                                    &report->parent_stat_first,
+                                    &report->parent_status_second,
+                                    &report->parent_stat_second);
     }
 
     tty = inspect_tty();
