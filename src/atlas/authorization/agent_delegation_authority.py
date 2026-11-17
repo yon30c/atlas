@@ -29,8 +29,9 @@ class _OwnerContextVerifier(Protocol):
 class SQLiteAgentDelegationAuthority:
     """Issues and revokes delegations after same-transaction owner verification.
 
-    Delegated operation verification remains unavailable; this class is not a
-    CAM engine. Revocation timestamps are read from the injected trusted clock.
+    Delegated operation evidence is issued only through an explicitly
+    configured verifier; absence of that dependency is fail-closed. This class
+    is not a CAM engine. Revocation timestamps use the trusted clock.
     """
 
     def __init__(
