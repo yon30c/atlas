@@ -1,6 +1,6 @@
 """Domain contracts for owner-issued, non-transitive AGENT delegations."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from enum import Enum
 import json
@@ -214,10 +214,23 @@ def validate_agent_delegation_transition(
         raise ContractError("current y updated deben ser AgentDelegation")
     if current.delegation_id != updated.delegation_id:
         raise ContractError("no se puede cambiar delegation_id")
+    if current.status is AgentDelegationStatus.REVOKED:
+        if updated != current:
+            raise ContractError("una delegación revocada es terminal e inmutable")
+        return
     if updated.revision != current.revision + 1:
         raise ContractError("la revisión debe avanzar exactamente en una unidad")
-    if current.status is AgentDelegationStatus.REVOKED:
-        raise ContractError("una delegación revocada es terminal e inmutable")
-    if current.status is AgentDelegationStatus.ACTIVE and updated.status is AgentDelegationStatus.REVOKED:
-        if updated.revoked_at is None or updated.revoked_by_user_id is None:
-            raise ContractError("la revocación requiere auditoría completa")
+    if updated.status is not AgentDelegationStatus.REVOKED:
+        raise ContractError("la única transición permitida es ACTIVE -> REVOKED")
+    if updated.revoked_at is None or updated.revoked_by_user_id is None:
+        raise ContractError("la revocación requiere auditoría completa")
+
+    expected = replace(
+        current,
+        status=AgentDelegationStatus.REVOKED,
+        revision=current.revision + 1,
+        revoked_at=updated.revoked_at,
+        revoked_by_user_id=updated.revoked_by_user_id,
+    )
+    if updated != expected:
+        raise ContractError("la revocación no puede modificar los claims de la delegación")
