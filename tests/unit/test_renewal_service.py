@@ -74,9 +74,10 @@ class GrantRenewalServiceTests(unittest.TestCase):
             self.renewal_repository,
         )
         self.grant_repository.create(self.grant)
+        self.identity_verifier = FakeVerifiedIdentityContextVerifier()
         self.service = GrantRenewalService(
             self.unit_of_work_factory,
-            identity_verifier=FakeVerifiedIdentityContextVerifier(),
+            identity_verifier=self.identity_verifier,
         )
         self.proposed_expires_at = NOW + timedelta(days=9)
 
@@ -152,6 +153,9 @@ class GrantRenewalServiceTests(unittest.TestCase):
             self.owner_context(), request.renewal_id, approval_time
         )
         updated_request = self.renewal_repository.get(request.renewal_id)
+        self.assertEqual(self.identity_verifier.verify_calls, 0)
+        self.assertEqual(self.identity_verifier.verify_in_uow_calls, 1)
+        self.assertIsNotNone(self.identity_verifier.last_unit_of_work)
         self.assertEqual(updated_grant.expires_at, self.proposed_expires_at)
         self.assertEqual(updated_grant.revision, self.grant.revision + 1)
         self.assertEqual(
@@ -195,6 +199,29 @@ class GrantRenewalServiceTests(unittest.TestCase):
                 NOW + timedelta(hours=1),
                 evidence=tampered,
             )
+
+    def test_approval_fails_closed_when_verifier_lacks_shared_uow_support(self):
+        request = self.seed_pending_renewal()
+
+        class StandaloneOnlyVerifier:
+            def verify(self, context):
+                return FakeVerifiedIdentityContextVerifier._canonical()
+
+        service = GrantRenewalService(
+            self.unit_of_work_factory,
+            identity_verifier=StandaloneOnlyVerifier(),
+        )
+        with self.assertRaises(AuthorizationError):
+            service.approve_renewal(
+                self.owner_context(),
+                request.renewal_id,
+                NOW + timedelta(hours=1),
+                verified_identity=VERIFIED_OWNER,
+            )
+        self.assertEqual(
+            self.renewal_repository.get(request.renewal_id).status,
+            RenewalStatus.PENDING,
+        )
 
     def test_approval_fails_closed_when_identity_verifier_is_unavailable(self):
         request = self.seed_pending_renewal()
@@ -256,6 +283,9 @@ class GrantRenewalServiceTests(unittest.TestCase):
             self.owner_context(), request.renewal_id, decision_time
         )
         self.assertEqual(rejected_request.status, RenewalStatus.REJECTED)
+        self.assertEqual(self.identity_verifier.verify_calls, 0)
+        self.assertEqual(self.identity_verifier.verify_in_uow_calls, 1)
+        self.assertIsNotNone(self.identity_verifier.last_unit_of_work)
         self.assertEqual(rejected_request.decided_at, decision_time)
         self.assertEqual(rejected_request.decided_by_user_id, OWNER_USER_ID)
         self.assertEqual(
