@@ -571,3 +571,20 @@ El bootstrap LOCAL inicial seguirá siendo un procedimiento administrativo expl�
 El Trust Anchor externo continúa siendo opcional y diferido. Esta decisión no inicializa CAM, no crea identidades/Grants, no expone servicios de red y no habilita ejecución adicional.
 
 **Consecuencia para la hoja de ruta:** antes de conectar clientes remotos, diseñar la frontera de autenticación, sesiones, registro/revocación de dispositivos y transporte seguro del servicio central. La CLI actual se conserva como un cliente/adaptador local, no como autoridad de seguridad.
+
+
+## 52. Decisión arquitectónica — Atlas Workstation
+
+**Decisión aprobada por el propietario: 16 de noviembre de 2026.** Diseño: [Atlas Workstation](design/atlas-workstation.md).
+
+Atlas dispondrá de un entorno operativo propio para trabajar en proyectos. Workstation separa los workspaces persistentes de proyecto de los runtimes efímeros de tareas. La primera implementación objetivo utiliza contenedores Docker confinados, siempre detrás de un adaptador estrecho y una frontera de control validada.
+
+Principios:
+- El servicio central conserva identidad, CAM, Grants, aprobaciones, tareas y auditoría.
+- Assistant/LLM no recibe acceso directo a shell del host, Docker socket ni rutas físicas arbitrarias.
+- Los runtimes se ejecutan como no root, con filesystem/mounts explícitos, límites de recursos y red deshabilitada por defecto.
+- Cada runtime recibe solo el workspace y las herramientas requeridas por la tarea.
+- Los resultados, logs y artefactos se vinculan a una operación durable; un resultado desconocido no se trata como fallo ni como permiso para reintentar.
+- Atlas Broker puede evaluarse como adaptador de control, pero su integración no se presume ni se amplía automáticamente.
+
+Workstation es una base transversal de la Fase 4 y no reemplaza el Ciclo 3.2. El bootstrap confiable, identidad canónica, proyecto/entorno y ownership de workspace siguen siendo prerrequisitos para conectar ejecución. Esta decisión es documental: no crea contenedores, no cambia Docker/systemd/sudoers, no instala paquetes, no conecta runtime ni habilita shell arbitrario.
