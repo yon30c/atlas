@@ -251,3 +251,73 @@ Implementado:
 **Validación completada:** el usuario ejecutó la suite completa en Debian: `Ran 1262 tests ... OK`; `python -m compileall -q src tests` terminó con `COMPILE_EXIT_CODE=0`. Las pruebas específicas de I-1 forman parte de esa suite. El workflow CI actual no se dispara para esta rama `feature/**`; la validación fue manual y los resultados fueron compartidos en la conversación.
 
 **Límite:** no se modificó esquema/migración, no se alteró la relación canónica, no se añadió acceso SQL desde Native Identity Authority y no se implementó todavía I-2.
+
+## 12. I-2 — contrato de autenticación y VerifiedIdentityContext
+
+**Documento de detalle:** `docs/design/native-authentication-i2-verified-context-contract.md`.
+
+La emisión de `VerifiedIdentityContext` pertenece a Identity Authority conforme B1-B-03D. Native Authentication Authority verifica credenciales y emite proofs; no resuelve bindings ni usuarios.
+
+**Estado:** I-2 implementado en dos slices y validado localmente en Debian.
+
+La inspección confirmó:
+- La persistencia C1 acepta un `NativeAuthenticationProof` ya construido; no verifica contraseña ni demuestra cómo se obtuvo.
+- `argon2-cffi` ya es dependencia del proyecto.
+- Existe `Clock` como puerto UTC.
+- `SQLiteLocalAuthorityUnitOfWork` expone `identity`, `native_identity` y `native_authentication` sobre la misma UoW.
+- I-1 ya permite resolver `identity_id → CanonicalUserIdentity`.
+- La autoridad nativa resuelve issuer por realm y binding por issuer + subject digest.
+
+Decisiones registradas:
+- El realm, audience y TTL se inyectan desde composición confiable; nunca desde el request.
+- Solo el servicio de aplicación verifica Argon2id y puede emitir proof.
+- Se requiere relectura/CAS de credential_revision después de verificar la contraseña.
+- Proof consumption, binding lookup y canonical identity resolution deben compartir una UoW física.
+- VerifiedIdentityContext conserva los IDs canónicos separados, binding/identity revisions y expiración explícita.
+- La derivación de OperationContext queda limitada a USER directo y no concede autorización CAM.
+- No hay actualmente un puerto de throttling. Se exige un guard compartido, atómico y fail-closed; un contador en memoria no se acepta para producción.
+
+**Pendiente:** implementar un adaptador de guard de intentos compartido y fail-closed antes de cualquier composición operativa. La validación de pruebas de este incremento no sustituye esa dependencia ni habilita login operativo o capacidades protegidas.
+
+## 13. I-2 — primer slice de Authentication Authority
+
+**Commits de implementación:** `0466f58` (puerto de guard), `1ee90b5` (servicio inicial), `84c57f3` (pruebas iniciales), `f5e6391` (perfil de issuer y TTL configurado) y `085c311` (ajuste de prueba TTL).
+
+Añadido:
+- `AuthenticationAttemptGuardPort`: interfaz de cuenta para `is_allowed`, `record_failure` y `record_success`. El contrato exige implementación atómica/compartida; todavía no existe adaptador productivo.
+- `NativeAuthenticationService`: servicio de aplicación que recibe UoW factory, hasher, guard, Clock y configuración confiable.
+- `NativeAuthenticationConfig`: realm, audience y TTL proceden de composición confiable; el TTL debe ser positivo y es el límite configurado para el proof.
+- Lookup del issuer por realm configurado y aceptación exclusiva de perfil `NATIVE_AUTHORITY_PROOF` activo.
+- Dummy Argon2id PHC generado al componer el servicio y verificado para handles desconocidos.
+- Verificación uniforme para handle inexistente, contraseña incorrecta y autenticador inactivo; el guard se consulta antes de ejecutar Argon2id y cualquier indisponibilidad del guard falla cerrado.
+- Relectura del autenticador y comparación de issuer, subject, estado y credential_revision.
+- Rehash condicional mediante CAS; el proof utiliza la revisión devuelta por el update.
+- Proof audience-bound y con expiración derivada de Clock; la referencia raw se devuelve solo después de salir de la UoW con commit, mientras SQLite conserva el digest.
+- `NativeAuthenticationGrant.__repr__` redacta la referencia raw.
+
+Pruebas añadidas en `tests/unit/test_native_authentication_service.py`: emisión correcta y persistencia digest-only; contraseña incorrecta y handle desconocido con dummy verify; bloqueo antes del hash; guard indisponible con fail-closed; rehash y revisión vinculada al proof; rechazo de TTL no positivo.
+
+**Validación:** el usuario ejecutó la suite completa en Debian después de este slice: `Ran 1274 tests ... OK`; `python -m compileall -q src tests` terminó con `COMPILE_EXIT_CODE=0`. El fake del guard existe solo en tests; no se ha creado un guard productivo ni se permite componer el servicio para un entrypoint operativo.
+
+**Límites:** no consume proofs, no emite `VerifiedIdentityContext`, no deriva `OperationContext`, no implementa endpoints/CLI/sesiones/bootstrap/CAM y no modifica migraciones, DB productiva ni infraestructura.
+## 14. I-2 — proof admission, VerifiedIdentityContext y derivación USER
+
+**Implementación añadida en la rama del PR #11; validación local completada por el usuario en Debian.**
+
+Archivos:
+- `src/atlas/core/verified_identity_context.py`: modelo frozen y efímero, UUIDs canónicos, USER fijo, revisiones/timestamps validados, `verification_ref` aleatoria y `attestation` HMAC.
+- `src/atlas/ports/verified_identity_context_attestor.py` y `src/atlas/adapters/hmac_verified_identity_context_attestor.py`: puerto y adaptador HMAC-SHA256. La clave requiere 256 bits como mínimo y debe proceder de configuración secreta confiable.
+- `src/atlas/ports/native_identity_authority.py` y `src/atlas/adapters/sqlite/native_identity_authority.py`: `get_native_binding_by_id` para revalidar por binding ID inmutable sin almacenar NativeSubject en el contexto.
+- `src/atlas/identity/verified_identity_context_service.py`: `admit_proof` y `verify`.
+- `src/atlas/identity/verified_operation_context_factory.py`: derivación USER directa, sin delegación y sin aceptar actor/UserId del caller.
+- Tests: `test_verified_identity_context_service.py`, `test_verified_operation_context_factory.py`, y ampliación de `test_sqlite_native_identity_authority.py`.
+
+El servicio de Identity Authority consume proof, resuelve issuer por realm configurado, binding por issuer + digest del NativeSubject del proof y usuario canónico por I-1, todo dentro de una única UoW. Si una resolución falla después del consumo, se revierte el proof. El verificador exige attestation válida, separada por versión/realm/audience, contexto no expirado, issuer activo, binding activo con revisión exacta e identidad USER activa con UserId/revisión exactos. La admisión también exige que `proof.authenticated_at` no preceda `binding.verified_at`.
+
+**Brecha de procedencia:** una simple relectura de los registros no impedía fabricar un dataclass con IDs válidos. Se cerró en este slice con HMAC-SHA256 sobre todos los claims. La clave no se persiste ni se acepta del caller; la rotación invalida los contextos anteriores. La attestation no sustituye la relectura de autoridades.
+
+**Límite importante:** `VerifiedOperationContextFactory` no vuelve seguros automáticamente los consumidores existentes. I-3 debe exigir/verificar la evidencia en cada servicio sensible y reconciliar `actor.identity_id` con `context.user_id` sin equiparar esos identificadores. No habilitar endpoints, CLI, sesiones, bootstrap ni CAM.
+
+**Validación completada:** el usuario ejecutó la suite completa en Debian: `Ran 1288 tests in 14.646s — OK`; `python -m compileall -q src tests` terminó con `COMPILE_EXIT_CODE=0`. Esto incluye los tests focalizados de proof admission, factory y lookup por binding ID. El segundo slice queda validado localmente.
+
+**Límites que permanecen:** no existe adaptador productivo compartido para `AuthenticationAttemptGuardPort`; la clave HMAC aún debe provisionarse mediante composición secreta confiable; no hay composición operativa, endpoints, CLI, sesiones, bootstrap ni CAM. I-3 sigue siendo necesario para proteger los consumidores sensibles que reciben `OperationContext`.
