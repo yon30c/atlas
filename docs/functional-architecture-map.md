@@ -105,6 +105,33 @@ La rama incorpora contratos y adaptadores de lectura independientes del runtime 
 - `CapabilityCatalog` contiene exclusivamente `workspace.list` y `workspace.read`, ambas `READ_ONLY`; `validate_intent` comprueba parámetros exactos. El catálogo no contiene handlers ni concede autorización.
 - Estas capacidades aún no están conectadas a `cli.py`, a la consola ni al runtime. La lectura tampoco sustituye CAM ni el gate de ejecución.
 
+### Servicio de aplicación workspace.list (F2.2)
+
+El caso de uso se mantiene separado del adaptador:
+
+```text
+Solicitud de aplicación
+        |
+        v
+WorkspaceListingService
+        |
+        v
+WorkspaceReader (puerto)
+        |
+        v
+LocalWorkspaceAdapter
+        |
+        v
+WorkspaceListing
+```
+
+- El servicio recibe un lector inyectado; no recibe rutas del modelo ni conoce el sistema de archivos.
+- Valida que `workspace_id` sea texto no vacío.
+- Comprueba que el adaptador devuelva `WorkspaceListing` y que el ID del resultado coincida con el solicitado.
+- Propaga errores de dominio, como `NotFoundError`, sin transformarlos en éxitos.
+- Incluye prueba de integración unitaria del servicio con el adaptador local y fixtures temporales.
+- No se integra todavía en `bootstrap.py`, `cli.py` ni el runtime conversacional.
+
 ## 3.3 Escritura controlada de workspace (Ciclo 2 F2)
 
 **Estado: VALIDADO por el propietario; suite completa: 1,182 tests en 9.769 s, todos OK.**
