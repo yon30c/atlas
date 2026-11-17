@@ -42,6 +42,9 @@ static void test_snapshot_comparison(void) {
     stat_a.starttime = 9876;
     stat_b = stat_a;
 
+    assert(bo_session_matches(10, 10));
+    assert(!bo_session_matches(10, 11));
+    assert(!bo_session_matches(0, 0));
     assert(bo_parent_samples_match(&status_a, &stat_a, &status_b, &stat_b));
     status_b.uid[0]++;
     assert(!bo_parent_samples_match(&status_a, &stat_a, &status_b, &stat_b));
