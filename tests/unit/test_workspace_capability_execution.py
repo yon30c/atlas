@@ -5,14 +5,12 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from atlas.adapters.local_workspace import LocalWorkspaceAdapter
+from atlas.adapters.trusted_workspace_mount_resolver import TrustedWorkspaceMountResolver
 from atlas.adapters.sqlite.local_authority_unit_of_work import (
     SQLiteLocalAuthorityUnitOfWorkFactory,
 )
 from atlas.adapters.sqlite.database import SQLiteDatabase
 from atlas.adapters.sqlite.migrations import SQLITE_MIGRATIONS
-from atlas.application.workspace_file_reading import WorkspaceFileReadingService
-from atlas.application.workspace_listing import WorkspaceListingService
 from atlas.application.workspace_capability_execution import (
     WorkspaceCapabilityExecutionService,
 )
@@ -27,6 +25,12 @@ from atlas.core.context import OperationContext
 from atlas.core.errors import AuthorizationError, ContractError
 from atlas.memory.metadata import EnvironmentMetadata, ProjectMetadata
 from atlas.memory.models import EnvironmentId, ProjectId
+from atlas.workspace.models import (
+    ProjectEnvironmentAssociation,
+    ProjectEnvironmentStatus,
+    WorkspaceRecord,
+    WorkspaceStatus,
+)
 
 
 NOW = datetime(2026, 11, 16, 12, 0, tzinfo=timezone.utc)
@@ -53,6 +57,23 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
             unit.project_environments.create_environment(
                 EnvironmentMetadata(EnvironmentId("test"), "active", 1)
             )
+            unit.workspaces.create_association(
+                ProjectEnvironmentAssociation(
+                    ProjectId("atlas-demo"),
+                    EnvironmentId("test"),
+                    ProjectEnvironmentStatus.ACTIVE,
+                )
+            )
+            unit.workspaces.create_workspace(
+                WorkspaceRecord(
+                    workspace_id="demo",
+                    owner_user_id=self.user.user_id,
+                    project_id=ProjectId("atlas-demo"),
+                    environment_id=EnvironmentId("test"),
+                    root_ref="mount:demo-root",
+                    status=WorkspaceStatus.ACTIVE,
+                )
+            )
             unit.commit()
 
         self.context = OperationContext(
@@ -68,11 +89,12 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
             classification="internal",
             created_at=NOW,
         )
-        adapter = LocalWorkspaceAdapter({"demo": self.workspace_root})
+        self.mount_resolver = TrustedWorkspaceMountResolver(
+            {"demo-root": self.workspace_root}
+        )
         self.service = WorkspaceCapabilityExecutionService(
             unit_of_work_factory=self.uow_factory,
-            listing_service=WorkspaceListingService(adapter),
-            reading_service=WorkspaceFileReadingService(adapter),
+            mount_resolver=self.mount_resolver,
         )
 
     def _plan(self, kind, parameters):
@@ -202,6 +224,69 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
         )
         with self.assertRaises(AuthorizationError):
             self.service.execute(plan, self.context, NOW, review_confirmed=True)
+
+    def test_workspace_owner_must_match_canonical_user(self):
+        from dataclasses import replace
+        with self.uow_factory() as unit:
+            current = unit.workspaces.get_workspace("demo")
+            unit.workspaces.update_workspace(
+                replace(current, owner_user_id="another-user", revision=2),
+                expected_revision=1,
+            )
+            unit.commit()
+        self._grant(kind=IntentKind.WORKSPACE_LIST, resource_id="demo")
+        plan = self._plan(IntentKind.WORKSPACE_LIST, (("workspace_id", "demo"),))
+        with self.assertRaises(AuthorizationError):
+            self.service.execute(plan, self.context, NOW, review_confirmed=True)
+
+    def test_workspace_scope_must_match_context(self):
+        from dataclasses import replace
+        plan = self._plan(IntentKind.WORKSPACE_LIST, (("workspace_id", "demo"),))
+        altered = replace(self.context, project_id="another-project")
+        with self.assertRaises(AuthorizationError):
+            self.service.execute(plan, altered, NOW, review_confirmed=True)
+
+    def test_suspended_workspace_denies(self):
+        from dataclasses import replace
+        with self.uow_factory() as unit:
+            current = unit.workspaces.get_workspace("demo")
+            unit.workspaces.update_workspace(
+                replace(current, status=WorkspaceStatus.SUSPENDED, revision=2),
+                expected_revision=1,
+            )
+            unit.commit()
+        self._grant(kind=IntentKind.WORKSPACE_LIST, resource_id="demo")
+        plan = self._plan(IntentKind.WORKSPACE_LIST, (("workspace_id", "demo"),))
+        with self.assertRaises(AuthorizationError):
+            self.service.execute(plan, self.context, NOW, review_confirmed=True)
+
+    def test_suspended_project_environment_association_denies(self):
+        from dataclasses import replace
+        with self.uow_factory() as unit:
+            current = unit.workspaces.get_association(
+                ProjectId("atlas-demo"), EnvironmentId("test")
+            )
+            unit.workspaces.update_association(
+                replace(current, status=ProjectEnvironmentStatus.SUSPENDED, revision=2),
+                expected_revision=1,
+            )
+            unit.commit()
+        self._grant(kind=IntentKind.WORKSPACE_LIST, resource_id="demo")
+        plan = self._plan(IntentKind.WORKSPACE_LIST, (("workspace_id", "demo"),))
+        with self.assertRaises(AuthorizationError):
+            self.service.execute(plan, self.context, NOW, review_confirmed=True)
+
+    def test_unknown_mount_denies_after_cam_without_filesystem_access(self):
+        service = WorkspaceCapabilityExecutionService(
+            unit_of_work_factory=self.uow_factory,
+            mount_resolver=TrustedWorkspaceMountResolver(
+                {"other-root": self.workspace_root}
+            ),
+        )
+        self._grant(kind=IntentKind.WORKSPACE_LIST, resource_id="demo")
+        plan = self._plan(IntentKind.WORKSPACE_LIST, (("workspace_id", "demo"),))
+        with self.assertRaises(AuthorizationError):
+            service.execute(plan, self.context, NOW, review_confirmed=True)
 
     def test_missing_project_or_environment_denies(self):
         from dataclasses import replace
