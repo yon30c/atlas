@@ -1,0 +1,167 @@
+# I3-2B.6A — auditoría de integración CAM para solicitudes AGENT de renovación
+
+**Estado:** auditoría de diseño; no habilita solicitudes AGENT ni modifica código productivo.  
+**Base inspeccionada:** rama design/verified-agent-delegation-i3-2b, PR #16.  
+**Validación previa:** el propietario confirmó 1,369/1,369 tests y compileall exit 0 para I3-2B.5.  
+**Decisión de seguridad:** identidad AGENT, consentimiento delegado y decisión CAM son tres verificaciones independientes.
+
+## 1. Resultado ejecutivo
+
+I3-2B.5 aporta evidencia AGENT y de delegación verificable. La composición SQLite actual ofrece una UoW que agrupa las autoridades y repositorios necesarios: Identity, AGENT, native bindings, delegaciones, Grants, renovaciones y Project/Environment.
+
+Esto permite diseñar una solicitud bajo una transacción local compartida, pero no equivale a una autorización CAM ni a un coordinador genérico de admisión/fencing.
+
+Se identificó un bloqueo de alcance: AgentDelegationScope permite delegar un subconjunto del Grant, mientras que GrantRenewalRequest solo solicita cambiar la expiración del Grant completo. Permitir que una delegación parcial solicite la renovación del Grant entero daría al AGENT capacidad para iniciar una decisión sobre permisos que no recibió en delegación. La primera integración debe denegar ese caso.
+
+## 2. CAM existente: comportamiento real
+
+### 2.1 Evaluador
+
+AuthorizationEvaluator.evaluate(request, grants, now) es una función pura. Para devolver ALLOW exige, entre otras cosas:
+
+- actor ACTIVE;
+- grant.subject_identity_id igual a context.actor.identity_id;
+- owner del recurso igual a grant.owner_user_id;
+- project y environment exactos;
+- resource_type, resource_id y action exactos;
+- Grant vigente y no revocado.
+
+No valida VerifiedAgentIdentityContext, VerifiedAgentDelegationContext, attestation, issuer, binding ni consentimiento del propietario. Tampoco produce por sí solo una admisión transaccional. Es el evaluador de una política CAM, no un autenticador ni una autoridad de delegación.
+
+### 2.2 Precedente de ejecución
+
+WorkspaceCapabilityExecutionService demuestra el patrón de ejecución local: abre SQLiteLocalAuthorityUnitOfWork, resuelve identidad y metadatos canónicos, construye AuthorizationRequest, evalúa el Grant exacto y mantiene la UoW durante el efecto.
+
+Ese servicio rechaza expresamente cualquier actor distinto de USER y cualquier DelegationMode. No debe ampliarse para admitir AGENT; su política de workspace sigue siendo USER-direct.
+
+MemoryAuthorizationService es una política específica de Memory, con reglas adicionales de propietario, clasificación y snapshots. No es un autorizador genérico reutilizable para renovación de Grants.
+
+## 3. Frontera transaccional disponible
+
+SQLiteLocalAuthorityUnitOfWork extiende SQLiteAuthorizationUnitOfWork y crea repositorios sobre la misma SQLiteUnitOfWork:
+
+- Identity USER y AGENT;
+- native identity y native AGENT binding;
+- delegaciones AGENT;
+- Grants y solicitudes de renovación;
+- Project/Environment;
+- authority-change ledger y otros registros locales.
+
+La factory usa una única instancia SQLiteDatabase. Los verificadores USER y AGENT y el verificador de delegación ofrecen variantes verify_in_unit_of_work para participar en la transacción recibida.
+
+Esto permite que una futura solicitud lea y revalide evidencia, delegación, Grant y Project/Environment, evalúe CAM y persista la renovación dentro de la misma transacción SQLite.
+
+**Límite:** esta garantía solo existe si el composition root inyecta la misma base y todos los caminos de mutación relevantes la respetan. No implementa el coordinador general de invalidación/admisión/fencing descrito en F2.3.4 ni garantiza consistencia con sistemas externos. No afirmar atomicidad distribuida.
+
+La integración debe usar SQLiteLocalAuthorityUnitOfWorkFactory, no una factory aislada que no exponga las autoridades AGENT y la delegación.
+
+## 4. Hallazgo crítico: delegación parcial frente a renovación completa
+
+El modelo actual permite:
+- AgentDelegationScope.resource_ids y actions como subconjuntos del Grant;
+- GrantRenewalRequest con grant_id, owner, subject, requester, vencimiento actual y propuesto;
+- approve_renewal actualiza Grant.expires_at del Grant completo; no recibe ni aplica un scope parcial.
+
+Por tanto, una delegación limitada a un recurso o a unas acciones podría permitir solicitar la extensión temporal de un Grant con más recursos/acciones. Aunque la decisión final siga siendo del propietario, el AGENT habría podido iniciar una solicitud fuera del alcance delegado.
+
+### Gate obligatorio para la primera versión
+
+La solicitud AGENT solo podrá continuar si:
+1. delegation.grant_id == grant.grant_id y delegation.grant_revision == grant.revision;
+2. delegation.scope.resource_type == grant.resource_type;
+3. delegation.scope.resource_ids == grant.resource_ids (cobertura exacta del conjunto completo);
+4. grant.renewal.request aparece explícitamente tanto en grant.actions como en delegation.scope.actions;
+5. el AGENT no puede cambiar scope, acciones, owner, subject ni vencimiento actual del Grant.
+
+La delegación puede limitar sus acciones a la acción de solicitar renovación; no necesita recibir todas las acciones operativas del Grant. Pero no puede tener cobertura de recursos menor mientras la solicitud/decisión siga extendiendo el Grant completo.
+
+Alternativa futura, fuera del primer slice: modelar solicitudes de renovación de un subconjunto y que la aprobación del propietario emita un Grant nuevo y acotado. El modelo actual de renovación no soporta esa semántica.
+
+## 5. Semántica CAM propuesta
+
+No se encontró en el código la acción grant.renewal.request; tampoco hay un contrato existente que la defina. Se propone introducirla como acción explícita, no inferirla de DelegationMode.DELEGATED.
+
+Para reutilizar el evaluador actual sin convertir la delegación en ALLOW:
+1. Definir una constante de dominio grant.renewal.request.
+2. Construir un AuthorizationRequest con actor AGENT autenticado, owner canónico, project/environment del Grant, resource_type=grant.resource_type y la acción explícita.
+3. Evaluar el Grant objetivo exacto, no una lista caller-supplied ni un Grant distinto del solicitado.
+4. Evaluar cada resource_id de grant.resource_ids; todos deben devolver ALLOW y matched_grant debe ser el mismo grant_id + revision.
+5. Exigir la coincidencia de la acción y de todos los recursos con el scope de la delegación verificada.
+
+Así, CAM comprueba el permiso sobre cada recurso real cubierto por el Grant. No se debe usar resource_type="grant" y resource_id=grant_id salvo que el modelo de permisos defina expresamente que los Grants son recursos autorizables; hoy GrantResourceScope representa recursos del permiso, no necesariamente el propio Grant.
+
+Esta propuesta necesita aprobación como semántica de producto antes de implementar el slice. La acción nueva debe ser emitida explícitamente al crear Grants; los Grants históricos que no la incluyan deben denegar renovación AGENT.
+
+## 6. Contrato de contexto delegado
+
+Antes de CAM, la operación debe exigir simultáneamente:
+- context.actor.kind == AGENT y estado ACTIVE;
+- context.delegation == DelegationMode.DELEGATED;
+- context.actor.identity_id igual al AGENT canónico devuelto por el verificador;
+- context.user_id == verified_delegation.owner_user_id;
+- project/environment del contexto iguales a los de Grant y delegación;
+- verified_delegation.agent_identity_id, grant_id, grant_revision, delegation_id y revisiones exactas coincidentes;
+- revalidación de VerifiedAgentIdentityContext y VerifiedAgentDelegationContext dentro de la misma UoW que lee el Grant y escribe la solicitud.
+
+user_id en OperationContext es metadata caller-controlled; solo se acepta después de compararlo con el owner incluido en la evidencia de delegación revalidada. No convierte al AGENT en USER ni crea un CanonicalUserIdentity.
+
+## 7. Cambios de modelo requeridos antes de habilitar
+
+GrantRenewalRequest no conserva hoy la revisión del Grant al momento de solicitar ni el identificador/revisión de la delegación que permitió la solicitud.
+
+El slice de integración debe añadir claims de auditoría inmutables y persistidos:
+- grant_revision: revisión exacta autorizada al solicitar;
+- delegation_id y delegation_revision: mandato exacto que cubrió la solicitud;
+- requested_by_identity_id: AGENT canónico, nunca tomado de un campo libre del caller.
+
+La aprobación/rechazo USER debe seguir siendo owner-only. En aprobación, revalidar que el Grant conserve la revisión y vencimiento capturados por la solicitud; luego actualizar Grant y solicitud en una misma UoW. La aprobación no debe requerir que la delegación siga vigente: el decisor es el propietario USER autenticado, no el AGENT.
+
+También debe definirse idempotencia de renewal_id y si se permite más de una solicitud PENDING por Grant. La primera implementación debe rechazar duplicados incompatibles, no crear solicitudes paralelas ambiguas.
+
+## 8. Secuencia propuesta de implementación
+
+### I3-2B.6A — Auditoría CAM (este documento)
+Documenta contratos existentes, semántica CAM, bloqueo de delegación parcial y frontera UoW. No cambia código ni habilita rutas.
+
+### I3-2B.6B — Contrato y pruebas CAM para renovación
+- Añadir la acción explícita grant.renewal.request.
+- Añadir pruebas positivas y negativas del evaluador para actor AGENT, owner, project/environment, cada recurso, acción ausente y Grant exacto.
+- Definir y probar el gate de cobertura exacta de recursos.
+- Mantener request_renewal fail-closed.
+
+### I3-2B.6C — Solicitud AGENT bajo UoW compartida
+- Inyectar verificadores USER/AGENT/delegación y la factory local confiable.
+- Revalidar evidencia AGENT y delegación dentro de la UoW.
+- Resolver Grant y Project/Environment canónicos.
+- Aplicar CAM para cada recurso y validar el gate de scope exacto.
+- Persistir request con revisiones/IDs de auditoría y CAS/idempotencia.
+- No alterar Grant ni permitir que AGENT apruebe/rechace.
+- Cualquier fallo debe dejar cero escrituras confirmadas.
+
+Cada slice tendrá pruebas focalizadas, suite completa y compileall ejecutados por el propietario en Debian. PR #16 permanece Draft; no fusionar sin autorización explícita.
+
+## 9. Pruebas obligatorias
+
+- AGENT válido sin delegación, delegación revocada/expirada o revisión obsoleta: DENY sin escritura.
+- Contexto USER presentado en ruta AGENT o viceversa: DENY.
+- owner, AGENT, Grant, issuer, binding, project o environment mismatch: DENY.
+- acción ausente de Grant o delegación: DENY.
+- recurso fuera de Grant/delegación o delegación parcial: DENY.
+- Grant expirado/revocado o revisión cambiada: DENY.
+- context.user_id alterado respecto del owner verificado: DENY.
+- CAM ALLOW para otro Grant no satisface el Grant solicitado.
+- duplicado de renewal_id o PENDING incompatible: comportamiento idempotente y sin doble escritura.
+- rollback después de cualquier fallo posterior a una escritura provisional.
+- aprobación/rechazo por AGENT: DENY; solo USER owner verificado puede decidir.
+- la solicitud no cambia Grant.expires_at; solo la aprobación USER puede hacerlo.
+
+## 10. Estado y conclusión
+
+- I3-2B.5: validado por el propietario con 1,369 tests y compileall exit 0.
+- I3-2B.6A: auditoría documental completada.
+- I3-2B.6B/6C: no implementados.
+- GrantRenewalService.request_renewal: continúa fail-closed.
+- No hay login/endpoints/runtime AGENT habilitados.
+- No se ha creado una decisión CAM ni una admisión operativa a partir de la evidencia de delegación.
+
+**Bloqueo antes de implementar:** confirmar la semántica de producto de grant.renewal.request y aceptar que la primera versión solo permita renovar Grants cuya cobertura de recursos esté delegada íntegramente.
