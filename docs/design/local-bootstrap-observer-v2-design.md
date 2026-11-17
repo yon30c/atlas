@@ -70,7 +70,7 @@ Salida legible por humanos, con campos etiquetados para:
 - resultado V1;
 - PPID, UID/GID y starttime observados del padre;
 - doble muestra y estabilidad observada;
-- metadatos de exe (device/inode/mode/UID/GID) y destino textual opcional;
+- metadatos de exe (device/inode/mode/UID/GID) y destino textual opcional, escapando bytes de control para evitar inyección de líneas;
 - TTY disponible/no disponible, SID y foreground PGID;
 - errores de observación sin incluir secretos.
 
