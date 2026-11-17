@@ -53,7 +53,7 @@ class VerifiedOperationContextFactoryTests(unittest.TestCase):
             subject = NativeSubject.generate()
             unit.native_identity.create_native_binding(
                 self.user, issuer.issuer_id, subject.digest,
-                verified_at=self.clock.now(),
+                verified_at=self.clock.now() - timedelta(seconds=2),
             )
             authenticator = NativeAuthenticator(
                 authenticator_id=str(uuid4()), issuer_id=issuer.issuer_id,
