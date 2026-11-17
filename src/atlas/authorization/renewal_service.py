@@ -17,6 +17,7 @@ from atlas.core.errors import (
     ContractError,
     NotFoundError,
 )
+from atlas.core.user_identity import CanonicalUserIdentity
 from atlas.core.verified_identity_context import VerifiedIdentityContext
 from atlas.ports.verified_identity_context_verifier import (
     VerifiedIdentityContextVerifierPort,
@@ -178,20 +179,6 @@ class GrantRenewalService:
             )
         return request
 
-    @staticmethod
-    def _get_existing_renewal(
-        repository: GrantRenewalRepository,
-        renewal_id: str,
-    ) -> GrantRenewalRequest | None:
-        request = repository.get(renewal_id)
-        if request is not None and not isinstance(
-            request, GrantRenewalRequest
-        ):
-            raise ContractError(
-                "El repositorio debe devolver una solicitud de renovación"
-            )
-        return request
-
     def _validate_owner_context(
         self,
         context: OperationContext,
@@ -222,7 +209,7 @@ class GrantRenewalService:
         context: OperationContext,
         request: GrantRenewalRequest,
         grant: Grant,
-        canonical,
+        canonical: CanonicalUserIdentity,
     ) -> None:
         if (
             canonical.user_id != request.owner_user_id
