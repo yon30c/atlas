@@ -14,15 +14,15 @@ static void test_output_escaping(void) {
 
     assert(stream != NULL);
     report.exe_first_available = true;
-    strcpy(report.exe_target, "parent\\nAUTHORIZATION=FORGED");
+    strcpy(report.exe_target, "parent\nAUTHORIZATION=FORGED");
     bo_print_report(stream, &report);
     rewind(stream);
     count = fread(output, 1U, sizeof(output) - 1U, stream);
     output[count] = '\\0';
 
     assert(strstr(output,
-                  "parent_exe_target=parent\\x5cnAUTHORIZATION=FORGED") != NULL);
-    assert(strstr(output, "\\nAUTHORIZATION=FORGED\\n") == NULL);
+                  "parent_exe_target=parent\\x0aAUTHORIZATION=FORGED") != NULL);
+    assert(strstr(output, "\nAUTHORIZATION=FORGED\n") == NULL);
     assert(fclose(stream) == 0);
 }
 
