@@ -647,3 +647,12 @@ El contrato de motivo elegido es 1–500 caracteres, sin caracteres de control, 
 ## 20. I3-2B.7B.4B — V26 association lifecycle ledger
 
 Published on PR #16 branch: immutable lifecycle event ledger, exact active canonical USER actor/association checks, deferred event-to-transition commit marker, association CAS update requiring event reference, and adversarial SQL tests. Existing associations are preserved without synthetic history. Owner validation is pending; V26 has not been applied to production. See `docs/design/i3-2b-7b4b-association-lifecycle-v26-migration.md`.
+
+
+## 21. I3-2B.7B.4B — validación Debian confirmada y 7B.4C publicado
+
+El propietario confirmó la validación completa de 7B.4B en Debian: **1,480 tests OK** y `COMPILE_EXIT_CODE=0`. La migración V26, sus triggers y las pruebas adversariales quedan validadas; no se aplicó a producción ni se ejecutó bootstrap real.
+
+Se publicó 7B.4C: `SQLiteProjectEnvironmentLifecycleLedger` implementa append/read ordenado por revisión, reconstrucción validada de eventos y soporte de UoW compartida. El writer no se integra en `SQLiteLocalAuthorityUnitOfWork` ni en runtime composition. Las pruebas nuevas cubren append/transición atómicos, orden, rechazo de evento huérfano, rollback, validación de entradas y ausencia del writer runtime.
+
+**Estado 7B.4C:** implementación publicada; validación owner pendiente. PR #16 continúa Draft, abierto y sin merge.
