@@ -1,6 +1,6 @@
 # I3-2B.7B.3D — diseño de CLI offline para bootstrap de Platform Admin
 
-**Estado:** diseño de implementación basado en inspección del branch; no se ha añadido CLI ni ejecutado bootstrap.
+**Estado:** implementación publicada; validación automatizada del propietario pendiente. No se ha ejecutado bootstrap real.
 **PR:** #16 — Draft, abierto y sin merge.
 
 ## 1. Inspección del baseline
@@ -85,3 +85,17 @@ No se ejecuta bootstrap automáticamente al importar, instalar, iniciar Atlas, a
 - no hay opción `--yes`, override de UID/TTY ni integración runtime.
 - suite completa y `compileall` en Debian; no ejecutar provisión real.
 
+
+## 8. Implementación publicada
+
+Se añadieron:
+
+- `src/atlas/platform_admin_bootstrap_cli.py`: entrypoint aislado, sin dependencia desde `atlas.cli` ni composición runtime.
+- `tests/unit/test_platform_admin_bootstrap_cli.py`: pruebas de TTY, confirmación, provisión, replay, conflicto y rechazo de rutas inválidas.
+- `pyproject.toml`: comando independiente `atlas-platform-admin-bootstrap`.
+
+La implementación verifica que stdin/stdout sean TTY y correspondan al mismo dispositivo; captura UID real/efectivo y TTY desde el OS. La base debe existir como archivo regular, con ruta absoluta no simbólica. El ledger se inspecciona mediante conexión SQLite `mode=ro`, exigiendo el historial completo y los checksums exactos de V1–V25. No se llama a `initialize()` ni `apply_migrations()`.
+
+La operación existente se recupera antes de consultar el estado actual del USER; replay exacto no vuelve a pedir confirmación ni escribe. Para una operación nueva se muestra el sujeto y alcance y se exige la frase exacta. El servicio obtiene el timestamp de confirmación mediante `SystemClock`, y el adaptador mantiene la revalidación autoritativa bajo `BEGIN IMMEDIATE`.
+
+**Pendiente:** ejecución de pruebas focalizadas, suite completa y `compileall` por el propietario en Debian. No ejecutar el bootstrap real.
