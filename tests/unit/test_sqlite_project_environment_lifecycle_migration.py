@@ -22,7 +22,7 @@ class SQLiteProjectEnvironmentLifecycleMigrationTests(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
         self.database = SQLiteDatabase(Path(self.temp_dir.name) / "authority.sqlite")
-        self.database.apply_migrations(SQLITE_MIGRATIONS)
+        self.database.apply_migrations(SQLITE_MIGRATIONS[:-1])
         self.identity = SQLiteIdentityAuthority(self.database).create_user()
         projects = SQLiteProjectEnvironmentRepository(self.database)
         projects.create_project(ProjectMetadata(ProjectId("atlas"), "active", 1))
@@ -32,6 +32,7 @@ class SQLiteProjectEnvironmentLifecycleMigrationTests(unittest.TestCase):
             ProjectId("atlas"), EnvironmentId("test"), ProjectEnvironmentStatus.ACTIVE
         )
         self.registry.create_association(self.association)
+        self.database.apply_migrations(SQLITE_MIGRATIONS)
 
     def _insert_event(self, connection, *, previous_status, new_status,
                       previous_revision=1, event_id=None, actor_user_id=None,
