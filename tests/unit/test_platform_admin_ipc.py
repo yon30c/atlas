@@ -58,6 +58,10 @@ class AuthorityAdminIPCProtocolTests(unittest.TestCase):
         with self.assertRaises(AdminProtocolRejected):
             decode_admin_request(_request_packet(version=True))
 
+    def test_rejects_float_protocol_version(self):
+        with self.assertRaises(AdminProtocolRejected):
+            decode_admin_request(_request_packet(version=1.0))
+
     def test_rejects_non_canonical_or_non_v4_request_id(self):
         with self.assertRaises(AdminProtocolRejected):
             decode_admin_request(_request_packet(request_id=str(uuid.uuid1())))
