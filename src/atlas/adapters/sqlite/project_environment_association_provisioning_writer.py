@@ -113,19 +113,13 @@ class SQLiteProjectEnvironmentAssociationProvisioningWriter:
                     ):
                         raise ContractError("operation_id ya fue usado con otra intención")
                     row = connection.execute(
-                        """SELECT project_id, environment_id, status, revision
-                           FROM atlas_project_environments
+                        """SELECT 1 FROM atlas_project_environments
                            WHERE provisioning_event_id = ?""",
                         (existing["event_id"],),
                     ).fetchone()
                     if row is None:
                         raise ContractError("registro idempotente incompleto; operación denegada")
-                    return ProjectEnvironmentAssociation(
-                        ProjectId(row["project_id"]),
-                        EnvironmentId(row["environment_id"]),
-                        ProjectEnvironmentStatus(row["status"]),
-                        row["revision"],
-                    )
+                    return association
 
                 connection.execute(
                     """INSERT INTO atlas_project_environment_provisioning_events (
