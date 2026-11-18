@@ -692,3 +692,11 @@ Tras corregir el doble de prueba, el propietario confirmó **26 tests en 1.664 s
 ### Cierre de validación 7B.4E
 
 El propietario confirmó **1,497 tests en 30.888 s — OK** y `compileall` con **`COMPILE_EXIT_CODE=0`**. Las 26 pruebas focalizadas también pasaron (1.664 s). Se considera 7B.4E validada. Sin cambios de producción, esquema, composición runtime o infraestructura en esta fase.
+
+## Revisión de integración 7B.4A–7B.4E — hallazgo corregido, validación pendiente
+
+Se revisaron conjuntamente contratos de dominio, puerto, migración V26, ledger SQLite, servicio transaccional, UoW, autoridad Platform Admin y pruebas adversariales. Se confirmó que la escritura del ledger no está expuesta en `SQLiteLocalAuthorityUnitOfWork`, el servicio comparte la UoW para verificación de identidad/grant/asociación y persistencia, y V26 exige evento + transición + marcador en el mismo commit, conservando asociaciones legacy sin eventos sintéticos.
+
+**Hallazgo:** el servicio capturaba `Clock.now()` antes de adquirir la UoW. Dado que `SQLiteDatabase.unit_of_work()` ejecuta `BEGIN IMMEDIATE` y puede esperar hasta `busy_timeout_ms`, el grant podía evaluarse usando una hora anterior a la adquisición del bloqueo. Se corrigió capturando y validando el Clock dentro de la UoW, después de adquirirla. Se añadió una prueba que simula el avance del reloj durante la entrada a la UoW y exige denegación sin escrituras cuando el grant ya expiró.
+
+**Estado:** corrección y prueba publicadas en la rama; pendientes de validación del propietario (prueba focalizada, suite completa y compileall). No se modificó schema, migraciones, composición runtime ni infraestructura.
