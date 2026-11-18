@@ -20,6 +20,7 @@ PROTOCOL_VERSION = 1
 MAX_REQUEST_BYTES = 64 * 1024
 MAX_RESPONSE_BYTES = 4 * 1024
 CONNECTION_TIMEOUT_SECONDS = 5.0
+MAX_CONNECTION_TIMEOUT_SECONDS = 60.0
 _ALLOWED_OPERATIONS = frozenset({"authority.ping"})
 
 
@@ -175,13 +176,21 @@ def handle_admin_connection(
         raise AdminProtocolRejected("only AF_UNIX connections are supported")
     if connection.getsockopt(socket.SOL_SOCKET, socket.SO_TYPE) != socket.SOCK_SEQPACKET:
         raise AdminProtocolRejected("only SOCK_SEQPACKET connections are supported")
-    if (
-        isinstance(timeout_seconds, bool)
-        or not isinstance(timeout_seconds, (int, float))
-        or not math.isfinite(timeout_seconds)
-        or timeout_seconds <= 0
-    ):
+    if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float)):
         raise AdminProtocolRejected("timeout_seconds must be a finite positive number")
+    try:
+        timeout_value = float(timeout_seconds)
+    except (OverflowError, ValueError) as exc:
+        raise AdminProtocolRejected("timeout_seconds must be a finite positive number") from exc
+    if (
+        not math.isfinite(timeout_value)
+        or timeout_value <= 0
+        or timeout_value > MAX_CONNECTION_TIMEOUT_SECONDS
+    ):
+        raise AdminProtocolRejected(
+            f"timeout_seconds must be greater than zero and at most "
+            f"{MAX_CONNECTION_TIMEOUT_SECONDS:g}"
+        )
 
     allowed = frozenset(allowed_peer_uids)
     if not allowed or any(
@@ -194,7 +203,7 @@ def handle_admin_connection(
     if peer.uid not in allowed:
         raise AdminPeerRejected("peer UID is not authorized")
 
-    connection.settimeout(float(timeout_seconds))
+    connection.settimeout(timeout_value)
     try:
         packet, ancillary, flags, _address = connection.recvmsg(MAX_REQUEST_BYTES + 1)
     except TimeoutError as exc:
