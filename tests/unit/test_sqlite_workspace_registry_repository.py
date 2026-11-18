@@ -76,6 +76,7 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
                 expected_revision=current.revision,
                 lifecycle_event_id=event_id,
             )
+            unit.commit()
         return self.associations.get_association(ProjectId("atlas"), EnvironmentId("test"))
 
     def test_create_and_read_explicit_project_environment_association(self):
