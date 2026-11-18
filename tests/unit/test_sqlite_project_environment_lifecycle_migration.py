@@ -11,7 +11,7 @@ from atlas.adapters.sqlite.database import SQLiteDatabase
 from atlas.adapters.sqlite.identity_authority import SQLiteIdentityAuthority
 from atlas.adapters.sqlite.migrations import SQLITE_MIGRATIONS
 from atlas.adapters.sqlite.project_environment_repository import SQLiteProjectEnvironmentRepository
-from atlas.adapters.sqlite.workspace_registry_repository import SQLiteWorkspaceRegistryRepository
+from atlas.adapters.sqlite.project_environment_association_repository import SQLiteProjectEnvironmentAssociationRepository
 from atlas.memory.metadata import EnvironmentMetadata, ProjectMetadata
 from atlas.memory.models import EnvironmentId, ProjectId
 from atlas.workspace.models import ProjectEnvironmentAssociation, ProjectEnvironmentStatus
@@ -27,7 +27,7 @@ class SQLiteProjectEnvironmentLifecycleMigrationTests(unittest.TestCase):
         projects = SQLiteProjectEnvironmentRepository(self.database)
         projects.create_project(ProjectMetadata(ProjectId("atlas"), "active", 1))
         projects.create_environment(EnvironmentMetadata(EnvironmentId("test"), "active", 1))
-        self.registry = SQLiteWorkspaceRegistryRepository(self.database)
+        self.registry = SQLiteProjectEnvironmentAssociationRepository(self.database)
         self.association = ProjectEnvironmentAssociation(
             ProjectId("atlas"), EnvironmentId("test"), ProjectEnvironmentStatus.ACTIVE
         )
