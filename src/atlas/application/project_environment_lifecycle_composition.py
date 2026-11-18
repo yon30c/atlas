@@ -11,6 +11,9 @@ from atlas.adapters.sqlite.local_authority_unit_of_work import (
     SQLiteLocalAuthorityUnitOfWork,
     SQLiteLocalAuthorityUnitOfWorkFactory,
 )
+from atlas.adapters.sqlite.project_environment_lifecycle_association_writer import (
+    SQLiteProjectEnvironmentLifecycleAssociationWriter,
+)
 from atlas.adapters.sqlite.project_environment_lifecycle_ledger import (
     SQLiteProjectEnvironmentLifecycleLedger,
 )
@@ -68,9 +71,18 @@ def build_trusted_project_environment_lifecycle_service(
             unit_of_work=unit,
         )
 
+    def association_writer_factory(unit):
+        if not isinstance(unit, SQLiteLocalAuthorityUnitOfWork):
+            raise ContractError("la composición lifecycle requiere UoW local confiable")
+        return SQLiteProjectEnvironmentLifecycleAssociationWriter(
+            database,
+            unit_of_work=unit,
+        )
+
     return ProjectEnvironmentLifecycleService(
         unit_of_work_factory,
         identity_verifier=identity_verifier,
         clock=clock,
         ledger_factory=ledger_factory,
+        association_writer_factory=association_writer_factory,
     )
