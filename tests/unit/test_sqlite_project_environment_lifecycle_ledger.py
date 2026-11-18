@@ -121,6 +121,7 @@ class SQLiteProjectEnvironmentLifecycleLedgerTests(unittest.TestCase):
                 expected_revision=1,
                 lifecycle_event_id=event.event_id,
             )
+            unit.commit()
         self.assertEqual(self.ledger.list_events("atlas", "test"), (event,))
 
     def test_history_is_ordered_by_association_revision(self):
