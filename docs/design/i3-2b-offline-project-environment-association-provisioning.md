@@ -1,6 +1,6 @@
 # Offline Project/Environment Association Provisioning
 
-**Status:** operational trust boundary approved by the owner; V27 persistence, the narrow writer, and the guarded interactive Linux entrypoint are implemented on this branch. Owner-run Debian validation is still pending. No production database has been provisioned.
+**Status:** operational trust boundary approved by the owner; V27 persistence, the narrow writer, and the guarded interactive Linux entrypoint are implemented and validated on Debian. The focused provisioning/CLI tests (19), affected lifecycle/workspace regression tests (70), and full unit suite (1,538) passed. No production database has been provisioned.
 
 ## Decision
 
@@ -86,14 +86,21 @@ This slice does not:
 
 ## Implementation sequence
 
-1. Implement V27 immutable provisioning ledger and bidirectional deferred integrity constraints. **Implemented; validation pending.**
-2. Separate the association reader from the narrow INSERT writer. **Implemented; validation pending.**
-3. Add atomic persistence and idempotent operation-ID handling. **Implemented; validation pending.**
-4. Add the unregistered interactive Linux command with `sudo`, UID, TTY, schema, and typed-confirmation guards. **Implemented; validation pending.**
-5. Add adversarial tests for legacy-row preservation, idempotency, event/association atomicity, direct INSERT denial, and CLI guards. **Added; owner-run validation pending.**
-6. Complete the final architecture audit and resolve any test findings.
+1. Implement V27 immutable provisioning ledger and bidirectional deferred integrity constraints. **Implemented and validated.**
+2. Separate the association reader from the narrow INSERT writer. **Implemented and validated.**
+3. Add atomic persistence and idempotent operation-ID handling. **Implemented and validated.**
+4. Add the unregistered interactive Linux command with `sudo`, UID, TTY, schema, and typed-confirmation guards. **Implemented and validated.**
+5. Add adversarial tests for legacy-row preservation, idempotency, event/association atomicity, direct INSERT denial, and CLI guards. **Added and validated.**
+6. Complete the final architecture audit and resolve any test findings. **In progress; residual host-filesystem trust assumptions are documented in the final review.**
 7. Keep all runtime registration and actual first provisioning disabled.
 
 ## Validation boundary
 
-The implementation will require owner-run Debian validation of focused tests, `compileall`, and the full suite. No real administrator, association, or production database will be provisioned during development or tests.
+The owner-run Debian validation completed with 19 focused provisioning/CLI tests, 70 affected lifecycle/workspace regression tests, and 1,538 tests in the full suite, all passing. A `compileall` result was not recorded in the validation output available for this review. No real administrator, association, or production database was provisioned during development or tests.
+
+
+## Residual host trust assumption
+
+The writer is intentionally an internal Python adapter: it is not exported, attached to a general UoW, or imported by any production source module other than the guarded offline CLI. The source-level exclusivity test protects this composition against accidental imports. This is **not** a Python sandbox or an OS privilege boundary: a caller able to execute arbitrary Python with write access to the authority database can import internal modules or write SQLite directly, and can construct a syntactically valid provenance dataclass. The UID/TTY/confirmation checks are performed by the CLI, not cryptographically attested by the persistence writer.
+
+Therefore the approved operational boundary also depends on host access control: keep the authority database and its containing directory writable only by the trusted platform-operator/root context, do not grant the ordinary Atlas runtime account write access to that database, and treat arbitrary code execution under an account with database write access as equivalent to provisioning authority. If that filesystem/host assumption is not acceptable, provisioning needs a separately isolated privileged broker or service boundary; module visibility and AST tests alone are insufficient.
