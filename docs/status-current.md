@@ -1,9 +1,9 @@
 # Estado vigente de Atlas
 
 > Corte documental: 18 de noviembre de 2026.
-> Rama revisada: `main` (`f0070dd`; sincronizada con `origin/main`, 0/0).
-> Commit de código evaluado en la suite reportada: `dd95c3cd87448ff99056aea703111f0e9a8632a6`; las actualizaciones documentales posteriores no alteran ese código.
-> Suite completa más reciente reportada por el propietario en Debian: **1,513 tests — OK**.
+> Rama de código revisada: `main` (`8351b68`; sincronizada con `origin/main` en la validación del propietario). El contrato operativo de almacenamiento de autoridad queda documentado en esta revisión y está pendiente de implementación.
+> Commit de código evaluado en la suite completa reportada: `8351b683ae315d2096637f3d132ae5586f54b6d6`.
+> Suite completa más reciente reportada por el propietario en Debian: **1,539 tests — OK**.
 > Validación focalizada de 7B.6B en Debian: **37 tests — OK**; `python -m compileall -q src tests`: **exit code 0**. 7B.6B queda cerrada en el alcance validado.
 > Este documento diferencia implementación publicada, validación local reportada y capacidades conectadas al runtime.
 
@@ -30,29 +30,17 @@ Atlas todavía no es la plataforma autónoma completa de la visión. La presenci
 
 ## Evidencia local
 
-El propietario reportó en Debian la ejecución de la suite completa:
+El propietario reportó en Debian, sobre `main` en el commit `8351b683ae315d2096637f3d132ae5586f54b6d6`, la ejecución de la suite completa:
 
 ```text
-Ran 1513 tests in 30.071s
+Ran 1539 tests in 34.305s
 
 OK
 ```
 
-La suite completa reportada (1,513 tests) se complementó con la validación focalizada ejecutada por el propietario en Debian sobre `main`:
+También reportó que `python -m compileall -q src tests` terminó con código de salida 0. Esta evidencia corresponde al código de `main` indicado; no es una ejecución de GitHub Actions ni valida cambios documentales posteriores en ramas separadas.
 
-```text
-Rama: main
-HEAD: f0070dd
-Sincronización main...origin/main: 0 0
-Ran 37 tests in 2.342s
-
-OK
-COMPILE_EXIT_CODE=0
-```
-
-La ejecución focalizada cubrió Ledger lifecycle, Workspace Registry, servicio lifecycle y Local Authority Unit of Work. La compilación de `src` y `tests` terminó con código 0. Con esta evidencia, **7B.6B queda cerrada** en el alcance de pruebas ejecutado. Esto no equivale a GitHub Actions, validación E2E ni prueba de despliegue productivo.
-
-La validación demuestra que los módulos focalizados pasan en el checkout indicado; no debe ampliarse a garantías no cubiertas por esas pruebas ni a la habilitación de runtime.
+La validación no equivale a pruebas E2E ni a una prueba de despliegue productivo. No debe ampliarse a garantías que la suite no cubre ni a la habilitación del runtime.
 
 ## Estado de dominios de la visión
 
@@ -106,6 +94,8 @@ La validación demuestra que los módulos focalizados pasan en el checkout indic
 - [Auditoría CAM de renovación delegada](design/i3-2b-cam-renewal-integration-audit.md)
 - [Auditoría de frontera lifecycle 7B.6A](design/i3-2b-7b6a-lifecycle-write-boundary-audit.md)
 - [Separación de capacidades lifecycle 7B.6B](design/i3-2b-7b6b-lifecycle-write-capability-separation.md)
+- [Contrato operativo de almacenamiento de autoridad local](design/local-authority-storage-operational-contract.md) — decisión documental aprobada, pendiente de implementación.
+- [Provisioning offline Project/Environment](design/i3-2b-offline-project-environment-association-provisioning.md) — CLI actual no apto para la futura DB principal hasta adaptar su frontera de privilegios.
 
 
 ### Actualización 3.3.3 — sobre de respuesta estructurada
