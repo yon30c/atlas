@@ -1,4 +1,4 @@
-"""Adversarial tests for the V26 Project/Environment lifecycle schema."""
+"""Adversarial tests for V26 lifecycle and V27 provisioning compatibility."""
 
 from datetime import datetime, timezone
 from pathlib import Path
