@@ -9,6 +9,8 @@ from uuid import uuid4
 
 from atlas.adapters.sqlite.database import SQLiteDatabase
 from atlas.adapters.sqlite.identity_authority import SQLiteIdentityAuthority
+from atlas.adapters.sqlite.local_authority_unit_of_work import SQLiteLocalAuthorityUnitOfWork
+from atlas.adapters.sqlite.project_environment_lifecycle_association_writer import SQLiteProjectEnvironmentLifecycleAssociationWriter
 from atlas.adapters.sqlite.local_authority_unit_of_work import SQLiteLocalAuthorityUnitOfWorkFactory
 from atlas.adapters.sqlite.migrations import SQLITE_MIGRATIONS
 from atlas.adapters.sqlite.project_environment_lifecycle_ledger import (
@@ -64,15 +66,15 @@ class SQLiteProjectEnvironmentLifecycleLedgerTests(unittest.TestCase):
             new=target,
             previous_revision=current.revision,
         )
-        with self.database.unit_of_work() as unit:
+        with SQLiteLocalAuthorityUnitOfWork(self.database) as unit:
             ledger = SQLiteProjectEnvironmentLifecycleLedger(
                 self.database, unit_of_work=unit
             )
-            registry = SQLiteProjectEnvironmentAssociationRepository(
+            writer = SQLiteProjectEnvironmentLifecycleAssociationWriter(
                 self.database, unit_of_work=unit
             )
             ledger.append_event(event)
-            registry.update_association(
+            writer.update_association(
                 replace(current, status=target, revision=current.revision + 1),
                 expected_revision=current.revision,
                 lifecycle_event_id=event.event_id,
@@ -85,11 +87,11 @@ class SQLiteProjectEnvironmentLifecycleLedgerTests(unittest.TestCase):
             new=ProjectEnvironmentStatus.SUSPENDED,
             previous_revision=1,
         )
-        with self.database.unit_of_work() as unit:
+        with SQLiteLocalAuthorityUnitOfWork(self.database) as unit:
             ledger = SQLiteProjectEnvironmentLifecycleLedger(
                 self.database, unit_of_work=unit
             )
-            registry = SQLiteProjectEnvironmentAssociationRepository(
+            writer = SQLiteProjectEnvironmentLifecycleAssociationWriter(
                 self.database, unit_of_work=unit
             )
             ledger.append_event(event)
@@ -97,7 +99,7 @@ class SQLiteProjectEnvironmentLifecycleLedgerTests(unittest.TestCase):
                 ledger.list_events("atlas", "test"),
                 (event,),
             )
-            registry.update_association(
+            writer.update_association(
                 replace(
                     self.association,
                     status=ProjectEnvironmentStatus.SUSPENDED,
@@ -142,15 +144,15 @@ class SQLiteProjectEnvironmentLifecycleLedgerTests(unittest.TestCase):
             previous_revision=1,
         )
         with self.assertRaisesRegex(RuntimeError, "force lifecycle rollback"):
-            with self.database.unit_of_work() as unit:
+            with SQLiteLocalAuthorityUnitOfWork(self.database) as unit:
                 ledger = SQLiteProjectEnvironmentLifecycleLedger(
                     self.database, unit_of_work=unit
                 )
-                registry = SQLiteProjectEnvironmentAssociationRepository(
+                writer = SQLiteProjectEnvironmentLifecycleAssociationWriter(
                     self.database, unit_of_work=unit
                 )
                 ledger.append_event(event)
-                registry.update_association(
+                writer.update_association(
                     replace(
                         self.association,
                         status=ProjectEnvironmentStatus.SUSPENDED,
