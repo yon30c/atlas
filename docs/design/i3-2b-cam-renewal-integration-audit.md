@@ -748,3 +748,15 @@ La autorización Platform Admin está en `ProjectEnvironmentLifecycleService`. P
 **7B.4A–7B.4E: implementación y validación unitaria integradas; revisión estática completada.** No se habilita todavía la capacidad en runtime ni se considera lista para exposición externa. El siguiente slice recomendado es un diseño de composición confiable y prueba de integración real (sin endpoint ni CLI), con una decisión explícita sobre cómo restringir la construcción del ledger writer y el acceso a la mutación de asociaciones.
 
 No se aplicó V26 a una base productiva, no se ejecutó bootstrap real y no se modificó infraestructura. PR #16 permanece Draft, abierto y sin merge.
+
+## 7B.5A — diseño de composición confiable publicado
+
+Se publicó `docs/design/i3-2b-7b5a-trusted-lifecycle-composition-design.md`.
+
+La inspección confirmó que `VerifiedIdentityContextService.verify_in_unit_of_work(context, unit)` ya es el verifier real requerido: valida vigencia, attestation HMAC, issuer, binding, revisión y USER canónico, sin abrir ni confirmar otra UoW. La integración propuesta reutiliza ese servicio directamente y comparte el mismo `SQLiteLocalAuthorityUnitOfWorkFactory`, `SQLiteDatabase` y Clock UTC confiable con el servicio lifecycle.
+
+Se identificó una frontera técnica a resolver antes de implementar: el adapter lifecycle acepta actualmente `SQLiteUnitOfWork`, mientras el servicio opera con `SQLiteLocalAuthorityUnitOfWork`. La futura composición no debe navegar atributos privados `_unit`; 7B.5B deberá ajustar el adapter para validar y aceptar la UoW local de autoridad como contexto compartido, sin exponer el writer en la UoW general.
+
+El diseño especifica fixture de autenticación nativa real, attestor HMAC de test, pruebas positivas y negativas de issuer/binding/USER/attestation/audience/expiración/Platform Admin, atomicidad y comprobación de la misma transacción física. No se permite sustituir el verifier real por un mock en esas pruebas.
+
+**Estado 7B.5A:** diseño únicamente, publicado. Sin cambios de código, runtime composition, endpoint, CLI, migración ni infraestructura. **7B.5B pendiente.** PR #16 sigue Draft, abierto y sin merge.
