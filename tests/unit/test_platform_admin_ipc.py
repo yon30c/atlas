@@ -6,6 +6,7 @@ import os
 import socket
 import unittest
 import uuid
+from unittest.mock import Mock
 
 from atlas.platform_admin_ipc import (
     MAX_REQUEST_BYTES,
@@ -132,6 +133,34 @@ class AuthorityAdminIPCPeerTests(unittest.TestCase):
             handle_admin_connection(
                 stream_server,
                 allowed_peer_uids={os.getuid()},
+            )
+
+    def test_rejects_non_unix_seqpacket_socket_before_peer_lookup(self):
+        connection = Mock()
+        connection.family = socket.AF_INET
+        with self.assertRaises(AdminProtocolRejected):
+            handle_admin_connection(
+                connection,
+                allowed_peer_uids={os.getuid()},
+            )
+        connection.getsockopt.assert_not_called()
+
+    def test_rejects_non_positive_or_non_finite_timeout(self):
+        for timeout in (0, -1, float("inf"), float("nan"), True):
+            with self.subTest(timeout=timeout):
+                with self.assertRaises(AdminProtocolRejected):
+                    handle_admin_connection(
+                        self.server,
+                        allowed_peer_uids={os.getuid()},
+                        timeout_seconds=timeout,
+                    )
+
+    def test_rejects_peer_that_does_not_send_before_timeout(self):
+        with self.assertRaisesRegex(AdminProtocolRejected, "receive timed out"):
+            handle_admin_connection(
+                self.server,
+                allowed_peer_uids={os.getuid()},
+                timeout_seconds=0.05,
             )
 
     def test_rejects_oversized_seqpacket(self):
