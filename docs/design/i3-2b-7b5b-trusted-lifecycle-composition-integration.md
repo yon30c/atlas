@@ -1,6 +1,6 @@
 # I3-2B.7B.5B — composición confiable y pruebas de integración reales
 
-**Estado:** implementación publicada; validación Debian pendiente.  
+**Estado:** implementación publicada y validada por el propietario en Debian.  
 **PR:** #16 — Draft, abierto y sin merge.  
 **Base:** diseño 7B.5A.  
 **Alcance:** adaptador SQLite, composición interna no registrada y pruebas de integración. Sin runtime, HTTP, CLI, migración ni infraestructura.
@@ -71,7 +71,7 @@ python -m compileall -q src tests
 python -m unittest discover -s tests -v
 ```
 
-La fase queda **pendiente de validación del propietario** hasta recibir los resultados reales. No se afirma que las pruebas hayan pasado.
+**Validación confirmada:** el propietario reportó la suite completa con **1,510 tests en 30.376 s — OK**. La fase 7B.5B queda validada por esa ejecución. No se afirma una ejecución separada de `compileall` en este checkpoint.
 
 ## 5. Seguridad y estado operativo
 
@@ -89,4 +89,4 @@ La primera ejecución completa reportó un único fallo en `test_wrong_audience_
 
 Se corrigió el fixture: ahora persiste un segundo proof nativo real con audience `atlas.other`, lo consume mediante un `VerifiedIdentityContextService` real configurado para esa audiencia y pasa el contexto HMAC resultante al lifecycle configurado para `atlas.internal`. Se comprueba que el verifier lifecycle rechaza ese contexto y que no se alteran asociación, revisión, eventos ni marcadores.
 
-**Estado:** corrección publicada; nueva ejecución focalizada y suite completa pendientes. No se modificó el código de producción ni se debilitó la verificación.
+**Validación final del propietario:** tras corregir el fixture de audience, la suite completa ejecutada en Debian terminó con **1,510 tests en 30.376 s — OK**. La corrección fue exclusivamente de prueba; no se modificó el código de producción ni se debilitó la verificación.
