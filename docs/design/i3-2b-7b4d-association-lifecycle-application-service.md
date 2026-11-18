@@ -11,7 +11,7 @@ Se añade `ProjectEnvironmentLifecycleService.transition(context, verified_ident
 
 Secuencia dentro de una única UoW:
 
-1. Capturar una sola vez `Clock.now()` y exigir datetime UTC.
+1. Adquirir la UoW (`BEGIN IMMEDIATE`) y, ya dentro de la transacción, capturar una sola vez `Clock.now()` y exigir datetime UTC. Así una espera por otro escritor no deja una hora de autorización obsoleta.
 2. Revalidar `VerifiedIdentityContext` mediante `require_verified_owner_context_in_unit_of_work`. La evidencia debe resolver a la pareja canónica USER activa; actor y UserId contextual deben coincidir y no se admite delegación.
 3. Leer los grants Platform Admin del usuario canónico. Exigir exactamente un grant ACTIVE y aplicar `require_platform_admin_permission` con el permiso exacto según el objetivo: `association.suspend` o `association.reactivate`. El helper comprueba sujeto, identity_id, revisión, estado y ventana temporal.
 4. Leer la asociación exacta, exigir que exista y que su revisión coincida con `expected_revision`; rechazar no-op.
@@ -55,3 +55,7 @@ La validación confirma el servicio, las pruebas focalizadas incorporadas al con
 - La prueba del servicio usa un verifier doble. Se requieren pruebas adversariales con verifier real/mocks de fallo, grant expirado/revocado, mismatch de identity revision, rollback de commit diferido y concurrencia.
 - No se añade cascade sobre Grants/delegaciones/Workspaces ni suspensión automática de Workspaces.
 - No hay cambios de schema, host, systemd, Docker, privilegios ni DB productiva.
+
+## Revisión de integración posterior
+
+La revisión 7B.4A–7B.4E detectó que el `Clock` se capturaba antes de adquirir la UoW. Se corrigió el orden: ahora se captura después de entrar en la UoW, una vez adquirido el bloqueo transaccional. Se añadió una prueba que adelanta el reloj al entrar en la UoW y exige denegación por grant expirado sin escrituras. Validación pendiente del propietario.
