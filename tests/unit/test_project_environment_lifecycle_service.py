@@ -1,6 +1,9 @@
 """Security and transaction tests for association lifecycle application service."""
 
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from threading import Barrier
 from pathlib import Path
 import tempfile
 import unittest
@@ -39,13 +42,17 @@ def _uuid():
 
 
 class FixedClock(Clock):
+    def __init__(self, now=NOW):
+        self._now = now
+
     def now(self):
-        return NOW
+        return self._now
 
 
 class TestIdentityVerifier:
-    def __init__(self, canonical):
+    def __init__(self, canonical, now=NOW):
         self.canonical = canonical
+        self.now = now
 
     def verify_in_unit_of_work(self, evidence, unit):
         current = unit.identity.get_user(evidence.user_id)
@@ -54,8 +61,8 @@ class TestIdentityVerifier:
             or current != self.canonical
             or evidence.identity_id != current.identity.identity_id
             or evidence.identity_revision != current.identity.revision
-            or evidence.expires_at <= NOW
-            or evidence.verified_at > NOW
+            or evidence.expires_at <= self.now
+            or evidence.verified_at > self.now
         ):
             raise AuthorizationError("invalid identity evidence")
         return current
@@ -248,6 +255,130 @@ class ProjectEnvironmentLifecycleServiceTests(unittest.TestCase):
                 ).fetchone()[0],
                 0,
             )
+
+
+    def test_expired_platform_admin_grant_denies_without_writes(self):
+        future = NOW + timedelta(days=90)
+        long_lived_evidence = replace(
+            self.evidence,
+            authenticated_at=NOW,
+            verified_at=NOW,
+            expires_at=future + timedelta(days=1),
+        )
+        service = ProjectEnvironmentLifecycleService(
+            self.uow_factory,
+            identity_verifier=TestIdentityVerifier(self.user, now=future),
+            clock=FixedClock(future),
+            ledger_factory=lambda unit: SQLiteProjectEnvironmentLifecycleLedger(
+                self.database, unit_of_work=unit._unit
+            ),
+        )
+        with self.assertRaises(AuthorizationError):
+            service.transition(
+                self.context,
+                long_lived_evidence,
+                self._request(ProjectEnvironmentStatus.SUSPENDED),
+            )
+        with self.database.connection() as connection:
+            association = connection.execute(
+                "SELECT status, revision FROM atlas_project_environments"
+            ).fetchone()
+            event_count = connection.execute(
+                "SELECT COUNT(*) FROM atlas_project_environment_lifecycle_events"
+            ).fetchone()[0]
+        self.assertEqual((association["status"], association["revision"]), ("active", 1))
+        self.assertEqual(event_count, 0)
+
+    def test_identity_revision_mismatch_denies_without_writes(self):
+        mismatched = replace(
+            self.evidence,
+            identity_revision=self.evidence.identity_revision + 1,
+        )
+        with self.assertRaises(AuthorizationError):
+            self.service.transition(
+                self.context,
+                mismatched,
+                self._request(ProjectEnvironmentStatus.SUSPENDED),
+            )
+        with self.database.connection() as connection:
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM atlas_project_environment_lifecycle_events"
+                ).fetchone()[0],
+                0,
+            )
+
+    def test_commit_failure_rolls_back_event_and_association(self):
+        factory = self.uow_factory
+
+        class CommitFailingUnit:
+            def __enter__(self):
+                self._unit = factory().__enter__()
+                return self
+
+            def __getattr__(self, name):
+                return getattr(self._unit, name)
+
+            def commit(self):
+                raise RuntimeError("forced physical commit failure")
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                return self._unit.__exit__(exc_type, exc_value, traceback)
+
+        service = ProjectEnvironmentLifecycleService(
+            lambda: CommitFailingUnit(),
+            identity_verifier=TestIdentityVerifier(self.user),
+            clock=FixedClock(),
+            ledger_factory=lambda unit: SQLiteProjectEnvironmentLifecycleLedger(
+                self.database, unit_of_work=unit._unit
+            ),
+        )
+        with self.assertRaisesRegex(RuntimeError, "forced physical commit failure"):
+            service.transition(
+                self.context,
+                self.evidence,
+                self._request(ProjectEnvironmentStatus.SUSPENDED),
+            )
+        with self.database.connection() as connection:
+            association = connection.execute(
+                "SELECT status, revision FROM atlas_project_environments"
+            ).fetchone()
+            event_count = connection.execute(
+                "SELECT COUNT(*) FROM atlas_project_environment_lifecycle_events"
+            ).fetchone()[0]
+            marker_count = connection.execute(
+                "SELECT COUNT(*) FROM atlas_project_environment_lifecycle_commits"
+            ).fetchone()[0]
+        self.assertEqual((association["status"], association["revision"]), ("active", 1))
+        self.assertEqual((event_count, marker_count), (0, 0))
+
+    def test_concurrent_same_revision_allows_only_one_transition(self):
+        barrier = Barrier(2)
+
+        def attempt():
+            barrier.wait(timeout=5)
+            try:
+                self.service.transition(
+                    self.context,
+                    self.evidence,
+                    self._request(ProjectEnvironmentStatus.SUSPENDED),
+                )
+                return "committed"
+            except ConcurrencyError:
+                return "stale"
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            outcomes = tuple(pool.map(lambda _: attempt(), range(2)))
+        self.assertCountEqual(outcomes, ("committed", "stale"))
+        with self.database.connection() as connection:
+            association = connection.execute(
+                "SELECT status, revision FROM atlas_project_environments"
+            ).fetchone()
+            event_count = connection.execute(
+                "SELECT COUNT(*) FROM atlas_project_environment_lifecycle_events"
+            ).fetchone()[0]
+        self.assertEqual((association["status"], association["revision"]), ("suspended", 2))
+        self.assertEqual(event_count, 1)
 
     def test_ledger_failure_rolls_back_transition(self):
         def failing_ledger_factory(unit):
