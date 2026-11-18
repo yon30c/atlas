@@ -668,3 +668,9 @@ El propietario confirmó la validación del adaptador SQLite lifecycle en Debian
 Se publicó `ProjectEnvironmentLifecycleService`: revalida VerifiedIdentityContext USER dentro de la UoW, exige un único Platform Admin ACTIVE y el permiso exacto de suspensión/reactivación, comprueba expected_revision, usa Clock UTC confiable y escribe ledger + CAS de asociación en la misma transacción. El adapter se enlaza mediante `ledger_factory(unit)` y no se agrega writer a `SQLiteLocalAuthorityUnitOfWork`.
 
 Las pruebas iniciales usan un verifier doble controlado; no simulan ni sustituyen la validación criptográfica real de Identity Authority. La validación Debian está pendiente. No se añadió runtime composition, endpoint, CLI ni migración. No se ejecutó bootstrap real ni se tocó DB productiva.
+
+## 24. I3-2B.7B.4D — validación Debian confirmada
+
+El propietario confirmó la suite completa en Debian: **1,493 tests en 29.527 s — OK** y `python -m compileall -q src tests` con **COMPILE_EXIT_CODE=0**. Queda validado el servicio transaccional de lifecycle junto con el ledger SQLite y las protecciones V26 en el HEAD probado.
+
+No se ejecutó bootstrap real, no se aplicó migración a producción y no se añadió runtime composition, endpoint ni CLI. PR #16 permanece Draft, abierto y sin merge.
