@@ -25,6 +25,11 @@ from atlas.adapters.sqlite.local_authority_unit_of_work import (
     SQLiteLocalAuthorityUnitOfWork,
     SQLiteLocalAuthorityUnitOfWorkFactory,
 )
+from atlas.adapters.sqlite.authority_storage_composition import (
+    SQLiteLocalAuthorityStorageComposition,
+    compose_sqlite_local_authority_storage,
+    compose_sqlite_local_authority_storage_on_database,
+)
 from atlas.adapters.sqlite.authorization_unit_of_work import (
     SQLiteAuthorizationUnitOfWork,
     SQLiteAuthorizationUnitOfWorkFactory,
@@ -51,6 +56,9 @@ __all__ = [
     "SQLiteIdentityAuthority", "SQLiteAgentIdentityAuthority", "SQLiteNativeAgentIdentityAuthority", "SQLiteAgentDelegationRepository",
     "SQLiteNativeIdentityAuthority", "SQLiteNativeAuthenticationAuthority",
     "SQLiteLocalAuthorityUnitOfWork", "SQLiteLocalAuthorityUnitOfWorkFactory",
+    "SQLiteLocalAuthorityStorageComposition",
+    "compose_sqlite_local_authority_storage",
+    "compose_sqlite_local_authority_storage_on_database",
     "SQLiteAuthorizationUnitOfWork", "SQLiteAuthorizationUnitOfWorkFactory",
     "SQLiteConversationRepository",
     "ConversationBackup", "ConversationExport", "prepare_conversation_database_path",
