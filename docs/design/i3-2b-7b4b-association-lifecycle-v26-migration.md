@@ -1,6 +1,6 @@
 # I3-2B.7B.4B — migración V26 y protección SQL del lifecycle
 
-**Estado:** implementación publicada; validación del propietario pendiente.  
+**Estado:** implementación publicada y validada por el propietario en Debian.  
 **PR:** #16 — Draft, abierto y sin merge.  
 **Migración:** V26 `audited_project_environment_association_lifecycle`.  
 **Alcance:** schema SQLite, constraints/triggers, adaptación mínima del método de persistencia existente y pruebas SQL adversariales. No introduce servicio ni runtime composition.
@@ -75,18 +75,13 @@ Las pruebas existentes de `SQLiteWorkspaceRegistryRepository` ahora generan el e
 
 ## Validación del propietario
 
-Pendiente de ejecutar en Debian después de sincronizar la rama. No declarar V26 validada hasta recibir:
+El propietario sincronizó la rama en `~/atlas-dev` y ejecutó la suite completa y `compileall`. Resultado reportado:
 
-```bash
-cd ~/atlas-dev
-git pull --ff-only
+```text
+Ran 1480 tests in 30.943s
 
-PYTHONPATH=tests:tests/unit python -m unittest test_sqlite_project_environment_lifecycle_migration test_sqlite_workspace_registry_repository -v
-
-PYTHONPATH=tests:tests/unit python -m unittest discover -s tests/unit -p 'test_*.py'
-
-python -m compileall -q src tests
-echo "COMPILE_EXIT_CODE=$?"
+OK
+COMPILE_EXIT_CODE=0
 ```
 
-Checkpoint anterior: 1,471 tests. Se esperan **1,480 tests** (9 nuevos), prueba focal OK y `COMPILE_EXIT_CODE=0`.
+**Resultado:** 1,480/1,480 tests OK; compilación estática sin errores. La validación focal y la suite completa quedaron cubiertas por la ejecución completa. No se ejecutó migración productiva ni bootstrap real. PR #16 permanece Draft, abierto y sin merge.
