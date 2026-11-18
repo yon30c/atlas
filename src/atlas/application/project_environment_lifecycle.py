@@ -98,12 +98,14 @@ class ProjectEnvironmentLifecycleService:
             raise AuthorizationError("Se requiere VerifiedIdentityContext")
         if not isinstance(request, ProjectEnvironmentLifecycleRequest):
             raise ContractError("request debe ser ProjectEnvironmentLifecycleRequest")
-        now = self._clock.now()
-        self._validate_now(now)
-
         permission = self._required_permission(request.target_status)
         with self._unit_of_work_factory() as unit:
             self._required_uow_capabilities(unit)
+            # BEGIN IMMEDIATE may wait for another writer. Capture trusted time
+            # only after the transaction lock is acquired so grant expiry is
+            # evaluated at the start of the protected operation, not pre-lock.
+            now = self._clock.now()
+            self._validate_now(now)
             canonical = require_verified_owner_context_in_unit_of_work(
                 context,
                 verified_identity,
