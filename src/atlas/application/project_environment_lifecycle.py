@@ -114,8 +114,7 @@ class ProjectEnvironmentLifecycleService:
             grants = unit.platform_admin.list_grants_for_user(canonical.user_id)
             active_grants = tuple(
                 grant for grant in grants
-                if isinstance(grant, object)
-                and grant.status is PlatformAdminGrantStatus.ACTIVE
+                if grant.status is PlatformAdminGrantStatus.ACTIVE
             )
             if len(active_grants) != 1:
                 raise AuthorizationError(
