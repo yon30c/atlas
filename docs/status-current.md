@@ -30,29 +30,17 @@ Atlas todavía no es la plataforma autónoma completa de la visión. La presenci
 
 ## Evidencia local
 
-El propietario reportó en Debian la ejecución de la suite completa:
+El propietario reportó en Debian, sobre `main` en el commit `8351b683ae315d2096637f3d132ae5586f54b6d6`, la ejecución de la suite completa:
 
 ```text
-Ran 1513 tests in 30.071s
+Ran 1539 tests in 34.305s
 
 OK
 ```
 
-La suite completa reportada (1,539 tests) se complementó con la validación focalizada ejecutada por el propietario en Debian sobre `main`:
+También reportó que `python -m compileall -q src tests` terminó con código de salida 0. Esta evidencia corresponde al código de `main` indicado; no es una ejecución de GitHub Actions ni valida cambios documentales posteriores en ramas separadas.
 
-```text
-Rama: main
-HEAD: f0070dd
-Sincronización main...origin/main: 0 0
-Ran 37 tests in 2.342s
-
-OK
-COMPILE_EXIT_CODE=0
-```
-
-La validación focalizada cubrió provisioning offline, lifecycle y Workspace; además, el propietario reportó la suite completa de 1,539 tests y `compileall` con código 0. Con esta evidencia, las fases integradas quedan validadas en el alcance reportado. Esto no equivale a GitHub Actions, validación E2E ni prueba de despliegue productivo. Esto no equivale a GitHub Actions, validación E2E ni prueba de despliegue productivo.
-
-La validación demuestra que los módulos focalizados pasan en el checkout indicado; no debe ampliarse a garantías no cubiertas por esas pruebas ni a la habilitación de runtime.
+La validación no equivale a pruebas E2E ni a una prueba de despliegue productivo. No debe ampliarse a garantías que la suite no cubre ni a la habilitación del runtime.
 
 ## Estado de dominios de la visión
 
@@ -105,7 +93,9 @@ La validación demuestra que los módulos focalizados pasan en el checkout indic
 - [Contrato de delegación verificada AGENT I3-2B](design/verified-agent-delegation-contract-i3-2b.md)
 - [Auditoría CAM de renovación delegada](design/i3-2b-cam-renewal-integration-audit.md)
 - [Auditoría de frontera lifecycle 7B.6A](design/i3-2b-7b6a-lifecycle-write-boundary-audit.md)
-- [Separación de capacidades lifecycle 7B.6B](design/i3-2b-7b6b-lifecycle-write-capability-separation.md)\n- [Contrato operativo de almacenamiento de autoridad local](design/local-authority-storage-operational-contract.md) — decisión documental aprobada, pendiente de implementación.\n- [Provisioning offline Project/Environment](design/i3-2b-offline-project-environment-association-provisioning.md) — CLI actual no apto para la futura DB principal hasta adaptar su frontera de privilegios.
+- [Separación de capacidades lifecycle 7B.6B](design/i3-2b-7b6b-lifecycle-write-capability-separation.md)
+- [Contrato operativo de almacenamiento de autoridad local](design/local-authority-storage-operational-contract.md) — decisión documental aprobada, pendiente de implementación.
+- [Provisioning offline Project/Environment](design/i3-2b-offline-project-environment-association-provisioning.md) — CLI actual no apto para la futura DB principal hasta adaptar su frontera de privilegios.
 
 
 ### Actualización 3.3.3 — sobre de respuesta estructurada
