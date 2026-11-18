@@ -122,6 +122,35 @@ class SQLiteProjectEnvironmentLifecycleMigrationTests(unittest.TestCase):
                          ("suspended", 2, event_id))
         self.assertEqual(tuple(event), ("active", "suspended", 1, 2))
 
+    def test_event_and_transition_roll_back_together(self):
+        with self.assertRaisesRegex(RuntimeError, "force lifecycle rollback"):
+            with self.database.unit_of_work() as unit:
+                connection = unit._connection_for(self.database)
+                event_id = self._insert_event(
+                    connection, previous_status="active", new_status="suspended"
+                )
+                connection.execute(
+                    """UPDATE atlas_project_environments
+                       SET status = 'suspended', revision = 2, updated_at = ?,
+                           last_lifecycle_event_id = ?
+                       WHERE project_id = 'atlas' AND environment_id = 'test'""",
+                    (datetime.now(timezone.utc).isoformat(), event_id),
+                )
+                raise RuntimeError("force lifecycle rollback")
+        with self.database.connection() as connection:
+            association = connection.execute(
+                """SELECT status, revision FROM atlas_project_environments
+                   WHERE project_id = 'atlas' AND environment_id = 'test'"""
+            ).fetchone()
+            count = connection.execute(
+                "SELECT COUNT(*) FROM atlas_project_environment_lifecycle_events"
+            ).fetchone()[0]
+            marker_count = connection.execute(
+                "SELECT COUNT(*) FROM atlas_project_environment_lifecycle_commits"
+            ).fetchone()[0]
+        self.assertEqual(tuple(association), ("active", 1))
+        self.assertEqual((count, marker_count), (0, 0))
+
     def test_stale_event_is_rejected(self):
         with self.database.connection() as connection:
             with self.assertRaises(sqlite3.IntegrityError):
