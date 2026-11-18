@@ -49,3 +49,7 @@ Checkpoint anterior: **1,493 tests**. Se añaden cuatro pruebas; se espera **1,4
 ## Fuera de alcance
 
 Sin cambios en runtime composition, HTTP, CLI, migraciones, DB productiva, host, systemd, Docker, usuarios o privilegios. PR #16 permanece Draft, abierto y sin merge.
+
+## Corrección posterior al primer ensayo
+
+El primer ensayo del propietario detectó un error en el doble `CommitFailingUnit`: el wrapper conserva un `SQLiteLocalAuthorityUnitOfWork` en `unit._unit`, mientras que el ledger exige el `SQLiteUnitOfWork` interno. Se corrigió únicamente el argumento del `ledger_factory` en la prueba para pasar `unit._unit._unit`. No se relajó el contrato del adaptador ni se modificó código productivo. Repetir primero la suite focalizada y luego la suite completa.
