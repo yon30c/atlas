@@ -1,4 +1,4 @@
-"""Adversarial tests for the V26 Project/Environment lifecycle schema."""
+"""Adversarial tests for V26 lifecycle and V27 provisioning compatibility."""
 
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,7 +22,7 @@ class SQLiteProjectEnvironmentLifecycleMigrationTests(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
         self.database = SQLiteDatabase(Path(self.temp_dir.name) / "authority.sqlite")
-        self.database.apply_migrations(SQLITE_MIGRATIONS)
+        self.database.apply_migrations(SQLITE_MIGRATIONS[:-1])
         self.identity = SQLiteIdentityAuthority(self.database).create_user()
         projects = SQLiteProjectEnvironmentRepository(self.database)
         projects.create_project(ProjectMetadata(ProjectId("atlas"), "active", 1))
@@ -31,7 +31,13 @@ class SQLiteProjectEnvironmentLifecycleMigrationTests(unittest.TestCase):
         self.association = ProjectEnvironmentAssociation(
             ProjectId("atlas"), EnvironmentId("test"), ProjectEnvironmentStatus.ACTIVE
         )
-        self.registry.create_association(self.association)
+        with self.database.connection() as connection:
+            connection.execute(
+                """INSERT INTO atlas_project_environments (
+                    project_id, environment_id, status, revision, created_at, updated_at
+                ) VALUES ('atlas', 'test', 'active', 1, 'legacy', 'legacy')"""
+            )
+        self.database.apply_migrations(SQLITE_MIGRATIONS)
 
     def _insert_event(self, connection, *, previous_status, new_status,
                       previous_revision=1, event_id=None, actor_user_id=None,
@@ -56,16 +62,20 @@ class SQLiteProjectEnvironmentLifecycleMigrationTests(unittest.TestCase):
     def test_existing_association_is_preserved_without_synthetic_history(self):
         with self.database.connection() as connection:
             row = connection.execute(
-                """SELECT status, revision, last_lifecycle_event_id
+                """SELECT status, revision, last_lifecycle_event_id, provisioning_event_id
                    FROM atlas_project_environments
                    WHERE project_id = 'atlas' AND environment_id = 'test'"""
             ).fetchone()
             count = connection.execute(
                 "SELECT COUNT(*) FROM atlas_project_environment_lifecycle_events"
             ).fetchone()[0]
-        self.assertEqual((row["status"], row["revision"], row["last_lifecycle_event_id"]),
-                         ("active", 1, None))
+            provisioning_count = connection.execute(
+                "SELECT COUNT(*) FROM atlas_project_environment_provisioning_events"
+            ).fetchone()[0]
+        self.assertEqual((row["status"], row["revision"], row["last_lifecycle_event_id"], row["provisioning_event_id"]),
+                         ("active", 1, None, None))
         self.assertEqual(count, 0)
+        self.assertEqual(provisioning_count, 0)
 
     def test_orphan_event_cannot_commit_without_completed_transition(self):
         with self.assertRaises(sqlite3.IntegrityError):

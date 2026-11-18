@@ -37,6 +37,7 @@ from atlas.application.project_environment_lifecycle_composition import build_tr
 from atlas.identity.verified_identity_context_service import VerifiedIdentityContextService
 from atlas.memory.metadata import EnvironmentMetadata, ProjectMetadata
 from atlas.memory.models import EnvironmentId, ProjectId
+from tests.unit.association_provisioning_test_support import provision_association
 from atlas.workspace.models import ProjectEnvironmentAssociation, ProjectEnvironmentStatus
 
 
@@ -100,11 +101,13 @@ class TrustedLifecycleCompositionIntegrationTests(unittest.TestCase):
             unit.project_environments.create_environment(
                 EnvironmentMetadata(EnvironmentId("test"), "active", 1)
             )
-            unit.project_environment_associations.create_association(
+            provision_association(
+                self.database,
                 ProjectEnvironmentAssociation(
                     ProjectId("atlas"), EnvironmentId("test"),
                     ProjectEnvironmentStatus.ACTIVE,
-                )
+                ),
+                unit_of_work=unit._unit,
             )
             unit.commit()
         self._provision_admin()

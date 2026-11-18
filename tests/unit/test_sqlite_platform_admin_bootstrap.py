@@ -42,7 +42,7 @@ class SQLitePlatformAdminBootstrapAdapterTests(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
         self.database = SQLiteDatabase(Path(self.temp_dir.name) / "atlas.sqlite")
-        self.assertEqual(self.database.apply_migrations(SQLITE_MIGRATIONS), 26)
+        self.assertEqual(self.database.apply_migrations(SQLITE_MIGRATIONS), 27)
         self.identity = SQLiteIdentityAuthority(self.database)
         self.adapter = SQLitePlatformAdminBootstrapAdapter(self.database)
         self.now = datetime(2026, 11, 17, 12, 0, tzinfo=timezone.utc)

@@ -27,6 +27,7 @@ from atlas.core.context import OperationContext
 from atlas.core.errors import AuthorizationError, ContractError
 from atlas.memory.metadata import EnvironmentMetadata, ProjectMetadata
 from atlas.memory.models import EnvironmentId, ProjectId
+from tests.unit.association_provisioning_test_support import provision_association
 from atlas.workspace.models import (
     ProjectEnvironmentAssociation,
     ProjectEnvironmentStatus,
@@ -59,12 +60,14 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
             unit.project_environments.create_environment(
                 EnvironmentMetadata(EnvironmentId("test"), "active", 1)
             )
-            unit.project_environment_associations.create_association(
+            provision_association(
+                self.database,
                 ProjectEnvironmentAssociation(
                     ProjectId("atlas-demo"),
                     EnvironmentId("test"),
                     ProjectEnvironmentStatus.ACTIVE,
-                )
+                ),
+                unit_of_work=unit._unit,
             )
             unit.workspaces.create_workspace(
                 WorkspaceRecord(

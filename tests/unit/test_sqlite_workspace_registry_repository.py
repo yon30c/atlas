@@ -19,6 +19,7 @@ from atlas.adapters.sqlite.project_environment_lifecycle_association_writer impo
 from atlas.core.errors import ConcurrencyError, ContractError, NotFoundError
 from atlas.memory.metadata import EnvironmentMetadata, ProjectMetadata
 from atlas.memory.models import EnvironmentId, ProjectId
+from tests.unit.association_provisioning_test_support import provision_association
 from atlas.workspace.models import (
     ProjectEnvironmentAssociation,
     ProjectEnvironmentStatus,
@@ -80,7 +81,7 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
         return self.associations.get_association(ProjectId("atlas"), EnvironmentId("test"))
 
     def test_create_and_read_explicit_project_environment_association(self):
-        self.associations.create_association(self.association)
+        provision_association(self.database, self.association)
         self.assertEqual(
             self.associations.get_association(ProjectId("atlas"), EnvironmentId("test")),
             self.association,
@@ -91,10 +92,10 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
             ProjectId("missing"), EnvironmentId("test"), ProjectEnvironmentStatus.ACTIVE
         )
         with self.assertRaises(ContractError):
-            self.associations.create_association(invalid)
+            provision_association(self.database, invalid)
 
     def test_association_status_uses_compare_and_swap_revision(self):
-        self.associations.create_association(self.association)
+        provision_association(self.database, self.association)
         suspended = self._transition_association(ProjectEnvironmentStatus.SUSPENDED)
         self.assertEqual(
             self.associations.get_association(ProjectId("atlas"), EnvironmentId("test")),
@@ -111,7 +112,7 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
                 )
 
     def test_create_and_read_workspace_with_canonical_owner_and_scope(self):
-        self.associations.create_association(self.association)
+        provision_association(self.database, self.association)
         self.repository.create_workspace(self.workspace)
         self.assertEqual(
             self.repository.get_workspace("workspace-main"), self.workspace
@@ -122,7 +123,7 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
         )
 
     def test_workspace_requires_existing_owner_and_active_association(self):
-        self.associations.create_association(self.association)
+        provision_association(self.database, self.association)
         invalid_owner = replace(self.workspace, owner_user_id="missing-user")
         with self.assertRaises(ContractError):
             self.repository.create_workspace(invalid_owner)
@@ -136,7 +137,7 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
             self.repository.create_workspace(self.workspace)
 
     def test_workspace_status_cas_and_immutable_scope(self):
-        self.associations.create_association(self.association)
+        provision_association(self.database, self.association)
         self.repository.create_workspace(self.workspace)
         suspended = replace(self.workspace, status=WorkspaceStatus.SUSPENDED, revision=2)
         self.repository.update_workspace(suspended, expected_revision=1)
@@ -152,7 +153,7 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
             )
 
     def test_database_rejects_workspace_identity_change_and_delete(self):
-        self.associations.create_association(self.association)
+        provision_association(self.database, self.association)
         self.repository.create_workspace(self.workspace)
         with self.database.connection() as connection:
             with self.assertRaises(sqlite3.IntegrityError):
@@ -172,7 +173,7 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
                 )
 
     def test_registry_joins_outer_unit_of_work(self):
-        self.associations.create_association(self.association)
+        provision_association(self.database, self.association)
         with self.assertRaisesRegex(RuntimeError, "force outer rollback"):
             with self.database.unit_of_work() as unit:
                 joined = SQLiteWorkspaceRegistryRepository(
@@ -186,7 +187,7 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
         self.assertIsNone(self.repository.get_workspace("workspace-main"))
 
     def test_local_authority_uow_exposes_workspace_registry_on_same_transaction(self):
-        self.associations.create_association(self.association)
+        provision_association(self.database, self.association)
         with self.assertRaisesRegex(RuntimeError, "force outer rollback"):
             with SQLiteLocalAuthorityUnitOfWork(self.database) as unit:
                 self.assertIs(unit.workspaces._database, self.database)
@@ -194,7 +195,7 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
                 self.assertFalse(hasattr(unit.workspaces, "create_association"))
                 self.assertFalse(hasattr(unit.workspaces, "update_association"))
                 self.assertTrue(hasattr(unit.project_environment_associations, "get_association"))
-                self.assertTrue(hasattr(unit.project_environment_associations, "create_association"))
+                self.assertFalse(hasattr(unit.project_environment_associations, "create_association"))
                 self.assertFalse(hasattr(unit.project_environment_associations, "update_association"))
                 self.assertIs(unit.project_environment_associations._unit_of_work, unit._unit)
                 unit.workspaces.create_workspace(self.workspace)

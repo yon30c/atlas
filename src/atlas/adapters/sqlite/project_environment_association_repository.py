@@ -1,6 +1,5 @@
 """SQLite adapter for canonical Project/Environment association records."""
 
-from datetime import datetime, timezone
 import sqlite3
 from contextlib import contextmanager
 from typing import Iterator
@@ -11,12 +10,8 @@ from atlas.memory.models import EnvironmentId, ProjectId
 from atlas.workspace.models import ProjectEnvironmentAssociation, ProjectEnvironmentStatus
 
 
-def _now_text() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="microseconds")
-
-
 class SQLiteProjectEnvironmentAssociationRepository:
-    """Read/create canonical associations; it cannot transition their lifecycle."""
+    """Read canonical associations; creation and lifecycle writes are separate capabilities."""
 
     def __init__(
         self,
@@ -38,14 +33,6 @@ class SQLiteProjectEnvironmentAssociationRepository:
         else:
             with self._database.connection() as connection:
                 yield connection
-
-    @contextmanager
-    def _write_connection(self) -> Iterator[sqlite3.Connection]:
-        if self._unit_of_work is not None:
-            yield self._unit_of_work._connection_for(self._database)
-        else:
-            with self._database.unit_of_work() as unit:
-                yield unit._connection_for(self._database)
 
     @staticmethod
     def _required(value: object, field: str) -> str:
@@ -75,23 +62,3 @@ class SQLiteProjectEnvironmentAssociationRepository:
                 (project, environment),
             ).fetchone()
         return None if row is None else self._association(row)
-
-    def create_association(self, association: ProjectEnvironmentAssociation) -> None:
-        if not isinstance(association, ProjectEnvironmentAssociation):
-            raise ContractError("association debe ser ProjectEnvironmentAssociation")
-        now = _now_text()
-        try:
-            with self._write_connection() as connection:
-                connection.execute(
-                    """INSERT INTO atlas_project_environments
-                       (project_id, environment_id, status, revision, created_at, updated_at)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
-                    (
-                        association.project_id, association.environment_id,
-                        association.status.value, association.revision, now, now,
-                    ),
-                )
-        except sqlite3.IntegrityError as exc:
-            raise ContractError(
-                "asociación duplicada o Project/Environment inexistente"
-            ) from exc

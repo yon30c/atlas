@@ -14,10 +14,3 @@ class ProjectEnvironmentAssociationReaderPort(Protocol):
     ) -> ProjectEnvironmentAssociation | None:
         """Devuelve el vínculo canónico exacto o None si no existe."""
         ...
-
-
-class ProjectEnvironmentAssociationPort(ProjectEnvironmentAssociationReaderPort, Protocol):
-    """Read/create contract; lifecycle transitions use a separate writer port."""
-
-    def create_association(self, association: ProjectEnvironmentAssociation) -> None:
-        """Create one explicit Project/Environment association."""

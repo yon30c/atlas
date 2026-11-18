@@ -22,6 +22,7 @@ from atlas.core.errors import ContractError
 from atlas.core.project_environment_lifecycle import ProjectEnvironmentLifecycleEvent
 from atlas.memory.metadata import EnvironmentMetadata, ProjectMetadata
 from atlas.memory.models import EnvironmentId, ProjectId
+from tests.unit.association_provisioning_test_support import provision_association
 from atlas.workspace.models import ProjectEnvironmentAssociation, ProjectEnvironmentStatus
 
 
@@ -39,7 +40,7 @@ class SQLiteProjectEnvironmentLifecycleLedgerTests(unittest.TestCase):
         self.association = ProjectEnvironmentAssociation(
             ProjectId("atlas"), EnvironmentId("test"), ProjectEnvironmentStatus.ACTIVE
         )
-        self.associations.create_association(self.association)
+        provision_association(self.database, self.association)
         self.ledger = SQLiteProjectEnvironmentLifecycleLedger(self.database)
 
     def _event(self, *, previous, new, previous_revision, occurred_at=None):
