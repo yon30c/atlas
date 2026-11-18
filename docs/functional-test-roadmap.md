@@ -1,7 +1,8 @@
 # Atlas funcional de prueba — plan de trabajo
 
- > Prioridad acordada: 16 de noviembre de 2026.\n> Corte de estado: 18 de noviembre de 2026.
- > Rama de trabajo actual: `design/verified-agent-delegation-i3-2b`.
+> Prioridad acordada: 16 de noviembre de 2026.
+> Corte de estado: 18 de noviembre de 2026.
+> Rama de trabajo actual: `design/verified-agent-delegation-i3-2b`.
 > Objetivo: convertir la base conversacional existente en un asistente local capaz de completar flujos útiles de principio a fin en un entorno de prueba.
 > Este plan no declara Atlas listo para producción.
 
