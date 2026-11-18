@@ -23,6 +23,8 @@ The command records the real/effective UIDs, terminal identifier, operation ID, 
 
 No secrets, passwords, tokens, or private keys are accepted as command-line arguments or written to the audit record.
 
+The dedicated entrypoint is invoked explicitly as `python -m atlas.adapters.sqlite.offline_association_provisioning_cli --database <absolute-existing-sqlite-path> --operation-id <uuid4>` under `sudo`. It verifies the complete migration ledger through V27 and never applies migrations itself.
+
 ## Domain contract
 
 A provisioning request contains only:
