@@ -183,3 +183,18 @@ Recomendación para el primer comando: exigir terminal interactivo local y regis
 No almacenar un nombre de usuario libre como si fuera autenticación, ni usar UID/TTY como sustituto de una identidad USER canónica. El actor de la concesión sigue siendo el USER existente que recibe el permiso; la procedencia del operador es un registro separado.
 
 **Gate operativo:** confirmar si esta procedencia técnica limitada (UID real/efectivo + TTY + operation_id + confirmación interactiva) es aceptable, o si se requiere un mecanismo de autenticación local más fuerte. Hasta esa decisión, se puede implementar V25, el reader runtime y los repositorios, pero no publicar ni ejecutar un comando de bootstrap.
+
+
+## 12. Implementación inicial de persistencia publicada (pendiente de Debian)
+
+Se añadió en esta rama una primera implementación de persistencia, sin ejecutar ni publicar un comando de bootstrap:
+
+- **V25** crea `platform_admin_bootstrap_events` y `platform_admin_grants`, con FK diferidas circulares para exigir que evento y concesión se confirmen juntos; ambas tablas conservan registros y bloquean UPDATE/DELETE del evento y DELETE de la concesión.
+- El evento registra operation_id UUIDv4, UID real/efectivo, terminal y confirmación UTC. El trigger comprueba que el sujeto corresponde exactamente a un par canónico UserId/Identity(USER), activo y en la revisión declarada.
+- La concesión persiste permisos JSON no vacío, únicos y limitados a los dos permisos exactos; un índice parcial permite como máximo una concesión activa por USER.
+- Se añadió `SQLitePlatformAdminAuthorityReader` de solo lectura y se compuso dentro de `SQLiteLocalAuthorityUnitOfWork`; comparte la conexión y transacción con Identity Authority.
+- Se añadieron pruebas focalizadas para migración/reaplicación, lectura vacía, read-your-writes, rollback conjunto, FK diferida, permisos inválidos, identidad suspendida y ausencia de método de provisión en runtime.
+
+**Límites deliberados:** no se implementó todavía el adaptador `PlatformAdminBootstrapPort`, el servicio de provisión ni CLI. El UID/TTY/operation_id quedan registrados como procedencia técnica, pero la interfaz debe exigir terminal interactivo y confirmación humana real antes de cualquier escritura. No se ha provisionado ningún administrador.
+
+**Gate de validación:** ejecutar las pruebas nuevas y la suite completa en Debian. Si aparecen problemas, corregir antes de continuar. No considerar esta persistencia validada hasta recibir resultados del propietario.
