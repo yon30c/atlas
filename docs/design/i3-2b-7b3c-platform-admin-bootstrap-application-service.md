@@ -1,6 +1,6 @@
 # I3-2B.7B.3C — Platform Admin bootstrap application service
 
-**Estado:** implementación publicada; validación automatizada del propietario pendiente.
+**Estado:** IMPLEMENTADO Y VALIDADO por el propietario en Debian. Suite completa: 1,451 tests en 25.087 s — OK; `python -m compileall -q src tests` con `COMPILE_EXIT_CODE=0`.
 
 ## Propósito
 
@@ -70,3 +70,10 @@ La exclusión global del primer bootstrap sigue protegida por `BEGIN IMMEDIATE` 
 - El servicio recupera el grant existente sin volver a consultar Clock ni emitir nueva procedencia.
 - Un operation_id reutilizado para otro USER se rechaza.
 - El adaptador reconstruye exactamente el comando persistido mediante `get_operation`.
+
+
+## Validación del propietario — I3-2B.7B.3C
+
+El propietario ejecutó la suite completa en Debian: **1,451 tests en 25.087 s — OK**. La compilación completa terminó con **`COMPILE_EXIT_CODE=0`**. Esto valida el servicio de aplicación, el método `get_operation` del puerto y la reconstrucción/recovery de operaciones del adaptador SQLite, incluidos los tests asociados. No se ejecutó el bootstrap real ni se creó un Platform Admin.
+
+**Siguiente slice:** I3-2B.7B.3D — CLI offline. Antes de implementar, inspeccionar y respetar la composición CLI actual (`src/atlas/cli.py`, `src/atlas/__main__.py`, `pyproject.toml`) sin mezclar la provisión administrativa con el arranque de la consola cotidiana. La CLI de bootstrap deberá ser un entrypoint explícito, aislado y no invocable por HTTP/runtime.
