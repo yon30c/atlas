@@ -4,7 +4,7 @@ This adapter is intentionally not composed into runtime unit-of-work factories.
 It owns one BEGIN IMMEDIATE transaction per provisioning attempt.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 import json
 import sqlite3
 
@@ -14,7 +14,10 @@ from atlas.core.errors import AuthorizationError, ConcurrencyError, ContractErro
 from atlas.core.identity import IdentityStatus
 from atlas.core.platform_admin import (
     PlatformAdminBootstrapCommand,
+    PlatformAdminBootstrapProvenance,
+    PlatformAdminBootstrapRequest,
     PlatformAdminGrant,
+    PlatformAdminPermission,
 )
 from atlas.ports.platform_admin_authority import PlatformAdminBootstrapPort
 from atlas.core.user_identity import validate_canonical_uuid4
@@ -74,6 +77,65 @@ class SQLitePlatformAdminBootstrapAdapter(PlatformAdminBootstrapPort):
             raise ContractError("bootstrap operation references a missing grant")
         # Keep row decoding in the canonical read adapter.
         return SQLitePlatformAdminAuthorityReader._from_row(row)
+
+    def get_operation(
+        self,
+        operation_id: str,
+    ) -> PlatformAdminBootstrapCommand | None:
+        """Recover the exact persisted command for an offline retry."""
+        validate_canonical_uuid4(operation_id, "operation_id")
+        from atlas.adapters.sqlite.platform_admin_authority import (
+            SQLitePlatformAdminAuthorityReader,
+        )
+
+        with self._database.connection() as connection:
+            row = connection.execute(
+                """
+                SELECT e.*, g.permissions_json AS grant_permissions_json
+                FROM platform_admin_bootstrap_events AS e
+                JOIN platform_admin_grants AS g ON g.grant_id = e.grant_id
+                WHERE e.operation_id = ?
+                """,
+                (operation_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            try:
+                permission_values = json.loads(row["grant_permissions_json"])
+                if not isinstance(permission_values, list):
+                    raise ValueError("permissions_json is not an array")
+                permissions = frozenset(
+                    PlatformAdminPermission(value) for value in permission_values
+                )
+                request = PlatformAdminBootstrapRequest(
+                    operation_id=row["operation_id"],
+                    user_id=row["user_id"],
+                    permissions=permissions,
+                )
+                provenance = PlatformAdminBootstrapProvenance(
+                    event_id=row["event_id"],
+                    grant_id=row["grant_id"],
+                    operator_real_uid=row["operator_real_uid"],
+                    operator_effective_uid=row["operator_effective_uid"],
+                    terminal_id=row["terminal_id"],
+                    confirmed_at=datetime.fromisoformat(row["confirmed_at"]),
+                )
+                grant_row = connection.execute(
+                    "SELECT * FROM platform_admin_grants WHERE grant_id = ?",
+                    (row["grant_id"],),
+                ).fetchone()
+                if grant_row is None:
+                    raise ValueError("bootstrap event has no grant")
+                grant = SQLitePlatformAdminAuthorityReader._from_row(grant_row)
+                return PlatformAdminBootstrapCommand(
+                    request=request,
+                    provenance=provenance,
+                    grant=grant,
+                )
+            except (TypeError, ValueError, KeyError) as exc:
+                raise ContractError(
+                    "operación Platform Admin persistida es inválida"
+                ) from exc
 
     def provision_first_admin(
         self,
