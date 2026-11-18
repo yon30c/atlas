@@ -67,7 +67,7 @@ Así, un evento y su transición no pueden confirmarse por separado, incluso si 
 - inmutabilidad/retención de eventos y marcadores;
 - rechazo de incrementos de revisión sin transición real.
 
-Las pruebas existentes de `SQLiteWorkspaceRegistryRepository` ahora generan el evento y la transición en una misma UoW, conservando los casos de CAS, Workspace y rollback.
+Las pruebas existentes de `SQLiteWorkspaceRegistryRepository` ahora generan el evento y la transición en una misma UoW, conservando los casos de CAS, Workspace y rollback. La prueba focal añade **9 casos** adversariales, incluido rollback conjunto de evento, asociación y marcador.
 
 ## Siguiente fase
 
@@ -76,6 +76,20 @@ Las pruebas existentes de `SQLiteWorkspaceRegistryRepository` ahora generan el e
 ## Validación del propietario
 
 Pendiente de ejecutar en Debian después de sincronizar la rama. No declarar V26 validada hasta recibir:
-- prueba focal de migración;
-- suite completa;
-- `compileall` con código de salida 0.
+
+```bash
+cd ~/atlas-dev
+git pull --ff-only
+
+PYTHONPATH=tests:tests/unit python -m unittest \\
+  test_sqlite_project_environment_lifecycle_migration \\
+  test_sqlite_workspace_registry_repository -v
+
+PYTHONPATH=tests:tests/unit python -m unittest discover \\
+  -s tests/unit -p 'test_*.py'
+
+python -m compileall -q src tests
+echo "COMPILE_EXIT_CODE=$?"
+```
+
+Checkpoint anterior: 1,471 tests. Se esperan **1,480 tests** (9 nuevos), prueba focal OK y `COMPILE_EXIT_CODE=0`.
