@@ -1,8 +1,11 @@
-"""Read-only port for canonical platform-administrator authority."""
+"""Ports for read-only runtime and isolated offline Platform Admin bootstrap."""
 
 from typing import Protocol
 
-from atlas.core.platform_admin import PlatformAdminGrant
+from atlas.core.platform_admin import (
+    PlatformAdminBootstrapCommand,
+    PlatformAdminGrant,
+)
 
 
 class PlatformAdminAuthorityReaderPort(Protocol):
@@ -18,10 +21,19 @@ class PlatformAdminAuthorityReaderPort(Protocol):
 class PlatformAdminBootstrapPort(Protocol):
     """Offline-only provisioning capability; never expose in request composition.
 
-    Its implementation must be wired exclusively into an operator-controlled
-    offline bootstrap command. Runtime application services must receive only
-    PlatformAdminAuthorityReaderPort, never this provisioning capability.
+    Implementations must receive a validated command carrying the original
+    request, immutable local provenance and the exact grant to persist. The
+    adapter must still enforce operation-id idempotency and first-admin
+    exclusivity transactionally; this domain object is not a substitute for
+    canonical Identity Authority checks inside that transaction.
     """
 
-    def provision_first_admin(self, grant: PlatformAdminGrant) -> None:
-        """Create the initial authority only when no platform admin exists."""
+    def provision_first_admin(
+        self,
+        command: PlatformAdminBootstrapCommand,
+    ) -> PlatformAdminGrant:
+        """Persist the first grant and its provenance atomically.
+
+        An exact replay of the same operation returns the persisted grant.
+        A conflicting replay or any prior bootstrap operation is rejected.
+        """
