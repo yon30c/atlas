@@ -289,6 +289,58 @@ class ProjectEnvironmentLifecycleServiceTests(unittest.TestCase):
         self.assertEqual((association["status"], association["revision"]), ("active", 1))
         self.assertEqual(event_count, 0)
 
+    def test_clock_is_captured_after_uow_acquisition(self):
+        future = NOW + timedelta(days=90)
+        long_lived_evidence = replace(
+            self.evidence,
+            authenticated_at=future - timedelta(minutes=1),
+            verified_at=future - timedelta(seconds=30),
+            expires_at=future + timedelta(days=1),
+        )
+        clock = FixedClock(NOW)
+        verifier = TestIdentityVerifier(self.user, now=future)
+        delegate_factory = self.uow_factory
+
+        class ClockAdvancingFactory:
+            def __call__(self):
+                delegate = delegate_factory()
+
+                class ClockAdvancingUnit:
+                    def __enter__(self):
+                        unit = delegate.__enter__()
+                        # Simulate time passing while BEGIN IMMEDIATE waits.
+                        clock._now = future
+                        return unit
+
+                    def __exit__(self, exc_type, exc_value, traceback):
+                        return delegate.__exit__(exc_type, exc_value, traceback)
+
+                return ClockAdvancingUnit()
+
+        service = ProjectEnvironmentLifecycleService(
+            ClockAdvancingFactory(),
+            identity_verifier=verifier,
+            clock=clock,
+            ledger_factory=lambda unit: SQLiteProjectEnvironmentLifecycleLedger(
+                self.database, unit_of_work=unit._unit
+            ),
+        )
+        with self.assertRaises(AuthorizationError):
+            service.transition(
+                self.context,
+                long_lived_evidence,
+                self._request(ProjectEnvironmentStatus.SUSPENDED),
+            )
+        with self.database.connection() as connection:
+            association = connection.execute(
+                "SELECT status, revision FROM atlas_project_environments"
+            ).fetchone()
+            event_count = connection.execute(
+                "SELECT COUNT(*) FROM atlas_project_environment_lifecycle_events"
+            ).fetchone()[0]
+        self.assertEqual((association["status"], association["revision"]), ("active", 1))
+        self.assertEqual(event_count, 0)
+
     def test_identity_revision_mismatch_denies_without_writes(self):
         mismatched = replace(
             self.evidence,
