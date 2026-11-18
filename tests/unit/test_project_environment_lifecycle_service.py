@@ -199,9 +199,9 @@ class ProjectEnvironmentLifecycleServiceTests(unittest.TestCase):
 
     def test_missing_admin_authority_denies(self):
         with self.database.unit_of_work() as unit:
-            unit._connection_for(self.database).execute(
+            unit._unit._connection_for(self.database).execute(
                 "UPDATE platform_admin_grants SET status='revoked', revision=revision+1, revoked_at=?, revoked_by_user_id=?",
-                (NOW.isoformat(), _uuid()),
+                (NOW.isoformat(), self.user.user_id),
             )
         with self.assertRaises(AuthorizationError):
             self.service.transition(
@@ -215,9 +215,6 @@ class ProjectEnvironmentLifecycleServiceTests(unittest.TestCase):
                 self.context, self.evidence,
                 self._request(ProjectEnvironmentStatus.SUSPENDED, revision=9),
             )
-        self.assertEqual(
-            self.service._ledger_factory, self.service._ledger_factory
-        )
         with self.database.connection() as connection:
             self.assertEqual(
                 connection.execute(
