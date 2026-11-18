@@ -34,6 +34,8 @@ class OfflineAssociationProvisioningCLITests(unittest.TestCase):
             patch("atlas.adapters.sqlite.offline_association_provisioning_cli.os.getuid", return_value=1000),
             patch("atlas.adapters.sqlite.offline_association_provisioning_cli.os.geteuid", return_value=0),
             patch("atlas.adapters.sqlite.offline_association_provisioning_cli.os.ttyname", return_value="/dev/pts/7"),
+            patch("atlas.adapters.sqlite.offline_association_provisioning_cli.os.tcgetpgrp", return_value=42),
+            patch("atlas.adapters.sqlite.offline_association_provisioning_cli.os.getpgrp", return_value=42),
             patch("atlas.adapters.sqlite.offline_association_provisioning_cli.sys.stdin", _TTY(0)),
             patch("atlas.adapters.sqlite.offline_association_provisioning_cli.sys.stdout", _TTY(1)),
             patch.dict(os.environ, {"SUDO_UID": "1000"}),
@@ -54,6 +56,20 @@ class OfflineAssociationProvisioningCLITests(unittest.TestCase):
             patch("atlas.adapters.sqlite.offline_association_provisioning_cli.os.getuid", return_value=0),
             patch("atlas.adapters.sqlite.offline_association_provisioning_cli.os.geteuid", return_value=0),
             patch.dict(os.environ, {"SUDO_UID": "0"}),
+        ):
+            with self.assertRaises(PermissionError):
+                _require_sudo_tty()
+
+    def test_background_process_group_is_denied(self):
+        with (
+            patch("atlas.adapters.sqlite.offline_association_provisioning_cli.os.getuid", return_value=1000),
+            patch("atlas.adapters.sqlite.offline_association_provisioning_cli.os.geteuid", return_value=0),
+            patch("atlas.adapters.sqlite.offline_association_provisioning_cli.os.ttyname", return_value="/dev/pts/7"),
+            patch("atlas.adapters.sqlite.offline_association_provisioning_cli.os.tcgetpgrp", return_value=99),
+            patch("atlas.adapters.sqlite.offline_association_provisioning_cli.os.getpgrp", return_value=42),
+            patch("atlas.adapters.sqlite.offline_association_provisioning_cli.sys.stdin", _TTY(0)),
+            patch("atlas.adapters.sqlite.offline_association_provisioning_cli.sys.stdout", _TTY(1)),
+            patch.dict(os.environ, {"SUDO_UID": "1000"}),
         ):
             with self.assertRaises(PermissionError):
                 _require_sudo_tty()
