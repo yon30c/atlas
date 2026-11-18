@@ -1,6 +1,6 @@
 """Domain tests for the offline Platform Admin bootstrap contracts."""
 
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 from datetime import datetime, timedelta, timezone
 import unittest
 from uuid import uuid4
@@ -132,14 +132,7 @@ class PlatformAdminBootstrapContractTests(unittest.TestCase):
         )
 
     def test_command_rejects_mismatched_subject_event_or_permissions(self):
-        variants = (
-            PlatformAdminGrant(
-                **{
-                    **self.grant.__dict__,
-                    "user_id": _uuid(),
-                }
-            ),
-        )
+        variants = (replace(self.grant, user_id=_uuid()),)
         for grant in variants:
             with self.subTest(grant=grant):
                 with self.assertRaises(ContractError):
