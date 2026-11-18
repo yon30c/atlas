@@ -1,9 +1,10 @@
 import unittest
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from atlas.application.platform_admin_bootstrap import PlatformAdminBootstrapService
-from atlas.core.errors import AuthorizationError, ContractError
+from atlas.core.errors import AuthorizationError, ConcurrencyError, ContractError
 from atlas.core.identity import Identity, IdentityKind, IdentityStatus
 from atlas.core.platform_admin import (
     INITIAL_PLATFORM_ADMIN_GRANT_TTL,
@@ -32,9 +33,14 @@ class FakeIdentityAuthority:
 class FakeBootstrapPort:
     def __init__(self):
         self.commands = []
+        self.operations = {}
+
+    def get_operation(self, operation_id):
+        return self.operations.get(operation_id)
 
     def provision_first_admin(self, command):
         self.commands.append(command)
+        self.operations[command.request.operation_id] = command
         return command.grant
 
 
@@ -101,6 +107,45 @@ class PlatformAdminBootstrapServiceTests(unittest.TestCase):
         self.assertEqual(command.provenance.terminal_id, "/dev/pts/2")
         self.assertEqual(self.clock.calls, 1)
 
+
+    def test_exact_replay_recovers_persisted_grant_without_new_provenance(self):
+        first = self.service.provision_first_admin(
+            self.request,
+            operator_real_uid=1000,
+            operator_effective_uid=0,
+            terminal_id="/dev/pts/2",
+        )
+        clock_calls = self.clock.calls
+        replay = self.service.provision_first_admin(
+            self.request,
+            operator_real_uid=2000,
+            operator_effective_uid=2000,
+            terminal_id="/dev/pts/9",
+        )
+        self.assertEqual(replay, first)
+        self.assertEqual(len(self.bootstrap.commands), 1)
+        self.assertEqual(self.clock.calls, clock_calls)
+
+    def test_operation_id_replay_with_different_intent_is_rejected(self):
+        self.service.provision_first_admin(
+            self.request,
+            operator_real_uid=1000,
+            operator_effective_uid=1000,
+            terminal_id="/dev/pts/2",
+        )
+        conflicting = replace(
+            self.request,
+            user_id="88888888-8888-4888-8888-888888888888",
+        )
+        with self.assertRaises(ConcurrencyError):
+            self.service.provision_first_admin(
+                conflicting,
+                operator_real_uid=1000,
+                operator_effective_uid=1000,
+                terminal_id="/dev/pts/2",
+            )
+        self.assertEqual(len(self.bootstrap.commands), 1)
+
     def test_rejects_missing_user_without_calling_bootstrap_port(self):
         self.identity.canonical = None
         with self.assertRaises(AuthorizationError):
@@ -143,6 +188,9 @@ class PlatformAdminBootstrapServiceTests(unittest.TestCase):
 
     def test_adapter_failure_is_propagated_without_fallback(self):
         class FailingBootstrap:
+            def get_operation(self, operation_id):
+                return None
+
             def provision_first_admin(self, command):
                 raise RuntimeError("storage unavailable")
 
