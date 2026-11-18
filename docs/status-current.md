@@ -2,7 +2,7 @@
 
 > Corte documental: 18 de noviembre de 2026.
 > Rama revisada: `design/verified-agent-delegation-i3-2b`.
-> HEAD revisado: `dd95c3cd87448ff99056aea703111f0e9a8632a6`.
+> Commit de código evaluado en la suite reportada: `dd95c3cd87448ff99056aea703111f0e9a8632a6`; las actualizaciones documentales posteriores no alteran ese código.
 > Suite completa más reciente reportada por el propietario en Debian: **1,513 tests — OK**.
 > La validación focalizada de 7B.6B y `compileall` no están confirmadas en este corte.
 > Este documento diferencia implementación publicada, validación local reportada y capacidades conectadas al runtime.
@@ -103,6 +103,10 @@ El resultado completo de 1,513 tests no permite afirmar por sí solo que cada es
 - [Operaciones de conversaciones](conversations.md)
 - [Arquitectura](architecture.md)
 - [Contratos](contracts/)
+- [Contrato de delegación verificada AGENT I3-2B](design/verified-agent-delegation-contract-i3-2b.md)
+- [Auditoría CAM de renovación delegada](design/i3-2b-cam-renewal-integration-audit.md)
+- [Auditoría de frontera lifecycle 7B.6A](design/i3-2b-7b6a-lifecycle-write-boundary-audit.md)
+- [Separación de capacidades lifecycle 7B.6B](design/i3-2b-7b6b-lifecycle-write-capability-separation.md)
 
 
 ### Actualización 3.3.3 — sobre de respuesta estructurada
