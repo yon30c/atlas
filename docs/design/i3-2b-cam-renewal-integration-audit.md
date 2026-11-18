@@ -674,3 +674,9 @@ Las pruebas iniciales usan un verifier doble controlado; no simulan ni sustituye
 El propietario confirmó la suite completa en Debian: **1,493 tests en 29.527 s — OK** y `python -m compileall -q src tests` con **COMPILE_EXIT_CODE=0**. Queda validado el servicio transaccional de lifecycle junto con el ledger SQLite y las protecciones V26 en el HEAD probado.
 
 No se ejecutó bootstrap real, no se aplicó migración a producción y no se añadió runtime composition, endpoint ni CLI. PR #16 permanece Draft, abierto y sin merge.
+
+## 25. I3-2B.7B.4E — endurecimiento adversarial publicado; validación pendiente
+
+Se añadieron cuatro pruebas de servicio para: grant Platform Admin expirado con evidencia USER todavía válida, mismatch de revisión de identidad, fallo de commit con rollback de asociación/evento/marcador y concurrencia de dos transiciones con el mismo expected_revision (solo una puede confirmar). La cobertura existente conserva casos de autoridad revocada/ausente, evidencia expirada, revisión obsoleta y fallo del ledger.
+
+El verifier sigue siendo un doble controlado; no se afirma validar criptografía/issuer/attestation. La prueba de commit fuerza una excepción antes de la confirmación física SQLite; las constraints diferidas V26 se mantienen cubiertas por las pruebas de migración. No hay cambios de servicio, schema, runtime composition, HTTP, CLI ni infraestructura. Validación Debian pendiente: se esperan 1,497 tests y `COMPILE_EXIT_CODE=0`. PR #16 continúa Draft, abierto y sin merge.
