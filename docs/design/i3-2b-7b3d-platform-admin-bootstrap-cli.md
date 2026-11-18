@@ -1,6 +1,6 @@
 # I3-2B.7B.3D — diseño de CLI offline para bootstrap de Platform Admin
 
-**Estado:** implementación publicada; validación automatizada del propietario pendiente. No se ha ejecutado bootstrap real.
+**Estado:** implementación y validación automatizada del propietario completadas. No se ha ejecutado bootstrap real.
 **PR:** #16 — Draft, abierto y sin merge.
 
 ## 1. Inspección del baseline
@@ -99,3 +99,16 @@ La implementación verifica que stdin/stdout sean TTY y correspondan al mismo di
 La operación existente se recupera antes de consultar el estado actual del USER; replay exacto no vuelve a pedir confirmación ni escribe. Para una operación nueva se muestra el sujeto y alcance y se exige la frase exacta. El servicio obtiene el timestamp de confirmación mediante `SystemClock`, y el adaptador mantiene la revalidación autoritativa bajo `BEGIN IMMEDIATE`.
 
 **Pendiente:** ejecución de pruebas focalizadas, suite completa y `compileall` por el propietario en Debian. No ejecutar el bootstrap real.
+
+
+## 9. Cierre de validación 7B.3D
+
+El propietario confirmó en Debian, después de la corrección del cierre de conexiones SQLite:
+
+- prueba focal `test_platform_admin_bootstrap_cli` con `-W error::ResourceWarning`: sin warnings;
+- suite completa: **1,460 tests en 24.994 s — OK**;
+- compilación: **`COMPILE_EXIT_CODE=0`**.
+
+La fuga detectada estaba en la prueba que inspeccionaba un ledger incompleto: el context manager nativo de `sqlite3.Connection` gestiona transacciones, pero no cierra la conexión. La prueba ahora usa `contextlib.closing` y commit explícito. No se modificó `database.py`.
+
+No se ejecutó el bootstrap real, no se creó un administrador y no se modificó ninguna base productiva.
