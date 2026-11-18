@@ -13,6 +13,7 @@ from atlas.adapters.sqlite.authorization_unit_of_work import (
 from atlas.adapters.sqlite.database import SQLiteDatabase
 from atlas.adapters.sqlite.authority_changes import SQLiteAuthorityChangeStore
 from atlas.adapters.sqlite.identity_authority import SQLiteIdentityAuthority
+from atlas.adapters.sqlite.platform_admin_authority import SQLitePlatformAdminAuthorityReader
 from atlas.adapters.sqlite.agent_identity_authority import SQLiteAgentIdentityAuthority
 from atlas.adapters.sqlite.native_agent_identity_authority import SQLiteNativeAgentIdentityAuthority
 from atlas.adapters.sqlite.agent_delegation_repository import SQLiteAgentDelegationRepository
@@ -42,6 +43,7 @@ class SQLiteLocalAuthorityUnitOfWork(SQLiteAuthorizationUnitOfWork):
     def __init__(self, database: SQLiteDatabase) -> None:
         super().__init__(database)
         self.identity = None
+        self.platform_admin = None
         self.agent_identity = None
         self.native_agent_identity = None
         self.agent_delegations = None
@@ -58,6 +60,10 @@ class SQLiteLocalAuthorityUnitOfWork(SQLiteAuthorizationUnitOfWork):
         super().__enter__()
         try:
             self.identity = SQLiteIdentityAuthority(
+                self._database,
+                unit_of_work=self._unit,
+            )
+            self.platform_admin = SQLitePlatformAdminAuthorityReader(
                 self._database,
                 unit_of_work=self._unit,
             )
