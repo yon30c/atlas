@@ -27,6 +27,7 @@ from atlas.core.project_environment_lifecycle import (
 from atlas.core.verified_identity_context import VerifiedIdentityContext
 from atlas.ports.clock import Clock
 from atlas.ports.project_environment_lifecycle import (
+    ProjectEnvironmentLifecycleAssociationWriterPort,
     ProjectEnvironmentLifecycleLedgerPort,
 )
 from atlas.workspace.models import ProjectEnvironmentStatus
@@ -47,6 +48,7 @@ class ProjectEnvironmentLifecycleService:
         identity_verifier,
         clock: Clock,
         ledger_factory: Callable[[object], ProjectEnvironmentLifecycleLedgerPort],
+        association_writer_factory: Callable[[object], ProjectEnvironmentLifecycleAssociationWriterPort],
     ) -> None:
         if not callable(unit_of_work_factory):
             raise ContractError("unit_of_work_factory debe ser invocable")
@@ -56,10 +58,13 @@ class ProjectEnvironmentLifecycleService:
             raise ContractError("clock debe implementar now()")
         if not callable(ledger_factory):
             raise ContractError("ledger_factory debe ser invocable")
+        if not callable(association_writer_factory):
+            raise ContractError("association_writer_factory debe ser invocable")
         self._unit_of_work_factory = unit_of_work_factory
         self._identity_verifier = identity_verifier
         self._clock = clock
         self._ledger_factory = ledger_factory
+        self._association_writer_factory = association_writer_factory
 
     @staticmethod
     def _validate_now(value: datetime) -> None:
@@ -72,7 +77,7 @@ class ProjectEnvironmentLifecycleService:
 
     @staticmethod
     def _required_uow_capabilities(unit) -> None:
-        required = ("identity", "platform_admin", "workspaces", "commit")
+        required = ("identity", "platform_admin", "project_environment_associations", "commit")
         if any(getattr(unit, name, None) is None for name in required):
             raise AuthorizationError(
                 "Se requiere una UoW local con Identity, Platform Admin y asociaciones"
@@ -132,7 +137,7 @@ class ProjectEnvironmentLifecycleService:
                 now=now,
             )
 
-            association = unit.workspaces.get_association(
+            association = unit.project_environment_associations.get_association(
                 request.project_id, request.environment_id
             )
             if association is None:
@@ -162,7 +167,10 @@ class ProjectEnvironmentLifecycleService:
             if not callable(getattr(ledger, "append_event", None)):
                 raise ContractError("ledger_factory no devolvió un ledger compatible")
             ledger.append_event(event)
-            unit.workspaces.update_association(
+            association_writer = self._association_writer_factory(unit)
+            if not callable(getattr(association_writer, "update_association", None)):
+                raise ContractError("association_writer_factory no devolvió un writer compatible")
+            association_writer.update_association(
                 replace(
                     association,
                     status=request.target_status,
