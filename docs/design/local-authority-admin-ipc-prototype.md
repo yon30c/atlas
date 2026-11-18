@@ -1,0 +1,59 @@
+# Prototipo IPC Unix para operaciones administrativas de autoridad
+
+**Estado:** prototipo experimental, pendiente de validación en Debian y revisión adversarial.  
+**Fase:** 2.5.2.  
+**No habilitado para producción.**
+
+## Alcance implementado
+
+El módulo `src/atlas/platform_admin_ipc.py` prueba dos propiedades del canal:
+
+1. Un socket conectado debe ser `AF_UNIX/SOCK_SEQPACKET`.
+2. La identidad del peer se obtiene desde el kernel mediante `SO_PEERCRED`; el UID debe pertenecer a una allowlist local.
+3. Se acepta exactamente un paquete por conexión.
+4. El paquete es JSON UTF-8 acotado a 64 KiB, versión 1, UUIDv4 canónico, operación allowlisted y payload vacío.
+5. Se rechazan claves duplicadas, campos extra, versión booleana/flotante, UTF-8 inválido, operación desconocida, payload no vacío y paquete truncado.
+6. La única operación disponible es `authority.ping`, sin efectos de dominio.
+7. La respuesta es un único paquete acotado; no se incluye ni acepta identidad de ejecutor enviada por el cliente.
+
+Los tests unitarios usan pares de sockets Unix reales para validar el transporte `SOCK_SEQPACKET` y las credenciales kernel del peer. Los tests no requieren privilegios.
+
+## Lo que el prototipo deliberadamente no hace
+
+- No crea un socket de filesystem ni define propietario/modo/ACL de un socket persistente.
+- No crea listener, daemon, socket activation ni unidad systemd.
+- No cambia UID/GID, no usa sudo/setuid y no delega ejecución.
+- No abre SQLite ni importa la composición de autoridad.
+- No expone diagnóstico, migraciones, bootstrap ni provisioning.
+- No registra auditoría administrativa ni identifica al operador humano.
+- No valida capabilities, saved IDs, entorno, descriptores heredados o hardening de un proceso desplegado.
+- No demuestra aislamiento entre cuentas Linux distintas; el test local inicial permite el UID actual.
+
+## Validación requerida por el propietario en Debian
+
+Desde el checkout del branch:
+
+```bash
+python -m unittest -v tests.unit.test_platform_admin_ipc
+python -m compileall -q src tests
+git diff --check
+git status --short --branch
+```
+
+Se debe informar el número de tests y el resultado exacto. Si el paquete de tests no puede importarse como módulo en ese checkout, ejecutar el archivo con el mecanismo de test ya usado por el repositorio y reportar el comando.
+
+## Siguiente prueba antes de crear un listener
+
+- Abrir sockets AF_UNIX SOCK_SEQPACKET de filesystem dentro de un directorio temporal privado.
+- Verificar que un peer de UID no permitido sea rechazado usando procesos con credenciales Linux distintas (no mocks).
+- Comprobar permisos del socket/directorio, symlink preexistente, path existente y cleanup seguro.
+- Comprobar límites y comportamiento ante desconexión, packet truncado y timeout.
+- Comprobar que no se aceptan descriptores auxiliares SCM_RIGHTS.
+- Confirmar si `SO_PEERCRED` del socket conectado sigue el modelo esperado para el futuro cliente privilegiado.
+- Solo después decidir si se implementa listener persistente o activación systemd.
+
+No ejecutar estas pruebas contra sockets, servicios, usuarios o directorios de Atlas existentes. Usar exclusivamente recursos temporales creados por la suite.
+
+## Decisión pendiente
+
+El socket Unix permanece como candidato. La aprobación de este prototipo no aprueba todavía el canal de producción, la configuración systemd ni las operaciones administrativas.
