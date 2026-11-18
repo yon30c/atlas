@@ -760,3 +760,16 @@ Se identificó una frontera técnica a resolver antes de implementar: el adapter
 El diseño especifica fixture de autenticación nativa real, attestor HMAC de test, pruebas positivas y negativas de issuer/binding/USER/attestation/audience/expiración/Platform Admin, atomicidad y comprobación de la misma transacción física. No se permite sustituir el verifier real por un mock en esas pruebas.
 
 **Estado 7B.5A:** diseño únicamente, publicado. Sin cambios de código, runtime composition, endpoint, CLI, migración ni infraestructura. **7B.5B pendiente.** PR #16 sigue Draft, abierto y sin merge.
+
+
+## 7B.5B — composición confiable y pruebas de integración reales publicadas
+
+Se publicó el adaptador lifecycle con soporte explícito para `SQLiteLocalAuthorityUnitOfWork`: valida UoW activa, misma instancia de base de datos y transacción física activa, y utiliza esa conexión sin abrir otra transacción. No se añadió writer a la UoW general.
+
+Se añadió `atlas.application.project_environment_lifecycle_composition`, una composición interna no registrada que crea una sola factory SQLite, el `VerifiedIdentityContextService` real, y una closure privada de ledger que solo acepta la UoW local esperada. Devuelve únicamente el servicio lifecycle. No se conecta a runtime, HTTP, CLI ni plugins.
+
+Se añadieron pruebas de integración con issuer/binding, autenticador y proof nativos reales; admisión real de proof; attestor HMAC real con clave exclusiva de test; Platform Admin de fixture; y composición lifecycle. La cobertura publicada incluye transición válida y comprobación de transacción activa compartida, attestation manipulada, binding revocado, contexto expirado, revisión USER cambiada, audience discordante y grant Platform Admin revocado. Los rechazos comprueban asociación/revisión, eventos y marcadores sin escrituras parciales.
+
+**Pendiente de validación Debian:** pruebas focalizadas de composición, pruebas del ledger, compileall y suite completa. No se declara ningún resultado de ejecución hasta que el propietario lo confirme.
+
+**Límites:** quedan para 7B.5C los casos adversariales restantes (issuer revocado, realm distinto, actor/delegación discordante, grant expirado/permiso incorrecto, fallo físico de commit y revisión ampliada de superficies). La clave de test no demuestra custodia de secretos en producción. No hay endpoint, CLI, runtime registration, migración productiva, bootstrap real ni cambios de host/infraestructura. PR #16 sigue Draft, abierto y sin merge.
