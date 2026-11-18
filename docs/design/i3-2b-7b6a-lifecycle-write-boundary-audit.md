@@ -121,3 +121,16 @@ No duplicar el verificador, no mover permisos a un boolean caller-controlled y n
 7B.5C permanece validada por el propietario con **1,517 tests en 30.234 s — OK**. No se reportó compileall para ese checkpoint.
 
 Este corte es documental y no altera el comportamiento ejecutable. PR #16 permanece Draft, abierto y sin merge.
+
+
+## 7. Seguimiento 7B.6B — implementación publicada, validación pendiente
+
+Se implementó la separación descrita en esta auditoría. `SQLiteWorkspaceRegistryRepository` ya no contiene métodos de asociación; `SQLiteProjectEnvironmentAssociationRepository` gestiona lectura/creación; y `SQLiteProjectEnvironmentLifecycleAssociationWriter` es un adaptador interno separado, ligado a una UoW local activa y a la misma base de datos.
+
+La UoW general expone `project_environment_associations` y `workspaces`, pero no expone el writer lifecycle. El servicio lifecycle recibe ledger y association writer por factories internas y la composición confiable crea ambos sobre la misma UoW. Workspace read-only consulta el nuevo repositorio de asociaciones.
+
+La firma de `WorkspaceRegistryPort` quedó limitada a operaciones Workspace. `ProjectEnvironmentAssociationPort` declara lectura/creación, mientras `ProjectEnvironmentLifecycleAssociationWriterPort` declara el CAS lifecycle con `expected_revision` y `lifecycle_event_id`.
+
+Las pruebas y fixtures correspondientes fueron actualizadas, incluyendo límites de capacidades y rechazo de writer fuera de una UoW activa o con otra base de datos. **No se han ejecutado localmente en este entorno ni han sido validadas por el propietario**. Ver `docs/design/i3-2b-7b6b-lifecycle-write-capability-separation.md` para los comandos.
+
+No se realizó aún el inventario exhaustivo de todos los imports/call-sites; queda para 7B.6C. No hay runtime registration, endpoint, CLI, plugin ni cambio de infraestructura. PR #16 permanece Draft, abierto y sin merge.
