@@ -6,6 +6,7 @@ import sqlite3
 from typing import Iterator
 
 from atlas.adapters.sqlite.database import SQLiteDatabase, SQLiteUnitOfWork
+from atlas.adapters.sqlite.local_authority_unit_of_work import SQLiteLocalAuthorityUnitOfWork
 from atlas.core.errors import ContractError
 from atlas.core.project_environment_lifecycle import ProjectEnvironmentLifecycleEvent
 from atlas.memory.models import EnvironmentId, ProjectId
@@ -23,18 +24,29 @@ class SQLiteProjectEnvironmentLifecycleLedger:
         self,
         database: SQLiteDatabase,
         *,
-        unit_of_work: SQLiteUnitOfWork | None = None,
+        unit_of_work: SQLiteUnitOfWork | SQLiteLocalAuthorityUnitOfWork | None = None,
     ) -> None:
         if not isinstance(database, SQLiteDatabase):
             raise ContractError("database debe ser SQLiteDatabase")
-        if unit_of_work is not None and not isinstance(unit_of_work, SQLiteUnitOfWork):
-            raise ContractError("unit_of_work debe ser SQLiteUnitOfWork")
+        if unit_of_work is not None and not isinstance(
+            unit_of_work, (SQLiteUnitOfWork, SQLiteLocalAuthorityUnitOfWork)
+        ):
+            raise ContractError("unit_of_work debe ser una UoW SQLite confiable")
         self._database = database
         self._unit_of_work = unit_of_work
 
     @contextmanager
     def _read_connection(self) -> Iterator[sqlite3.Connection]:
-        if self._unit_of_work is not None:
+        if isinstance(self._unit_of_work, SQLiteLocalAuthorityUnitOfWork):
+            if (
+                not self._unit_of_work._active
+                or self._unit_of_work._database is not self._database
+                or self._unit_of_work._connection is None
+                or not self._unit_of_work._connection.in_transaction
+            ):
+                raise ContractError("la UoW local no está activa en esta base de datos")
+            yield self._unit_of_work._connection
+        elif self._unit_of_work is not None:
             yield self._unit_of_work._connection_for(self._database)
         else:
             with self._database.connection() as connection:
@@ -42,7 +54,16 @@ class SQLiteProjectEnvironmentLifecycleLedger:
 
     @contextmanager
     def _write_connection(self) -> Iterator[sqlite3.Connection]:
-        if self._unit_of_work is not None:
+        if isinstance(self._unit_of_work, SQLiteLocalAuthorityUnitOfWork):
+            if (
+                not self._unit_of_work._active
+                or self._unit_of_work._database is not self._database
+                or self._unit_of_work._connection is None
+                or not self._unit_of_work._connection.in_transaction
+            ):
+                raise ContractError("la UoW local no está activa en esta base de datos")
+            yield self._unit_of_work._connection
+        elif self._unit_of_work is not None:
             yield self._unit_of_work._connection_for(self._database)
         else:
             with self._database.unit_of_work() as unit:
