@@ -2464,8 +2464,224 @@ CORE_SCHEMA_V24 = SQLiteMigration(
 )
 
 
+# v25 persists narrowly scoped Platform Admin grants and immutable offline
+# bootstrap provenance. The event/grant FK cycle is deferred so both records
+# must exist at transaction commit.
+CORE_SCHEMA_V25 = SQLiteMigration(
+    version=25,
+    name="platform_admin_grants_and_offline_bootstrap_provenance",
+    sql="""
+    CREATE TABLE platform_admin_bootstrap_events (
+        event_id TEXT PRIMARY KEY CHECK (
+            length(event_id) = 36 AND event_id = lower(event_id)
+            AND length(replace(event_id, '-', '')) = 32
+            AND substr(event_id, 9, 1) = '-'
+            AND substr(event_id, 14, 1) = '-'
+            AND substr(event_id, 19, 1) = '-'
+            AND substr(event_id, 24, 1) = '-'
+            AND substr(event_id, 15, 1) = '4'
+            AND substr(event_id, 20, 1) IN ('8', '9', 'a', 'b')
+            AND event_id NOT GLOB '*[^0-9a-f-]*'
+        ),
+        grant_id TEXT NOT NULL UNIQUE,
+        user_id TEXT NOT NULL REFERENCES atlas_users(user_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+        user_identity_id TEXT NOT NULL REFERENCES identity_records(identity_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+        user_identity_revision INTEGER NOT NULL CHECK (user_identity_revision > 0),
+        operation_id TEXT NOT NULL UNIQUE CHECK (
+            length(operation_id) = 36 AND operation_id = lower(operation_id)
+            AND length(replace(operation_id, '-', '')) = 32
+            AND substr(operation_id, 9, 1) = '-'
+            AND substr(operation_id, 14, 1) = '-'
+            AND substr(operation_id, 19, 1) = '-'
+            AND substr(operation_id, 24, 1) = '-'
+            AND substr(operation_id, 15, 1) = '4'
+            AND substr(operation_id, 20, 1) IN ('8', '9', 'a', 'b')
+            AND operation_id NOT GLOB '*[^0-9a-f-]*'
+        ),
+        operator_real_uid INTEGER NOT NULL CHECK (operator_real_uid >= 0),
+        operator_effective_uid INTEGER NOT NULL CHECK (operator_effective_uid >= 0),
+        terminal_id TEXT NOT NULL CHECK (length(trim(terminal_id)) > 0),
+        confirmed_at TEXT NOT NULL CHECK (length(trim(confirmed_at)) > 0),
+        FOREIGN KEY (grant_id) REFERENCES platform_admin_grants(grant_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
+    );
+
+    CREATE TABLE platform_admin_grants (
+        grant_id TEXT PRIMARY KEY CHECK (
+            length(grant_id) = 36 AND grant_id = lower(grant_id)
+            AND length(replace(grant_id, '-', '')) = 32
+            AND substr(grant_id, 9, 1) = '-'
+            AND substr(grant_id, 14, 1) = '-'
+            AND substr(grant_id, 19, 1) = '-'
+            AND substr(grant_id, 24, 1) = '-'
+            AND substr(grant_id, 15, 1) = '4'
+            AND substr(grant_id, 20, 1) IN ('8', '9', 'a', 'b')
+            AND grant_id NOT GLOB '*[^0-9a-f-]*'
+        ),
+        user_id TEXT NOT NULL REFERENCES atlas_users(user_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+        user_identity_id TEXT NOT NULL REFERENCES identity_records(identity_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+        user_identity_revision INTEGER NOT NULL CHECK (user_identity_revision > 0),
+        permissions_json TEXT NOT NULL CHECK (
+            json_valid(permissions_json)
+            AND json_type(permissions_json) = 'array'
+            AND json_array_length(permissions_json) > 0
+        ),
+        provisioning_method TEXT NOT NULL CHECK (provisioning_method = 'offline_bootstrap'),
+        bootstrap_event_id TEXT NOT NULL UNIQUE
+            REFERENCES platform_admin_bootstrap_events(event_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+            DEFERRABLE INITIALLY DEFERRED,
+        issued_at TEXT NOT NULL CHECK (length(trim(issued_at)) > 0),
+        not_before TEXT NOT NULL CHECK (length(trim(not_before)) > 0),
+        expires_at TEXT NOT NULL CHECK (length(trim(expires_at)) > 0),
+        status TEXT NOT NULL CHECK (status IN ('active', 'revoked')),
+        revision INTEGER NOT NULL CHECK (revision > 0),
+        revoked_at TEXT,
+        revoked_by_user_id TEXT REFERENCES atlas_users(user_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+        CHECK (issued_at <= not_before AND not_before < expires_at),
+        CHECK (
+            (status = 'active' AND revoked_at IS NULL AND revoked_by_user_id IS NULL)
+            OR
+            (status = 'revoked' AND revoked_at IS NOT NULL AND revoked_by_user_id IS NOT NULL)
+        )
+    );
+
+    CREATE INDEX platform_admin_grants_user ON platform_admin_grants(user_id, grant_id);
+
+    CREATE TRIGGER platform_admin_bootstrap_event_matches_user
+    BEFORE INSERT ON platform_admin_bootstrap_events
+    WHEN NOT EXISTS (
+        SELECT 1 FROM atlas_users u
+        JOIN identity_records i ON i.identity_id = u.identity_id
+        WHERE u.user_id = NEW.user_id
+          AND u.identity_id = NEW.user_identity_id
+          AND i.identity_kind = 'user'
+          AND i.identity_status = 'active'
+          AND i.revision = NEW.user_identity_revision
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'bootstrap event requires exact active canonical USER identity');
+    END;
+
+    CREATE TRIGGER platform_admin_grant_matches_bootstrap_event
+    BEFORE INSERT ON platform_admin_grants
+    WHEN NOT EXISTS (
+        SELECT 1 FROM platform_admin_bootstrap_events e
+        WHERE e.event_id = NEW.bootstrap_event_id
+          AND e.grant_id = NEW.grant_id
+          AND e.user_id = NEW.user_id
+          AND e.user_identity_id = NEW.user_identity_id
+          AND e.user_identity_revision = NEW.user_identity_revision
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'Platform Admin grant does not match its bootstrap event');
+    END;
+
+    CREATE TRIGGER platform_admin_grant_requires_active_user
+    BEFORE INSERT ON platform_admin_grants
+    WHEN NOT EXISTS (
+        SELECT 1 FROM atlas_users u
+        JOIN identity_records i ON i.identity_id = u.identity_id
+        WHERE u.user_id = NEW.user_id
+          AND u.identity_id = NEW.user_identity_id
+          AND i.identity_kind = 'user'
+          AND i.identity_status = 'active'
+          AND i.revision = NEW.user_identity_revision
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'Platform Admin grant requires exact active canonical USER identity');
+    END;
+
+    CREATE TRIGGER platform_admin_grant_permissions_exact
+    BEFORE INSERT ON platform_admin_grants
+    WHEN EXISTS (
+        SELECT 1 FROM json_each(NEW.permissions_json)
+        WHERE type != 'text'
+           OR value NOT IN ('association.suspend', 'association.reactivate')
+    )
+      OR (
+        SELECT COUNT(*) FROM json_each(NEW.permissions_json)
+      ) != (
+        SELECT COUNT(DISTINCT value) FROM json_each(NEW.permissions_json)
+      )
+    BEGIN
+        SELECT RAISE(ABORT, 'Platform Admin permissions must be unique exact permissions');
+    END;
+
+    CREATE TRIGGER platform_admin_grant_claims_immutable
+    BEFORE UPDATE OF grant_id, user_id, user_identity_id, user_identity_revision,
+        permissions_json, provisioning_method, bootstrap_event_id, issued_at,
+        not_before, expires_at
+    ON platform_admin_grants
+    WHEN NEW.grant_id != OLD.grant_id
+      OR NEW.user_id != OLD.user_id
+      OR NEW.user_identity_id != OLD.user_identity_id
+      OR NEW.user_identity_revision != OLD.user_identity_revision
+      OR NEW.permissions_json != OLD.permissions_json
+      OR NEW.provisioning_method != OLD.provisioning_method
+      OR NEW.bootstrap_event_id != OLD.bootstrap_event_id
+      OR NEW.issued_at != OLD.issued_at
+      OR NEW.not_before != OLD.not_before
+      OR NEW.expires_at != OLD.expires_at
+    BEGIN
+        SELECT RAISE(ABORT, 'Platform Admin grant claims are immutable');
+    END;
+
+    CREATE TRIGGER platform_admin_grant_revision_step
+    BEFORE UPDATE ON platform_admin_grants
+    WHEN NEW.revision != OLD.revision + 1
+    BEGIN
+        SELECT RAISE(ABORT, 'Platform Admin grant revision must increase by exactly one');
+    END;
+
+    CREATE TRIGGER platform_admin_grant_revocation_only
+    BEFORE UPDATE ON platform_admin_grants
+    WHEN OLD.status != 'active'
+      OR NEW.status != 'revoked'
+      OR NEW.revoked_at IS NULL
+      OR NEW.revoked_by_user_id IS NULL
+      OR NEW.user_id != OLD.user_id
+      OR NEW.user_identity_id != OLD.user_identity_id
+      OR NEW.user_identity_revision != OLD.user_identity_revision
+      OR NEW.permissions_json != OLD.permissions_json
+      OR NEW.provisioning_method != OLD.provisioning_method
+      OR NEW.bootstrap_event_id != OLD.bootstrap_event_id
+      OR NEW.issued_at != OLD.issued_at
+      OR NEW.not_before != OLD.not_before
+      OR NEW.expires_at != OLD.expires_at
+      OR NEW.grant_id != OLD.grant_id
+    BEGIN
+        SELECT RAISE(ABORT, 'Platform Admin grants only allow terminal revocation');
+    END;
+
+    CREATE TRIGGER platform_admin_grant_no_delete
+    BEFORE DELETE ON platform_admin_grants
+    BEGIN
+        SELECT RAISE(ABORT, 'Platform Admin grants are retained as tombstones');
+    END;
+
+    CREATE TRIGGER platform_admin_bootstrap_event_no_update
+    BEFORE UPDATE ON platform_admin_bootstrap_events
+    BEGIN
+        SELECT RAISE(ABORT, 'Platform Admin bootstrap events are immutable');
+    END;
+
+    CREATE TRIGGER platform_admin_bootstrap_event_no_delete
+    BEFORE DELETE ON platform_admin_bootstrap_events
+    BEGIN
+        SELECT RAISE(ABORT, 'Platform Admin bootstrap events are immutable');
+    END;
+    """,
+)
+
+
 SQLITE_MIGRATIONS = (
     CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
     CORE_SCHEMA_V5, CORE_SCHEMA_V6, CORE_SCHEMA_V7, CORE_SCHEMA_V8,
-    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13, CORE_SCHEMA_V14, CORE_SCHEMA_V15, CORE_SCHEMA_V16, CORE_SCHEMA_V17, CORE_SCHEMA_V18, CORE_SCHEMA_V19, CORE_SCHEMA_V20, CORE_SCHEMA_V21, CORE_SCHEMA_V22, CORE_SCHEMA_V23, CORE_SCHEMA_V24,
+    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13, CORE_SCHEMA_V14, CORE_SCHEMA_V15, CORE_SCHEMA_V16, CORE_SCHEMA_V17, CORE_SCHEMA_V18, CORE_SCHEMA_V19, CORE_SCHEMA_V20, CORE_SCHEMA_V21, CORE_SCHEMA_V22, CORE_SCHEMA_V23, CORE_SCHEMA_V24, CORE_SCHEMA_V25,
 )
