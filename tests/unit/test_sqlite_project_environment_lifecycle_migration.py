@@ -62,15 +62,15 @@ class SQLiteProjectEnvironmentLifecycleMigrationTests(unittest.TestCase):
     def test_existing_association_is_preserved_without_synthetic_history(self):
         with self.database.connection() as connection:
             row = connection.execute(
-                """SELECT status, revision, last_lifecycle_event_id
+                """SELECT status, revision, last_lifecycle_event_id, provisioning_event_id
                    FROM atlas_project_environments
                    WHERE project_id = 'atlas' AND environment_id = 'test'"""
             ).fetchone()
             count = connection.execute(
                 "SELECT COUNT(*) FROM atlas_project_environment_lifecycle_events"
             ).fetchone()[0]
-        self.assertEqual((row["status"], row["revision"], row["last_lifecycle_event_id"]),
-                         ("active", 1, None))
+        self.assertEqual((row["status"], row["revision"], row["last_lifecycle_event_id"], row["provisioning_event_id"]),
+                         ("active", 1, None, None))
         self.assertEqual(count, 0)
 
     def test_orphan_event_cannot_commit_without_completed_transition(self):
