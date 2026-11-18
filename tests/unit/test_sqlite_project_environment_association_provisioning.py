@@ -96,6 +96,47 @@ class SQLiteProjectEnvironmentAssociationProvisioningTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             self._write()
 
+    def test_reused_operation_id_with_different_scope_is_rejected(self):
+        operation_id = str(uuid4())
+        self._write(operation_id=operation_id)
+        projects = SQLiteProjectEnvironmentRepository(self.database)
+        projects.create_project(ProjectMetadata(ProjectId("other"), "active", 1))
+        projects.create_environment(EnvironmentMetadata(EnvironmentId("other-env"), "active", 1))
+        other = ProjectEnvironmentAssociation(
+            ProjectId("other"), EnvironmentId("other-env"), ProjectEnvironmentStatus.ACTIVE
+        )
+        with self.assertRaises(ContractError):
+            self._write(operation_id=operation_id, association=other)
+
+    def test_writer_participates_in_outer_transaction_and_rolls_back(self):
+        with self.assertRaisesRegex(RuntimeError, "force provisioning rollback"):
+            with self.database.unit_of_work() as unit:
+                joined = SQLiteProjectEnvironmentAssociationProvisioningWriter(
+                    self.database, unit_of_work=unit
+                )
+                joined.create_association(
+                    self.association,
+                    event_id=str(uuid4()),
+                    operation_id=str(uuid4()),
+                    reason="Outer transaction test",
+                    real_uid=1000,
+                    effective_uid=0,
+                    terminal_id="/dev/pts/4",
+                    occurred_at=datetime(2026, 11, 18, 12, 0, tzinfo=timezone.utc),
+                )
+                raise RuntimeError("force provisioning rollback")
+        with self.database.connection() as connection:
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM atlas_project_environment_provisioning_events"
+                ).fetchone()[0],
+                0,
+            )
+            self.assertEqual(
+                connection.execute("SELECT COUNT(*) FROM atlas_project_environments").fetchone()[0],
+                0,
+            )
+
     def test_direct_association_insert_without_provisioning_event_is_rejected(self):
         with self.database.connection() as connection:
             with self.assertRaises(sqlite3.IntegrityError):
@@ -141,6 +182,12 @@ class SQLiteProjectEnvironmentAssociationProvisioningTests(unittest.TestCase):
                 connection.execute(
                     "DELETE FROM atlas_project_environment_provisioning_events WHERE event_id = ?",
                     (event_id,),
+                )
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    """UPDATE atlas_project_environments
+                       SET provisioning_event_id = NULL
+                       WHERE project_id = 'atlas' AND environment_id = 'test'"""
                 )
 
     def test_reader_and_general_uow_do_not_expose_creation_capability(self):
