@@ -1,6 +1,7 @@
 """Tests for CAM-gated read-only workspace capability execution."""
 
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 from pathlib import Path
 import tempfile
 import unittest
@@ -291,9 +292,27 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
             current = unit.workspaces.get_association(
                 ProjectId("atlas-demo"), EnvironmentId("test")
             )
+            lifecycle_event_id = str(uuid4())
+            connection = unit._unit._connection_for(self.database)
+            connection.execute(
+                """INSERT INTO atlas_project_environment_lifecycle_events (
+                    event_id, project_id, environment_id, previous_status, new_status,
+                    previous_revision, new_revision, actor_user_id, actor_identity_id,
+                    verified_identity_context_id, request_id, correlation_id, reason, occurred_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    lifecycle_event_id, current.project_id, current.environment_id,
+                    current.status.value, ProjectEnvironmentStatus.SUSPENDED.value,
+                    current.revision, current.revision + 1, self.user.user_id,
+                    self.user.identity.identity_id, str(uuid4()), self.context.request_id,
+                    self.context.correlation_id, "Lifecycle suspension test",
+                    NOW.isoformat(),
+                ),
+            )
             unit.workspaces.update_association(
                 replace(current, status=ProjectEnvironmentStatus.SUSPENDED, revision=2),
                 expected_revision=1,
+                lifecycle_event_id=lifecycle_event_id,
             )
             unit.commit()
         self._grant(kind=IntentKind.WORKSPACE_LIST, resource_id="demo")
