@@ -81,12 +81,9 @@ Pendiente de ejecutar en Debian después de sincronizar la rama. No declarar V26
 cd ~/atlas-dev
 git pull --ff-only
 
-PYTHONPATH=tests:tests/unit python -m unittest \\
-  test_sqlite_project_environment_lifecycle_migration \\
-  test_sqlite_workspace_registry_repository -v
+PYTHONPATH=tests:tests/unit python -m unittest test_sqlite_project_environment_lifecycle_migration test_sqlite_workspace_registry_repository -v
 
-PYTHONPATH=tests:tests/unit python -m unittest discover \\
-  -s tests/unit -p 'test_*.py'
+PYTHONPATH=tests:tests/unit python -m unittest discover -s tests/unit -p 'test_*.py'
 
 python -m compileall -q src tests
 echo "COMPILE_EXIT_CODE=$?"
