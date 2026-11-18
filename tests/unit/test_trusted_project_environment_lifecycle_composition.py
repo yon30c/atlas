@@ -234,5 +234,21 @@ class TrustedLifecycleCompositionIntegrationTests(unittest.TestCase):
         self.assertEqual(self._state(), ("active", 1, 0, 0))
 
 
+    def test_revoked_platform_admin_grant_denies_without_any_lifecycle_write(self):
+        evidence = self._evidence()
+        with self.database.unit_of_work() as unit:
+            unit._connection_for(self.database).execute(
+                """
+                UPDATE platform_admin_grants
+                SET status='revoked', revision=revision+1, revoked_at=?,
+                    revoked_by_user_id=?
+                """,
+                (self.clock.now().isoformat(), self.user.user_id),
+            )
+        with self.assertRaises(AuthorizationError):
+            self.lifecycle.transition(self.context, evidence, self._request())
+        self.assertEqual(self._state(), ("active", 1, 0, 0))
+
+
 if __name__ == "__main__":
     unittest.main()
