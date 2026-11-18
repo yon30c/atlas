@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 from uuid import uuid4
 
 from atlas.adapters.sqlite.database import SQLiteDatabase
@@ -178,6 +179,24 @@ class SQLitePlatformAdminBootstrapAdapterTests(unittest.TestCase):
         with self.database.connection() as connection:
             self.assertEqual(connection.execute(
                 "SELECT COUNT(*) FROM platform_admin_bootstrap_events"
+            ).fetchone()[0], 0)
+
+    def test_failure_after_both_inserts_rolls_back_event_and_grant(self):
+        user = self._new_user()
+        command = self._command(user.user_id)
+        with patch.object(
+            SQLitePlatformAdminBootstrapAdapter,
+            "_load_grant",
+            side_effect=RuntimeError("forced post-insert verification failure"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "forced post-insert"):
+                self.adapter.provision_first_admin(command)
+        with self.database.connection() as connection:
+            self.assertEqual(connection.execute(
+                "SELECT COUNT(*) FROM platform_admin_bootstrap_events"
+            ).fetchone()[0], 0)
+            self.assertEqual(connection.execute(
+                "SELECT COUNT(*) FROM platform_admin_grants"
             ).fetchone()[0], 0)
 
     def test_runtime_uow_does_not_expose_offline_bootstrap_adapter(self):
