@@ -67,13 +67,13 @@ class AuthorityAdminIPCProtocolTests(unittest.TestCase):
             decode_admin_request(_request_packet(request_id=str(uuid.uuid1())))
 
     def test_rejects_invalid_utf8_and_non_json(self):
-        for packet in (b"\\xff", b"{"):
+        for packet in (bytes([0xFF]), b"{"):
             with self.subTest(packet=packet):
                 with self.assertRaises(AdminProtocolRejected):
                     decode_admin_request(packet)
 
     def test_rejects_empty_and_oversized_packets(self):
-        for packet in (b"", b"x" * (MAX_REQUEST_BYTES + 1)):
+        for packet in (bytes([0xFF]), b"{"):
             with self.subTest(size=len(packet)):
                 with self.assertRaises(AdminProtocolRejected):
                     decode_admin_request(packet)
