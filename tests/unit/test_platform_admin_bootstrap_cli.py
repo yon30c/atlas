@@ -153,13 +153,14 @@ class PlatformAdminBootstrapCliTests(unittest.TestCase):
 
     def test_relative_database_path_is_rejected_without_creating_a_file(self):
         output = []
+        relative_path = Path(f"{uuid4()}.sqlite3")
         with (
             patch("atlas.platform_admin_bootstrap_cli.os.ttyname", return_value="/dev/pts/7"),
             patch("atlas.platform_admin_bootstrap_cli.os.getuid", return_value=1000),
             patch("atlas.platform_admin_bootstrap_cli.os.geteuid", return_value=1000),
         ):
             result = main(
-                ["--database", "relative.sqlite3", "--user-id", self.user.user_id,
+                ["--database", str(relative_path), "--user-id", self.user.user_id,
                  "--operation-id", self.operation_id],
                 output_fn=output.append,
                 stdin=self.stdin,
@@ -167,7 +168,6 @@ class PlatformAdminBootstrapCliTests(unittest.TestCase):
             )
         self.assertEqual(result, 2)
         self.assertIn("ruta absoluta", " ".join(output))
-        relative_path = Path(f"{uuid4()}.sqlite3")
         self.assertFalse(relative_path.exists())
 
     def test_missing_database_is_not_created(self):
