@@ -122,3 +122,22 @@ Commits:
 El archivo actual `test_project_environment_lifecycle_service.py` en la rama contiene una sola declaración de `association_writer_factory` en el constructor de `setUp`; el SyntaxError que aparece en el registro adjunto corresponde a una ejecución anterior al commit correctivo.
 
 **Estado:** fixtures actualizados; todavía no hay una ejecución nueva de tests o compileall posterior a estos tres commits. La suite completa debe repetirse antes de 7B.6C.
+
+
+## 8. Tercera ronda — errores de contrato y precondiciones corregidos
+
+Los resultados focalizados detectaron tres defectos reales y una expectativa de prueba que debía alinearse con la arquitectura:
+
+1. **CAS lifecycle:** un intento con `expected_revision` obsoleta llegaba al trigger SQLite, que rechazaba el evento no coincidente con `IntegrityError` antes de que el writer pudiera devolver `ConcurrencyError`. El writer ahora lee la revisión actual dentro de la misma UoW activa y devuelve `NotFoundError` o `ConcurrencyError` antes del UPDATE. El UPDATE conserva su condición CAS y los triggers siguen siendo la última barrera de integridad.
+2. **Ledger tests:** tres transiciones de prueba intentaban llamar `update_association` en `SQLiteProjectEnvironmentAssociationRepository`, capacidad que deliberadamente no existe. Se migraron a `SQLiteProjectEnvironmentLifecycleAssociationWriter` y `SQLiteLocalAuthorityUnitOfWork`; el ledger y el writer participan en la misma transacción. No se añadió método de transición al repositorio.
+3. **Workspace ACTIVE:** `create_workspace` ahora verifica explícitamente que la asociación exista y esté `active` en la misma transacción antes de insertar. La FK y el trigger SQLite permanecen activos como protección a nivel de base de datos. Se traduce una asociación inexistente/no activa a `ContractError` de contrato.
+4. **Fixture migration:** las pruebas de migración conservan SQL directo intencional para verificar triggers, eventos huérfanos, inmutabilidad y rollback; no deben cambiarse a la API de aplicación porque prueban las barreras de la base de datos.
+
+Commits de implementación:
+- `eb1ef3e` — preflight de revisión CAS en lifecycle writer.
+- `6c7b80d` — precondición ACTIVE en Workspace repository.
+- `2512f84` — ledger tests usan lifecycle writer y UoW local compartida.
+
+La rama actual fue inspeccionada: el ledger test contiene tres llamadas `writer.update_association` y ninguna llamada `registry.update_association`; el test de servicio contiene cinco factories en distintas instancias de prueba (no argumentos duplicados dentro de una llamada).
+
+**Estado:** cambios publicados; pendiente ejecutar compileall, pruebas focalizadas y suite completa en Debian. No avanzar a 7B.6C hasta validación limpia. El log adjunto anterior contiene una versión previa del test de servicio con argumento duplicado y no coincide con el archivo actual de la rama.
