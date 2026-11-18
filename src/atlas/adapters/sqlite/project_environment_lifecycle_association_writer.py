@@ -68,6 +68,15 @@ class SQLiteProjectEnvironmentLifecycleAssociationWriter:
             raise ContractError("la nueva revisión debe ser expected_revision + 1")
         event_id = self._required(lifecycle_event_id, "lifecycle_event_id")
         with self._write_connection() as connection:
+            current = connection.execute(
+                """SELECT revision FROM atlas_project_environments
+                   WHERE project_id = ? AND environment_id = ?""",
+                (association.project_id, association.environment_id),
+            ).fetchone()
+            if current is None:
+                raise NotFoundError("asociación Project/Environment no encontrada")
+            if current["revision"] != expected_revision:
+                raise ConcurrencyError("la revisión de la asociación cambió")
             cursor = connection.execute(
                 """UPDATE atlas_project_environments
                    SET status = ?, revision = ?,
