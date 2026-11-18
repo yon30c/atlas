@@ -25,7 +25,7 @@ from atlas.adapters.sqlite.project_environment_association_repository import (
     SQLiteProjectEnvironmentAssociationRepository,
 )
 from atlas.adapters.sqlite.project_environment_repository import SQLiteProjectEnvironmentRepository
-from atlas.core.errors import AtlasError
+from atlas.core.errors import AtlasError, ContractError
 from atlas.core.project_environment_association_provisioning import (
     ProjectEnvironmentAssociationProvisioningProvenance,
     ProjectEnvironmentAssociationProvisioningRequest,
