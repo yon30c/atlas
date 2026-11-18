@@ -109,20 +109,20 @@ class SQLitePlatformAdminAuthorityTests(unittest.TestCase):
             ).fetchone()[0], 0)
 
     def test_deferred_event_grant_foreign_key_rejects_orphan_event(self):
-        with self.factory() as unit:
-            user = unit.identity.create_user()
-            now = datetime.now(timezone.utc).isoformat()
-            connection = unit._unit._connection_for(self.database)
-            connection.execute(
-                """INSERT INTO platform_admin_bootstrap_events (
-                    event_id, grant_id, user_id, user_identity_id,
-                    user_identity_revision, operation_id, operator_real_uid,
-                    operator_effective_uid, terminal_id, confirmed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, 1000, 1000, '/dev/pts/1', ?)""",
-                (_uuid(), _uuid(), user.user_id, user.identity.identity_id,
-                 user.identity.revision, _uuid(), now),
-            )
-            with self.assertRaises(sqlite3.IntegrityError):
+        with self.assertRaises(sqlite3.IntegrityError):
+            with self.factory() as unit:
+                user = unit.identity.create_user()
+                now = datetime.now(timezone.utc).isoformat()
+                connection = unit._unit._connection_for(self.database)
+                connection.execute(
+                    """INSERT INTO platform_admin_bootstrap_events (
+                        event_id, grant_id, user_id, user_identity_id,
+                        user_identity_revision, operation_id, operator_real_uid,
+                        operator_effective_uid, terminal_id, confirmed_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, 1000, 1000, '/dev/pts/1', ?)""",
+                    (_uuid(), _uuid(), user.user_id, user.identity.identity_id,
+                     user.identity.revision, _uuid(), now),
+                )
                 unit.commit()
 
     def test_unknown_or_duplicate_permission_is_rejected_by_sql(self):
