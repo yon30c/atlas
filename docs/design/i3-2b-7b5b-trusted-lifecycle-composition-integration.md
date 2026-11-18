@@ -81,3 +81,12 @@ La fase queda **pendiente de validación del propietario** hasta recibir los res
 - No se ejecutó bootstrap real.
 - No se modificó systemd, Docker, usuarios, privilegios, host ni secretos.
 - PR #16 permanece Draft, abierto y sin merge.
+
+
+### Corrección del caso audience (después de la primera ejecución del propietario)
+
+La primera ejecución completa reportó un único fallo en `test_wrong_audience_attestation_denies_without_any_lifecycle_write`. El análisis confirmó que el test anterior no construía evidencia de audiencia incorrecta para el lifecycle: emitía evidencia para `atlas.internal`, comprobaba por separado que un verifier configurado como `atlas.other` la rechazaba y luego pasaba la evidencia original válida al lifecycle. Que el lifecycle la aceptara era el comportamiento correcto; la expectativa del test estaba mal construida.
+
+Se corrigió el fixture: ahora persiste un segundo proof nativo real con audience `atlas.other`, lo consume mediante un `VerifiedIdentityContextService` real configurado para esa audiencia y pasa el contexto HMAC resultante al lifecycle configurado para `atlas.internal`. Se comprueba que el verifier lifecycle rechaza ese contexto y que no se alteran asociación, revisión, eventos ni marcadores.
+
+**Estado:** corrección publicada; nueva ejecución focalizada y suite completa pendientes. No se modificó el código de producción ni se debilitó la verificación.
