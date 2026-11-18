@@ -104,3 +104,21 @@ Se eliminó la segunda declaración redundante, conservando una sola factory par
 Se revisaron los cinco archivos de pruebas de la fase: no se encontraron llamadas antiguas a `unit.workspaces.get_association/create_association/update_association` ni a `self.repository.get_association/create_association/update_association`. En el archivo del servicio hay cinco asignaciones de factory correspondientes a distintas instancias de prueba; no equivalen a argumentos duplicados dentro de una misma llamada.
 
 **Estado:** corrección publicada; compileall y pruebas siguen pendientes de repetición en Debian. No avanzar a 7B.6C hasta recibir validación limpia.
+
+
+## 7. Segunda ronda de validación — fixtures obsoletos corregidos
+
+La siguiente ejecución focalizada encontró que la separación de adaptadores no se había propagado a todos los fixtures:
+
+- `test_sqlite_workspace_registry_repository.py` llamaba `unit._connection_for(...)` sobre `SQLiteLocalAuthorityUnitOfWork`, aunque el objeto envoltorio expone la conexión activa como `unit._connection`. Se corrigió el acceso de la prueba; el writer lifecycle sigue validando UoW activa y transacción.
+- `test_sqlite_project_environment_lifecycle_ledger.py` seguía instanciando `SQLiteWorkspaceRegistryRepository` para crear asociaciones. Todas sus instancias de asociación se cambiaron a `SQLiteProjectEnvironmentAssociationRepository`.
+- `test_sqlite_project_environment_lifecycle_migration.py` tenía el mismo fixture obsoleto y ahora prepara asociaciones con `SQLiteProjectEnvironmentAssociationRepository`.
+
+Commits:
+- `7e7d47e2c2dbbff2b50d31a5edf04f6b59f5478e`
+- `57d20f3856cd8873f299de29f592c4b75a688a54`
+- `d2632953583a9a3e9e91a91dd3c0ef18a457ef37`
+
+El archivo actual `test_project_environment_lifecycle_service.py` en la rama contiene una sola declaración de `association_writer_factory` en el constructor de `setUp`; el SyntaxError que aparece en el registro adjunto corresponde a una ejecución anterior al commit correctivo.
+
+**Estado:** fixtures actualizados; todavía no hay una ejecución nueva de tests o compileall posterior a estos tres commits. La suite completa debe repetirse antes de 7B.6C.
