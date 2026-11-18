@@ -294,8 +294,11 @@ class TrustedLifecycleCompositionIntegrationTests(unittest.TestCase):
         with self.database.unit_of_work() as unit:
             connection = unit._connection_for(self.database)
             connection.execute(
-                "UPDATE native_identity_issuers SET status='REVOKED',
-                "revision=revision+1, updated_at=? WHERE issuer_id=?",
+                """
+                UPDATE native_identity_issuers
+                SET status='REVOKED', revision=revision+1, updated_at=?
+                WHERE issuer_id=?
+                """,
                 (self.clock.now().isoformat(), self.issuer.issuer_id),
             )
         with self.assertRaises(AuthorizationError):
