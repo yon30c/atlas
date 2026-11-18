@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import math
 import socket
 import struct
 import uuid
@@ -18,6 +19,7 @@ from typing import Any, Mapping
 PROTOCOL_VERSION = 1
 MAX_REQUEST_BYTES = 64 * 1024
 MAX_RESPONSE_BYTES = 4 * 1024
+CONNECTION_TIMEOUT_SECONDS = 5.0
 _ALLOWED_OPERATIONS = frozenset({"authority.ping"})
 
 
@@ -162,14 +164,24 @@ def handle_admin_connection(
     connection: socket.socket,
     *,
     allowed_peer_uids: frozenset[int] | set[int],
+    timeout_seconds: float = CONNECTION_TIMEOUT_SECONDS,
 ) -> tuple[PeerCredentials, AdminRequest]:
     """Authenticate one SOCK_SEQPACKET peer and accept one ping request.
 
     The caller owns the listening socket and connection lifecycle. This
     function never creates files, changes process credentials, or touches DB.
     """
+    if connection.family != socket.AF_UNIX:
+        raise AdminProtocolRejected("only AF_UNIX connections are supported")
     if connection.getsockopt(socket.SOL_SOCKET, socket.SO_TYPE) != socket.SOCK_SEQPACKET:
         raise AdminProtocolRejected("only SOCK_SEQPACKET connections are supported")
+    if (
+        isinstance(timeout_seconds, bool)
+        or not isinstance(timeout_seconds, (int, float))
+        or not math.isfinite(timeout_seconds)
+        or timeout_seconds <= 0
+    ):
+        raise AdminProtocolRejected("timeout_seconds must be a finite positive number")
 
     allowed = frozenset(allowed_peer_uids)
     if not allowed or any(
@@ -182,10 +194,17 @@ def handle_admin_connection(
     if peer.uid not in allowed:
         raise AdminPeerRejected("peer UID is not authorized")
 
-    packet, _ancillary, flags, _address = connection.recvmsg(MAX_REQUEST_BYTES + 1)
+    connection.settimeout(float(timeout_seconds))
+    try:
+        packet, ancillary, flags, _address = connection.recvmsg(MAX_REQUEST_BYTES + 1)
+    except TimeoutError as exc:
+        raise AdminProtocolRejected("request receive timed out") from exc
+
     truncated_flags = getattr(socket, "MSG_TRUNC", 0) | getattr(socket, "MSG_CTRUNC", 0)
     if flags & truncated_flags:
         raise AdminProtocolRejected("request packet or ancillary data was truncated")
+    if ancillary:
+        raise AdminProtocolRejected("ancillary data is not supported")
     request = decode_admin_request(packet)
 
     response = {
@@ -195,7 +214,10 @@ def handle_admin_connection(
         "operation": request.operation,
     }
     encoded = _encode_response(response)
-    sent = connection.send(encoded)
+    try:
+        sent = connection.send(encoded)
+    except TimeoutError as exc:
+        raise AdminIPCError("response send timed out") from exc
     if sent != len(encoded):
         raise AdminIPCError("response packet was not sent atomically")
     return peer, request
