@@ -58,6 +58,36 @@ class SQLiteProjectEnvironmentAssociationProvisioningTests(unittest.TestCase):
         )
         return self.writer.create_association(request, provenance)
 
+    def test_domain_request_rejects_non_uuid4_operation_id_and_control_reason(self):
+        with self.assertRaises(ContractError):
+            ProjectEnvironmentAssociationProvisioningRequest(
+                operation_id="not-a-uuid",
+                project_id=ProjectId("atlas"),
+                environment_id=EnvironmentId("test"),
+                reason="Valid reason",
+            )
+        with self.assertRaises(ContractError):
+            ProjectEnvironmentAssociationProvisioningRequest(
+                operation_id=str(uuid4()),
+                project_id=ProjectId("atlas"),
+                environment_id=EnvironmentId("test"),
+                reason="invalid\nreason",
+            )
+
+    def test_domain_provenance_requires_root_effective_uid_and_nonroot_real_uid(self):
+        with self.assertRaises(ContractError):
+            ProjectEnvironmentAssociationProvisioningProvenance(
+                event_id=str(uuid4()), real_uid=0, effective_uid=0,
+                terminal_id="/dev/pts/4",
+                occurred_at=datetime(2026, 11, 18, 12, 0, tzinfo=timezone.utc),
+            )
+        with self.assertRaises(ContractError):
+            ProjectEnvironmentAssociationProvisioningProvenance(
+                event_id=str(uuid4()), real_uid=1000, effective_uid=1000,
+                terminal_id="/dev/pts/4",
+                occurred_at=datetime(2026, 11, 18, 12, 0, tzinfo=timezone.utc),
+            )
+
     def test_event_and_active_revision_one_association_commit_together(self):
         result = self._write()
         self.assertEqual(result, self.association)
