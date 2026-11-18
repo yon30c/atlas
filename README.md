@@ -15,7 +15,7 @@ La visión de Atlas se apoya en estos principios:
 
 La autonomía de Atlas no equivale a autoridad. Comprender una solicitud, generar una respuesta o proponer un plan no autoriza ni ejecuta una operación.
 
-> **Estado de esta documentación:** sincronizado con el estado conocido de la rama `feature/terminal-commands` al 16 de noviembre de 2026. La evidencia funcional de Atlas Terminal descrita aquí corresponde al commit base `610f027f1fe91933278e431d8a9ec29dd291b96e`; los prototipos bootstrap V1/V2/V3 y sus pruebas se registran por separado en `docs/status-current.md` y sus diseños. Este README diferencia capacidades funcionales, composición parcial y trabajo pendiente. Un contrato, puerto, modelo o reducer no demuestra por sí solo que una capacidad esté habilitada en un runtime completo.
+> **Corte documental:** 18 de noviembre de 2026. Rama revisada: `design/verified-agent-delegation-i3-2b`, HEAD `dd95c3cd87448ff99056aea703111f0e9a8632a6`. La suite completa más reciente reportada por el propietario en Debian ejecutó 1,513 pruebas y terminó en `OK`. La validación focalizada de 7B.6B y `compileall` todavía no están confirmadas en este corte. Este README distingue código implementado, validación reportada y capacidades aún no conectadas al runtime. Un contrato, puerto, modelo o reducer no demuestra por sí solo que una capacidad esté habilitada en un runtime completo.
 
 ## Estado general del desarrollo
 
@@ -27,10 +27,11 @@ Atlas es software funcional en desarrollo incremental, no solamente un conjunto 
 | Integración con Ollama | **Implementada** |
 | Contexto conversacional | **Persistente en SQLite; historial durable y proyección acotada al modelo** |
 | AtlasCore | **Fachada de aplicación implementada; orquestación completa pendiente** |
-| Identidad canónica local | **Persistencia SQLite implementada para UserId–Identity(USER)** |
-| Autenticación externa e identidad verificada completa | **Pendiente** |
-| CAM y autorización de memoria | **Servicios y contratos implementados parcialmente** |
-| Grants, renovación y revocación | **Servicios y coordinación implementados; composición completa depende de puertos/adaptadores** |
+| Identidad canónica y autenticación nativa | **Primitivas, persistencia y servicios USER/AGENT implementados; login operativo y bootstrap de producción pendientes** |
+| Contexto de identidad verificada | **Servicios USER/AGENT y revalidación transaccional implementados; integración de clientes/runtime pendiente** |
+| CAM y autorización | **Evaluación de Grants y flujos de renovación implementados parcialmente; no equivale a runtime protegido completo** |
+| Delegación AGENT | **Identidad, binding, delegación del propietario, evidencia verificada y renovación delegada implementados; runtime AGENT no habilitado** |
+| Project/Environment y Workspace | **Persistencia canónica, asociación lifecycle, registro Workspace y gate CAM read-only implementados; integración con consola pendiente** |
 | Memory Engine | **Dominio, Gateway, consistencia, journal, recuperación local y reducers implementados parcialmente** |
 | Persistencia durable del contenido Memory | **Pendiente** |
 | Forget de extremo a extremo | **Modelos y reducer implementados; adaptadores y ejecución completa pendientes** |
@@ -42,9 +43,9 @@ Atlas es software funcional en desarrollo incremental, no solamente un conjunto 
 | Runtime integrado de extremo a extremo | **Pendiente** |
 | Memory Engine como producto/paquete independiente | **Diseño parcialmente desacoplado; independencia ejecutable no demostrada** |
 
-## Desarrollo actual: Atlas Terminal
+## Desarrollo actual: autoridad, identidad y delegación
 
-Atlas Terminal ya es una superficie funcional en `feature/terminal-commands`: inicia la consola, conversa con Ollama cuando está disponible, conserva conversaciones en SQLite y permite administrarlas. Las fases 1 y 2 están implementadas y validadas en el alcance descrito. Consulta la [documentación de Atlas Terminal](docs/terminal/README.md), la [hoja de ruta](docs/terminal/roadmap.md) y la [guía de conversaciones](docs/conversations.md). Esta rama no debe confundirse con `main`; el estado aquí documentado corresponde a la rama indicada en el encabezado. La hoja de ruta general marca las fases 1 y 2 como completadas. La Fase 3 (evaluación de inteligencia y seguridad) queda pausada por decisión del propietario; sus resultados y pendientes se conservan, pero no serán el foco inmediato. La prioridad pasa a construir un Atlas funcional de prueba, ampliando las capacidades del Assistant de forma incremental en un entorno local controlado. Consulta [roadmap](docs/roadmap.md), [estado vigente](docs/status-current.md) y el [plan de Atlas funcional de prueba](docs/functional-test-roadmap.md).
+La consola local y las conversaciones persistentes siguen siendo funcionales, pero el desarrollo más reciente se concentra en la base de autoridad: autenticación nativa, identidad verificada USER/AGENT, delegaciones emitidas por el propietario, renovación delegada bajo CAM y lifecycle de asociaciones Project–Environment. El incremento actual 7B.6B separa la capacidad de escritura lifecycle de los repositorios generales y restringe el writer a la composición confiable. La suite completa reportada en Debian es de 1,513 pruebas OK; faltan confirmar las pruebas focalizadas de 7B.6B y `compileall` antes de cerrar el incremento. No se habilitan login de producción, endpoints protegidos, runtime AGENT, herramientas de consola ni ejecución privilegiada. Consulta el [estado vigente](docs/status-current.md), el [plan funcional](docs/functional-test-roadmap.md), el [mapa de arquitectura](docs/functional-architecture-map.md) y la [hoja de ruta general](docs/roadmap.md).
 
 ## Documentación del proyecto
 
@@ -132,11 +133,11 @@ La migración v6 exige que una identidad USER tenga su registro canónico de usu
 
 **Límites pendientes:**
 
-- Autenticación real del propietario y proveedores externos.
-- Bindings externos y un flujo completo de `VerifiedIdentityContext`.
-- Fuentes durables y canónicas para todos los dominios Identity, Project y Environment.
-- Composición de una autoridad común que coordine todos los cambios protegidos.
-- Verificación de extremo a extremo de los límites de autorización en un runtime integrado.
+- Login de usuario operativo y bootstrap inicial seguro para despliegue; las primitivas nativas actuales no constituyen por sí solas un flujo de acceso desplegado.
+- Integración de `VerifiedIdentityContext` con clientes y operaciones protegidas de extremo a extremo.
+- Completar las fronteras de autoridad y coordinación/fencing que aún no están implementadas.
+- Integración verificada de Project/Environment, Workspace y CAM en el runtime real.
+- Pruebas E2E de los límites de autorización en una composición desplegada.
 
 La persistencia local de `UserId` e `Identity(USER)` no debe describirse como autenticación externa ni como identidad verificada completa.
 
@@ -397,3 +398,17 @@ El orden recomendado evita conectar el Assistant a capacidades que aún no tiene
 ## Alcance de este repositorio
 
 Este repositorio contiene el código y la documentación de Atlas. La existencia de un contrato o componente no autoriza cambios en infraestructura, servicios, datos o entornos externos. Las migraciones y adaptadores deben validarse primero con bases temporales y pruebas de upgrade, integridad, concurrencia y recuperación.
+
+
+## Estado del incremento de autoridad — 18 de noviembre de 2026
+
+La rama actual incorpora, además de la base conversacional y del trabajo de Memory descrito arriba:
+
+- Autenticación nativa: credenciales Argon2id, autenticadores, proofs de un solo uso y persistencia separada de Authentication Authority e Identity Authority.
+- Identidad verificada USER y AGENT, con bindings canónicos y revalidación mediante servicios confiables.
+- Delegación AGENT emitida/revocada por el propietario verificado, con scopes explícitos, evidencia de corta duración y revalidación.
+- Renovaciones delegadas de Grants bajo evaluación CAM exacta y revalidación de identidad, delegación y asociación Project–Environment.
+- Bootstrap administrativo local de Platform Admin y lifecycle de asociaciones Project–Environment con ledger de eventos.
+- Separación de lectura y escritura lifecycle: el repositorio general de Workspace no expone la transición; el writer lifecycle se limita a la composición del servicio autorizado.
+
+**Límites:** estos componentes no habilitan por sí solos login público, endpoints, agentes en runtime, ejecución de herramientas, shell, Docker ni privilegios del host. La fase 7B.6B está implementada en la rama, pero su validación focalizada aún debe confirmarse. El detalle y la evidencia se mantienen en [docs/status-current.md](docs/status-current.md) y en los diseños enlazados desde el [roadmap funcional](docs/functional-test-roadmap.md).
