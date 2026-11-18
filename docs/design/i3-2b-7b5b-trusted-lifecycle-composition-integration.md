@@ -65,8 +65,8 @@ La clave HMAC de integración es únicamente material fijo de test; no demuestra
 Desde `~/atlas-dev`, después de sincronizar la rama:
 
 ```bash
-python -m unittest tests.unit.test_trusted_project_environment_lifecycle_composition -v
-python -m unittest tests.unit.test_sqlite_project_environment_lifecycle_ledger -v
+PYTHONPATH=tests:tests/unit python -m unittest test_trusted_project_environment_lifecycle_composition -v
+PYTHONPATH=tests:tests/unit python -m unittest test_sqlite_project_environment_lifecycle_ledger -v
 python -m compileall -q src tests
 python -m unittest discover -s tests -v
 ```
