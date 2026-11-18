@@ -67,6 +67,19 @@ class SQLiteProjectEnvironmentLifecycleMigrationTests(unittest.TestCase):
                          ("active", 1, None))
         self.assertEqual(count, 0)
 
+    def test_orphan_event_cannot_commit_without_completed_transition(self):
+        with self.assertRaises(sqlite3.IntegrityError):
+            with self.database.unit_of_work() as unit:
+                self._insert_event(
+                    unit._connection_for(self.database),
+                    previous_status="active", new_status="suspended",
+                )
+        with self.database.connection() as connection:
+            count = connection.execute(
+                "SELECT COUNT(*) FROM atlas_project_environment_lifecycle_events"
+            ).fetchone()[0]
+        self.assertEqual(count, 0)
+
     def test_transition_without_matching_event_is_rejected(self):
         with self.database.connection() as connection:
             with self.assertRaises(sqlite3.IntegrityError):
@@ -148,6 +161,16 @@ class SQLiteProjectEnvironmentLifecycleMigrationTests(unittest.TestCase):
             with self.assertRaises(sqlite3.IntegrityError):
                 connection.execute(
                     "DELETE FROM atlas_project_environment_lifecycle_events WHERE event_id = ?",
+                    (event_id,),
+                )
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    "UPDATE atlas_project_environment_lifecycle_commits SET new_revision = 99 WHERE event_id = ?",
+                    (event_id,),
+                )
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    "DELETE FROM atlas_project_environment_lifecycle_commits WHERE event_id = ?",
                     (event_id,),
                 )
 
