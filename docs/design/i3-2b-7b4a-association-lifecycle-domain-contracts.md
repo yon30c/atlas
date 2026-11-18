@@ -1,6 +1,6 @@
 # I3-2B.7B.4A — contratos de dominio para lifecycle de asociaciones
 
-**Estado:** 7B.4A validado por el propietario (1,471 tests OK; compileall 0). 7B.4B V26 publicada; validación pendiente.
+**Estado:** 7B.4A validado (1,471 tests OK); 7B.4B V26 validada por el propietario (1,480 tests OK; compileall 0). 7B.4C adaptador SQLite publicado; validación pendiente.
 **PR:** #16 — Draft, abierto y sin merge.
 **Alcance:** solo contratos de dominio/puertos y pruebas unitarias; no hay servicio, migración ni escritura runtime.
 
@@ -36,8 +36,8 @@ La construcción valida forma y consistencia local. No autentica al actor, no co
 
 ## Secuencia posterior
 
-1. 7B.4B: migración V26 para ledger inmutable, unicidad por asociación/revisión y triggers que obliguen a que cada actualización de estado tenga un evento compatible.
-2. 7B.4C: adaptador SQLite de ledger y pruebas SQL adversariales.
+1. 7B.4B: migración V26 para ledger inmutable, unicidad por asociación/revisión y triggers que obliguen a que cada actualización de estado tenga un evento compatible. Validada en Debian: 1,480 tests OK, compileall 0.
+2. 7B.4C: adaptador SQLite de ledger y pruebas de persistencia/atomicidad. Implementación publicada; validación pendiente.
 3. 7B.4D: servicio de aplicación con verificación USER transaccional, Platform Admin exacto, Clock confiable, CAS y persistencia atómica.
 4. 7B.4E: pruebas de seguridad, concurrencia, rollback y regresión completa.
 
@@ -52,9 +52,9 @@ La migración debe preservar asociaciones preexistentes sin inventar eventos ret
 - No se cambia V18 ni se reescriben migraciones históricas.
 - No se modifica host, systemd, Docker, privilegios ni DB productiva.
 
-## Continuación 7B.4B
+## Continuación 7B.4B y 7B.4C
 
-La migración V26, ledger inmutable, commit marker diferido y triggers SQL se documentan en [I3-2B.7B.4B](i3-2b-7b4b-association-lifecycle-v26-migration.md). La prueba de migración adversarial y la adaptación del repositorio requieren validación en Debian antes de continuar.
+La migración V26, ledger inmutable, commit marker diferido y triggers SQL se documentan en [I3-2B.7B.4B](i3-2b-7b4b-association-lifecycle-v26-migration.md); el propietario confirmó 1,480 tests OK y compileall 0 en Debian. El adaptador SQLite y sus pruebas se documentan en [I3-2B.7B.4C](i3-2b-7b4c-association-lifecycle-sqlite-ledger.md); están publicados y pendientes de validación owner.
 
 ## Validación owner 7B.4A
 
