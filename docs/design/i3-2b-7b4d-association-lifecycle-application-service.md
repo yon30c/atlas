@@ -59,3 +59,7 @@ La validación confirma el servicio, las pruebas focalizadas incorporadas al con
 ## Revisión de integración posterior
 
 La revisión 7B.4A–7B.4E detectó que el `Clock` se capturaba antes de adquirir la UoW. Se corrigió el orden: ahora se captura después de entrar en la UoW, una vez adquirido el bloqueo transaccional. Se añadió una prueba que adelanta el reloj al entrar en la UoW y exige denegación por grant expirado sin escrituras. Validación pendiente del propietario.
+
+## Validación de la corrección temporal — confirmada por el propietario
+
+El propietario ejecutó la suite completa después de mover la captura de `Clock.now()` al interior de la UoW: **1,498 tests en 29.777 s — OK**; `python -m compileall -q src tests`: **`COMPILE_EXIT_CODE=0`**. La regresión temporal quedó incluida y validada por esa ejecución.
