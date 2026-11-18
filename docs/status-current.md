@@ -1,7 +1,7 @@
 # Estado vigente de Atlas
 
 > Corte documental: 18 de noviembre de 2026.
-> Rama de código revisada: `main` (`8351b68`; sincronizada con `origin/main` en la validación del propietario). La rama documental de almacenamiento de autoridad es independiente y aún no está integrada.
+> Rama de código revisada: `main` (`8351b68`; sincronizada con `origin/main` en la validación del propietario). El contrato operativo de almacenamiento de autoridad queda documentado en esta revisión y está pendiente de implementación.
 > Commit de código evaluado en la suite completa reportada: `8351b683ae315d2096637f3d132ae5586f54b6d6`.
 > Suite completa más reciente reportada por el propietario en Debian: **1,539 tests — OK**.
 > Validación focalizada de 7B.6B en Debian: **37 tests — OK**; `python -m compileall -q src tests`: **exit code 0**. 7B.6B queda cerrada en el alcance validado.
