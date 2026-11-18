@@ -773,3 +773,8 @@ Se añadieron pruebas de integración con issuer/binding, autenticador y proof n
 **Pendiente de validación Debian:** pruebas focalizadas de composición, pruebas del ledger, compileall y suite completa. No se declara ningún resultado de ejecución hasta que el propietario lo confirme.
 
 **Límites:** quedan para 7B.5C los casos adversariales restantes (issuer revocado, realm distinto, actor/delegación discordante, grant expirado/permiso incorrecto, fallo físico de commit y revisión ampliada de superficies). La clave de test no demuestra custodia de secretos en producción. No hay endpoint, CLI, runtime registration, migración productiva, bootstrap real ni cambios de host/infraestructura. PR #16 sigue Draft, abierto y sin merge.
+
+
+### Nota de validación 7B.5B — corrección del fixture de audience
+
+La primera suite completa del propietario (1,510 tests) tuvo un fallo aislado en el caso de audience. El test entregaba al lifecycle evidencia válidamente firmada para `atlas.internal`; solo comprobaba aparte que un verifier `atlas.other` la rechazaba. Por tanto, el servicio lifecycle aceptaba correctamente la evidencia y la expectativa era errónea. El fixture ahora emite y consume un proof nativo separado para `atlas.other`, genera evidencia HMAC real para esa audiencia y la presenta al lifecycle `atlas.internal`, comprobando rechazo y ausencia de escrituras. Corrección publicada; revalidación pendiente. No hubo cambio en producción.
