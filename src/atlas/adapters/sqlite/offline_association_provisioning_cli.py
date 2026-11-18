@@ -139,7 +139,7 @@ def main(argv: list[str] | None = None) -> int:
             f"operation_id={args.operation_id}"
         )
         return 0
-    except (AtlasError, PermissionError, OSError, sqlite3.Error, ValueError) as exc:
+    except (AtlasError, PermissionError, OSError, sqlite3.Error, ValueError, EOFError) as exc:
         print(f"Aprovisionamiento denegado: {exc}", file=sys.stderr)
         return 1
 
