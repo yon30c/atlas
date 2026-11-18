@@ -89,7 +89,11 @@ def decode_admin_request(packet: bytes) -> AdminRequest:
         raise AdminProtocolRejected("request contains missing or unknown fields")
 
     version = decoded["version"]
-    if isinstance(version, bool) or version != PROTOCOL_VERSION:
+    if (
+        isinstance(version, bool)
+        or not isinstance(version, int)
+        or version != PROTOCOL_VERSION
+    ):
         raise AdminProtocolRejected("unsupported protocol version")
 
     request_id = decoded["request_id"]
