@@ -656,3 +656,8 @@ El propietario confirmó la validación completa de 7B.4B en Debian: **1,480 tes
 Se publicó 7B.4C: `SQLiteProjectEnvironmentLifecycleLedger` implementa append/read ordenado por revisión, reconstrucción validada de eventos y soporte de UoW compartida. El writer no se integra en `SQLiteLocalAuthorityUnitOfWork` ni en runtime composition. Las pruebas nuevas cubren append/transición atómicos, orden, rechazo de evento huérfano, rollback, validación de entradas y ausencia del writer runtime.
 
 **Estado 7B.4C:** implementación publicada; validación owner pendiente. PR #16 continúa Draft, abierto y sin merge.
+
+
+## 22. I3-2B.7B.4C — validación Debian confirmada
+
+El propietario confirmó la validación del adaptador SQLite lifecycle en Debian: **1,487 tests OK** (`Ran 1487 tests in 29.235s`) y `COMPILE_EXIT_CODE=0`. Quedan validados append/read, orden por revisión, el requisito de transición atómica V26, rollback conjunto y el límite que mantiene el writer fuera de `SQLiteLocalAuthorityUnitOfWork`. No se ejecutó migración productiva ni bootstrap real. PR #16 permanece Draft, abierto y sin merge.
