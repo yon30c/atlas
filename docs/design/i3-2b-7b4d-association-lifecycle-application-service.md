@@ -1,6 +1,6 @@
 # I3-2B.7B.4D — servicio transaccional de lifecycle de asociaciones
 
-**Estado:** implementación publicada; validación del propietario pendiente.  
+**Estado:** implementación publicada y validada por el propietario en Debian.  
 **PR:** #16 — Draft, abierto y sin merge.  
 **Dependencias:** 7B.4A contratos, 7B.4B V26 y 7B.4C adaptador SQLite validados.  
 **Alcance:** servicio de aplicación y pruebas iniciales; sin endpoint HTTP, CLI, migración adicional ni activación de bootstrap.
@@ -39,26 +39,14 @@ No se integra el servicio a runtime composition en esta fase y no se crea endpoi
 
 El test verifier es un doble controlado de la interfaz de verificación transaccional; no pretende probar criptografía, issuer ni attestation. La implementación de verificación real permanece responsabilidad del Identity Authority existente.
 
-## Validación owner
+## Validación owner — confirmada en Debian
 
-Pendiente en Debian. Ejecutar:
-```bash
-cd ~/atlas-dev
-git pull --ff-only
+El propietario ejecutó las pruebas en `~/atlas-dev` sobre el HEAD actualizado y confirmó:
 
-PYTHONPATH=tests:tests/unit python -m unittest \
-  test_project_environment_lifecycle_service \
-  test_sqlite_project_environment_lifecycle_ledger \
-  test_sqlite_project_environment_lifecycle_migration -v
+- Suite completa: **1,493 tests en 29.527 s — OK**.
+- `python -m compileall -q src tests`: **COMPILE_EXIT_CODE=0**.
 
-PYTHONPATH=tests:tests/unit python -m unittest discover \
-  -s tests/unit -p 'test_*.py'
-
-python -m compileall -q src tests
-echo "COMPILE_EXIT_CODE=$?"
-```
-
-Checkpoint anterior: 1,487 tests. Se esperan seis pruebas nuevas, total **1,493**; `compileall` debe devolver 0. Si la prueba focalizada revela diferencias de nombre de módulo, no cambiar código hasta revisar el traceback exacto.
+La validación confirma el servicio, las pruebas focalizadas incorporadas al conjunto completo, el ledger SQLite y las protecciones de migración V26. No implica que se haya ejecutado un bootstrap real ni una migración sobre producción.
 
 ## Límites y riesgos pendientes para 7B.4E
 
