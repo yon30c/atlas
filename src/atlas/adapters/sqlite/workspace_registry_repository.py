@@ -93,6 +93,15 @@ class SQLiteWorkspaceRegistryRepository:
         now = _now_text()
         try:
             with self._write_connection() as connection:
+                association = connection.execute(
+                    """SELECT status FROM atlas_project_environments
+                       WHERE project_id = ? AND environment_id = ?""",
+                    (workspace.project_id, workspace.environment_id),
+                ).fetchone()
+                if association is None or association["status"] != "active":
+                    raise ContractError(
+                        "workspace requiere una asociación Project/Environment activa"
+                    )
                 connection.execute(
                     """INSERT INTO atlas_workspaces
                        (workspace_id, owner_user_id, project_id, environment_id,
