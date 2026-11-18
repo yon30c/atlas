@@ -52,6 +52,8 @@ def _require_sudo_tty() -> tuple[int, int, str]:
         raise PermissionError("no se pudo verificar la terminal interactiva") from exc
     if input_tty != output_tty:
         raise PermissionError("entrada y salida deben pertenecer a la misma terminal")
+    if not hasattr(os, "tcgetpgrp") or os.tcgetpgrp(sys.stdin.fileno()) != os.getpgrp():
+        raise PermissionError("el comando debe ejecutarse en primer plano de la terminal")
     return real_uid, effective_uid, input_tty
 
 
