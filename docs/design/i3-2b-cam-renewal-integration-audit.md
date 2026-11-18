@@ -700,3 +700,7 @@ Se revisaron conjuntamente contratos de dominio, puerto, migración V26, ledger 
 **Hallazgo:** el servicio capturaba `Clock.now()` antes de adquirir la UoW. Dado que `SQLiteDatabase.unit_of_work()` ejecuta `BEGIN IMMEDIATE` y puede esperar hasta `busy_timeout_ms`, el grant podía evaluarse usando una hora anterior a la adquisición del bloqueo. Se corrigió capturando y validando el Clock dentro de la UoW, después de adquirirla. Se añadió una prueba que simula el avance del reloj durante la entrada a la UoW y exige denegación sin escrituras cuando el grant ya expiró.
 
 **Estado:** corrección y prueba publicadas en la rama; pendientes de validación del propietario (prueba focalizada, suite completa y compileall). No se modificó schema, migraciones, composición runtime ni infraestructura.
+
+### Cierre del hallazgo temporal de la revisión de integración
+
+El propietario confirmó la suite completa tras la corrección: **1,498 tests en 29.777 s — OK** y `compileall` con **`COMPILE_EXIT_CODE=0`**. La prueba de regresión del avance del reloj durante la adquisición de UoW quedó incluida en la suite y validada. El hallazgo se considera corregido y verificado.
