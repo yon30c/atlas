@@ -1,5 +1,6 @@
 """Internal SQLite writer for authorized Project/Environment lifecycle transitions."""
 
+from datetime import datetime, timezone
 import sqlite3
 from contextlib import contextmanager
 from typing import Iterator
@@ -70,11 +71,12 @@ class SQLiteProjectEnvironmentLifecycleAssociationWriter:
             cursor = connection.execute(
                 """UPDATE atlas_project_environments
                    SET status = ?, revision = ?,
-                       updated_at = strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now'),
+                       updated_at = ?,
                        last_lifecycle_event_id = ?
                    WHERE project_id = ? AND environment_id = ? AND revision = ?""",
                 (
-                    association.status.value, association.revision, event_id,
+                    association.status.value, association.revision,
+                    datetime.now(timezone.utc).isoformat(timespec="microseconds"), event_id,
                     association.project_id, association.environment_id, expected_revision,
                 ),
             )
