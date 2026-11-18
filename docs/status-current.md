@@ -1,10 +1,10 @@
 # Estado vigente de Atlas
 
 > Corte documental: 18 de noviembre de 2026.
-> Rama revisada: `design/verified-agent-delegation-i3-2b`.
+> Rama revisada: `main` (`f0070dd`; sincronizada con `origin/main`, 0/0).
 > Commit de código evaluado en la suite reportada: `dd95c3cd87448ff99056aea703111f0e9a8632a6`; las actualizaciones documentales posteriores no alteran ese código.
 > Suite completa más reciente reportada por el propietario en Debian: **1,513 tests — OK**.
-> La validación focalizada de 7B.6B y `compileall` no están confirmadas en este corte.
+> Validación focalizada de 7B.6B en Debian: **37 tests — OK**; `python -m compileall -q src tests`: **exit code 0**. 7B.6B queda cerrada en el alcance validado.
 > Este documento diferencia implementación publicada, validación local reportada y capacidades conectadas al runtime.
 
 ## Posicionamiento
@@ -38,22 +38,21 @@ Ran 1513 tests in 30.071s
 OK
 ```
 
-Este resultado valida la suite completa en el checkout que se ejecutó, pero no sustituye la revisión focalizada requerida para 7B.6B. Tampoco se ha reportado en este corte el resultado de `python -m compileall -q src tests`. No es una ejecución de GitHub Actions ni una prueba de despliegue productivo.
+La suite completa reportada (1,513 tests) se complementó con la validación focalizada ejecutada por el propietario en Debian sobre `main`:
 
-**Comprobación focalizada pendiente para 7B.6B:**
+```text
+Rama: main
+HEAD: f0070dd
+Sincronización main...origin/main: 0 0
+Ran 37 tests in 2.342s
 
-```bash
-PYTHONPATH=tests:tests/unit python -m unittest \
-  test_sqlite_project_environment_lifecycle_ledger \
-  test_sqlite_workspace_registry_repository \
-  test_project_environment_lifecycle_service \
-  test_sqlite_local_authority_unit_of_work -v
-
-python -m compileall -q src tests
-echo "COMPILE_EXIT_CODE=$?"
+OK
+COMPILE_EXIT_CODE=0
 ```
 
-El resultado completo de 1,513 tests no permite afirmar por sí solo que cada escenario adversarial de CAS, reactivación ACTIVE/SUSPENDED, rechazo de Workspace ante asociación suspendida y read-your-writes del Ledger esté demostrado individualmente.
+La ejecución focalizada cubrió Ledger lifecycle, Workspace Registry, servicio lifecycle y Local Authority Unit of Work. La compilación de `src` y `tests` terminó con código 0. Con esta evidencia, **7B.6B queda cerrada** en el alcance de pruebas ejecutado. Esto no equivale a GitHub Actions, validación E2E ni prueba de despliegue productivo.
+
+La validación demuestra que los módulos focalizados pasan en el checkout indicado; no debe ampliarse a garantías no cubiertas por esas pruebas ni a la habilitación de runtime.
 
 ## Estado de dominios de la visión
 
