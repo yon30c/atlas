@@ -127,17 +127,20 @@ class SQLiteWorkspaceRegistryRepository:
         association: ProjectEnvironmentAssociation,
         *,
         expected_revision: int,
+        lifecycle_event_id: str,
     ) -> None:
         if not isinstance(association, ProjectEnvironmentAssociation):
             raise ContractError("association debe ser ProjectEnvironmentAssociation")
         self._next_revision(expected_revision, association.revision)
+        event_id = self._required(lifecycle_event_id, "lifecycle_event_id")
         with self._write_connection() as connection:
             cursor = connection.execute(
                 """UPDATE atlas_project_environments
-                   SET status = ?, revision = ?, updated_at = ?
+                   SET status = ?, revision = ?, updated_at = ?,
+                       last_lifecycle_event_id = ?
                    WHERE project_id = ? AND environment_id = ? AND revision = ?""",
                 (
-                    association.status.value, association.revision, _now_text(),
+                    association.status.value, association.revision, _now_text(), event_id,
                     association.project_id, association.environment_id, expected_revision,
                 ),
             )
