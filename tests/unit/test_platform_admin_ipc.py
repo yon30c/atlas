@@ -74,7 +74,7 @@ class AuthorityAdminIPCProtocolTests(unittest.TestCase):
                     decode_admin_request(packet)
 
     def test_rejects_empty_and_oversized_packets(self):
-        for packet in (bytes([0xFF]), b"{"):
+        for packet in (b"", b"x" * (MAX_REQUEST_BYTES + 1)):
             with self.subTest(size=len(packet)):
                 with self.assertRaises(AdminProtocolRejected):
                     decode_admin_request(packet)
