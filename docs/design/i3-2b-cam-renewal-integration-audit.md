@@ -612,3 +612,18 @@ Esta evidencia valida los contratos de dominio y puertos de 7B.1 en el HEAD indi
 
 **Estado:** I3-2B.7B.1 validada por el propietario en Debian. PR #16 permanece Draft, abierto y sin fusionar.
 
+
+
+## 18. I3-2B.7B.2 — persistencia inicial publicada, pendiente de validación
+
+Se publicó una primera implementación de persistencia Platform Admin en la rama de trabajo:
+
+- Migración `CORE_SCHEMA_V25`, registrada después de V24.
+- Tablas `platform_admin_bootstrap_events` y `platform_admin_grants`, con integridad diferida evento/concesión para atomicidad al commit.
+- Validación SQL de identidad USER canónica exacta, activa y en revisión coincidente; permisos exactos; una concesión activa por USER; eventos inmutables y concesiones retenidas como tombstones.
+- Adaptador `SQLitePlatformAdminAuthorityReader` de solo lectura, integrado en `SQLiteLocalAuthorityUnitOfWork`.
+- Pruebas focalizadas nuevas en `tests/unit/test_sqlite_platform_admin_authority.py`.
+
+Esta implementación aún no está validada en Debian. El bootstrap writer/CLI no está implementado ni conectado a runtime. No se ha concedido autoridad a ningún USER, ni se han modificado asociaciones o bases productivas.
+
+**Estado:** código publicado; pendiente validación del propietario en Debian. No avanzar al bootstrap offline hasta que las pruebas focalizadas, compileall y suite completa pasen.
