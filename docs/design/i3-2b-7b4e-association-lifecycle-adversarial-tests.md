@@ -61,3 +61,7 @@ Tras la corrección del test double, el propietario confirmó: **26 tests en 1.6
 ## Validación completa — confirmada por el propietario
 
 El propietario confirmó la ejecución de la suite completa: **1,497 tests en 30.888 s — OK**. También confirmó `python -m compileall -q src tests` con **`COMPILE_EXIT_CODE=0`**. Junto con las 26 pruebas focalizadas aprobadas, 7B.4E queda validada.
+
+## Prueba adicional de integración — validación pendiente
+
+La revisión integral detectó un posible uso de hora obsoleta si `BEGIN IMMEDIATE` espera por otro escritor. Se movió la captura de `Clock.now()` al interior de la UoW y se añadió `test_clock_is_captured_after_uow_acquisition`, que simula el avance temporal durante la adquisición de la transacción y exige que un grant expirado sea rechazado sin escrituras. Esta prueba nueva y la suite completa deben ejecutarse en Debian antes de cerrar la revisión de integración.
