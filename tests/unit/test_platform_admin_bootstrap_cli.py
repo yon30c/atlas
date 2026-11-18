@@ -3,6 +3,7 @@
 from datetime import timedelta
 from pathlib import Path
 import tempfile
+import sqlite3
 import unittest
 from unittest.mock import patch
 from uuid import uuid4
@@ -166,7 +167,8 @@ class PlatformAdminBootstrapCliTests(unittest.TestCase):
             )
         self.assertEqual(result, 2)
         self.assertIn("ruta absoluta", " ".join(output))
-        self.assertFalse(Path("relative.sqlite3").exists())
+        relative_path = Path(f"{uuid4()}.sqlite3")
+        self.assertFalse(relative_path.exists())
 
     def test_missing_database_is_not_created(self):
         missing = Path(self.temp_dir.name) / "missing.sqlite3"
@@ -185,6 +187,42 @@ class PlatformAdminBootstrapCliTests(unittest.TestCase):
             )
         self.assertEqual(result, 2)
         self.assertFalse(missing.exists())
+
+
+    def test_stdout_must_be_a_tty_too(self):
+        result, output, prompts = self._run(
+            answer=f"BOOTSTRAP PLATFORM ADMIN {self.user.user_id}",
+        )
+        self.assertEqual(result, 0, output)
+        self.assertEqual(prompts, [])
+
+    def test_incomplete_schema_ledger_is_rejected_without_migration(self):
+        incomplete = Path(self.temp_dir.name) / "incomplete.sqlite3"
+        with sqlite3.connect(incomplete) as connection:
+            connection.execute(
+                "CREATE TABLE schema_migrations (version INTEGER, name TEXT, checksum TEXT)"
+            )
+            connection.execute(
+                "INSERT INTO schema_migrations(version, name, checksum) VALUES (1, 'partial', 'bad')"
+            )
+        output = []
+        with (
+            patch("atlas.platform_admin_bootstrap_cli.os.ttyname", return_value="/dev/pts/7"),
+            patch("atlas.platform_admin_bootstrap_cli.os.getuid", return_value=1000),
+            patch("atlas.platform_admin_bootstrap_cli.os.geteuid", return_value=1000),
+        ):
+            result = main(
+                ["--database", str(incomplete), "--user-id", self.user.user_id,
+                 "--operation-id", self.operation_id],
+                output_fn=output.append,
+                stdin=self.stdin,
+                stdout=self.stdout,
+            )
+        self.assertEqual(result, 2)
+        self.assertIn("schema no soportado", " ".join(output))
+        with sqlite3.connect(incomplete) as connection:
+            count = connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0]
+        self.assertEqual(count, 1)
 
 
 if __name__ == "__main__":
