@@ -20,12 +20,13 @@ No depende de `SQLiteLocalAuthorityUnitOfWork` y no se incorpora a la composici�
 
 1. Valida que la intención sea `PlatformAdminBootstrapRequest` y conserve el conjunto exacto de permisos iniciales.
 2. Resuelve `request.user_id` mediante Identity Authority.
-3. Rechaza USER inexistente o no ACTIVE.
-4. Obtiene `confirmed_at` exclusivamente de `Clock.now()` y exige UTC consciente de zona.
-5. Genera `event_id` y `grant_id` UUIDv4 distintos.
-6. Construye procedencia técnica inmutable y grant ACTIVE de revisión 1, con emisión/not-before iguales a la confirmación y expiración exactamente 90 días después.
-7. Construye `PlatformAdminBootstrapCommand` (que vuelve a comprobar consistencia entre request, provenance y grant).
-8. Delega al puerto offline y devuelve su resultado. Los errores de persistencia se propagan; no hay fallback ni reintento implícito.
+3. Antes de resolver la identidad o generar nuevos IDs, consulta `get_operation(operation_id)` en el puerto offline. Si ya existe, compara la intención (USER y permisos) y devuelve el grant persistido; si la intención difiere, rechaza el conflicto. Esto recupera un commit exitoso cuya respuesta se perdió sin fabricar una procedencia nueva.
+4. Si no existe operación previa, rechaza USER inexistente o no ACTIVE.
+5. Obtiene `confirmed_at` exclusivamente de `Clock.now()` y exige UTC consciente de zona.
+6. Genera `event_id` y `grant_id` UUIDv4 distintos.
+7. Construye procedencia técnica inmutable y grant ACTIVE de revisión 1, con emisión/not-before iguales a la confirmación y expiración exactamente 90 días después.
+8. Construye `PlatformAdminBootstrapCommand` (que vuelve a comprobar consistencia entre request, provenance y grant).
+9. Delega al puerto offline y devuelve su resultado. Los errores de persistencia se propagan; no hay fallback ni reintento implícito.
 
 ## Límite transaccional y concurrencia
 
@@ -51,3 +52,21 @@ UID real/efectivo y terminal son datos del proceso local suministrados por la fu
 - propagación de fallo del puerto sin fallback.
 
 Las pruebas de este slice no ejecutan una provisión real ni acceden a una base productiva.
+
+
+## Recuperación exacta de operaciones
+
+Se amplió el puerto offline con `get_operation(operation_id)`. El adaptador SQLite reconstruye el comando persistido desde el evento y grant canónicos. El servicio consulta este resultado antes de generar IDs/procedencia o releer el USER:
+- mismo operation_id + mismo USER/permisos: devuelve el grant previamente persistido;
+- mismo operation_id + intención diferente: `ConcurrencyError`;
+- no existe operación: sigue el flujo de preparación y la escritura transaccional.
+
+El adaptador conserva además su comparación completa de procedencia al recibir una repetición directa del mismo comando. La recuperación del servicio evita que una repetición secuencial regenere IDs/TTY/timestamp y convierta un commit confirmado con respuesta perdida en un conflicto artificial.
+
+La exclusión global del primer bootstrap sigue protegida por `BEGIN IMMEDIATE` y el guard histórico del adaptador. Dos intentos distintos no pueden crear dos administradores. Para reintentos realmente concurrentes con el mismo operation_id, el adaptador sigue exigiendo que el comando de escritura coincida exactamente; una futura CLI deberá conservar el identificador de operación y no crear una segunda intención independiente.
+
+## Pruebas adicionales
+
+- El servicio recupera el grant existente sin volver a consultar Clock ni emitir nueva procedencia.
+- Un operation_id reutilizado para otro USER se rechaza.
+- El adaptador reconstruye exactamente el comando persistido mediante `get_operation`.
