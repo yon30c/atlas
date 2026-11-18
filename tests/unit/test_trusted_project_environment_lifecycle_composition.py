@@ -140,7 +140,7 @@ class TrustedLifecycleCompositionIntegrationTests(unittest.TestCase):
 
         self.assertIs(lifecycle._unit_of_work_factory, self.factory)
         self.assertIs(
-            lifecycle._identity_verifier._unit_of_work_factory,
+            lifecycle._identity_verifier._uow_factory,
             self.factory,
         )
 
