@@ -54,12 +54,17 @@ def _require_tty(stdin, stdout) -> tuple[int, int, str]:
         raise AuthorizationError("stdout debe estar conectado a una TTY real")
     try:
         terminal_id = os.ttyname(stdin.fileno())
+        output_terminal_id = os.ttyname(stdout.fileno())
         real_uid = os.getuid()
         effective_uid = os.geteuid()
     except (AttributeError, OSError) as exc:
         raise AuthorizationError("no se pudo verificar la procedencia TTY/UID del proceso") from exc
-    if not isinstance(terminal_id, str) or not terminal_id.strip():
-        raise AuthorizationError("la terminal del proceso no es válida")
+    if (
+        not isinstance(terminal_id, str)
+        or not terminal_id.strip()
+        or output_terminal_id != terminal_id
+    ):
+        raise AuthorizationError("stdin y stdout deben pertenecer a la misma TTY")
     return real_uid, effective_uid, terminal_id
 
 
@@ -82,13 +87,17 @@ def _validate_database_path(raw_path: str) -> Path:
 def _validate_schema_read_only(database_path: Path) -> int:
     """Verify the complete known migration ledger without creating or changing it."""
     uri = database_path.as_uri() + "?mode=ro"
+    connection = None
     try:
-        with sqlite3.connect(uri, uri=True) as connection:
-            rows = connection.execute(
-                "SELECT version, name, checksum FROM schema_migrations ORDER BY version"
-            ).fetchall()
+        connection = sqlite3.connect(uri, uri=True)
+        rows = connection.execute(
+            "SELECT version, name, checksum FROM schema_migrations ORDER BY version"
+        ).fetchall()
     except sqlite3.Error as exc:
         raise AuthorizationError("no se pudo verificar el ledger SQLite en modo solo lectura") from exc
+    finally:
+        if connection is not None:
+            connection.close()
 
     expected = SQLITE_MIGRATIONS
     if len(rows) != len(expected):
