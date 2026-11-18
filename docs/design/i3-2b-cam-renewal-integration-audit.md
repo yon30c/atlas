@@ -680,3 +680,7 @@ No se ejecutó bootstrap real, no se aplicó migración a producción y no se a�
 Se añadieron cuatro pruebas de servicio para: grant Platform Admin expirado con evidencia USER todavía válida, mismatch de revisión de identidad, fallo de commit con rollback de asociación/evento/marcador y concurrencia de dos transiciones con el mismo expected_revision (solo una puede confirmar). La cobertura existente conserva casos de autoridad revocada/ausente, evidencia expirada, revisión obsoleta y fallo del ledger.
 
 El verifier sigue siendo un doble controlado; no se afirma validar criptografía/issuer/attestation. La prueba de commit fuerza una excepción antes de la confirmación física SQLite; las constraints diferidas V26 se mantienen cubiertas por las pruebas de migración. No hay cambios de servicio, schema, runtime composition, HTTP, CLI ni infraestructura. Validación Debian pendiente: se esperan 1,497 tests y `COMPILE_EXIT_CODE=0`. PR #16 continúa Draft, abierto y sin merge.
+
+### Nota de corrección 7B.4E
+
+El primer ensayo Debian encontró que el doble de prueba de commit pasaba al ledger el wrapper `SQLiteLocalAuthorityUnitOfWork` en lugar del `SQLiteUnitOfWork` interno. Se corrigió el wiring de la prueba a `unit._unit._unit`; no hubo cambios productivos. Validación pendiente de repetición.
