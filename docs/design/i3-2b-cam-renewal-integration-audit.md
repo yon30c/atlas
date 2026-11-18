@@ -778,3 +778,10 @@ Se añadieron pruebas de integración con issuer/binding, autenticador y proof n
 ### Nota de validación 7B.5B — corrección del fixture de audience
 
 La primera suite completa del propietario (1,510 tests) tuvo un fallo aislado en el caso de audience. El test entregaba al lifecycle evidencia válidamente firmada para `atlas.internal`; solo comprobaba aparte que un verifier `atlas.other` la rechazaba. Por tanto, el servicio lifecycle aceptaba correctamente la evidencia y la expectativa era errónea. El fixture ahora emite y consume un proof nativo separado para `atlas.other`, genera evidencia HMAC real para esa audiencia y la presenta al lifecycle `atlas.internal`, comprobando rechazo y ausencia de escrituras. Corrección publicada; revalidación pendiente. No hubo cambio en producción.
+
+
+### Cierre de validación 7B.5B — composición confiable
+
+El propietario confirmó la reejecución completa en Debian después de corregir el fixture de audience: **1,510 tests en 30.376 s — OK**. La prueba ahora genera evidencia HMAC real para `atlas.other` mediante un proof nativo separado y comprueba que el lifecycle configurado para `atlas.internal` la rechaza sin escrituras. El fallo inicial correspondía a una expectativa mal construida en el test, no a una omisión del verifier; no se cambió el código de producción ni se relajó la verificación.
+
+Queda validada por el propietario la suite completa del checkpoint 7B.5B. No se reportó en este checkpoint una ejecución independiente de `compileall`; no se atribuye ese resultado. Siguen pendientes para 7B.5C los casos adversariales adicionales descritos arriba y una revisión ampliada de superficies. No hay endpoint, CLI, runtime registration, migración productiva, bootstrap real ni cambios de host/infraestructura. PR #16 permanece Draft, abierto y sin merge.
