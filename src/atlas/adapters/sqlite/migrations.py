@@ -2552,6 +2552,8 @@ CORE_SCHEMA_V25 = SQLiteMigration(
     );
 
     CREATE INDEX platform_admin_grants_user ON platform_admin_grants(user_id, grant_id);
+    CREATE UNIQUE INDEX platform_admin_grants_one_active_per_user
+        ON platform_admin_grants(user_id) WHERE status = 'active';
 
     CREATE TRIGGER platform_admin_bootstrap_event_matches_user
     BEFORE INSERT ON platform_admin_bootstrap_events
