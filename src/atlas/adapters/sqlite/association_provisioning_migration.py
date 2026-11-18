@@ -46,20 +46,76 @@ CORE_SCHEMA_V27 = SQLiteMigration(
         reason TEXT NOT NULL CHECK (
             length(reason) BETWEEN 1 AND 500
             AND reason = trim(reason)
-            AND instr(reason, char(0)) = 0
+            AND instr(reason, char(1)) = 0
+            AND instr(reason, char(2)) = 0
+            AND instr(reason, char(3)) = 0
+            AND instr(reason, char(4)) = 0
+            AND instr(reason, char(5)) = 0
+            AND instr(reason, char(6)) = 0
+            AND instr(reason, char(7)) = 0
+            AND instr(reason, char(8)) = 0
             AND instr(reason, char(9)) = 0
             AND instr(reason, char(10)) = 0
+            AND instr(reason, char(11)) = 0
+            AND instr(reason, char(12)) = 0
             AND instr(reason, char(13)) = 0
+            AND instr(reason, char(14)) = 0
+            AND instr(reason, char(15)) = 0
+            AND instr(reason, char(16)) = 0
+            AND instr(reason, char(17)) = 0
+            AND instr(reason, char(18)) = 0
+            AND instr(reason, char(19)) = 0
+            AND instr(reason, char(20)) = 0
+            AND instr(reason, char(21)) = 0
+            AND instr(reason, char(22)) = 0
+            AND instr(reason, char(23)) = 0
+            AND instr(reason, char(24)) = 0
+            AND instr(reason, char(25)) = 0
+            AND instr(reason, char(26)) = 0
+            AND instr(reason, char(27)) = 0
+            AND instr(reason, char(28)) = 0
+            AND instr(reason, char(29)) = 0
+            AND instr(reason, char(30)) = 0
+            AND instr(reason, char(31)) = 0
+            AND instr(reason, char(127)) = 0
         ),
         real_uid INTEGER NOT NULL CHECK (real_uid > 0),
         effective_uid INTEGER NOT NULL CHECK (effective_uid = 0),
         terminal_id TEXT NOT NULL CHECK (
             length(terminal_id) BETWEEN 1 AND 256
             AND terminal_id = trim(terminal_id)
-            AND instr(terminal_id, char(0)) = 0
+            AND instr(terminal_id, char(1)) = 0
+            AND instr(terminal_id, char(2)) = 0
+            AND instr(terminal_id, char(3)) = 0
+            AND instr(terminal_id, char(4)) = 0
+            AND instr(terminal_id, char(5)) = 0
+            AND instr(terminal_id, char(6)) = 0
+            AND instr(terminal_id, char(7)) = 0
+            AND instr(terminal_id, char(8)) = 0
             AND instr(terminal_id, char(9)) = 0
             AND instr(terminal_id, char(10)) = 0
+            AND instr(terminal_id, char(11)) = 0
+            AND instr(terminal_id, char(12)) = 0
             AND instr(terminal_id, char(13)) = 0
+            AND instr(terminal_id, char(14)) = 0
+            AND instr(terminal_id, char(15)) = 0
+            AND instr(terminal_id, char(16)) = 0
+            AND instr(terminal_id, char(17)) = 0
+            AND instr(terminal_id, char(18)) = 0
+            AND instr(terminal_id, char(19)) = 0
+            AND instr(terminal_id, char(20)) = 0
+            AND instr(terminal_id, char(21)) = 0
+            AND instr(terminal_id, char(22)) = 0
+            AND instr(terminal_id, char(23)) = 0
+            AND instr(terminal_id, char(24)) = 0
+            AND instr(terminal_id, char(25)) = 0
+            AND instr(terminal_id, char(26)) = 0
+            AND instr(terminal_id, char(27)) = 0
+            AND instr(terminal_id, char(28)) = 0
+            AND instr(terminal_id, char(29)) = 0
+            AND instr(terminal_id, char(30)) = 0
+            AND instr(terminal_id, char(31)) = 0
+            AND instr(terminal_id, char(127)) = 0
         ),
         occurred_at TEXT NOT NULL CHECK (length(trim(occurred_at)) > 0),
         UNIQUE (event_id, project_id, environment_id),
