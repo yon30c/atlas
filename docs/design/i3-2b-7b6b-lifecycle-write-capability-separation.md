@@ -93,3 +93,14 @@ No se afirma que compileall o los tests hayan pasado hasta recibir los resultado
 7B.6C debe completar el inventario de imports/call-sites de las antiguas operaciones de asociación, confirmar que no existe consumidor de aplicación alternativo, revisar exports y ejecutar pruebas adversariales adicionales. La fase no habilitará runtime.
 
 PR #16 permanece Draft, abierto y sin merge.
+
+
+## 6. Corrección posterior a validación — 7B.6B
+
+La primera ejecución del propietario en Debian detectó un error sintáctico en `tests/unit/test_project_environment_lifecycle_service.py`: el constructor principal del servicio declaraba dos veces el argumento `association_writer_factory`.
+
+Se eliminó la segunda declaración redundante, conservando una sola factory para esa instancia. Commit correctivo: `c2422d5a1e4824a3190e1d8491f2a184715f313d`.
+
+Se revisaron los cinco archivos de pruebas de la fase: no se encontraron llamadas antiguas a `unit.workspaces.get_association/create_association/update_association` ni a `self.repository.get_association/create_association/update_association`. En el archivo del servicio hay cinco asignaciones de factory correspondientes a distintas instancias de prueba; no equivalen a argumentos duplicados dentro de una misma llamada.
+
+**Estado:** corrección publicada; compileall y pruebas siguen pendientes de repetición en Debian. No avanzar a 7B.6C hasta recibir validación limpia.
