@@ -8,13 +8,14 @@
 
 El módulo `src/atlas/platform_admin_ipc.py` prueba dos propiedades del canal:
 
-1. Un socket conectado debe ser `AF_UNIX/SOCK_SEQPACKET`.
+1. Un socket conectado debe ser `AF_UNIX/SOCK_SEQPACKET`; el handler comprueba ambas propiedades antes de consultar credenciales.
 2. La identidad del peer se obtiene desde el kernel mediante `SO_PEERCRED`; el UID debe pertenecer a una allowlist local.
 3. Se acepta exactamente un paquete por conexión.
 4. El paquete es JSON UTF-8 acotado a 64 KiB, versión 1, UUIDv4 canónico, operación allowlisted y payload vacío.
-5. Se rechazan claves duplicadas, campos extra, versión booleana/flotante, UTF-8 inválido, operación desconocida, payload no vacío y paquete truncado.
+5. Se rechazan claves duplicadas, campos extra, versión booleana/flotante, UTF-8 inválido, operación desconocida, payload no vacío, paquete truncado y datos ancillary.
 6. La única operación disponible es `authority.ping`, sin efectos de dominio.
 7. La respuesta es un único paquete acotado; no se incluye ni acepta identidad de ejecutor enviada por el cliente.
+8. Cada conexión tiene timeout de lectura/escritura configurable, default 5 s y máximo 60 s; el handler procesa una conexión y un paquete. El listener futuro debe imponer por separado un límite de concurrencia/backpressure.
 
 Los tests unitarios usan pares de sockets Unix reales para validar el transporte `SOCK_SEQPACKET` y las credenciales kernel del peer. Los tests no requieren privilegios.
 
@@ -47,7 +48,7 @@ Se debe informar el número de tests y el resultado exacto. Si el paquete de tes
 - Abrir sockets AF_UNIX SOCK_SEQPACKET de filesystem dentro de un directorio temporal privado.
 - Verificar que un peer de UID no permitido sea rechazado usando procesos con credenciales Linux distintas (no mocks).
 - Comprobar permisos del socket/directorio, symlink preexistente, path existente y cleanup seguro.
-- Comprobar límites y comportamiento ante desconexión, packet truncado y timeout.
+- Comprobar límites y comportamiento ante desconexión, packet truncado y timeout de lectura/escritura; el listener debe limitar concurrencia.
 - Comprobar que no se aceptan descriptores auxiliares SCM_RIGHTS.
 - Confirmar si `SO_PEERCRED` del socket conectado sigue el modelo esperado para el futuro cliente privilegiado.
 - Solo después decidir si se implementa listener persistente o activación systemd.
