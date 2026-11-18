@@ -1,6 +1,6 @@
 # I3-2B.7B.4C — adaptador SQLite del ledger lifecycle
 
-**Estado:** implementación publicada; validación del propietario pendiente.  
+**Estado:** implementación publicada y validada por el propietario en Debian.  
 **PR:** #16 — Draft, abierto y sin merge.  
 **Dependencia:** V26 validada en Debian en 7B.4B.  
 **Alcance:** adaptador de persistencia y pruebas; no servicio, autorización, runtime composition ni cambios de schema.
@@ -39,7 +39,7 @@ La suite SQL V26 de 7B.4B sigue siendo la autoridad para inmutabilidad, constrai
 
 ## Validación owner
 
-Pendiente de ejecución en Debian. No declarar 7B.4C validada hasta recibir:
+El propietario ejecutó la validación en Debian y reportó:
 ```bash
 cd ~/atlas-dev
 git pull --ff-only
