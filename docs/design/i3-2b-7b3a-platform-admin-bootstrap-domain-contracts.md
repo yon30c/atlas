@@ -139,6 +139,8 @@ El servicio resuelve el USER canónico, exige estado ACTIVE, toma el instante UT
 
 La lectura de identidad del servicio es preparatoria: el adaptador SQLite conserva la revalidación autoritativa de USER/identity_id/revisión dentro de `BEGIN IMMEDIATE`, junto con idempotencia, exclusividad histórica y escritura atómica.
 
-Se añadieron cinco pruebas unitarias de servicio. **Aún no se han ejecutado en Debian**; la validación del propietario queda pendiente. No se debe considerar 7B.3C cerrada hasta recibir el resultado de las pruebas focalizadas, suite completa y compileall.
+Se añadieron siete pruebas unitarias de servicio y una prueba de recuperación en el adaptador SQLite. **Aún no se han ejecutado en Debian**; la validación del propietario queda pendiente. No se debe considerar 7B.3C cerrada hasta recibir el resultado de las pruebas focalizadas, suite completa y compileall.
+
+La implementación inicial reveló que regenerar IDs/procedencia en cada llamada impediría recuperar un commit exitoso cuya respuesta se perdió. Para cerrar ese hueco, el puerto offline ahora expone `get_operation(operation_id)`; el adaptador reconstruye el comando persistido y el servicio recupera el grant antes de generar nueva procedencia. El mismo operation_id con otro USER/permisos se rechaza. La comparación completa de procedencia en la escritura del adaptador se conserva.
 
 La futura fase 7B.3D seguirá siendo responsable de TTY real, captura de UID/terminal y confirmación interactiva. No se ha creado ni ejecutado CLI y no se ha realizado ningún bootstrap real.
