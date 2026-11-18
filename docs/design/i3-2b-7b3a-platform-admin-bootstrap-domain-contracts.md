@@ -144,3 +144,10 @@ Se añadieron siete pruebas unitarias de servicio y una prueba de recuperación 
 La implementación inicial reveló que regenerar IDs/procedencia en cada llamada impediría recuperar un commit exitoso cuya respuesta se perdió. Para cerrar ese hueco, el puerto offline ahora expone `get_operation(operation_id)`; el adaptador reconstruye el comando persistido y el servicio recupera el grant antes de generar nueva procedencia. El mismo operation_id con otro USER/permisos se rechaza. La comparación completa de procedencia en la escritura del adaptador se conserva.
 
 La futura fase 7B.3D seguirá siendo responsable de TTY real, captura de UID/terminal y confirmación interactiva. No se ha creado ni ejecutado CLI y no se ha realizado ningún bootstrap real.
+
+
+## 9. Validación del propietario — I3-2B.7B.3C
+
+El propietario validó en Debian la suite completa: **1,451 tests en 25.087 s — OK**; `python -m compileall -q src tests` terminó con **`COMPILE_EXIT_CODE=0`**. Quedan validados el servicio de aplicación y la recuperación idempotente mediante `get_operation(operation_id)` en el puerto/adaptador SQLite. No se ejecutó el bootstrap real, no se creó un Platform Admin y no se modificó ninguna base productiva.
+
+**Siguiente slice:** I3-2B.7B.3D — diseño e implementación de la CLI offline, separada del entrypoint de consola habitual y sin integración HTTP/runtime.
