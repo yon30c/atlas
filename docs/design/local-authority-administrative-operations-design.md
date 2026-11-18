@@ -76,7 +76,7 @@ El hecho de que el peer sea root identifica un proceso privilegiado del host; no
 El protocolo debe ser versionado, acotado y estricto:
 
 - Un mensaje de solicitud por conexión.
-- Tamaño máximo definido y pequeño (propuesta inicial: 64 KiB).
+- Tamaño máximo asimétrico definido en §10: solicitud 16 KiB y respuesta 64 KiB; la propuesta inicial de 64 KiB para solicitudes queda sustituida.
 - JSON UTF-8 con versión explícita, request ID UUIDv4, nombre de operación y payload específico.
 - Rechazo de claves duplicadas, campos desconocidos, tipos inesperados, valores excesivos y mensajes adicionales.
 - No aceptar rutas, SQL, expresiones, código ni argumentos arbitrarios.
@@ -297,3 +297,265 @@ No se debe avanzar directamente de 2.5.1 a una operación privilegiada real. Cad
 - Resolver auditoría externa, backup/restore, claves y anti-rollback en sus fases correspondientes.
 
 **Conclusión:** el socket Unix estrecho es el candidato más prometedor para separar el frontend root del writer `atlas-runtime`, pero no se considera aprobado ni seguro hasta demostrarlo con un prototipo real y pruebas adversariales. El CLI actual permanece bloqueado para la futura DB principal.
+
+
+## 10. Contrato de transporte y mensajes — v0.1
+
+Este apartado concreta §3.3 a partir de las pruebas aisladas realizadas en Debian 13.7 / kernel 6.12.117 / systemd 257.13 / Python 3.13.5 el 18-11-2026. Es un contrato de diseño para el siguiente prototipo; no convierte el fixture en implementación aprobada ni autoriza despliegue.
+
+### 10.1 Transporte y ciclo de conexión
+
+- Familia: `AF_UNIX`.
+- Tipo: `SOCK_SEQPACKET`; cada paquete conserva sus límites. No se añade un encabezado de longitud.
+- Listener: administrado por systemd mediante socket activation, con `Accept=no` como candidato del prototipo.
+- Una solicitud y una respuesta como máximo por conexión.
+- El servidor acepta una conexión, procesa como máximo un paquete y cierra esa conexión. No se admite una sesión persistente ni se procesa un segundo paquete como otra operación.
+- El cliente debe abrir una conexión nueva para cada solicitud.
+- No se admite tráfico TCP, sockets de red ni fallback silencioso a `SOCK_STREAM`.
+- El listener debe aplicar backpressure y un límite explícito de concurrencia/cola. Para el primer prototipo se prefiere ejecución serial de una solicitud activa; el valor de backlog y la semántica de reactivación de systemd deben probarse y fijarse antes de implementar.
+- El descriptor heredado se valida antes de atender clientes: `LISTEN_PID`, `LISTEN_FDS`, FD esperado, familia, tipo y nombre del socket.
+- El servicio no hace `bind`, `unlink`, `chmod` ni `shutdown` sobre el listener heredado.
+
+### 10.2 Identidad del peer
+
+- El servidor obtiene PID, UID y GID mediante `SO_PEERCRED`; nunca acepta credenciales declaradas en el JSON.
+- En el prototipo inicial, el peer permitido es UID 0. El rechazo del peer se realiza antes de leer o interpretar su solicitud.
+- Los permisos del directorio/socket y `SO_PEERCRED` son controles diferentes: se prueban por separado. El directorio privado root-owned y el socket restringido no se relajan para hacer pasar pruebas de credenciales.
+- UID 0 identifica un proceso privilegiado del host; no prueba identidad civil ni identidad Atlas USER.
+- El ejecutor de operaciones sigue siendo `atlas-runtime`; su UID/GID se observa dentro del servicio y nunca se acepta desde un campo del cliente.
+
+### 10.3 Límites de mensajes
+
+| Límite | Valor v0.1 | Regla |
+|---|---:|---|
+| Solicitud | 16 KiB | Rechazar si el paquete excede el límite |
+| Respuesta | 64 KiB | Respuestas mayores requieren resumen/paginación, no truncamiento |
+| Profundidad JSON | 16 niveles | Rechazar estructuras más profundas |
+| Solicitudes por conexión | 1 | Cerrar después de la respuesta o rechazo |
+| Tiempo de lectura de solicitud | 5 s por defecto | Límite superior configurable de 60 s |
+| Tiempo de escritura | 5 s por defecto | Límite superior configurable de 60 s |
+
+Los límites son límites de protocolo, no sustituyen los límites de CPU, memoria, descriptores, concurrencia ni tiempo de cada caso de uso. Cada operación de larga duración necesita además un deadline de ejecución explícito.
+
+El servidor recibe con `recvmsg()` y debe comprobar:
+
+- `MSG_TRUNC`: el paquete excedió el buffer/límite; rechazar sin ejecutar.
+- `MSG_CTRUNC`: los datos ancillary quedaron truncados; rechazar.
+- Cualquier dato ancillary/control message: rechazado. No se pasan descriptores de archivo ni credenciales adicionales mediante ancillary data.
+- Un paquete vacío no se interpreta como una solicitud JSON válida.
+
+No basta con `recv(1024)`: puede devolver un prefijo truncado sin que la aplicación compruebe el tamaño original. El servidor no debe intentar interpretar ni ejecutar ese prefijo.
+
+La distinción entre un paquete de longitud cero y EOF del peer debe verificarse con `recvmsg()` y las banderas observadas en los kernels soportados. Si la plataforma no permite distinguirlos de forma fiable, ambos se tratan como cierre de transporte sin operación y sin respuesta; nunca se intenta escribir a un peer ya desconectado.
+
+### 10.4 Solicitud JSON
+
+Codificación UTF-8 estricta, un objeto JSON por paquete:
+
+```json
+{
+  "protocol": "atlas-admin/1",
+  "request_id": "UUIDv4",
+  "operation": "authority.diagnose",
+  "payload": {}
+}
+```
+
+Reglas normativas:
+
+- `protocol`, `request_id`, `operation` y `payload` son obligatorios.
+- `request_id` identifica el intercambio de transporte; cada intento nuevo obtiene un UUIDv4 nuevo.
+- `operation` pertenece al catálogo cerrado de §11.
+- `payload` es un objeto con esquema específico de la operación.
+- Rechazar UTF-8 inválido, JSON inválido, claves duplicadas, campos desconocidos, tipos incorrectos, valores fuera de rango, profundidad excesiva, `NaN`, `Infinity` y cualquier representación no admitida por JSON estricto.
+- No se permiten rutas de base, SQL, shell, ejecutables, nombres de módulos, expresiones, código, variables de entorno ni argumentos genéricos.
+- El digest de intención se calcula en el servicio sobre una representación normalizada y versionada del payload. El cliente no puede imponer el digest ni sustituir la canonicalización.
+- Las mutaciones incluyen además un `operation_id` UUIDv4 distinto de `request_id`; este identificador es la clave durable de idempotencia.
+
+Para operaciones mutables, `payload` incluye la evidencia de procedencia del operador, motivo y confirmación tipada exigidos por §4 y §6. Esa evidencia se registra como procedencia transmitida por el frontend privilegiado; no se presenta como una identidad civil verificada por el servicio. El servicio registra por separado las credenciales del peer y su propia identidad de ejecución. Se rechaza cualquier campo `executor_uid` o equivalente enviado por el cliente.
+
+### 10.5 Respuesta
+
+Respuesta satisfactoria:
+
+```json
+{
+  "protocol": "atlas-admin/1",
+  "request_id": "UUIDv4",
+  "status": "completed",
+  "code": "OK",
+  "summary": "Operation completed",
+  "result": {},
+  "audit_ref": "reference-or-null"
+}
+```
+
+Respuesta de rechazo/error:
+
+```json
+{
+  "protocol": "atlas-admin/1",
+  "request_id": "UUIDv4-or-null",
+  "status": "rejected",
+  "code": "INVALID_REQUEST",
+  "summary": "Request rejected",
+  "result": {},
+  "audit_ref": null
+}
+```
+
+Estados de respuesta permitidos:
+
+- `completed`: resultado terminal confirmado.
+- `rejected`: solicitud rechazada sin ejecutar la mutación.
+- `pending`: operación aceptada pero todavía no terminal; solo se permite para operaciones que definan explícitamente este estado.
+- `unknown`: el servicio no puede demostrar si una mutación llegó a commit; requiere resolución por `operation_id`.
+
+Las respuestas no incluyen stack traces, rutas internas, SQL, secretos ni datos de tablas que el frontend no necesite. Si no puede recuperarse de forma segura el `request_id` de una solicitud malformada, se devuelve `null`. Para peer no autorizado, paquete truncado o ancillary data prohibido, el servicio puede cerrar sin respuesta; nunca debe ejecutar la operación.
+
+### 10.6 Errores estables
+
+Los códigos forman parte del contrato y no deben depender de mensajes de excepción del lenguaje:
+
+| Código | Significado |
+|---|---|
+| `UNAUTHORIZED_PEER` | UID del peer no permitido |
+| `EMPTY_REQUEST` | Paquete vacío cuando puede distinguirse de EOF |
+| `REQUEST_TOO_LARGE` | Solicitud supera 16 KiB |
+| `MESSAGE_TRUNCATED` | `MSG_TRUNC` detectado |
+| `ANCILLARY_DATA_FORBIDDEN` | Datos ancillary o `MSG_CTRUNC` |
+| `INVALID_UTF8` | Codificación no válida |
+| `INVALID_JSON` | JSON malformado o no estricto |
+| `INVALID_REQUEST` | Sobre de solicitud incompleto o campos no admitidos |
+| `UNSUPPORTED_PROTOCOL_VERSION` | Versión no admitida |
+| `UNKNOWN_OPERATION` | Operación fuera del catálogo |
+| `INVALID_ARGUMENTS` | Payload no cumple el esquema |
+| `OPERATION_DENIED` | Operación no autorizada por sus precondiciones |
+| `IDEMPOTENCY_CONFLICT` | Mismo operation ID con intención diferente |
+| `TIMEOUT` | Deadline de transporte/operación agotado |
+| `OPERATION_FAILED` | Fallo controlado del caso de uso |
+| `RESULT_UNKNOWN` | No se puede demostrar el resultado durable |
+| `INTERNAL_ERROR` | Fallo interno no recuperable, sin detalles sensibles |
+
+Una entrada inválida no debe provocar una excepción no controlada ni terminar el proceso de autoridad por un error de validación. `BrokenPipeError`/peer desaparecido es un resultado de transporte: no debe causar una caída inesperada ni convertir una mutación potencialmente confirmada en un falso `failed`.
+
+## 11. Catálogo de operaciones v0.1 y matriz de autorización
+
+Todas las operaciones requieren un peer local autorizado por `SO_PEERCRED` (UID 0 en el prototipo) y pasan por una allowlist exacta. Esta condición solo autentica el proceso del host; no reemplaza las precondiciones específicas de cada operación.
+
+| Operación | Acceso a DB | Mutación | TTY/confirmación | Motivo | Idempotencia |
+|---|---|---:|---|---|---|
+| `authority.ping` | Ninguno | No | No | No | `request_id` |
+| `authority.diagnose` | Solo lectura | No | No | No | `request_id` |
+| `authority.migrations.plan` | Solo lectura | No | No | No | `request_id` |
+| `authority.operation.status` | Lectura del ledger | No | No | No | `operation_id` consultado |
+| `authority.initialize` | Crea/bootstrap | Sí | TTY foreground y confirmación tipada | Obligatorio | `operation_id` |
+| `authority.migrations.apply` | Escritura transaccional | Sí | TTY foreground y confirmación exacta origen→destino | Obligatorio | `operation_id` |
+| `authority.project_environment.provision` | Escritura transaccional | Sí | TTY foreground y confirmación exacta Project/Environment | Obligatorio | `operation_id` |
+
+### 11.1 `authority.ping`
+
+- Comprueba que el servicio atiende el protocolo y devuelve su versión.
+- No abre SQLite, no inspecciona rutas de DB y no cambia estado.
+- No debe exponer configuración, secretos ni inventario sensible.
+- Es una operación de salud del canal, no una prueba de que la autoridad de dominio esté saludable.
+
+### 11.2 `authority.diagnose`
+
+Conserva las restricciones de §4.1. Solo el servicio puede inspeccionar el almacenamiento configurado. El frontend no abre SQLite ni toma decisiones a partir de lecturas propias. Diagnóstico rápido y profundo deben distinguirse en el resultado; una comprobación no ejecutada o incompleta es `UNKNOWN/UNAVAILABLE`, nunca saludable.
+
+### 11.3 `authority.migrations.plan`
+
+Conserva §4.2. Devuelve un plan determinista y de solo lectura. No crea DB, ledger, directorios, WAL ni sidecars. Aplicar el plan siempre vuelve a validar estado y checksums.
+
+### 11.4 `authority.operation.status`
+
+Nueva operación de solo lectura necesaria para resolver commits ambiguos:
+
+- Payload: `operation_id` UUIDv4.
+- Consulta únicamente el ledger administrativo; no permite búsquedas SQL ni lecturas arbitrarias.
+- Devuelve `COMMITTED_EXACT`, `NOT_COMMITTED` o `UNKNOWN`, junto con tipo de operación, digest registrado y referencia de auditoría cuando exista.
+- `NOT_COMMITTED` solo se devuelve cuando el ledger autoritativo está disponible, íntegro y permite demostrar la ausencia de commit.
+- Si la DB/ledger no está disponible, es inconsistente o todavía no existe (por ejemplo, bootstrap inicial incompleto), devuelve `UNKNOWN`.
+- No inicia, reintenta ni repara la operación consultada.
+
+### 11.5 `authority.initialize`
+
+Conserva §4.3. Solo crea una base nueva en la ruta canónica configurada. Exige ausencia demostrada de cualquier objeto en destino, confirmación tipada y operation ID. El evento de bootstrap y el ledger inicial deben quedar en el mismo commit cuando técnicamente sea posible. Un resultado ambiguo nunca provoca borrado automático ni repetición con otro ID.
+
+### 11.6 `authority.migrations.apply`
+
+Conserva §4.4. Solo aplica migraciones publicadas e inmutables sobre una DB existente. No admite downgrade, salto de versiones, SQL manual ni selección arbitraria de archivos. El cambio de esquema y el evento administrativo correspondiente se confirman en la misma transacción.
+
+### 11.7 `authority.project_environment.provision`
+
+Conserva §4.5. Payload cerrado: operation ID, Project ID, Environment ID y motivo normalizado. El servicio valida y muta en una sola UoW/SQLite transaction. No crea identidades, Grants, credenciales ni recursos adyacentes.
+
+### 11.8 Operaciones fuera de catálogo
+
+Continúan excluidas todas las operaciones enumeradas en §4.6. Tampoco se admiten aliases, nombres alternativos, comodines, comandos compuestos, operaciones batch ni extensiones dinámicas del catálogo. Agregar una operación requiere cambio de contrato, revisión de permisos, pruebas y aprobación explícita.
+
+## 12. Idempotencia, desconexión y auditoría de protocolo
+
+### 12.1 Dos identificadores distintos
+
+- `request_id`: correlaciona un intercambio IPC. Es nuevo en cada intento de transporte.
+- `operation_id`: identifica una intención administrativa mutable y permanece estable durante todos sus reintentos/resoluciones.
+
+El mismo `operation_id` y el mismo digest canónico devuelven el resultado original. El mismo ID con digest diferente produce `IDEMPOTENCY_CONFLICT` sin mutación.
+
+### 12.2 Desconexión y resultado ambiguo
+
+- Desconexión antes de recibir una solicitud válida: cerrar limpiamente; cero operaciones.
+- Solicitud inválida, truncada o no autorizada: cero mutaciones.
+- Desconexión durante el procesamiento: el servicio no asume que la transacción fue cancelada.
+- Error al enviar respuesta después de una mutación: no declarar automáticamente `NOT_COMMITTED`; resolver mediante `authority.operation.status`.
+- Mientras el resultado sea `UNKNOWN`, no iniciar el mismo propósito con un operation ID nuevo.
+- La desconexión del cliente no debe provocar rollback ficticio, doble ejecución ni una excepción no controlada del servidor.
+
+### 12.3 Auditoría mínima
+
+Cada intercambio registra, con redacción de datos sensibles:
+
+- timestamp UTC y duración;
+- request ID y operation ID cuando exista;
+- peer PID/UID/GID obtenidos del kernel;
+- identidad real/efectiva del ejecutor observada dentro del servicio;
+- operación y versión del protocolo;
+- digest canónico de intención;
+- decisión, código estable y resultado;
+- referencia al evento transaccional/ledger cuando exista;
+- desconexión o fallo de entrega de respuesta.
+
+La procedencia del operador transmitida por el frontend se etiqueta como evidencia declarada por ese frontend. No se fusiona con peer credentials, identidad de ejecución ni identidad Atlas USER.
+
+## 13. Evidencia de laboratorio que motiva v0.1
+
+Las pruebas del 18-11-2026 se realizaron en una VM Debian desechable, sobre el fixture `atlas-authority-admin-lab.py`, sin modificar el repositorio ni el socket principal de Atlas:
+
+| Prueba | Evidencia | Consecuencia de diseño |
+|---|---|---|
+| Paquete vacío | Recibió `invalid`; el handler lanzó RuntimeError y systemd marcó fallo | Tratar entrada vacía/EOF de forma controlada y no lanzar excepción |
+| Operación desconocida | Recibió `invalid`; RuntimeError no controlado | Allowlist y error estable sin caída |
+| Paquete de 2048 bytes con `recv(1024)` | El handler recibió un prefijo y respondió `invalid`; no comprobó truncamiento | `recvmsg()` + `MSG_TRUNC` obligatorio |
+| Prueba aislada de `recvmsg(1024)` | 2048 bytes enviados, 1024 recibidos y `MSG_TRUNC=True` | El kernel expone la señal de truncamiento; falta integrarla y probarla en el handler |
+| Dos `ping` en una conexión | Primera respuesta `pong`; segunda escritura del cliente recibió `BrokenPipeError` | Una solicitud por conexión debe ser explícita |
+| Cliente cierra sin enviar paquete | El servidor intentó responder `invalid` y obtuvo `BrokenPipeError` | Desconexión no debe tratarse como solicitud inválida ni derribar el servicio |
+| Recuperación posterior | Nuevo `ping` respondió `pong`; socket activo y servicio terminó `inactive` correctamente | El fallo de las pruebas negativas era del handler de fixture, no del listener |
+
+La prueba aislada de `MSG_TRUNC` usó un par de sockets local y no demuestra todavía el comportamiento final del handler systemd. Tampoco se ha demostrado aún la distinción fiable entre paquete de longitud cero y EOF; queda como prueba obligatoria del prototipo.
+
+El repositorio permaneció limpio (`lab/pr-27...origin/pr-27`) y el socket principal conservó su inode/permisos durante estas pruebas. La evidencia no valida el protocolo de producción ni autoriza integrar el fixture en Atlas.
+
+## 14. Decisiones pendientes antes de implementar
+
+1. Ejecutar pruebas específicas de `recvmsg()` para distinguir paquete vacío y EOF en Debian soportado.
+2. Integrar y probar `MSG_TRUNC`, `MSG_CTRUNC` y rechazo de ancillary data en un fixture aislado.
+3. Medir y fijar backlog, concurrencia máxima y backpressure del listener systemd.
+4. Fijar deadlines por operación, especialmente migración/bootstrap, y comportamiento de cancelación.
+5. Definir canonicalización versionada exacta para el digest de idempotencia.
+6. Revisar el esquema y atomicidad del ledger administrativo, incluido bootstrap inicial.
+7. Probar `authority.operation.status` ante commit, rollback, caída del proceso, pérdida de respuesta y DB inaccesible.
+8. Revisar los payloads definitivos y la procedencia del operador para cada mutación.
+
+**Criterio de salida:** no implementar operaciones mutables ni conectar este protocolo al runtime hasta cerrar estos puntos con pruebas reproducibles y revisión de seguridad. Este documento es una especificación de diseño v0.1; no aprueba despliegue, provisioning real ni cambios privilegiados en el host.
