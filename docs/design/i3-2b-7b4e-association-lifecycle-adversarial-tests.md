@@ -53,3 +53,7 @@ Sin cambios en runtime composition, HTTP, CLI, migraciones, DB productiva, host,
 ## Corrección posterior al primer ensayo
 
 El primer ensayo del propietario detectó un error en el doble `CommitFailingUnit`: el wrapper conserva un `SQLiteLocalAuthorityUnitOfWork` en `unit._unit`, mientras que el ledger exige el `SQLiteUnitOfWork` interno. Se corrigió únicamente el argumento del `ledger_factory` en la prueba para pasar `unit._unit._unit`. No se relajó el contrato del adaptador ni se modificó código productivo. Repetir primero la suite focalizada y luego la suite completa.
+
+## Reejecución focalizada — confirmada por el propietario
+
+Tras la corrección del test double, el propietario confirmó: **26 tests en 1.664 s — OK**. La suite completa y `compileall` aún están pendientes; no marcar la fase como validada hasta recibir ambos resultados.
