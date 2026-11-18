@@ -32,6 +32,7 @@ from atlas.core.verified_identity_context import VerifiedIdentityContext
 from atlas.memory.metadata import EnvironmentMetadata, ProjectMetadata
 from atlas.memory.models import EnvironmentId, ProjectId
 from atlas.ports.clock import Clock
+from association_provisioning_test_support import provision_association
 from atlas.workspace.models import ProjectEnvironmentAssociation, ProjectEnvironmentStatus
 
 
@@ -84,11 +85,13 @@ class ProjectEnvironmentLifecycleServiceTests(unittest.TestCase):
             unit.project_environments.create_environment(
                 EnvironmentMetadata(EnvironmentId("test"), "active", 1)
             )
-            unit.project_environment_associations.create_association(
+            provision_association(
+                self.database,
                 ProjectEnvironmentAssociation(
                     ProjectId("atlas"), EnvironmentId("test"),
                     ProjectEnvironmentStatus.ACTIVE,
-                )
+                ),
+                unit_of_work=unit._unit,
             )
             unit.commit()
         self._provision_admin()
