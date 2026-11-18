@@ -16,6 +16,7 @@ from atlas.adapters.sqlite.migrations import SQLITE_MIGRATIONS
 from atlas.adapters.sqlite.platform_admin_authority import (
     SQLitePlatformAdminAuthorityReader,
 )
+from atlas.core.identity import IdentityStatus
 from atlas.core.platform_admin import (
     PlatformAdminGrantStatus,
     PlatformAdminPermission,
