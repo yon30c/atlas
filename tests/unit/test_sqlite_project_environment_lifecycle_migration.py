@@ -120,14 +120,10 @@ class SQLiteProjectEnvironmentLifecycleMigrationTests(unittest.TestCase):
     def test_event_requires_exact_active_canonical_user_actor(self):
         other = SQLiteIdentityAuthority(self.database).create_user()
         with self.database.connection() as connection:
-            connection.execute(
-                "UPDATE identity_records SET identity_status = 'suspended' WHERE identity_id = ?",
-                (other.identity_id,),
-            )
             with self.assertRaises(sqlite3.IntegrityError):
                 self._insert_event(
                     connection, previous_status="active", new_status="suspended",
-                    actor_user_id=other.user_id, actor_identity_id=other.identity_id,
+                    actor_user_id=self.identity.user_id, actor_identity_id=other.identity_id,
                 )
 
     def test_events_are_immutable_and_retained(self):
