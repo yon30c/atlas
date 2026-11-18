@@ -1,5 +1,6 @@
 """Tests for the isolated authority admin Unix IPC prototype."""
 
+import array
 import json
 import os
 import socket
@@ -135,6 +136,28 @@ class AuthorityAdminIPCPeerTests(unittest.TestCase):
 
     def test_rejects_oversized_seqpacket(self):
         self.client.send(b"x" * (MAX_REQUEST_BYTES + 128))
+        with self.assertRaises(AdminProtocolRejected):
+            handle_admin_connection(
+                self.server,
+                allowed_peer_uids={os.getuid()},
+            )
+
+
+    @unittest.skipUnless(hasattr(socket, "SCM_RIGHTS"), "SCM_RIGHTS is required")
+    def test_rejects_ancillary_file_descriptors(self):
+        read_fd, write_fd = os.pipe()
+        self.addCleanup(os.close, read_fd)
+        self.addCleanup(os.close, write_fd)
+        self.client.sendmsg(
+            [_request_packet()],
+            [
+                (
+                    socket.SOL_SOCKET,
+                    socket.SCM_RIGHTS,
+                    array.array("i", [read_fd]),
+                )
+            ],
+        )
         with self.assertRaises(AdminProtocolRejected):
             handle_admin_connection(
                 self.server,
