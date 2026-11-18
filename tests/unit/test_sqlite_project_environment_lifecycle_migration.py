@@ -31,7 +31,12 @@ class SQLiteProjectEnvironmentLifecycleMigrationTests(unittest.TestCase):
         self.association = ProjectEnvironmentAssociation(
             ProjectId("atlas"), EnvironmentId("test"), ProjectEnvironmentStatus.ACTIVE
         )
-        self.registry.create_association(self.association)
+        with self.database.connection() as connection:
+            connection.execute(
+                """INSERT INTO atlas_project_environments (
+                    project_id, environment_id, status, revision, created_at, updated_at
+                ) VALUES ('atlas', 'test', 'active', 1, 'legacy', 'legacy')"""
+            )
         self.database.apply_migrations(SQLITE_MIGRATIONS)
 
     def _insert_event(self, connection, *, previous_status, new_status,
