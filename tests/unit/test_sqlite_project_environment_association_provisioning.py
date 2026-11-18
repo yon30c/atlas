@@ -17,6 +17,10 @@ from atlas.adapters.sqlite.project_environment_association_repository import (
 )
 from atlas.adapters.sqlite.project_environment_repository import SQLiteProjectEnvironmentRepository
 from atlas.core.errors import ContractError
+from atlas.core.project_environment_association_provisioning import (
+    ProjectEnvironmentAssociationProvisioningProvenance,
+    ProjectEnvironmentAssociationProvisioningRequest,
+)
 from atlas.memory.metadata import EnvironmentMetadata, ProjectMetadata
 from atlas.memory.models import EnvironmentId, ProjectId
 from atlas.workspace.models import ProjectEnvironmentAssociation, ProjectEnvironmentStatus
@@ -38,16 +42,21 @@ class SQLiteProjectEnvironmentAssociationProvisioningTests(unittest.TestCase):
         )
 
     def _write(self, *, operation_id=None, event_id=None, association=None, reason="Approved initial scope"):
-        return self.writer.create_association(
-            association or self.association,
-            event_id=event_id or str(uuid4()),
+        association = association or self.association
+        request = ProjectEnvironmentAssociationProvisioningRequest(
             operation_id=operation_id or str(uuid4()),
+            project_id=association.project_id,
+            environment_id=association.environment_id,
             reason=reason,
+        )
+        provenance = ProjectEnvironmentAssociationProvisioningProvenance(
+            event_id=event_id or str(uuid4()),
             real_uid=1000,
             effective_uid=0,
             terminal_id="/dev/pts/4",
             occurred_at=datetime(2026, 11, 18, 12, 0, tzinfo=timezone.utc),
         )
+        return self.writer.create_association(request, provenance)
 
     def test_event_and_active_revision_one_association_commit_together(self):
         result = self._write()
@@ -114,16 +123,20 @@ class SQLiteProjectEnvironmentAssociationProvisioningTests(unittest.TestCase):
                 joined = SQLiteProjectEnvironmentAssociationProvisioningWriter(
                     self.database, unit_of_work=unit
                 )
-                joined.create_association(
-                    self.association,
-                    event_id=str(uuid4()),
+                request = ProjectEnvironmentAssociationProvisioningRequest(
                     operation_id=str(uuid4()),
+                    project_id=self.association.project_id,
+                    environment_id=self.association.environment_id,
                     reason="Outer transaction test",
+                )
+                provenance = ProjectEnvironmentAssociationProvisioningProvenance(
+                    event_id=str(uuid4()),
                     real_uid=1000,
                     effective_uid=0,
                     terminal_id="/dev/pts/4",
                     occurred_at=datetime(2026, 11, 18, 12, 0, tzinfo=timezone.utc),
                 )
+                joined.create_association(request, provenance)
                 raise RuntimeError("force provisioning rollback")
         with self.database.connection() as connection:
             self.assertEqual(
