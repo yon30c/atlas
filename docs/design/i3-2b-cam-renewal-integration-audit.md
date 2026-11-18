@@ -642,3 +642,8 @@ El contrato de motivo elegido es 1–500 caracteres, sin caracteres de control, 
 **Siguiente:** 7B.4B debe diseñar e implementar V26 para ledger inmutable y protección SQL de transiciones. La migración no puede fabricar eventos históricos para asociaciones V18 existentes. Después se implementará el adaptador y finalmente el servicio transaccional con VerifiedIdentityContext, Platform Admin y Clock confiable.
 
 **Estado:** 7B.4A publicado; validación Debian pendiente. No se ha implementado servicio ni migración, no se ha ejecutado bootstrap real y no se ha modificado DB productiva.
+
+
+## 20. I3-2B.7B.4B — V26 association lifecycle ledger
+
+Published on PR #16 branch: immutable lifecycle event ledger, exact active canonical USER actor/association checks, deferred event-to-transition commit marker, association CAS update requiring event reference, and adversarial SQL tests. Existing associations are preserved without synthetic history. Owner validation is pending; V26 has not been applied to production. See `docs/design/i3-2b-7b4b-association-lifecycle-v26-migration.md`.
