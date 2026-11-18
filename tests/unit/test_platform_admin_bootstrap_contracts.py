@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import unittest
 from uuid import uuid4
 
-from atlas.core.errors import ContractError
+from atlas.core.errors import AuthorizationError, ContractError
 from atlas.core.platform_admin import (
     INITIAL_PLATFORM_ADMIN_GRANT_TTL,
     INITIAL_PLATFORM_ADMIN_PERMISSIONS,
@@ -16,6 +16,7 @@ from atlas.core.platform_admin import (
     PlatformAdminGrantStatus,
     PlatformAdminPermission,
     PlatformAdminProvisioningMethod,
+    require_platform_admin_permission,
 )
 
 
@@ -205,6 +206,68 @@ class PlatformAdminBootstrapContractTests(unittest.TestCase):
             self.request.user_id = _uuid()
         with self.assertRaises(FrozenInstanceError):
             self.provenance.operator_real_uid = 0
+
+
+    def test_permission_check_accepts_only_matching_active_unexpired_identity(self):
+        require_platform_admin_permission(
+            self.grant,
+            permission=PlatformAdminPermission.ASSOCIATION_SUSPEND,
+            user_id=self.user_id,
+            user_identity_id=self.identity_id,
+            user_identity_revision=3,
+            now=self.confirmed_at + timedelta(days=1),
+        )
+
+        denied_claims = (
+            {"user_id": _uuid()},
+            {"user_identity_id": _uuid()},
+            {"user_identity_revision": 4},
+            {"now": self.grant.expires_at},
+            {"now": self.grant.not_before - timedelta(microseconds=1)},
+        )
+        for overrides in denied_claims:
+            arguments = {
+                "user_id": self.user_id,
+                "user_identity_id": self.identity_id,
+                "user_identity_revision": 3,
+                "now": self.confirmed_at + timedelta(days=1),
+            }
+            arguments.update(overrides)
+            with self.subTest(overrides=overrides):
+                with self.assertRaises(AuthorizationError):
+                    require_platform_admin_permission(
+                        self.grant,
+                        permission=PlatformAdminPermission.ASSOCIATION_SUSPEND,
+                        **arguments,
+                    )
+
+    def test_permission_check_rejects_revoked_grant_and_unheld_permission(self):
+        revoked = replace(
+            self.grant,
+            status=PlatformAdminGrantStatus.REVOKED,
+            revision=2,
+            revoked_at=self.confirmed_at + timedelta(days=1),
+            revoked_by_user_id=_uuid(),
+        )
+        with self.assertRaises(AuthorizationError):
+            require_platform_admin_permission(
+                revoked,
+                permission=PlatformAdminPermission.ASSOCIATION_SUSPEND,
+                user_id=self.user_id,
+                user_identity_id=self.identity_id,
+                user_identity_revision=3,
+                now=self.confirmed_at + timedelta(days=2),
+            )
+
+        with self.assertRaises(AuthorizationError):
+            require_platform_admin_permission(
+                self.grant,
+                permission=PlatformAdminPermission.ASSOCIATION_REACTIVATE,
+                user_id=self.user_id,
+                user_identity_id=self.identity_id,
+                user_identity_revision=3,
+                now=self.confirmed_at + timedelta(days=2),
+            )
 
 
 if __name__ == "__main__":
