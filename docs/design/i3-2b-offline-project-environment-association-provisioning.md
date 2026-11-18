@@ -14,7 +14,7 @@ The approved operational boundary is a dedicated local command, not an HTTP endp
 
 For the Linux deployment, the approved command requires:
 - invocation through `sudo` (effective UID exactly `0`, with a real UID different from `0`);
-- an interactive terminal (TTY required; no stdin pipe, background invocation, or unattended startup);
+- an interactive foreground terminal (stdin/stdout must share a TTY and the process group must own the terminal foreground; no pipes, background invocation, or unattended startup);
 - explicit typed confirmation containing the exact Project and Environment identifiers;
 - a mandatory normalized reason;
 - a caller-supplied UUIDv4 `operation_id` to make retries idempotent.
