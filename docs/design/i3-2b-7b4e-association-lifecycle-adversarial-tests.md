@@ -57,3 +57,7 @@ El primer ensayo del propietario detectó un error en el doble `CommitFailingUni
 ## Reejecución focalizada — confirmada por el propietario
 
 Tras la corrección del test double, el propietario confirmó: **26 tests en 1.664 s — OK**. La suite completa y `compileall` aún están pendientes; no marcar la fase como validada hasta recibir ambos resultados.
+
+## Validación completa — confirmada por el propietario
+
+El propietario confirmó la ejecución de la suite completa: **1,497 tests en 30.888 s — OK**. También confirmó `python -m compileall -q src tests` con **`COMPILE_EXIT_CODE=0`**. Junto con las 26 pruebas focalizadas aprobadas, 7B.4E queda validada.
