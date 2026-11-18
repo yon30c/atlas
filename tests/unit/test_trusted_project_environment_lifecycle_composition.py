@@ -100,7 +100,7 @@ class TrustedLifecycleCompositionIntegrationTests(unittest.TestCase):
             unit.project_environments.create_environment(
                 EnvironmentMetadata(EnvironmentId("test"), "active", 1)
             )
-            unit.workspaces.create_association(
+            unit.project_environment_associations.create_association(
                 ProjectEnvironmentAssociation(
                     ProjectId("atlas"), EnvironmentId("test"),
                     ProjectEnvironmentStatus.ACTIVE,
