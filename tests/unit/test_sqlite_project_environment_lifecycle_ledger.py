@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from atlas.adapters.sqlite.database import SQLiteDatabase
 from atlas.adapters.sqlite.identity_authority import SQLiteIdentityAuthority
+from atlas.adapters.sqlite.local_authority_unit_of_work import SQLiteLocalAuthorityUnitOfWorkFactory
 from atlas.adapters.sqlite.migrations import SQLITE_MIGRATIONS
 from atlas.adapters.sqlite.project_environment_lifecycle_ledger import (
     SQLiteProjectEnvironmentLifecycleLedger,
@@ -176,6 +177,12 @@ class SQLiteProjectEnvironmentLifecycleLedgerTests(unittest.TestCase):
 
     def test_empty_history_returns_empty_tuple(self):
         self.assertEqual(self.ledger.list_events("atlas", "test"), ())
+
+    def test_runtime_local_authority_uow_does_not_expose_lifecycle_writer(self):
+        factory = SQLiteLocalAuthorityUnitOfWorkFactory(self.database)
+        with factory() as unit:
+            self.assertFalse(hasattr(unit, "lifecycle_ledger"))
+            unit.commit()
 
 
 if __name__ == "__main__":
