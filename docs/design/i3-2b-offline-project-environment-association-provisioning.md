@@ -1,6 +1,6 @@
 # Offline Project/Environment Association Provisioning
 
-**Status:** operational trust boundary approved by the owner; V27 persistence, the narrow writer, and the guarded interactive Linux entrypoint are implemented and validated on Debian. The focused provisioning/CLI tests (19), affected lifecycle/workspace regression tests (70), and full unit suite (1,538) passed. No production database has been provisioned.
+**Status:** V27 persistence, the narrow writer, and the guarded interactive Linux entrypoint are implemented. The existing entrypoint was designed and validated under a privileged-process-writes-database trust model. That host-filesystem assumption is superseded for the future primary authority database by [the local authority storage operational contract](local-authority-storage-operational-contract.md). The current CLI must not be used against that future database until adapted and tested. No production database has been provisioned.
 
 ## Decision
 
@@ -12,7 +12,7 @@ The existing permissions `association.suspend` and `association.reactivate` do n
 
 The approved operational boundary is a dedicated local command, not an HTTP endpoint, runtime service, plugin, AGENT capability, or general-purpose CLI command.
 
-For the Linux deployment, the approved command requires:
+The current implementation requires:
 - invocation through `sudo` (effective UID exactly `0`, with a real UID different from `0`);
 - an interactive foreground terminal (stdin/stdout must share a TTY and the process group must own the terminal foreground; no pipes, background invocation, or unattended startup);
 - explicit typed confirmation containing the exact Project and Environment identifiers;
@@ -23,7 +23,21 @@ The command records the real/effective UIDs, terminal identifier, operation ID, 
 
 No secrets, passwords, tokens, or private keys are accepted as command-line arguments or written to the audit record.
 
-The dedicated entrypoint is invoked explicitly as `python -m atlas.adapters.sqlite.offline_association_provisioning_cli --database <absolute-existing-sqlite-path> --operation-id <uuid4>` under `sudo`. It verifies the complete migration ledger through V27 and never applies migrations itself.
+The current dedicated entrypoint is invoked explicitly as `python -m atlas.adapters.sqlite.offline_association_provisioning_cli --database <absolute-existing-sqlite-path> --operation-id <uuid4>` under `sudo`. It verifies the complete migration ledger through V27 and never applies migrations itself.
+
+### Deployment restriction for the future primary authority DB
+
+The current CLI performs its UID/TTY/confirmation checks and opens SQLite in the same EUID-0 process. This is incompatible with the adopted ownership contract for the future `/var/lib/atlas-runtime/authority/authority.sqlite3`.
+
+Therefore:
+- **Do not run the current CLI against the future primary authority DB.**
+- Do not make the future DB or its containing directory writable by root/ordinary operators merely to accommodate the current CLI.
+- Do not change the DB owner to root.
+- Do not treat passing the current CLI tests as validation of the future privilege boundary.
+
+For the future primary DB, the privileged authorization frontend must validate operator provenance and typed confirmation without opening, migrating, or writing SQLite. It must delegate the narrow request and provenance through a reviewed, non-forgeable local channel to a writer running as `atlas-runtime`. The writer must not retain root or capabilities and must independently validate domain invariants, schema, scope, idempotency, and transaction rules. The audit record must distinguish the operator who authorized the operation from the Linux identity that executed it.
+
+The exact launcher/delegation mechanism is **not yet selected or implemented**. No ad-hoc `setuid`, `setpriv`, shell wrapper, pipe, environment-variable, or argument-based design is approved without threat analysis and adversarial tests. Root remains trusted host administration; this boundary is intended to keep normal Atlas DB writes out of the privileged process, not to defend against a malicious host root.
 
 ## Domain contract
 
@@ -39,7 +53,7 @@ A separate immutable provenance record contains:
 - terminal identifier;
 - trusted UTC confirmation timestamp.
 
-The service must not accept a boolean such as `is_admin`, a client claim, a USER/AGENT identity, or a Platform Admin grant as a substitute for this provenance.
+For the future privilege-separated implementation, provenance must also preserve the distinction between the operator's authorization context and the `atlas-runtime` execution identity. The service must not accept a boolean such as `is_admin`, a client claim, a USER/AGENT identity, or a Platform Admin grant as a substitute for host provenance.
 
 ## Transaction and persistence
 
@@ -62,7 +76,7 @@ Associations that predate this migration remain valid with a NULL provisioning-e
 
 ## Capability separation
 
-The general-purpose association repository exposed by `SQLiteLocalAuthorityUnitOfWork` is read-only. INSERT moved to `SQLiteProjectEnvironmentAssociationProvisioningWriter`, which is not exported through package `__all__`, not attached to the general UoW, and not registered in runtime composition. The dedicated CLI constructs it only after validating the host boundary.
+The general-purpose association repository exposed by `SQLiteLocalAuthorityUnitOfWork` is read-only. INSERT moved to `SQLiteProjectEnvironmentAssociationProvisioningWriter`, which is not exported through package `__all__`, not attached to the general UoW, and not registered in runtime composition.
 
 The existing lifecycle writer remains separate. Provisioning does not call the lifecycle service and does not create a lifecycle event: creation is not an ACTIVE/SUSPENDED transition.
 
@@ -86,21 +100,20 @@ This slice does not:
 
 ## Implementation sequence
 
-1. Implement V27 immutable provisioning ledger and bidirectional deferred integrity constraints. **Implemented and validated.**
-2. Separate the association reader from the narrow INSERT writer. **Implemented and validated.**
-3. Add atomic persistence and idempotent operation-ID handling. **Implemented and validated.**
-4. Add the unregistered interactive Linux command with `sudo`, UID, TTY, schema, and typed-confirmation guards. **Implemented and validated.**
-5. Add adversarial tests for legacy-row preservation, idempotency, event/association atomicity, direct INSERT denial, and CLI guards. **Added and validated.**
-6. Complete the final architecture audit and resolve any test findings. **In progress; residual host-filesystem trust assumptions are documented in the final review.**
+1. Implement V27 immutable provisioning ledger and bidirectional deferred integrity constraints. **Implemented.**
+2. Separate the association reader from the narrow INSERT writer. **Implemented.**
+3. Add atomic persistence and idempotent operation-ID handling. **Implemented.**
+4. Add the unregistered interactive Linux command with `sudo`, UID, TTY, schema, and typed-confirmation guards. **Implemented under the original privileged-writer model.**
+5. Add adversarial tests for legacy-row preservation, idempotency, event/association atomicity, direct INSERT denial, and CLI guards. **Implemented for the current model.**
+6. Adapt the command to the future privilege-separated model in the local authority storage contract. **Not implemented; required before use against the future primary DB.**
 7. Keep all runtime registration and actual first provisioning disabled.
 
 ## Validation boundary
 
-The owner-run Debian validation completed with 19 focused provisioning/CLI tests, 70 affected lifecycle/workspace regression tests, and 1,538 tests in the full suite, all passing. A `compileall` result was not recorded in the validation output available for this review. No real administrator, association, or production database was provisioned during development or tests.
-
+Historical owner-run Debian validation covered focused provisioning/CLI tests, affected lifecycle/workspace regression tests, and a full unit suite. Those results validate the implementation under its original model only; they do not validate the future `atlas-runtime` privilege separation, deployment filesystem permissions, or a production authority DB. No real administrator, association, or production database was provisioned during that validation.
 
 ## Residual host trust assumption
 
-The writer is intentionally an internal Python adapter: it is not exported, attached to a general UoW, or imported by any production source module other than the guarded offline CLI. The source-level exclusivity test protects this composition against accidental imports. This is **not** a Python sandbox or an OS privilege boundary: a caller able to execute arbitrary Python with write access to the authority database can import internal modules or write SQLite directly, and can construct a syntactically valid provenance dataclass. The UID/TTY/confirmation checks are performed by the CLI, not cryptographically attested by the persistence writer.
+The writer is an internal Python adapter, not a Python sandbox or an OS privilege boundary. A caller able to execute arbitrary Python with write access to the authority database can import internal modules or write SQLite directly, and can construct a syntactically valid provenance dataclass.
 
-Therefore the approved operational boundary also depends on host access control: keep the authority database and its containing directory writable only by the trusted platform-operator/root context, do not grant the ordinary Atlas runtime account write access to that database, and treat arbitrary code execution under an account with database write access as equivalent to provisioning authority. If that filesystem/host assumption is not acceptable, provisioning needs a separately isolated privileged broker or service boundary; module visibility and AST tests alone are insufficient.
+For the future primary authority DB, the intended filesystem owner is `atlas-runtime`, and every DB writer must run under that identity. The privileged frontend must not have a code path that opens SQLite. Host root remains trusted and can alter the system; this design does not claim protection against malicious root. The launcher, provenance channel, sudo policy, and audit sink require a separate reviewed implementation before deployment.
