@@ -147,7 +147,16 @@ La unidad del futuro runtime deberá cumplir como mínimo:
 
 Puede utilizarse `StateDirectory=atlas-runtime` para el directorio base si la unidad y el ciclo de vida de systemd lo justifican. La subcarpeta `authority/` debe crearse con propietario y modo explícitos. No se reutiliza ni modifica la unidad experimental actual como parte de esta decisión.
 
-Skills, plugins y procesos conversacionales no reciben acceso directo al archivo SQLite. Las operaciones deben pasar por servicios y capacidades de aplicación autorizados. Ninguna skill puede elevar sus permisos ni cambiar la identidad del proceso.
+La identidad `atlas-runtime` queda reservada a procesos de autoridad confiables que necesitan abrir la base. No debe ejecutar código de skills externas, plugins de terceros ni otro código no confiable dentro del mismo proceso, intérprete o contexto de seguridad.
+
+La separación debe ser efectiva en el sistema operativo, no solo en las APIs de Python:
+- Las skills externas y plugins no confiables se ejecutan en procesos/identidades aislados, sin permisos de lectura o escritura sobre el directorio de autoridad.
+- El runtime conversacional y los ejecutores de skills no reciben la identidad `atlas-runtime` ni acceso al archivo SQLite; solicitan operaciones mediante una API/IPC estrecha y autorizada.
+- Si varios procesos comparten la identidad `atlas-runtime`, todos se consideran parte de la misma frontera de confianza y con capacidad técnica de modificar la base directamente.
+- Ocultar módulos, no exportar writers o restringir imports no sustituye el aislamiento del sistema operativo: cualquier código arbitrario ejecutado bajo el UID propietario puede abrir SQLite directamente.
+- Ninguna skill puede elevar sus permisos ni cambiar la identidad del proceso. La mediación de capacidades no debe exponer SQL genérico ni una operación que permita saltarse las invariantes de dominio.
+
+La composición de autoridad puede ejecutarse como un servicio dedicado bajo `atlas-runtime`; los demás componentes deben consumir sus operaciones mediante contratos explícitos.
 
 ## 8. Backups y recuperación
 
@@ -209,7 +218,7 @@ El diseño debe proteger los registros de auditoría contra modificación por el
 - [ ] Servicios que comparten transacciones usan la misma UoW.
 - [ ] Migraciones explícitas, checksums verificados y sin migración automática al arrancar.
 - [ ] CLI provisioning adaptado; el CLI actual queda bloqueado para la futura DB hasta entonces.
-- [ ] Skills/plugins no tienen acceso directo a la DB.
+- [ ] Skills/plugins y runtime conversacional se ejecutan fuera del UID/proceso de autoridad y no pueden acceder al archivo ni a sus sidecars.
 - [ ] Backup cifrado verificable y restauración aislada probada.
 - [ ] Custodia de claves y limitación anti-rollback documentadas.
 - [ ] Auditoría distingue operador, ejecutor y evento de dominio.
