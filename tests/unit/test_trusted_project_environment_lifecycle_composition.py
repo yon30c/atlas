@@ -70,8 +70,9 @@ class TrustedLifecycleCompositionIntegrationTests(unittest.TestCase):
                 self.user, self.issuer.issuer_id, self.subject.digest,
                 verified_at=self.clock.now() - timedelta(seconds=2),
             )
+            self.authenticator_id = _uuid()
             authenticator = NativeAuthenticator(
-                authenticator_id=_uuid(), issuer_id=self.issuer.issuer_id,
+                authenticator_id=self.authenticator_id, issuer_id=self.issuer.issuer_id,
                 native_subject=self.subject, login_handle=LoginHandle("atlas.owner"),
                 password_hash_phc=_PHC,
             )
@@ -235,16 +236,33 @@ class TrustedLifecycleCompositionIntegrationTests(unittest.TestCase):
         self.assertEqual(self._state(), ("active", 1, 0, 0))
 
     def test_wrong_audience_attestation_denies_without_any_lifecycle_write(self):
-        evidence = self._evidence()
+        other_reference = NativeProofReference.generate()
+        with self.factory() as unit:
+            unit.native_authentication.create_native_authentication_proof(
+                NativeAuthenticationProof(
+                    proof_id=_uuid(), reference_digest=other_reference.digest,
+                    issuer_id=self.issuer.issuer_id, native_subject=self.subject,
+                    authenticator_id=self.authenticator_id,
+                    credential_revision=1,
+                    authenticated_at=self.clock.now() - timedelta(seconds=1),
+                    expires_at=self.clock.now() + timedelta(minutes=1),
+                    audience="atlas.other",
+                )
+            )
+            unit.commit()
+
         other = VerifiedIdentityContextService(
             unit_of_work_factory=self.factory, clock=self.clock,
             attestor=self.attestor, realm=REALM, audience="atlas.other",
             context_ttl=timedelta(minutes=2),
         )
+        wrong_audience_evidence = other.admit_proof(other_reference)
         with self.assertRaises(VerifiedIdentityContextRejected):
-            other.verify(evidence)
+            self.lifecycle._identity_verifier.verify(wrong_audience_evidence)
         with self.assertRaises(AuthorizationError):
-            self.lifecycle.transition(self.context, evidence, self._request())
+            self.lifecycle.transition(
+                self.context, wrong_audience_evidence, self._request()
+            )
         self.assertEqual(self._state(), ("active", 1, 0, 0))
 
 
