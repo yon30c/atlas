@@ -198,3 +198,20 @@ Se añadió en esta rama una primera implementación de persistencia, sin ejecut
 **Límites deliberados:** no se implementó todavía el adaptador `PlatformAdminBootstrapPort`, el servicio de provisión ni CLI. El UID/TTY/operation_id quedan registrados como procedencia técnica, pero la interfaz debe exigir terminal interactivo y confirmación humana real antes de cualquier escritura. No se ha provisionado ningún administrador.
 
 **Gate de validación:** ejecutar las pruebas nuevas y la suite completa en Debian. Si aparecen problemas, corregir antes de continuar. No considerar esta persistencia validada hasta recibir resultados del propietario.
+
+
+## 13. I3-2B.7B.3A — contratos de dominio cerrados
+
+Se acepta la procedencia local técnica propuesta: UID real/efectivo, terminal, operation_id UUIDv4 y confirmación interactiva. Esta procedencia describe el contexto del proceso y **no acredita identidad humana, autenticación ni autorización**. La herramienta futura debe capturar UID/TTY desde el sistema operativo y exigir terminal real; no debe aceptar esos valores como argumentos libres.
+
+Los contratos de dominio añadidos en `core/platform_admin.py` son:
+
+- `PlatformAdminBootstrapRequest`: operation_id, UserId y exactamente los permisos `association.suspend` + `association.reactivate`.
+- `PlatformAdminBootstrapProvenance`: event_id, grant_id, UIDs, terminal y confirmed_at UTC; IDs UUIDv4 distintos y valores técnicos validados.
+- `PlatformAdminBootstrapCommand`: vincula request, provenance y grant; exige sujeto/permisos/IDs coincidentes, método offline_bootstrap, estado ACTIVE/revisión 1, emisión y not_before iguales a la confirmación, y vencimiento exacto a los 90 días.
+
+El puerto `PlatformAdminBootstrapPort` ahora recibe el comando validado y devuelve el grant persistido. La implementación todavía debe realizar la comprobación de idempotencia por operation_id antes de la comprobación de historial, dentro de la misma transacción serializada que inserta evento y grant, y volver a validar la identidad USER canónica activa en esa transacción.
+
+Pruebas de dominio añadidas en `tests/unit/test_platform_admin_bootstrap_contracts.py`. La validación en Debian está pendiente; no declarar este slice validado hasta recibir los resultados focalizados, suite completa y compileall del propietario.
+
+No se implementó ni ejecutó bootstrap real. El adaptador writer sigue fuera de la composición runtime.
