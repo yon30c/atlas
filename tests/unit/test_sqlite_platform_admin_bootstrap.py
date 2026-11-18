@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import tempfile
+import sqlite3
 import unittest
 from unittest.mock import patch
 from uuid import uuid4
@@ -239,6 +240,166 @@ class SQLitePlatformAdminBootstrapAdapterTests(unittest.TestCase):
             self.assertEqual(connection.execute(
                 "SELECT COUNT(*) FROM platform_admin_grants WHERE status = 'active'"
             ).fetchone()[0], 1)
+
+
+    def test_bootstrap_event_cannot_be_updated_or_deleted(self):
+        user = self._new_user()
+        command = self._command(user.user_id)
+        self.adapter.provision_first_admin(command)
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            with self.database.unit_of_work() as unit:
+                connection = unit._connection_for(self.database)
+                connection.execute(
+                    """
+                    UPDATE platform_admin_bootstrap_events
+                    SET terminal_id = ?
+                    WHERE event_id = ?
+                    """,
+                    ("/dev/pts/99", command.provenance.event_id),
+                )
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            with self.database.unit_of_work() as unit:
+                connection = unit._connection_for(self.database)
+                connection.execute(
+                    "DELETE FROM platform_admin_bootstrap_events WHERE event_id = ?",
+                    (command.provenance.event_id,),
+                )
+
+        recovered = self.adapter.get_operation(command.request.operation_id)
+        self.assertEqual(recovered, command)
+
+    def test_grant_claims_and_tombstone_cannot_be_deleted(self):
+        user = self._new_user()
+        command = self._command(user.user_id)
+        self.adapter.provision_first_admin(command)
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            with self.database.unit_of_work() as unit:
+                connection = unit._connection_for(self.database)
+                connection.execute(
+                    """
+                    UPDATE platform_admin_grants
+                    SET permissions_json = '["association.suspend"]'
+                    WHERE grant_id = ?
+                    """,
+                    (command.grant.grant_id,),
+                )
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            with self.database.unit_of_work() as unit:
+                connection = unit._connection_for(self.database)
+                connection.execute(
+                    "DELETE FROM platform_admin_grants WHERE grant_id = ?",
+                    (command.grant.grant_id,),
+                )
+
+        self.assertEqual(
+            SQLitePlatformAdminAuthorityReader(self.database).get_grant(
+                command.grant.grant_id
+            ),
+            command.grant,
+        )
+
+    def test_grant_revocation_is_terminal_and_revisioned(self):
+        user = self._new_user()
+        revoker = self._new_user()
+        command = self._command(user.user_id)
+        self.adapter.provision_first_admin(command)
+        revoked_at = self.now + timedelta(days=1)
+
+        with self.database.unit_of_work() as unit:
+            connection = unit._connection_for(self.database)
+            connection.execute(
+                """
+                UPDATE platform_admin_grants
+                SET status = 'revoked',
+                    revision = revision + 1,
+                    revoked_at = ?,
+                    revoked_by_user_id = ?
+                WHERE grant_id = ?
+                """,
+                (
+                    revoked_at.isoformat(timespec="microseconds"),
+                    revoker.user_id,
+                    command.grant.grant_id,
+                ),
+            )
+
+        reader = SQLitePlatformAdminAuthorityReader(self.database)
+        revoked = reader.get_grant(command.grant.grant_id)
+        self.assertEqual(revoked.status.value, "revoked")
+        self.assertEqual(revoked.revision, 2)
+        self.assertEqual(revoked.revoked_at, revoked_at)
+        self.assertEqual(revoked.revoked_by_user_id, revoker.user_id)
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            with self.database.unit_of_work() as unit:
+                connection = unit._connection_for(self.database)
+                connection.execute(
+                    """
+                    UPDATE platform_admin_grants
+                    SET status = 'active',
+                        revision = revision + 1,
+                        revoked_at = NULL,
+                        revoked_by_user_id = NULL
+                    WHERE grant_id = ?
+                    """,
+                    (command.grant.grant_id,),
+                )
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            with self.database.unit_of_work() as unit:
+                connection = unit._connection_for(self.database)
+                connection.execute(
+                    "DELETE FROM platform_admin_grants WHERE grant_id = ?",
+                    (command.grant.grant_id,),
+                )
+
+        self.assertEqual(reader.get_grant(command.grant.grant_id), revoked)
+
+    def test_revoked_bootstrap_history_cannot_be_replaced_by_new_bootstrap(self):
+        first_user = self._new_user()
+        revoker = self._new_user()
+        replacement_user = self._new_user()
+        command = self._command(first_user.user_id)
+        self.adapter.provision_first_admin(command)
+
+        with self.database.unit_of_work() as unit:
+            connection = unit._connection_for(self.database)
+            connection.execute(
+                """
+                UPDATE platform_admin_grants
+                SET status = 'revoked',
+                    revision = revision + 1,
+                    revoked_at = ?,
+                    revoked_by_user_id = ?
+                WHERE grant_id = ?
+                """,
+                (
+                    (self.now + timedelta(days=1)).isoformat(timespec="microseconds"),
+                    revoker.user_id,
+                    command.grant.grant_id,
+                ),
+            )
+
+        with self.assertRaises(AuthorizationError):
+            self.adapter.provision_first_admin(self._command(replacement_user.user_id))
+
+        with self.database.connection() as connection:
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM platform_admin_bootstrap_events"
+                ).fetchone()[0],
+                1,
+            )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM platform_admin_grants"
+                ).fetchone()[0],
+                1,
+            )
 
 
 if __name__ == "__main__":
