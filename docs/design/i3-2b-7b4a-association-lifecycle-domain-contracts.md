@@ -1,6 +1,6 @@
 # I3-2B.7B.4A — contratos de dominio para lifecycle de asociaciones
 
-**Estado:** contratos, puerto y pruebas publicados; validación del propietario pendiente.
+**Estado:** 7B.4A validado por el propietario (1,471 tests OK; compileall 0). 7B.4B V26 publicada; validación pendiente.
 **PR:** #16 — Draft, abierto y sin merge.
 **Alcance:** solo contratos de dominio/puertos y pruebas unitarias; no hay servicio, migración ni escritura runtime.
 
@@ -51,6 +51,14 @@ La migración debe preservar asociaciones preexistentes sin inventar eventos ret
 - No se suspenden Workspaces automáticamente; los consumidores siguen comprobando la asociación ACTIVE en su propia UoW.
 - No se cambia V18 ni se reescriben migraciones históricas.
 - No se modifica host, systemd, Docker, privilegios ni DB productiva.
+
+## Continuación 7B.4B
+
+La migración V26, ledger inmutable, commit marker diferido y triggers SQL se documentan en [I3-2B.7B.4B](i3-2b-7b4b-association-lifecycle-v26-migration.md). La prueba de migración adversarial y la adaptación del repositorio requieren validación en Debian antes de continuar.
+
+## Validación owner 7B.4A
+
+Confirmado en Debian: 1,471 pruebas OK (29.495s) y `COMPILE_EXIT_CODE=0`.
 
 ## Validación pendiente en Debian
 
