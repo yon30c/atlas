@@ -796,3 +796,18 @@ La prueba de permiso ausente utiliza un segundo USER con proof nativo real y un 
 En la revisión de superficie se retiró `SQLiteProjectEnvironmentLifecycleLedger` del import y `__all__` de `atlas.adapters.sqlite`. El módulo interno del adapter sigue siendo importable deliberadamente; Python no ofrece aislamiento contra código arbitrario dentro del mismo proceso. La composición no se exporta desde `atlas.application`, no está registrada en runtime y la UoW general no expone un writer lifecycle. `SQLiteWorkspaceRegistryRepository.update_association` sigue siendo infraestructura interna y no debe exponerse a controladores/agentes/CLI; cualquier ruta futura debe invocar el servicio lifecycle autorizado.
 
 **Estado:** implementación y tests publicados; validación Debian pendiente. No se añadió endpoint, CLI, runtime registration, migración ni cambio de infraestructura. El fallo de commit es inyectado antes de la confirmación física y no representa una prueba de fallo de hardware. No se demuestra custodia de secretos de producción. Ver `docs/design/i3-2b-7b5c-trusted-lifecycle-adversarial-review.md`. PR #16 permanece Draft, abierto y sin merge.
+
+
+## 26. I3-2B.7B.6A — auditoría de frontera de escritura lifecycle
+
+Se publicó `docs/design/i3-2b-7b6a-lifecycle-write-boundary-audit.md`.
+
+La inspección confirmó que `SQLiteLocalAuthorityUnitOfWork.workspaces` expone `SQLiteWorkspaceRegistryRepository`, que combina operaciones de Workspace con `update_association(..., lifecycle_event_id=...)`. Por tanto, retirar el ledger writer de la UoW y cerrar su closure en la composición no elimina por sí solo la capacidad de actualización lifecycle del repositorio mixto.
+
+También se confirmó una discrepancia de contrato: `ProjectEnvironmentAssociationPort.update_association` no declara `lifecycle_event_id`, mientras el adapter SQLite sí lo exige. Existe además un puerto reader-only para asociaciones, que ofrece una base para separar capacidades.
+
+V26 garantiza integridad y atomicidad evento/transición/marcador, pero no comprueba autorización Platform Admin. La política debe permanecer en `ProjectEnvironmentLifecycleService` y ejecutarse dentro de la misma UoW. La separación de objetos/puertos reduce exposición accidental; no es sandbox frente a código Python deliberadamente malicioso ni frente a un proceso con acceso directo de escritura a SQLite.
+
+**Recomendación 7B.6B:** separar el reader de asociaciones del writer lifecycle, retirar el método lifecycle del repositorio general entregado por la UoW y pasar el writer estrecho únicamente mediante la composición confiable. Corregir el contrato del puerto y añadir pruebas de ausencia de writer en la UoW general, atomicidad y composición compartida. 7B.6C deberá completar un barrido de call-sites/imports antes de considerar cualquier exposición.
+
+**Estado:** auditoría documental publicada; no hay cambios de código, schema, runtime, HTTP, CLI ni infraestructura. PR #16 permanece Draft, abierto y sin merge.
