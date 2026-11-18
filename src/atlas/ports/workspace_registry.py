@@ -2,11 +2,7 @@
 
 from typing import Protocol
 
-from atlas.memory.models import EnvironmentId, ProjectId
-from atlas.workspace.models import (
-    ProjectEnvironmentAssociation,
-    WorkspaceRecord,
-)
+from atlas.workspace.models import WorkspaceRecord
 
 
 class WorkspaceRegistryPort(Protocol):
@@ -24,17 +20,3 @@ class WorkspaceRegistryPort(Protocol):
     def list_workspaces_by_owner(self, owner_user_id: str) -> tuple[WorkspaceRecord, ...]:
         """List canonical workspace identifiers for one owner."""
 
-
-class ProjectEnvironmentAssociationPort(Protocol):
-    def get_association(
-        self, project_id: ProjectId, environment_id: EnvironmentId
-    ) -> ProjectEnvironmentAssociation | None:
-        """Return the exact Project/Environment association."""
-
-    def create_association(self, association: ProjectEnvironmentAssociation) -> None:
-        """Create an explicit association; never infer one from independent records."""
-
-    def update_association(
-        self, association: ProjectEnvironmentAssociation, *, expected_revision: int
-    ) -> None:
-        """CAS-update association status while retaining its identity."""
