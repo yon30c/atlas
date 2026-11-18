@@ -199,6 +199,30 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
                 raise RuntimeError("force outer rollback")
         self.assertIsNone(self.repository.get_workspace("workspace-main"))
 
+    def test_lifecycle_writer_is_bound_to_one_active_local_authority_uow(self):
+        unit = SQLiteLocalAuthorityUnitOfWork(self.database)
+        with unit as active:
+            writer = SQLiteProjectEnvironmentLifecycleAssociationWriter(
+                self.database, unit_of_work=active
+            )
+            with writer._write_connection() as connection:
+                self.assertIs(connection, active._connection)
+        with self.assertRaises(ContractError):
+            with writer._write_connection():
+                pass
+
+        other_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(other_dir.cleanup)
+        other_database = SQLiteDatabase(Path(other_dir.name) / "other.sqlite")
+        other_database.apply_migrations(SQLITE_MIGRATIONS)
+        with SQLiteLocalAuthorityUnitOfWork(other_database) as other_unit:
+            mismatched = SQLiteProjectEnvironmentLifecycleAssociationWriter(
+                self.database, unit_of_work=other_unit
+            )
+            with self.assertRaises(ContractError):
+                with mismatched._write_connection():
+                    pass
+
     def test_workspace_root_ref_must_be_symbolic_not_a_filesystem_path(self):
         with self.assertRaises(ContractError):
             replace(self.workspace, root_ref="/srv/atlas/workspace")
