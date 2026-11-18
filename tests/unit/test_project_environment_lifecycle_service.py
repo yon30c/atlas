@@ -130,6 +130,9 @@ class ProjectEnvironmentLifecycleServiceTests(unittest.TestCase):
             association_writer_factory=lambda unit: SQLiteProjectEnvironmentLifecycleAssociationWriter(
                 self.database, unit_of_work=unit
             ),
+            association_writer_factory=lambda unit: SQLiteProjectEnvironmentLifecycleAssociationWriter(
+                self.database, unit_of_work=unit
+            ),
         )
 
     def _provision_admin(self):
@@ -276,6 +279,9 @@ class ProjectEnvironmentLifecycleServiceTests(unittest.TestCase):
             ledger_factory=lambda unit: SQLiteProjectEnvironmentLifecycleLedger(
                 self.database, unit_of_work=unit._unit
             ),
+            association_writer_factory=lambda unit: SQLiteProjectEnvironmentLifecycleAssociationWriter(
+                self.database, unit_of_work=unit
+            ),
         )
         with self.assertRaises(AuthorizationError):
             service.transition(
@@ -327,6 +333,9 @@ class ProjectEnvironmentLifecycleServiceTests(unittest.TestCase):
             clock=clock,
             ledger_factory=lambda unit: SQLiteProjectEnvironmentLifecycleLedger(
                 self.database, unit_of_work=unit._unit
+            ),
+            association_writer_factory=lambda unit: SQLiteProjectEnvironmentLifecycleAssociationWriter(
+                self.database, unit_of_work=unit
             ),
         )
         with self.assertRaises(AuthorizationError):
