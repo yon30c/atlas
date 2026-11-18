@@ -90,3 +90,10 @@ La primera ejecución completa reportó un único fallo en `test_wrong_audience_
 Se corrigió el fixture: ahora persiste un segundo proof nativo real con audience `atlas.other`, lo consume mediante un `VerifiedIdentityContextService` real configurado para esa audiencia y pasa el contexto HMAC resultante al lifecycle configurado para `atlas.internal`. Se comprueba que el verifier lifecycle rechaza ese contexto y que no se alteran asociación, revisión, eventos ni marcadores.
 
 **Validación final del propietario:** tras corregir el fixture de audience, la suite completa ejecutada en Debian terminó con **1,510 tests en 30.376 s — OK**. La corrección fue exclusivamente de prueba; no se modificó el código de producción ni se debilitó la verificación.
+
+
+## Seguimiento 7B.5C — cobertura adversarial posterior
+
+La fase siguiente añadió pruebas de issuer revocado, configuración de realm discordante, actor USER discordante, contexto delegado, Platform Admin expirado con evidencia USER aún vigente, permiso exacto ausente, rollback ante fallo inyectado en `commit()` y revisión de exports públicos. También retiró el ledger lifecycle del paquete público `atlas.adapters.sqlite`. El detalle está en `docs/design/i3-2b-7b5c-trusted-lifecycle-adversarial-review.md`.
+
+La prueba de commit provoca una excepción antes del commit físico y demuestra rollback de la UoW; no simula fallo de hardware/fsync. El adapter interno sigue siendo importable deliberadamente por módulos Python y no constituye un sandbox. La fase 7B.5C se encuentra publicada y pendiente de validación del propietario en Debian. No se habilitó runtime ni una interfaz externa.
