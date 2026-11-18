@@ -32,7 +32,7 @@ class SQLitePlatformAdminAuthorityTests(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
         self.database = SQLiteDatabase(Path(self.temp_dir.name) / "atlas.sqlite")
-        self.assertEqual(self.database.apply_migrations(SQLITE_MIGRATIONS), 25)
+        self.assertEqual(self.database.apply_migrations(SQLITE_MIGRATIONS), 26)
         self.factory = SQLiteLocalAuthorityUnitOfWorkFactory(self.database)
 
     def _insert_grant(self, unit, user, *, permissions=None):
@@ -75,7 +75,7 @@ class SQLitePlatformAdminAuthorityTests(unittest.TestCase):
             version = connection.execute(
                 "SELECT MAX(version) FROM schema_migrations"
             ).fetchone()[0]
-        self.assertEqual(version, 25)
+        self.assertEqual(version, 26)
 
     def test_reader_returns_empty_for_user_without_admin_grant(self):
         with self.factory() as unit:
