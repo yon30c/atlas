@@ -14,6 +14,8 @@ from atlas.adapters.sqlite.local_authority_unit_of_work import SQLiteLocalAuthor
 from atlas.adapters.sqlite.migrations import SQLITE_MIGRATIONS
 from atlas.adapters.sqlite.project_environment_repository import SQLiteProjectEnvironmentRepository
 from atlas.adapters.sqlite.workspace_registry_repository import SQLiteWorkspaceRegistryRepository
+from atlas.adapters.sqlite.project_environment_association_repository import SQLiteProjectEnvironmentAssociationRepository
+from atlas.adapters.sqlite.project_environment_lifecycle_association_writer import SQLiteProjectEnvironmentLifecycleAssociationWriter
 from atlas.core.errors import ConcurrencyError, ContractError, NotFoundError
 from atlas.memory.metadata import EnvironmentMetadata, ProjectMetadata
 from atlas.memory.models import EnvironmentId, ProjectId
@@ -38,6 +40,7 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
         self.project_environment.create_project(self.project)
         self.project_environment.create_environment(self.environment)
         self.repository = SQLiteWorkspaceRegistryRepository(self.database)
+        self.associations = SQLiteProjectEnvironmentAssociationRepository(self.database)
         self.association = ProjectEnvironmentAssociation(
             ProjectId("atlas"), EnvironmentId("test"), ProjectEnvironmentStatus.ACTIVE
         )
@@ -47,9 +50,9 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
         )
 
     def _transition_association(self, target_status):
-        current = self.repository.get_association(ProjectId("atlas"), EnvironmentId("test"))
+        current = self.associations.get_association(ProjectId("atlas"), EnvironmentId("test"))
         event_id = str(uuid4())
-        with self.database.unit_of_work() as unit:
+        with SQLiteLocalAuthorityUnitOfWork(self.database) as unit:
             connection = unit._connection_for(self.database)
             connection.execute(
                 """INSERT INTO atlas_project_environment_lifecycle_events (
@@ -65,8 +68,10 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
                     datetime.now(timezone.utc).isoformat(),
                 ),
             )
-            joined = SQLiteWorkspaceRegistryRepository(self.database, unit_of_work=unit)
-            joined.update_association(
+            writer = SQLiteProjectEnvironmentLifecycleAssociationWriter(
+                self.database, unit_of_work=unit
+            )
+            writer.update_association(
                 replace(current, status=target_status, revision=current.revision + 1),
                 expected_revision=current.revision,
                 lifecycle_event_id=event_id,
@@ -74,7 +79,7 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
         return self.repository.get_association(ProjectId("atlas"), EnvironmentId("test"))
 
     def test_create_and_read_explicit_project_environment_association(self):
-        self.repository.create_association(self.association)
+        self.associations.create_association(self.association)
         self.assertEqual(
             self.repository.get_association(ProjectId("atlas"), EnvironmentId("test")),
             self.association,
@@ -95,10 +100,14 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
             suspended,
         )
         with self.assertRaises(ConcurrencyError):
-            self.repository.update_association(
-                replace(self.association, revision=2), expected_revision=1,
-                lifecycle_event_id=str(uuid4()),
-            )
+            with SQLiteLocalAuthorityUnitOfWork(self.database) as unit:
+                writer = SQLiteProjectEnvironmentLifecycleAssociationWriter(
+                    self.database, unit_of_work=unit
+                )
+                writer.update_association(
+                    replace(self.association, revision=2), expected_revision=1,
+                    lifecycle_event_id=str(uuid4()),
+                )
 
     def test_create_and_read_workspace_with_canonical_owner_and_scope(self):
         self.repository.create_association(self.association)
@@ -180,6 +189,9 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "force outer rollback"):
             with SQLiteLocalAuthorityUnitOfWork(self.database) as unit:
                 self.assertIs(unit.workspaces._database, self.database)
+                self.assertFalse(hasattr(unit.workspaces, "update_association"))
+                self.assertTrue(hasattr(unit.project_environment_associations, "get_association"))
+                self.assertIs(unit.project_environment_associations._unit_of_work, unit._unit)
                 unit.workspaces.create_workspace(self.workspace)
                 self.assertEqual(
                     unit.workspaces.get_workspace("workspace-main"), self.workspace
