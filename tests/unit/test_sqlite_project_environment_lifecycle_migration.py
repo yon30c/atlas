@@ -46,7 +46,7 @@ class SQLiteProjectEnvironmentLifecycleMigrationTests(unittest.TestCase):
             (
                 event_id, previous_status, new_status, previous_revision,
                 previous_revision + 1, actor_user_id or self.identity.user_id,
-                actor_identity_id or self.identity.identity_id, str(uuid4()),
+                actor_identity_id or self.identity.identity.identity_id, str(uuid4()),
                 str(uuid4()), str(uuid4()), "Approved lifecycle transition",
                 datetime.now(timezone.utc).isoformat(),
             ),
@@ -165,7 +165,7 @@ class SQLiteProjectEnvironmentLifecycleMigrationTests(unittest.TestCase):
             with self.assertRaises(sqlite3.IntegrityError):
                 self._insert_event(
                     connection, previous_status="active", new_status="suspended",
-                    actor_user_id=self.identity.user_id, actor_identity_id=other.identity_id,
+                    actor_user_id=self.identity.user_id, actor_identity_id=other.identity.identity_id,
                 )
 
     def test_events_are_immutable_and_retained(self):
