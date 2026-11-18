@@ -14,6 +14,7 @@ from atlas.adapters.sqlite.local_authority_unit_of_work import SQLiteLocalAuthor
 from atlas.adapters.sqlite.migrations import SQLITE_MIGRATIONS
 from atlas.adapters.sqlite.platform_admin_bootstrap import SQLitePlatformAdminBootstrapAdapter
 from atlas.adapters.sqlite.project_environment_lifecycle_ledger import SQLiteProjectEnvironmentLifecycleLedger
+from atlas.adapters.sqlite.project_environment_lifecycle_association_writer import SQLiteProjectEnvironmentLifecycleAssociationWriter
 from atlas.application.project_environment_lifecycle import ProjectEnvironmentLifecycleService
 from atlas.core.context import OperationContext
 from atlas.core.errors import AuthorizationError, ConcurrencyError
@@ -83,7 +84,7 @@ class ProjectEnvironmentLifecycleServiceTests(unittest.TestCase):
             unit.project_environments.create_environment(
                 EnvironmentMetadata(EnvironmentId("test"), "active", 1)
             )
-            unit.workspaces.create_association(
+            unit.project_environment_associations.create_association(
                 ProjectEnvironmentAssociation(
                     ProjectId("atlas"), EnvironmentId("test"),
                     ProjectEnvironmentStatus.ACTIVE,
@@ -125,6 +126,9 @@ class ProjectEnvironmentLifecycleServiceTests(unittest.TestCase):
             clock=FixedClock(),
             ledger_factory=lambda unit: SQLiteProjectEnvironmentLifecycleLedger(
                 self.database, unit_of_work=unit._unit
+            ),
+            association_writer_factory=lambda unit: SQLiteProjectEnvironmentLifecycleAssociationWriter(
+                self.database, unit_of_work=unit
             ),
         )
 
@@ -175,7 +179,7 @@ class ProjectEnvironmentLifecycleServiceTests(unittest.TestCase):
         self.assertEqual(event.actor_user_id, self.user.user_id)
         self.assertEqual(event.actor_identity_id, self.user.identity.identity_id)
         with self.uow_factory() as unit:
-            association = unit.workspaces.get_association(
+            association = unit.project_environment_associations.get_association(
                 ProjectId("atlas"), EnvironmentId("test")
             )
             self.assertEqual(association.status, ProjectEnvironmentStatus.SUSPENDED)
@@ -384,6 +388,9 @@ class ProjectEnvironmentLifecycleServiceTests(unittest.TestCase):
             ledger_factory=lambda unit: SQLiteProjectEnvironmentLifecycleLedger(
                 self.database, unit_of_work=unit._unit._unit
             ),
+            association_writer_factory=lambda unit: SQLiteProjectEnvironmentLifecycleAssociationWriter(
+                self.database, unit_of_work=unit._unit
+            ),
         )
         with self.assertRaisesRegex(RuntimeError, "forced physical commit failure"):
             service.transition(
@@ -444,6 +451,9 @@ class ProjectEnvironmentLifecycleServiceTests(unittest.TestCase):
             identity_verifier=TestIdentityVerifier(self.user),
             clock=FixedClock(),
             ledger_factory=failing_ledger_factory,
+            association_writer_factory=lambda unit: SQLiteProjectEnvironmentLifecycleAssociationWriter(
+                self.database, unit_of_work=unit
+            ),
         )
         with self.assertRaisesRegex(RuntimeError, "forced ledger failure"):
             service.transition(
