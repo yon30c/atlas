@@ -53,7 +53,7 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
         current = self.associations.get_association(ProjectId("atlas"), EnvironmentId("test"))
         event_id = str(uuid4())
         with SQLiteLocalAuthorityUnitOfWork(self.database) as unit:
-            connection = unit._connection_for(self.database)
+            connection = unit._connection
             connection.execute(
                 """INSERT INTO atlas_project_environment_lifecycle_events (
                     event_id, project_id, environment_id, previous_status, new_status,
