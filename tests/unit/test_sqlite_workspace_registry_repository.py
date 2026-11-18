@@ -189,8 +189,12 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "force outer rollback"):
             with SQLiteLocalAuthorityUnitOfWork(self.database) as unit:
                 self.assertIs(unit.workspaces._database, self.database)
+                self.assertFalse(hasattr(unit.workspaces, "get_association"))
+                self.assertFalse(hasattr(unit.workspaces, "create_association"))
                 self.assertFalse(hasattr(unit.workspaces, "update_association"))
                 self.assertTrue(hasattr(unit.project_environment_associations, "get_association"))
+                self.assertTrue(hasattr(unit.project_environment_associations, "create_association"))
+                self.assertFalse(hasattr(unit.project_environment_associations, "update_association"))
                 self.assertIs(unit.project_environment_associations._unit_of_work, unit._unit)
                 unit.workspaces.create_workspace(self.workspace)
                 self.assertEqual(
