@@ -72,6 +72,8 @@ class PlatformAdminBootstrapRequest:
         validate_canonical_uuid4(self.user_id, "user_id")
         if not isinstance(self.permissions, frozenset):
             raise ContractError("permissions debe ser un frozenset")
+        if any(not isinstance(item, PlatformAdminPermission) for item in self.permissions):
+            raise ContractError("permissions contiene valores que no son PlatformAdminPermission")
         if self.permissions != INITIAL_PLATFORM_ADMIN_PERMISSIONS:
             raise ContractError(
                 "el bootstrap inicial requiere exactamente los permisos "
