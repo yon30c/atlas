@@ -16,6 +16,7 @@ from atlas.authentication.credentials import LoginHandle
 from atlas.authentication.native import NativeAuthenticationProof, NativeAuthenticator, NativeProofReference, NativeSubject
 from atlas.core.context import OperationContext
 from atlas.core.errors import AuthorizationError
+from atlas.identity.verified_identity_context_service import VerifiedIdentityContextRejected
 from atlas.core.identity import IdentityStatus
 from atlas.core.platform_admin import (
     INITIAL_PLATFORM_ADMIN_PERMISSIONS,
@@ -26,8 +27,6 @@ from atlas.core.platform_admin import (
     PlatformAdminProvisioningMethod,
 )
 from atlas.core.project_environment_lifecycle import ProjectEnvironmentLifecycleRequest
-from atlas.core.verified_identity_context import VerifiedIdentityContext
-from atlas.adapters.sqlite.native_identity_authority import SQLiteNativeIdentityAuthority
 from atlas.application.project_environment_lifecycle_composition import build_trusted_project_environment_lifecycle_service
 from atlas.identity.verified_identity_context_service import VerifiedIdentityContextService
 from atlas.memory.metadata import EnvironmentMetadata, ProjectMetadata
@@ -228,7 +227,7 @@ class TrustedLifecycleCompositionIntegrationTests(unittest.TestCase):
             attestor=self.attestor, realm=REALM, audience="atlas.other",
             context_ttl=timedelta(minutes=2),
         )
-        with self.assertRaises(Exception):
+        with self.assertRaises(VerifiedIdentityContextRejected):
             other.verify(evidence)
         with self.assertRaises(AuthorizationError):
             self.lifecycle.transition(self.context, evidence, self._request())
