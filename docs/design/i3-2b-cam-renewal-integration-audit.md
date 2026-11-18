@@ -661,3 +661,10 @@ Se publicó 7B.4C: `SQLiteProjectEnvironmentLifecycleLedger` implementa append/r
 ## 22. I3-2B.7B.4C — validación Debian confirmada
 
 El propietario confirmó la validación del adaptador SQLite lifecycle en Debian: **1,487 tests OK** (`Ran 1487 tests in 29.235s`) y `COMPILE_EXIT_CODE=0`. Quedan validados append/read, orden por revisión, el requisito de transición atómica V26, rollback conjunto y el límite que mantiene el writer fuera de `SQLiteLocalAuthorityUnitOfWork`. No se ejecutó migración productiva ni bootstrap real. PR #16 permanece Draft, abierto y sin merge.
+
+
+## 23. I3-2B.7B.4D — servicio transaccional publicado
+
+Se publicó `ProjectEnvironmentLifecycleService`: revalida VerifiedIdentityContext USER dentro de la UoW, exige un único Platform Admin ACTIVE y el permiso exacto de suspensión/reactivación, comprueba expected_revision, usa Clock UTC confiable y escribe ledger + CAS de asociación en la misma transacción. El adapter se enlaza mediante `ledger_factory(unit)` y no se agrega writer a `SQLiteLocalAuthorityUnitOfWork`.
+
+Las pruebas iniciales usan un verifier doble controlado; no simulan ni sustituyen la validación criptográfica real de Identity Authority. La validación Debian está pendiente. No se añadió runtime composition, endpoint, CLI ni migración. No se ejecutó bootstrap real ni se tocó DB productiva.
