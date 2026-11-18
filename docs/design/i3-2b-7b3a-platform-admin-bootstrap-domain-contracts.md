@@ -69,3 +69,39 @@ El puerto permanece separado del reader runtime y no debe añadirse a `SQLiteLoc
 No se añadió servicio, adaptador writer, CLI, integración runtime ni operación de recuperación de administradores revocados. No se ejecutó bootstrap ni se modificó ninguna base de datos.
 
 **Siguiente slice:** I3-2B.7B.3B, adaptador SQLite offline, idempotencia transaccional, concurrencia, rollback e integridad; usar exclusivamente bases temporales en pruebas.
+
+
+## 6. I3-2B.7B.3B — adaptador SQLite offline
+
+Se implementó `SQLitePlatformAdminBootstrapAdapter` en `src/atlas/adapters/sqlite/platform_admin_bootstrap.py`. El adaptador recibe únicamente `SQLiteDatabase` y no se compone en `SQLiteLocalAuthorityUnitOfWork`, factory runtime, HTTP ni workers.
+
+### Orden transaccional
+
+Cada intento abre la transacción existente `SQLiteDatabase.unit_of_work()`, que utiliza `BEGIN IMMEDIATE`. Bajo ese lock:
+
+1. Busca primero `operation_id` mediante JOIN de evento y grant.
+2. Si existe, compara IDs de evento/grant, sujeto, identidad/revisión, UIDs, terminal, confirmación UTC, permisos, método y ventana de emisión. Coincidencia exacta devuelve la concesión ya persistida; diferencias producen `ConcurrencyError`.
+3. Si no existe, exige que no haya ningún evento ni grant histórico.
+4. Resuelve el USER mediante `SQLiteIdentityAuthority` enlazada a la misma unidad de trabajo; exige identidad canónica ACTIVE y coincidencia exacta de identity_id/revision.
+5. Inserta evento y grant dentro de la misma transacción. V25 mantiene las FKs diferidas circulares y triggers de identidad/permisos.
+6. Relee el grant mediante el decoder del reader canónico y compara el resultado con el comando antes de permitir el commit.
+
+Un fallo, incluida una excepción durante la verificación posterior a las inserciones, provoca rollback conjunto. `BEGIN IMMEDIATE` serializa intentos concurrentes: un único bootstrap nuevo puede superar el guard histórico.
+
+### Recuperación e idempotencia
+
+El lookup por `operation_id` precede deliberadamente al guard de historial. Así, el replay exacto continúa recuperable después de la primera provisión. Un replay con identidad, permisos o procedencia distinta se rechaza. Una operación diferente, incluso si el grant histórico está revocado, no puede reutilizar el bootstrap inicial; recuperación/reemplazo exige un flujo administrativo futuro separado.
+
+### Pruebas añadidas
+
+`tests/unit/test_sqlite_platform_admin_bootstrap.py` cubre:
+- provisión y lectura posterior del grant/evento;
+- replay exacto sin duplicados;
+- conflicto por replay alterado;
+- rechazo de otro sujeto y de otra operación tras historial;
+- rechazo de USER suspendido y revisión obsoleta;
+- rollback forzado después de insertar evento y grant;
+- aislamiento respecto de la UoW runtime;
+- dos intentos concurrentes, con exactamente un resultado creado.
+
+Estas pruebas están publicadas, pero **requieren ejecución en Debian**. No se ha ejecutado el bootstrap real ni se ha tocado una base de datos del usuario.
