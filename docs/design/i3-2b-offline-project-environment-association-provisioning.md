@@ -1,6 +1,6 @@
 # Offline Project/Environment Association Provisioning
 
-**Status:** implementation design for owner review; no code, migration, CLI, runtime registration, or database changes are included in this design checkpoint.
+**Status:** operational trust boundary approved by the owner; implementation in progress. This document-only approval update does not add code, apply migrations, register runtime capabilities, or modify databases.
 
 ## Decision
 
@@ -10,11 +10,11 @@ The existing permissions `association.suspend` and `association.reactivate` do n
 
 ## Trust boundary
 
-The proposed operational boundary is a dedicated local command, not an HTTP endpoint, runtime service, plugin, AGENT capability, or general-purpose CLI command.
+The approved operational boundary is a dedicated local command, not an HTTP endpoint, runtime service, plugin, AGENT capability, or general-purpose CLI command.
 
-For the Linux deployment, the proposed command requires:
-- invocation through the operating system's privilege elevation path (`effective UID = 0`, with a non-root real UID);
-- an interactive terminal (no stdin pipe, background invocation, or unattended startup);
+For the Linux deployment, the approved command requires:
+- invocation through `sudo` (effective UID exactly `0`, with a real UID different from `0`);
+- an interactive terminal (TTY required; no stdin pipe, background invocation, or unattended startup);
 - explicit typed confirmation containing the exact Project and Environment identifiers;
 - a mandatory normalized reason;
 - a caller-supplied UUIDv4 `operation_id` to make retries idempotent.
