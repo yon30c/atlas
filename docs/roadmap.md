@@ -1,8 +1,8 @@
 # Hoja de ruta general de Atlas
 
 > Fuente central del orden de implementación y del estado de las fases.
-> Rama de seguimiento: `feature/terminal-commands`.
-> Actualizado: 16 de noviembre de 2026.
+> Rama de seguimiento: `design/verified-agent-delegation-i3-2b`.
+> Actualizado: 18 de noviembre de 2026.
 
 Este documento registra el orden acordado para completar Atlas. Se actualiza al cerrar cada fase con evidencia verificable. El 16 de noviembre de 2026 el propietario cambió la prioridad: pausar el endurecimiento avanzado de seguridad y concentrar el trabajo inmediato en un Atlas funcional de prueba. Los estados describen el trabajo real implementado, no solamente diseños, contratos o planes.
 
@@ -92,7 +92,7 @@ El corpus, harness y protocolo están en `tests/evaluation/phase3/`. P3-PI-002 s
 
 ## Fase 4 — Atlas funcional de prueba / capacidades del Assistant
 
-**Estado: Prioridad actual.** El objetivo inmediato es disponer de un asistente local que pueda completar flujos de trabajo de prueba de principio a fin, no limitarse a conversar. El alcance, los incrementos y los criterios de aceptación están en [docs/functional-test-roadmap.md](functional-test-roadmap.md).
+**Estado: En curso — base de autoridad e identidad en desarrollo; integración funcional del Assistant pendiente.** El objetivo sigue siendo disponer de un asistente local que complete flujos de trabajo de prueba de principio a fin. La rama actual ha avanzado en autenticación nativa, identidad verificada USER/AGENT, delegación AGENT, renovación CAM y lifecycle de asociaciones Project–Environment. Estos componentes son prerrequisitos de confianza y todavía no están conectados a la consola ni a un runtime protegido. El incremento 7B.6B requiere cerrar validación focalizada antes de avanzar a 7B.6C. El alcance funcional y sus criterios de aceptación están en [docs/functional-test-roadmap.md](functional-test-roadmap.md).
 
 Objetivo: permitir que Atlas comprenda solicitudes, elabore planes y solicite capacidades de forma controlada, manteniendo al modelo fuera de la frontera de autoridad.
 
@@ -131,6 +131,7 @@ El Recovery Gate seguirá cerrado hasta demostrar autoridad, bootstrap y recuper
 | 2026-11-16 | 2 | Confirmada como completada | 6/6 pruebas focalizadas y 844/844 suite local en commit `610f027...` |
 | 2026-11-16 | 3 | Pausada por decisión del propietario | P3-SR con `schema_only`: 9/9 PASS determinísticos en una pasada; SR-008: 5/5. SR-006 conserva revisión semántica pendiente. No es aprobación de seguridad. |
 | 2026-11-16 | 4 | Convertida en prioridad actual: Atlas funcional de prueba | Acuerdo de construir capacidades end-to-end en entorno local de prueba; plan en `docs/functional-test-roadmap.md`. |
+| 2026-11-18 | 4 / Cycle 3.2 | Avance de identidad, delegación AGENT y lifecycle Project–Environment; 7B.6B pendiente de cierre focalizado | Suite completa reportada: 1,513 tests OK. Falta confirmar pruebas focalizadas de 7B.6B y `compileall`; no hay runtime protegido conectado. |
 
 ## Trabajo transversal fuera de estas fases
 
@@ -143,3 +144,10 @@ Las fases organizan el camino de entrega; no sustituyen el estado de cada domini
 - [Fase 3 — Inteligencia y comportamiento](phase-3-intelligence.md)
 - [Atlas Terminal](terminal/README.md)
 - [Roadmap detallado Terminal-first](terminal/roadmap.md)
+
+
+## Actualización de seguimiento — 18 de noviembre de 2026
+
+La rama de trabajo actual incorpora Authentication/Identity Authority nativa, servicios de contexto verificado USER/AGENT, delegación AGENT con consentimiento del propietario, renovación delegada bajo CAM y lifecycle auditable de asociaciones Project–Environment. La separación de capacidades de escritura lifecycle (7B.6B) está implementada, pero no debe marcarse como cerrada hasta recibir las pruebas focalizadas y `compileall` en Debian.
+
+El propietario reportó la suite completa: **1,513 tests — OK**. Esta evidencia no equivale a validación E2E ni a habilitación de login, endpoints, runtime AGENT o herramientas. La Fase 4 continúa en curso; F3–F5 siguen pendientes como flujos funcionales integrados. La Fase 3 de evaluación avanzada permanece pausada.
