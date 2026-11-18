@@ -22,6 +22,9 @@ from atlas.adapters.sqlite.native_authentication_authority import SQLiteNativeAu
 from atlas.adapters.sqlite.project_environment_repository import (
     SQLiteProjectEnvironmentRepository,
 )
+from atlas.adapters.sqlite.project_environment_association_repository import (
+    SQLiteProjectEnvironmentAssociationRepository,
+)
 from atlas.adapters.sqlite.workspace_registry_repository import (
     SQLiteWorkspaceRegistryRepository,
 )
@@ -94,6 +97,12 @@ class SQLiteLocalAuthorityUnitOfWork(SQLiteAuthorizationUnitOfWork):
             self.workspaces = SQLiteWorkspaceRegistryRepository(
                 self._database,
                 unit_of_work=self._unit,
+            )
+            self.project_environment_associations = (
+                SQLiteProjectEnvironmentAssociationRepository(
+                    self._database,
+                    unit_of_work=self._unit,
+                )
             )
             self.authority_changes = SQLiteAuthorityChangeStore(
                 self._database,
