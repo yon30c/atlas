@@ -1,5 +1,6 @@
 """Adversarial tests for offline Project/Environment association provisioning."""
 
+import ast
 from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
@@ -233,17 +234,51 @@ class SQLiteProjectEnvironmentAssociationProvisioningTests(unittest.TestCase):
                        WHERE project_id = 'atlas' AND environment_id = 'test'"""
                 )
 
-    def test_reader_and_general_uow_do_not_expose_creation_capability(self):
+    def test_reader_and_general_uows_do_not_expose_creation_capability(self):
         self.assertFalse(hasattr(self.reader, "create_association"))
+
         import atlas.adapters.sqlite as sqlite_package
         self.assertNotIn(
             "SQLiteProjectEnvironmentAssociationProvisioningWriter",
             sqlite_package.__all__,
         )
+        self.assertFalse(
+            hasattr(sqlite_package, "SQLiteProjectEnvironmentAssociationProvisioningWriter")
+        )
+
+        from atlas.adapters.sqlite.authorization_unit_of_work import (
+            SQLiteAuthorizationUnitOfWork,
+        )
         from atlas.adapters.sqlite.local_authority_unit_of_work import (
             SQLiteLocalAuthorityUnitOfWork,
         )
-        with SQLiteLocalAuthorityUnitOfWork(self.database) as unit:
-            self.assertFalse(hasattr(unit.project_environment_associations, "create_association"))
-            self.assertFalse(hasattr(unit, "project_environment_association_provisioning_writer"))
+        for factory in (SQLiteAuthorizationUnitOfWork, SQLiteLocalAuthorityUnitOfWork):
+            with factory(self.database) as unit:
+                self.assertFalse(hasattr(unit, "project_environment_association_provisioning_writer"))
+                if hasattr(unit, "project_environment_associations"):
+                    self.assertFalse(
+                        hasattr(unit.project_environment_associations, "create_association")
+                    )
+
+    def test_production_writer_import_is_exclusive_to_offline_cli(self):
+        source_root = Path(__file__).resolve().parents[2] / "src" / "atlas"
+        writer_module = (
+            "atlas.adapters.sqlite.project_environment_association_provisioning_writer"
+        )
+        importers = []
+
+        for source_path in source_root.rglob("*.py"):
+            tree = ast.parse(source_path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and node.module == writer_module:
+                    importers.append(source_path.relative_to(source_root).as_posix())
+                elif isinstance(node, ast.Import):
+                    if any(alias.name == writer_module for alias in node.names):
+                        importers.append(source_path.relative_to(source_root).as_posix())
+
+        self.assertEqual(
+            importers,
+            ["adapters/sqlite/offline_association_provisioning_cli.py"],
+            "el writer de provisioning solo puede ser importado por el entrypoint offline",
+        )
 
