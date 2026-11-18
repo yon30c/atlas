@@ -15,7 +15,7 @@ La visión de Atlas se apoya en estos principios:
 
 La autonomía de Atlas no equivale a autoridad. Comprender una solicitud, generar una respuesta o proponer un plan no autoriza ni ejecuta una operación.
 
-> **Corte documental:** 18 de noviembre de 2026. Rama revisada: `design/verified-agent-delegation-i3-2b`, HEAD `dd95c3cd87448ff99056aea703111f0e9a8632a6`. La suite completa más reciente reportada por el propietario en Debian ejecutó 1,513 pruebas y terminó en `OK`. La validación focalizada de 7B.6B y `compileall` todavía no están confirmadas en este corte. Este README distingue código implementado, validación reportada y capacidades aún no conectadas al runtime. Un contrato, puerto, modelo o reducer no demuestra por sí solo que una capacidad esté habilitada en un runtime completo.
+> **Corte documental:** 18 de noviembre de 2026. Rama revisada: `design/verified-agent-delegation-i3-2b`. Commit de código evaluado: `dd95c3cd87448ff99056aea703111f0e9a8632a6`. La suite completa más reciente reportada por el propietario en Debian ejecutó 1,513 pruebas y terminó en `OK`. La validación focalizada de 7B.6B y `compileall` todavía no están confirmadas en este corte. Este README distingue código implementado, validación reportada y capacidades aún no conectadas al runtime. Un contrato, puerto, modelo o reducer no demuestra por sí solo que una capacidad esté habilitada en un runtime completo.
 
 ## Estado general del desarrollo
 
@@ -345,7 +345,7 @@ python -m unittest discover -s tests -v
 
 - Suite completa: **1,513 tests — OK** (30.071 segundos).
 - Entorno: Debian, dentro del entorno virtual del proyecto.
-- HEAD reportado en la rama de trabajo: `dd95c3cd87448ff99056aea703111f0e9a8632a6`.
+- Commit de código evaluado: `dd95c3cd87448ff99056aea703111f0e9a8632a6`; los commits documentales posteriores no modificaron ese código.
 - La validación focalizada de 7B.6B y `python -m compileall -q src tests` todavía no están confirmadas en este corte.
 
 La evidencia de 844 tests del 16 de noviembre pertenece a un checkpoint histórico y no representa el estado actual. Las ejecuciones son locales; no son resultados de GitHub Actions ni validación de despliegue productivo.
