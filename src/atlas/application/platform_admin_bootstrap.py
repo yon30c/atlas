@@ -4,8 +4,9 @@ from collections.abc import Callable
 from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
-from atlas.core.errors import AuthorizationError, ContractError
+from atlas.core.errors import AuthorizationError, ConcurrencyError, ContractError
 from atlas.core.identity import IdentityKind, IdentityStatus
+from atlas.core.user_identity import CanonicalUserIdentity
 from atlas.core.platform_admin import (
     INITIAL_PLATFORM_ADMIN_GRANT_TTL,
     INITIAL_PLATFORM_ADMIN_PERMISSIONS,
@@ -40,8 +41,13 @@ class PlatformAdminBootstrapService:
     ) -> None:
         if not callable(getattr(identity_authority, "get_user", None)):
             raise ContractError("identity_authority debe exponer get_user")
-        if not callable(getattr(bootstrap_port, "provision_first_admin", None)):
-            raise ContractError("bootstrap_port debe exponer provision_first_admin")
+        if (
+            not callable(getattr(bootstrap_port, "get_operation", None))
+            or not callable(getattr(bootstrap_port, "provision_first_admin", None))
+        ):
+            raise ContractError(
+                "bootstrap_port debe exponer get_operation y provision_first_admin"
+            )
         if not callable(getattr(clock, "now", None)):
             raise ContractError("clock debe exponer now")
         if not callable(uuid_factory):
@@ -65,9 +71,25 @@ class PlatformAdminBootstrapService:
         if request.permissions != INITIAL_PLATFORM_ADMIN_PERMISSIONS:
             raise ContractError("el conjunto de permisos inicial no es válido")
 
+        # Recover a committed operation before resolving current identity or
+        # generating fresh provenance. This preserves exact idempotency after
+        # a successful commit whose response was lost.
+        existing = self._bootstrap_port.get_operation(request.operation_id)
+        if existing is not None:
+            if (
+                existing.request.user_id != request.user_id
+                or existing.request.permissions != request.permissions
+            ):
+                raise ConcurrencyError(
+                    "operation_id ya está asociado a otra intención de bootstrap"
+                )
+            return existing.grant
+
         canonical = self._identity_authority.get_user(request.user_id)
         if canonical is None:
             raise AuthorizationError("el USER canónico solicitado no existe")
+        if not isinstance(canonical, CanonicalUserIdentity):
+            raise ContractError("Identity Authority debe devolver CanonicalUserIdentity")
         if (
             canonical.user_id != request.user_id
             or canonical.identity.kind is not IdentityKind.USER
