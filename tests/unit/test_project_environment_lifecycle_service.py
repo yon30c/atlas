@@ -330,7 +330,7 @@ class ProjectEnvironmentLifecycleServiceTests(unittest.TestCase):
             identity_verifier=TestIdentityVerifier(self.user),
             clock=FixedClock(),
             ledger_factory=lambda unit: SQLiteProjectEnvironmentLifecycleLedger(
-                self.database, unit_of_work=unit._unit
+                self.database, unit_of_work=unit._unit._unit
             ),
         )
         with self.assertRaisesRegex(RuntimeError, "forced physical commit failure"):
