@@ -2688,6 +2688,21 @@ CORE_SCHEMA_V26 = SQLiteMigration(
     version=26,
     name="audited_project_environment_association_lifecycle",
     sql="""
+    CREATE TABLE atlas_project_environment_lifecycle_commits (
+        event_id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        environment_id TEXT NOT NULL,
+        new_revision INTEGER NOT NULL CHECK (new_revision > 1),
+        UNIQUE (project_id, environment_id, new_revision),
+        FOREIGN KEY (event_id)
+            REFERENCES atlas_project_environment_lifecycle_events(event_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+            DEFERRABLE INITIALLY DEFERRED,
+        FOREIGN KEY (project_id, environment_id)
+            REFERENCES atlas_project_environments(project_id, environment_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+    );
+
     CREATE TABLE atlas_project_environment_lifecycle_events (
         event_id TEXT PRIMARY KEY CHECK (
             length(event_id) = 36 AND event_id = lower(event_id)
@@ -2731,6 +2746,10 @@ CORE_SCHEMA_V26 = SQLiteMigration(
         occurred_at TEXT NOT NULL CHECK (length(trim(occurred_at)) > 0),
         UNIQUE (project_id, environment_id, new_revision),
         UNIQUE (event_id, project_id, environment_id),
+        FOREIGN KEY (event_id)
+            REFERENCES atlas_project_environment_lifecycle_commits(event_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT
+            DEFERRABLE INITIALLY DEFERRED,
         FOREIGN KEY (project_id, environment_id)
             REFERENCES atlas_project_environments(project_id, environment_id)
             ON UPDATE RESTRICT ON DELETE RESTRICT,
@@ -2781,6 +2800,49 @@ CORE_SCHEMA_V26 = SQLiteMigration(
     BEFORE DELETE ON atlas_project_environment_lifecycle_events
     BEGIN
         SELECT RAISE(ABORT, 'Project/Environment lifecycle events are retained');
+    END;
+
+    CREATE TRIGGER atlas_project_environment_transition_records_commit
+    AFTER UPDATE ON atlas_project_environments
+    BEGIN
+        INSERT INTO atlas_project_environment_lifecycle_commits (
+            event_id, project_id, environment_id, new_revision
+        )
+        SELECT event.event_id, event.project_id, event.environment_id, event.new_revision
+        FROM atlas_project_environment_lifecycle_events event
+        WHERE event.event_id = NEW.last_lifecycle_event_id;
+    END;
+
+    CREATE TRIGGER atlas_project_environment_lifecycle_commit_matches_transition
+    BEFORE INSERT ON atlas_project_environment_lifecycle_commits
+    WHEN NOT EXISTS (
+        SELECT 1
+        FROM atlas_project_environment_lifecycle_events event
+        JOIN atlas_project_environments association
+          ON association.project_id = event.project_id
+         AND association.environment_id = event.environment_id
+        WHERE event.event_id = NEW.event_id
+          AND event.project_id = NEW.project_id
+          AND event.environment_id = NEW.environment_id
+          AND event.new_revision = NEW.new_revision
+          AND association.status = event.new_status
+          AND association.revision = event.new_revision
+          AND association.last_lifecycle_event_id = event.event_id
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'lifecycle commit marker requires the completed matching association transition');
+    END;
+
+    CREATE TRIGGER atlas_project_environment_lifecycle_commit_no_update
+    BEFORE UPDATE ON atlas_project_environment_lifecycle_commits
+    BEGIN
+        SELECT RAISE(ABORT, 'Project/Environment lifecycle commit markers are immutable');
+    END;
+
+    CREATE TRIGGER atlas_project_environment_lifecycle_commit_no_delete
+    BEFORE DELETE ON atlas_project_environment_lifecycle_commits
+    BEGIN
+        SELECT RAISE(ABORT, 'Project/Environment lifecycle commit markers are retained');
     END;
 
     CREATE TRIGGER atlas_project_environment_transition_requires_event
