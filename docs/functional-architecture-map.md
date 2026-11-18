@@ -1,8 +1,8 @@
 # F0 — Mapa de composición funcional de Atlas
 
-> Inspección de código: 16 de noviembre de 2026.
-> Rama: `feature/terminal-commands`.
-> Alcance: inspección estática de los archivos indicados; no equivale a una ejecución local nueva.
+> Snapshot de composición funcional inicial: 16 de noviembre de 2026.
+> Rama de actualización: `design/verified-agent-delegation-i3-2b`.
+> Alcance del mapa F0: snapshot estático inicial. Las actualizaciones de autoridad e identidad se registran en la sección 53; no equivalen a una ejecución local nueva.
 > Propósito: seleccionar el primer flujo funcional sin duplicar la base conversacional.
 
 ## 1. Punto de entrada y composición actual
@@ -615,3 +615,38 @@ Principios:
 - Atlas Broker puede evaluarse como adaptador de control, pero su integración no se presume ni se amplía automáticamente.
 
 Workstation es una base transversal de la Fase 4 y no reemplaza el Ciclo 3.2. El bootstrap confiable, identidad canónica, proyecto/entorno y ownership de workspace siguen siendo prerrequisitos para conectar ejecución. Esta decisión es documental: no crea contenedores, no cambia Docker/systemd/sudoers, no instala paquetes, no conecta runtime ni habilita shell arbitrario.
+
+
+## 53. Actualización de arquitectura — Identity, AGENT delegation y Project/Environment lifecycle (18-11-2026)
+
+Esta sección complementa el mapa F0 inicial. Describe componentes presentes en la rama `design/verified-agent-delegation-i3-2b`; no modifica la conclusión de que la consola conversacional aún no compone ni ejecuta capacidades protegidas.
+
+### 53.1 Authentication e Identity Authority
+
+- Authentication Authority mantiene autenticadores nativos y proofs de un solo uso; el almacenamiento conserva hashes/PHC y referencias digest-only, no contraseñas ni proofs reutilizables en claro.
+- Identity Authority conserva el vínculo canónico entre sujetos nativos y agregados USER/AGENT. Los dominios USER y AGENT mantienen authorities y bindings separados.
+- Los servicios de contexto verificado validan attestation, issuer, TTL, binding y estado/revisión canónicos. El flujo AGENT emite evidencia de delegación de corta duración y la revalida dentro de la UoW del consumidor.
+- La existencia de estos servicios no significa que exista login público, API de autenticación, sesión de cliente desplegada o runtime AGENT habilitado.
+
+### 53.2 Delegación AGENT y renovación de Grant
+
+- La delegación es emitida y revocada por el propietario USER verificado; su scope declara acciones y recursos explícitos y no admite wildcard.
+- El contexto verificado AGENT liga la identidad autenticada, issuer/binding, owner, delegación y revisiones canónicas.
+- La solicitud de renovación delegada exige acción CAM explícita y cobertura exacta del conjunto de recursos del Grant, porque el flujo actual renueva el Grant completo.
+- La aprobación permanece reservada al propietario USER verificado. La decisión revalida identidad, delegación, Grant y asociación Project–Environment dentro de la UoW compartida.
+- Evidencia de delegación verificada no equivale a autorización CAM ni concede permiso por sí sola.
+
+### 53.3 Project–Environment lifecycle y Workspace
+
+- La relación Project–Environment es explícita y persistente; su identidad de par es estable y las transiciones de estado usan revisión CAS.
+- El servicio lifecycle revalida USER y Platform Admin en una UoW compartida, y escribe el evento inmutable y la transición de asociación atómicamente.
+- 7B.6A identificó que el repositorio Workspace general exponía una capacidad lifecycle demasiado amplia.
+- 7B.6B separó el repositorio de asociaciones, el repositorio de Workspace y el writer lifecycle interno. La UoW general no expone el writer; la composición confiable lo entrega al servicio lifecycle mediante factories.
+- El writer no autentica ni autoriza. La política permanece en `ProjectEnvironmentLifecycleService`; los triggers SQLite mantienen integridad/atomicidad, no sustituyen autorización.
+- Workspace read-only consulta la asociación canónica y exige ACTIVE antes de resolver el mount.
+
+### 53.4 Estado de validación y límites de composición
+
+El propietario reportó la suite completa de **1,513 tests — OK** en Debian. La validación focalizada de 7B.6B y `compileall` siguen pendientes de confirmación en el corte del 18-11-2026. No se debe cerrar 7B.6B ni avanzar a 7B.6C hasta revisar esos resultados.
+
+Ninguno de estos componentes está conectado al runtime conversacional. No hay habilitación de login público, endpoints protegidos, herramientas de consola, shell, Docker ni ejecución privilegiada. El siguiente incremento 7B.6C debe completar el inventario de imports/call-sites y revisar exports/capacidades antes de cualquier exposición adicional.
