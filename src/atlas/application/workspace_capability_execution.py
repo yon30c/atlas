@@ -204,7 +204,7 @@ class WorkspaceCapabilityExecutionService:
             if environment is None or environment.status != "active":
                 raise AuthorizationError("el entorno no existe o no está activo")
 
-            association = unit.workspaces.get_association(
+            association = unit.project_environment_associations.get_association(
                 workspace.project_id, workspace.environment_id
             )
             if (
