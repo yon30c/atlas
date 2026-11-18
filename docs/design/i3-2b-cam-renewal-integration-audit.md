@@ -688,3 +688,7 @@ El primer ensayo Debian encontró que el doble de prueba de commit pasaba al led
 ### Reejecución focalizada 7B.4E
 
 Tras corregir el doble de prueba, el propietario confirmó **26 tests en 1.664 s — OK**. Suite completa y `compileall` pendientes; la fase no se considera validada todavía.
+
+### Cierre de validación 7B.4E
+
+El propietario confirmó **1,497 tests en 30.888 s — OK** y `compileall` con **`COMPILE_EXIT_CODE=0`**. Las 26 pruebas focalizadas también pasaron (1.664 s). Se considera 7B.4E validada. Sin cambios de producción, esquema, composición runtime o infraestructura en esta fase.
