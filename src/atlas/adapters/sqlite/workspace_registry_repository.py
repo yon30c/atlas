@@ -1,4 +1,4 @@
-"""SQLite adapter for canonical Project/Environment and Workspace registry records."""
+"""SQLite adapter for canonical Workspace registry records."""
 
 from datetime import datetime, timezone
 import sqlite3
@@ -8,12 +8,7 @@ from typing import Iterator
 from atlas.adapters.sqlite.database import SQLiteDatabase, SQLiteUnitOfWork
 from atlas.core.errors import ConcurrencyError, ContractError, NotFoundError
 from atlas.memory.models import EnvironmentId, ProjectId
-from atlas.workspace.models import (
-    ProjectEnvironmentAssociation,
-    ProjectEnvironmentStatus,
-    WorkspaceRecord,
-    WorkspaceStatus,
-)
+from atlas.workspace.models import WorkspaceRecord, WorkspaceStatus
 
 
 def _now_text() -> str:
@@ -21,10 +16,10 @@ def _now_text() -> str:
 
 
 class SQLiteWorkspaceRegistryRepository:
-    """Stores workspace ownership/scope and explicit project-environment links.
+    """Stores workspace ownership and scope.
 
-    The repository never resolves root_ref to a filesystem path. Resolution
-    belongs to trusted deployment composition, outside caller-controlled data.
+    Association reads/creation and lifecycle transitions use separate adapters.
+    The repository never resolves root_ref to a filesystem path.
     """
 
     def __init__(
@@ -68,92 +63,6 @@ class SQLiteWorkspaceRegistryRepository:
             raise ContractError("expected_revision debe ser un entero positivo")
         if new_revision != expected_revision + 1:
             raise ContractError("la nueva revisión debe ser expected_revision + 1")
-
-    @staticmethod
-    def _association(row: sqlite3.Row) -> ProjectEnvironmentAssociation:
-        return ProjectEnvironmentAssociation(
-            project_id=ProjectId(row["project_id"]),
-            environment_id=EnvironmentId(row["environment_id"]),
-            status=ProjectEnvironmentStatus(row["status"]),
-            revision=row["revision"],
-        )
-
-    @staticmethod
-    def _workspace(row: sqlite3.Row) -> WorkspaceRecord:
-        return WorkspaceRecord(
-            workspace_id=row["workspace_id"],
-            owner_user_id=row["owner_user_id"],
-            project_id=ProjectId(row["project_id"]),
-            environment_id=EnvironmentId(row["environment_id"]),
-            root_ref=row["root_ref"],
-            status=WorkspaceStatus(row["status"]),
-            revision=row["revision"],
-        )
-
-    def get_association(
-        self, project_id: ProjectId, environment_id: EnvironmentId
-    ) -> ProjectEnvironmentAssociation | None:
-        project = self._required(project_id, "project_id")
-        environment = self._required(environment_id, "environment_id")
-        with self._read_connection() as connection:
-            row = connection.execute(
-                """SELECT project_id, environment_id, status, revision
-                   FROM atlas_project_environments
-                   WHERE project_id = ? AND environment_id = ?""",
-                (project, environment),
-            ).fetchone()
-        return None if row is None else self._association(row)
-
-    def create_association(self, association: ProjectEnvironmentAssociation) -> None:
-        if not isinstance(association, ProjectEnvironmentAssociation):
-            raise ContractError("association debe ser ProjectEnvironmentAssociation")
-        now = _now_text()
-        try:
-            with self._write_connection() as connection:
-                connection.execute(
-                    """INSERT INTO atlas_project_environments
-                       (project_id, environment_id, status, revision, created_at, updated_at)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
-                    (
-                        association.project_id, association.environment_id,
-                        association.status.value, association.revision, now, now,
-                    ),
-                )
-        except sqlite3.IntegrityError as exc:
-            raise ContractError("asociación duplicada o Project/Environment inexistente") from exc
-
-    def update_association(
-        self,
-        association: ProjectEnvironmentAssociation,
-        *,
-        expected_revision: int,
-        lifecycle_event_id: str,
-    ) -> None:
-        if not isinstance(association, ProjectEnvironmentAssociation):
-            raise ContractError("association debe ser ProjectEnvironmentAssociation")
-        self._next_revision(expected_revision, association.revision)
-        event_id = self._required(lifecycle_event_id, "lifecycle_event_id")
-        with self._write_connection() as connection:
-            cursor = connection.execute(
-                """UPDATE atlas_project_environments
-                   SET status = ?, revision = ?, updated_at = ?,
-                       last_lifecycle_event_id = ?
-                   WHERE project_id = ? AND environment_id = ? AND revision = ?""",
-                (
-                    association.status.value, association.revision, _now_text(), event_id,
-                    association.project_id, association.environment_id, expected_revision,
-                ),
-            )
-            if cursor.rowcount == 1:
-                return
-            row = connection.execute(
-                """SELECT revision FROM atlas_project_environments
-                   WHERE project_id = ? AND environment_id = ?""",
-                (association.project_id, association.environment_id),
-            ).fetchone()
-            if row is None:
-                raise NotFoundError("asociación Project/Environment no encontrada")
-            raise ConcurrencyError("la revisión de la asociación cambió")
 
     def get_workspace(self, workspace_id: str) -> WorkspaceRecord | None:
         key = self._required(workspace_id, "workspace_id")
