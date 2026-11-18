@@ -229,7 +229,7 @@ El diseño debe proteger los registros de auditoría contra modificación por el
 
 1. **Contrato documental:** publicar y revisar este diseño y reconciliar documentos anteriores.
 2. **Composición de autoridad:** implementar root de composición, configuración de ruta y pruebas de UoW compartida sin activar runtime.
-3. **Operaciones de DB:** diseñar e implementar migrator y provisioning bajo `atlas-runtime`; resolver formalmente el launcher privilegiado.
+3. **Operaciones de DB:** seguir el [diseño de operaciones administrativas](local-authority-administrative-operations-design.md): cerrar el contrato, prototipar el canal local con pruebas adversariales y después implementar diagnóstico, migrator y provisioning bajo `atlas-runtime`. El socket Unix es candidato, no una decisión aprobada.
 4. **Backup/restore y claves:** implementar y probar recuperación y custodia.
 5. **Runtime aislado:** preparar unidad y pruebas en entorno temporal.
 6. **Despliegue:** solo tras aceptación de todos los criterios, con autorización explícita del propietario.
@@ -238,7 +238,7 @@ No se ejecutan provisioning real ni migraciones de la futura base durante las fa
 
 ## 13. Decisiones abiertas
 
-- Mecanismo exacto del launcher privilegiado y canal de procedencia no falsificable.
+- Mecanismo exacto del launcher privilegiado y canal de procedencia no falsificable; véase el [diseño de operaciones administrativas](local-authority-administrative-operations-design.md).
 - Modelo de cuenta administrativa humana y alcance sudoers.
 - Ubicación, rotación y recuperación de claves.
 - Ancla externa anti-rollback y protección de checkpoints de backup.
