@@ -69,9 +69,13 @@ class SQLiteProjectEnvironmentLifecycleMigrationTests(unittest.TestCase):
             count = connection.execute(
                 "SELECT COUNT(*) FROM atlas_project_environment_lifecycle_events"
             ).fetchone()[0]
+            provisioning_count = connection.execute(
+                "SELECT COUNT(*) FROM atlas_project_environment_provisioning_events"
+            ).fetchone()[0]
         self.assertEqual((row["status"], row["revision"], row["last_lifecycle_event_id"], row["provisioning_event_id"]),
                          ("active", 1, None, None))
         self.assertEqual(count, 0)
+        self.assertEqual(provisioning_count, 0)
 
     def test_orphan_event_cannot_commit_without_completed_transition(self):
         with self.assertRaises(sqlite3.IntegrityError):
