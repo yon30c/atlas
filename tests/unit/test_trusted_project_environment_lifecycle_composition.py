@@ -12,6 +12,7 @@ from atlas.adapters.sqlite.database import SQLiteDatabase
 from atlas.adapters.sqlite.local_authority_unit_of_work import SQLiteLocalAuthorityUnitOfWorkFactory
 from atlas.adapters.sqlite.migrations import SQLITE_MIGRATIONS
 from atlas.adapters.sqlite.platform_admin_bootstrap import SQLitePlatformAdminBootstrapAdapter
+from atlas.adapters.sqlite.project_environment_lifecycle_ledger import SQLiteProjectEnvironmentLifecycleLedger
 from atlas.authentication.credentials import LoginHandle
 from atlas.authentication.native import NativeAuthenticationProof, NativeAuthenticator, NativeProofReference, NativeSubject
 from atlas.core.context import OperationContext
@@ -177,9 +178,22 @@ class TrustedLifecycleCompositionIntegrationTests(unittest.TestCase):
             return original(context, unit)
 
         verifier.verify_in_unit_of_work = observe
-        event = self.lifecycle.transition(self.context, evidence, self._request())
+        ledger_connection_ids = []
+        original_append = SQLiteProjectEnvironmentLifecycleLedger.append_event
+
+        def observe_append(ledger, event):
+            with ledger._write_connection() as connection:
+                ledger_connection_ids.append(id(connection))
+            return original_append(ledger, event)
+
+        SQLiteProjectEnvironmentLifecycleLedger.append_event = observe_append
+        try:
+            event = self.lifecycle.transition(self.context, evidence, self._request())
+        finally:
+            SQLiteProjectEnvironmentLifecycleLedger.append_event = original_append
         self.assertEqual(event.new_status, ProjectEnvironmentStatus.SUSPENDED)
         self.assertEqual(len(seen), 1)
+        self.assertEqual(ledger_connection_ids, [seen[0][1]])
         self.assertEqual(self._state(), ("suspended", 2, 1, 1))
 
     def test_tampered_attestation_denies_without_any_lifecycle_write(self):
