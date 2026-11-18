@@ -38,6 +38,7 @@ def build_trusted_project_environment_lifecycle_service(
     realm: str,
     audience: str,
     context_ttl: timedelta,
+    unit_of_work_factory: SQLiteLocalAuthorityUnitOfWorkFactory | None = None,
 ) -> ProjectEnvironmentLifecycleService:
     """Build lifecycle service with the real verifier and a private ledger writer.
 
@@ -53,7 +54,20 @@ def build_trusted_project_environment_lifecycle_service(
     ):
         raise ContractError("attestor debe implementar sign/verify")
 
-    unit_of_work_factory = SQLiteLocalAuthorityUnitOfWorkFactory(database)
+    if unit_of_work_factory is None:
+        unit_of_work_factory = SQLiteLocalAuthorityUnitOfWorkFactory(database)
+    elif not isinstance(
+        unit_of_work_factory,
+        SQLiteLocalAuthorityUnitOfWorkFactory,
+    ):
+        raise ContractError(
+            "unit_of_work_factory debe ser SQLiteLocalAuthorityUnitOfWorkFactory"
+        )
+    elif unit_of_work_factory._database is not database:
+        raise ContractError(
+            "unit_of_work_factory y database deben compartir la misma instancia SQLite"
+        )
+
     identity_verifier = VerifiedIdentityContextService(
         unit_of_work_factory=unit_of_work_factory,
         clock=clock,
