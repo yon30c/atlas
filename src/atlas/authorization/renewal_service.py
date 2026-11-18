@@ -106,7 +106,7 @@ class GrantRenewalService:
             required_repositories = (
                 "agent_identity", "agent_delegations", "native_agent_identity",
                 "native_identity", "identity", "project_environments",
-                "workspaces", "grants", "renewals",
+                "project_environment_associations", "grants", "renewals",
             )
             if any(getattr(uow, name, None) is None for name in required_repositories):
                 raise AuthorizationError(
@@ -151,7 +151,7 @@ class GrantRenewalService:
 
             project = uow.project_environments.get_project(grant.project_id)
             environment = uow.project_environments.get_environment(grant.environment)
-            association = uow.workspaces.get_association(
+            association = uow.project_environment_associations.get_association(
                 grant.project_id, grant.environment
             )
             if (
@@ -346,7 +346,7 @@ class GrantRenewalService:
         """Revalidate AGENT authority at USER approval time in the shared UoW."""
         required = (
             "agent_delegations", "identity", "agent_identity",
-            "native_agent_identity", "project_environments", "workspaces",
+            "native_agent_identity", "project_environments", "project_environment_associations",
         )
         if any(getattr(unit_of_work, name, None) is None for name in required):
             raise AuthorizationError(
@@ -408,7 +408,7 @@ class GrantRenewalService:
 
             project = unit_of_work.project_environments.get_project(grant.project_id)
             environment = unit_of_work.project_environments.get_environment(grant.environment)
-            association = unit_of_work.workspaces.get_association(
+            association = unit_of_work.project_environment_associations.get_association(
                 grant.project_id, grant.environment
             )
             if (

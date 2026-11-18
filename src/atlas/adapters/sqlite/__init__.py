@@ -14,6 +14,7 @@ from atlas.adapters.sqlite.recovery_evidence_trust_policy_repository import (
     SQLiteRecoveryEvidenceIssuerTrustPolicyRepository,
 )
 from atlas.adapters.sqlite.project_environment_repository import SQLiteProjectEnvironmentRepository
+from atlas.adapters.sqlite.workspace_registry_repository import SQLiteWorkspaceRegistryRepository
 from atlas.adapters.sqlite.identity_authority import SQLiteIdentityAuthority
 from atlas.adapters.sqlite.agent_identity_authority import SQLiteAgentIdentityAuthority
 from atlas.adapters.sqlite.agent_delegation_repository import SQLiteAgentDelegationRepository

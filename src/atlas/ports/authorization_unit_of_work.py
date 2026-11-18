@@ -15,7 +15,7 @@ class AuthorizationUnitOfWork(Protocol):
 
     grants: GrantRepository
     renewals: GrantRenewalRepository
-    workspaces: ProjectEnvironmentAssociationReaderPort
+    project_environment_associations: ProjectEnvironmentAssociationReaderPort
 
     def __enter__(self) -> "AuthorizationUnitOfWork":
         """Inicia la unidad de trabajo."""

@@ -166,7 +166,7 @@ class AgentRenewalApprovalLifecycleTests(unittest.TestCase):
                     if environment_id == "development" else None
                 ),
             )
-            unit.workspaces = SimpleNamespace(
+            unit.project_environment_associations = SimpleNamespace(
                 get_association=lambda project_id, environment_id: (
                     self.association_state["value"]
                     if (project_id, environment_id) == ("atlas", "development")
