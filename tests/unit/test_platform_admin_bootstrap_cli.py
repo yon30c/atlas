@@ -1,5 +1,6 @@
 """Security and behavior tests for the isolated offline bootstrap CLI."""
 
+from contextlib import closing
 from datetime import timedelta
 from pathlib import Path
 import tempfile
@@ -201,13 +202,14 @@ class PlatformAdminBootstrapCliTests(unittest.TestCase):
 
     def test_incomplete_schema_ledger_is_rejected_without_migration(self):
         incomplete = Path(self.temp_dir.name) / "incomplete.sqlite3"
-        with sqlite3.connect(incomplete) as connection:
+        with closing(sqlite3.connect(incomplete)) as connection:
             connection.execute(
                 "CREATE TABLE schema_migrations (version INTEGER, name TEXT, checksum TEXT)"
             )
             connection.execute(
                 "INSERT INTO schema_migrations(version, name, checksum) VALUES (1, 'partial', 'bad')"
             )
+            connection.commit()
         output = []
         with (
             patch("atlas.platform_admin_bootstrap_cli.os.ttyname", return_value="/dev/pts/7"),
@@ -223,7 +225,7 @@ class PlatformAdminBootstrapCliTests(unittest.TestCase):
             )
         self.assertEqual(result, 2)
         self.assertIn("schema no soportado", " ".join(output))
-        with sqlite3.connect(incomplete) as connection:
+        with closing(sqlite3.connect(incomplete)) as connection:
             count = connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0]
         self.assertEqual(count, 1)
 
