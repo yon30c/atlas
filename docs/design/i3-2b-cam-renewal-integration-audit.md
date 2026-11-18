@@ -627,3 +627,18 @@ Se publicó una primera implementación de persistencia Platform Admin en la ram
 Esta implementación aún no está validada en Debian. El bootstrap writer/CLI no está implementado ni conectado a runtime. No se ha concedido autoridad a ningún USER, ni se han modificado asociaciones o bases productivas.
 
 **Estado:** código publicado; pendiente validación del propietario en Debian. No avanzar al bootstrap offline hasta que las pruebas focalizadas, compileall y suite completa pasen.
+
+
+## 19. I3-2B.7B.4A — contratos de lifecycle de asociaciones
+
+Se añadieron contratos explícitos de intención y evento, junto con un puerto para el ledger:
+
+- `core/project_environment_lifecycle.py`: `ProjectEnvironmentLifecycleRequest` limita la intención a Project/Environment, estado objetivo ACTIVE/SUSPENDED, expected_revision y motivo normalizado obligatorio. `ProjectEnvironmentLifecycleEvent` vincula transición, revisiones consecutivas, actor USER canónico, referencia de VerifiedIdentityContext, request/correlation IDs y timestamp UTC.
+- `ports/project_environment_lifecycle.py`: define append y lectura de eventos de auditoría.
+- `tests/unit/test_project_environment_lifecycle_contracts.py`: cubre intención normalizada, transición real, incremento de revisión, IDs de actor/contexto y UTC.
+
+El contrato de motivo elegido es 1–500 caracteres, sin caracteres de control, sin espacios exteriores y con whitespace interno colapsado. Los contratos validan estructura, no autenticación ni autorización.
+
+**Siguiente:** 7B.4B debe diseñar e implementar V26 para ledger inmutable y protección SQL de transiciones. La migración no puede fabricar eventos históricos para asociaciones V18 existentes. Después se implementará el adaptador y finalmente el servicio transaccional con VerifiedIdentityContext, Platform Admin y Clock confiable.
+
+**Estado:** 7B.4A publicado; validación Debian pendiente. No se ha implementado servicio ni migración, no se ha ejecutado bootstrap real y no se ha modificado DB productiva.
