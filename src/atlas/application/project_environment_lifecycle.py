@@ -36,9 +36,9 @@ from atlas.workspace.models import ProjectEnvironmentStatus
 class ProjectEnvironmentLifecycleService:
     """Apply one explicitly authorized association transition atomically.
 
-    The service receives a ledger factory rather than exposing its writer in
-    the general-purpose runtime UoW. Trusted composition binds that factory
-    to the active SQLite transaction.
+    The service receives separate ledger and association-writer factories.
+    Trusted composition binds both capabilities to the same active SQLite
+    transaction; neither writer is exposed by the general-purpose UoW.
     """
 
     def __init__(
