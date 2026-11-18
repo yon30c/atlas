@@ -1,9 +1,9 @@
 # Estado vigente de Atlas
 
 > Corte documental: 18 de noviembre de 2026.
-> Rama de código revisada: `main` (`8351b68`; sincronizada con `origin/main` en la validación del propietario). El contrato operativo de almacenamiento de autoridad queda documentado en esta revisión y está pendiente de implementación.
-> Commit de código evaluado en la suite completa reportada: `8351b683ae315d2096637f3d132ae5586f54b6d6`.
-> Suite completa más reciente reportada por el propietario en Debian: **1,539 tests — OK**.
+> Rama de código revisada: `main` (`5deb6bf`; PR #21 integrado). La composición compartida de almacenamiento de autoridad está implementada; aún no está conectada a un runtime ni a una base desplegada.
+> Commit de código evaluado en la suite completa reportada: `5deb6bf1cf1a53a1eb905d5c23e61f4f027c5fee` (squash de PR #21).
+> Suite completa más reciente reportada por el propietario en Debian: **1,547 tests — OK**; `python -m compileall -q src tests`: **exit code 0**.
 > Validación focalizada de 7B.6B en Debian: **37 tests — OK**; `python -m compileall -q src tests`: **exit code 0**. 7B.6B queda cerrada en el alcance validado.
 > Este documento diferencia implementación publicada, validación local reportada y capacidades conectadas al runtime.
 
@@ -27,18 +27,19 @@ Atlas todavía no es la plataforma autónoma completa de la visión. La presenci
 - Renovación delegada de Grants bajo CAM, con scope exacto y revalidación de identidad, delegación y asociación Project–Environment.
 - Bootstrap administrativo local de Platform Admin y lifecycle de asociaciones Project–Environment con CAS, ledger de eventos y composición confiable.
 - Separación de capacidades lifecycle 7B.6B: repositorio Workspace sin operaciones de transición de asociación y writer lifecycle interno ligado a la UoW del servicio.
+- Composición compartida de almacenamiento SQLite de autoridad (PR #21): una instancia `SQLiteDatabase` y una `SQLiteLocalAuthorityUnitOfWorkFactory` ligada a ella; lifecycle puede reutilizar la misma factory. La composición no crea archivos, inicializa SQLite ni aplica migraciones.
 
 ## Evidencia local
 
-El propietario reportó en Debian, sobre `main` en el commit `8351b683ae315d2096637f3d132ae5586f54b6d6`, la ejecución de la suite completa:
+El propietario reportó en Debian, sobre la rama `feat/local-authority-storage-composition` en el HEAD `c69b19f2ca815d1afc1e631e3de975b5f0654068`, antes de integrar PR #21:
 
 ```text
-Ran 1539 tests in 34.305s
+Ran 1547 tests in 35.761s
 
 OK
 ```
 
-También reportó que `python -m compileall -q src tests` terminó con código de salida 0. Esta evidencia corresponde al código de `main` indicado; no es una ejecución de GitHub Actions ni valida cambios documentales posteriores en ramas separadas.
+También reportó que `python -m compileall -q src tests` terminó sin errores. El PR #21 se integró por squash en `main` como `5deb6bf1cf1a53a1eb905d5c23e61f4f027c5fee`; el contenido de código integrado coincide con el HEAD validado. No se reportó una ejecución de GitHub Actions.
 
 La validación no equivale a pruebas E2E ni a una prueba de despliegue productivo. No debe ampliarse a garantías que la suite no cubre ni a la habilitación del runtime.
 
@@ -94,7 +95,8 @@ La validación no equivale a pruebas E2E ni a una prueba de despliegue productiv
 - [Auditoría CAM de renovación delegada](design/i3-2b-cam-renewal-integration-audit.md)
 - [Auditoría de frontera lifecycle 7B.6A](design/i3-2b-7b6a-lifecycle-write-boundary-audit.md)
 - [Separación de capacidades lifecycle 7B.6B](design/i3-2b-7b6b-lifecycle-write-capability-separation.md)
-- [Contrato operativo de almacenamiento de autoridad local](design/local-authority-storage-operational-contract.md) — decisión documental aprobada, pendiente de implementación.
+- [Contrato operativo de almacenamiento de autoridad local](design/local-authority-storage-operational-contract.md) — decisión de arquitectura aprobada.
+- [Diseño de operaciones administrativas de autoridad local](design/local-authority-administrative-operations-design.md) — propuesta de Fase 2.5.1; el socket Unix es candidato de prototipo, todavía no aprobado.
 - [Provisioning offline Project/Environment](design/i3-2b-offline-project-environment-association-provisioning.md) — CLI actual no apto para la futura DB principal hasta adaptar su frontera de privilegios.
 
 
