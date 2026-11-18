@@ -54,6 +54,7 @@ class SQLiteLocalAuthorityUnitOfWork(SQLiteAuthorizationUnitOfWork):
         self.native_authentication = None
         self.project_environments = None
         self.workspaces = None
+        self.project_environment_associations = None
         self.authority_changes = None
         self.recovery_evidence_trust_policies = None
         self.recovery_evidence_issuer_registry = None
