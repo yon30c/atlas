@@ -146,7 +146,7 @@ class AuthorityAdminIPCPeerTests(unittest.TestCase):
         connection.getsockopt.assert_not_called()
 
     def test_rejects_non_positive_or_non_finite_timeout(self):
-        for timeout in (0, -1, float("inf"), float("nan"), True):
+        for timeout in (0, -1, 60.01, 10**1000, float("inf"), float("nan"), True):
             with self.subTest(timeout=timeout):
                 with self.assertRaises(AdminProtocolRejected):
                     handle_admin_connection(
