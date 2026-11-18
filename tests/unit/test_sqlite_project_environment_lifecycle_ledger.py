@@ -79,6 +79,7 @@ class SQLiteProjectEnvironmentLifecycleLedgerTests(unittest.TestCase):
                 expected_revision=current.revision,
                 lifecycle_event_id=event.event_id,
             )
+            unit.commit()
         return event
 
     def test_append_and_read_event_inside_same_uow_as_association_transition(self):
@@ -94,7 +95,19 @@ class SQLiteProjectEnvironmentLifecycleLedgerTests(unittest.TestCase):
             writer = SQLiteProjectEnvironmentLifecycleAssociationWriter(
                 self.database, unit_of_work=unit
             )
+            with ledger._write_connection() as write_connection:
+                self.assertIs(write_connection, unit._connection)
+            with ledger._read_connection() as read_connection:
+                self.assertIs(read_connection, unit._connection)
             ledger.append_event(event)
+            self.assertEqual(
+                unit._connection.execute(
+                    """SELECT COUNT(*) FROM atlas_project_environment_lifecycle_events
+                       WHERE event_id = ?""",
+                    (event.event_id,),
+                ).fetchone()[0],
+                1,
+            )
             self.assertEqual(
                 ledger.list_events("atlas", "test"),
                 (event,),
