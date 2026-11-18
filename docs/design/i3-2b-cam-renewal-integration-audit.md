@@ -716,3 +716,35 @@ La revisión de los triggers V26 y del servicio confirma una separación que deb
 
 Esto no se clasifica como defecto de V26: la migración ofrece garantías estructurales, mientras que la política Platform Admin se aplica en el servicio. Sí es un requisito de integración antes de exponer la operación fuera de la composición interna. La prueba de servicio usa un verifier controlado; no acredita por sí sola una implementación criptográfica/issuer real. La integración futura debe enlazar el puerto a un verifier confiable que implemente `verify_in_unit_of_work` y probar esa composición real antes de habilitar cualquier endpoint.
 
+## Revisión de integración 7B.4A–7B.4E — checkpoint validado
+
+El propietario confirmó en Debian, después del ajuste temporal de 7B.4D:
+- Suite completa: **1,498 tests en 29.777 s — OK**.
+- `python -m compileall -q src tests`: **COMPILE_EXIT_CODE=0**.
+- La prueba `test_clock_is_captured_after_uow_acquisition` está incluida en la suite completa y pasó.
+
+La revisión estática conjunta de contratos, V26, ledger, repositorio, UoW y servicio confirma:
+1. La UoW se adquiere antes de capturar el Clock y antes de verificar identidad USER.
+2. La identidad canónica y el grant Platform Admin se leen dentro de la misma UoW que obtiene y actualiza la asociación.
+3. La transición exige el permiso exacto según el estado objetivo, un grant ACTIVE único, identidad/revisión coincidentes, ventana temporal válida y expected_revision vigente.
+4. El ledger y el CAS de asociación comparten la transacción.
+5. V26 exige una transición real, revisión +1, referencia al evento y marcador de commit; evento, asociación y marcador no pueden quedar confirmados por separado.
+6. Las asociaciones preexistentes permanecen sin eventos sintéticos; no se introducen cascadas sobre Grants, delegaciones ni Workspaces.
+7. El writer del ledger no está expuesto como atributo de `SQLiteLocalAuthorityUnitOfWork`.
+
+### Límite de autorización y condición para exposición
+
+V26 comprueba que el actor del evento corresponda a un USER canónico activo, pero no comprueba que ese USER tenga un grant Platform Admin ni el permiso de lifecycle correspondiente. La prueba de migración inserta deliberadamente eventos con USER canónico sin exigir Platform Admin; esto valida la separación entre integridad SQL y política de negocio, no una autorización completa en SQL.
+
+La autorización Platform Admin está en `ProjectEnvironmentLifecycleService`. Por tanto:
+- El ledger writer y `SQLiteWorkspaceRegistryRepository.update_association` son capacidades internas de infraestructura.
+- Ningún controlador, endpoint, agente, CLI general o consumidor de negocio debe invocar directamente esas escrituras.
+- Cualquier futura composición debe invocar el servicio y proporcionar un verifier confiable con `verify_in_unit_of_work`.
+- Antes de habilitar una interfaz externa se requiere una prueba de integración de composición real que use el verifier criptográfico/issuer de producción y el mismo SQLite UoW, además de demostrar que no existe una ruta alternativa de escritura accesible al consumidor.
+- Los tests actuales del servicio usan un verifier doble controlado; no constituyen evidencia de la integración criptográfica real.
+
+### Resultado y siguiente frontera
+
+**7B.4A–7B.4E: implementación y validación unitaria integradas; revisión estática completada.** No se habilita todavía la capacidad en runtime ni se considera lista para exposición externa. El siguiente slice recomendado es un diseño de composición confiable y prueba de integración real (sin endpoint ni CLI), con una decisión explícita sobre cómo restringir la construcción del ledger writer y el acceso a la mutación de asociaciones.
+
+No se aplicó V26 a una base productiva, no se ejecutó bootstrap real y no se modificó infraestructura. PR #16 permanece Draft, abierto y sin merge.
