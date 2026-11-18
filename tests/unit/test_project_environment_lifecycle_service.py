@@ -32,7 +32,7 @@ from atlas.core.verified_identity_context import VerifiedIdentityContext
 from atlas.memory.metadata import EnvironmentMetadata, ProjectMetadata
 from atlas.memory.models import EnvironmentId, ProjectId
 from atlas.ports.clock import Clock
-from association_provisioning_test_support import provision_association
+from tests.unit.association_provisioning_test_support import provision_association
 from atlas.workspace.models import ProjectEnvironmentAssociation, ProjectEnvironmentStatus
 
 
