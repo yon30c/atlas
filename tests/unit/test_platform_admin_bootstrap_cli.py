@@ -40,7 +40,7 @@ class PlatformAdminBootstrapCliTests(unittest.TestCase):
     def tearDown(self):
         self.temp_dir.cleanup()
 
-    def _run(self, *, user_id=None, operation_id=None, answer=None, stdin=None):
+    def _run(self, *, user_id=None, operation_id=None, answer=None, stdin=None, stdout=None):
         output = []
         prompts = []
 
@@ -62,7 +62,7 @@ class PlatformAdminBootstrapCliTests(unittest.TestCase):
                 input_fn=input_fn,
                 output_fn=output.append,
                 stdin=self.stdin if stdin is None else stdin,
-                stdout=self.stdout,
+                stdout=self.stdout if stdout is None else stdout,
             )
         return result, output, prompts
 
@@ -192,9 +192,12 @@ class PlatformAdminBootstrapCliTests(unittest.TestCase):
     def test_stdout_must_be_a_tty_too(self):
         result, output, prompts = self._run(
             answer=f"BOOTSTRAP PLATFORM ADMIN {self.user.user_id}",
+            stdout=FakeTTY(1, is_tty=False),
         )
-        self.assertEqual(result, 0, output)
+        self.assertEqual(result, 2)
         self.assertEqual(prompts, [])
+        self.assertIn("stdout", " ".join(output))
+        self.assertEqual(self._count("platform_admin_bootstrap_events"), 0)
 
     def test_incomplete_schema_ledger_is_rejected_without_migration(self):
         incomplete = Path(self.temp_dir.name) / "incomplete.sqlite3"
