@@ -3,7 +3,6 @@
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
-import sqlite3
 import tempfile
 import unittest
 from uuid import uuid4
