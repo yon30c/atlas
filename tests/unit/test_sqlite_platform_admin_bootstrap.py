@@ -112,6 +112,18 @@ class SQLitePlatformAdminBootstrapAdapterTests(unittest.TestCase):
                 "SELECT COUNT(*) FROM platform_admin_grants"
             ).fetchone()[0], 1)
 
+
+    def test_get_operation_recovers_exact_persisted_command_for_service_retry(self):
+        user = self._new_user()
+        command = self._command(user.user_id)
+        self.adapter.provision_first_admin(command)
+        recovered = self.adapter.get_operation(command.request.operation_id)
+        self.assertEqual(recovered, command)
+        self.assertEqual(
+            self.adapter.get_operation(_uuid()),
+            None,
+        )
+
     def test_operation_id_replay_with_changed_provenance_is_conflict(self):
         user = self._new_user()
         command = self._command(user.user_id)
