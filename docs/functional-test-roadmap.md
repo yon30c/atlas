@@ -209,7 +209,7 @@ Para cada siguiente incremento:
 6. Revisar los resultados antes de continuar.
 7. Actualizar esta documentación con evidencia, commit y estado real.
 
-**Siguiente acción vigente:** completar la validación focalizada de 7B.6B en Debian y confirmar `compileall`; no avanzar a 7B.6C hasta revisar los resultados. El objetivo de 7B.6C es el inventario exhaustivo de imports/call-sites y la verificación de que no queda una ruta alternativa de transición lifecycle. La consola continúa sin identidad autorizada: `LocalConsoleRequestFactory` no debe convertirse en autoridad. Después de cerrar el lifecycle y la frontera de identidad, continuar la integración funcional F3–F5. No conectar runtime privilegiado, Broker ni herramientas de consola por la sola presencia de contratos o adaptadores.
+**Estado actualizado (18 de noviembre de 2026):** 7B.6B queda cerrada tras la validación en Debian sobre `main` (`f0070dd`): 37 pruebas focalizadas OK en 2.342 s, `compileall` con código 0 y `main...origin/main` sincronizado (0/0). La suite completa de 1,513 pruebas también había sido reportada como OK. **Siguiente incremento propuesto: 7B.6C**, cuyo alcance es un inventario exhaustivo de imports/call-sites y la verificación de que no queda una ruta alternativa de transición lifecycle. Antes de cualquier cambio de código, debe hacerse una auditoría read-only de esos puntos y sus exports. La consola continúa sin identidad autorizada: `LocalConsoleRequestFactory` no debe convertirse en autoridad. Después de cerrar el lifecycle y la frontera de identidad, continuar la integración funcional F3–F5. No conectar runtime privilegiado, Broker ni herramientas de consola por la sola presencia de contratos o adaptadores.
 
 
 ### F2.3.3b — Inspección de autoridad y consistencia
@@ -736,14 +736,17 @@ La rama `design/verified-agent-delegation-i3-2b` contiene incrementos de identid
 
 ### Validación conocida
 
-El propietario reportó en Debian la suite completa: **1,513 tests — OK** (30.071 s). Esta evidencia no reemplaza la comprobación focalizada de 7B.6B. En el corte actual siguen pendientes la salida focalizada de los cuatro módulos afectados y el resultado de `python -m compileall -q src tests`. No afirmar que CAS, reactivación, precondición ACTIVE de Workspace y read-your-writes están cerrados hasta revisar esos resultados.
+El propietario reportó en Debian la suite completa: **1,513 tests — OK** (30.071 s). Posteriormente, sobre `main` en HEAD `f0070dd`, ejecutó los cuatro módulos focalizados: **37 tests — OK** (2.342 s), y `python -m compileall -q src tests` terminó con `COMPILE_EXIT_CODE=0`. `main...origin/main` devolvió `0 0`. Con esta evidencia, 7B.6B queda cerrada en el alcance validado. La evidencia es local y no representa GitHub Actions, E2E ni despliegue productivo.
 
-### Secuencia obligatoria
+### Secuencia de 7B.6C (propuesta; auditoría read-only)
 
-1. Repetir las pruebas focalizadas de Ledger, Workspace Registry, servicio lifecycle y UoW local.
-2. Ejecutar `compileall` y registrar el código de salida.
-3. Confirmar HEAD y árbol limpio en Debian.
-4. Solo si todo pasa, cerrar 7B.6B y comenzar 7B.6C (barrido de imports/call-sites y revisión de exports).
-5. Integrar a `main` mediante la ruta de integración revisada, conservando la rama de trabajo y sin habilitar runtime.
+1. Inventariar todos los imports del writer lifecycle, su implementación concreta y los módulos que pueden obtener una referencia.
+2. Localizar todos los call-sites de transición Project–Environment, incluyendo factories, composición, repositorios, servicios y tests.
+3. Revisar exports públicos (`__init__`, módulos de paquete y puntos de composición) para detectar exposición accidental del writer.
+4. Buscar rutas alternativas de escritura que evadan el servicio lifecycle o la UoW autorizada.
+5. Clasificar cada hallazgo como permitido, interno, obsoleto o exposición que requiere corrección; adjuntar rutas y líneas.
+6. No modificar código durante el inventario. Presentar hallazgos y propuesta de corrección antes de implementar cambios.
+
+No habilitar runtime ni cambiar las fronteras de autoridad como parte de esta auditoría.
 
 Documentos de diseño: [auditoría 7B.6A](design/i3-2b-7b6a-lifecycle-write-boundary-audit.md), [separación 7B.6B](design/i3-2b-7b6b-lifecycle-write-capability-separation.md) y [auditoría CAM de renovación AGENT](design/i3-2b-cam-renewal-integration-audit.md).
