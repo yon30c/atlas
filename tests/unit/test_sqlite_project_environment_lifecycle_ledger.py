@@ -15,7 +15,7 @@ from atlas.adapters.sqlite.project_environment_lifecycle_ledger import (
     SQLiteProjectEnvironmentLifecycleLedger,
 )
 from atlas.adapters.sqlite.project_environment_repository import SQLiteProjectEnvironmentRepository
-from atlas.adapters.sqlite.workspace_registry_repository import SQLiteWorkspaceRegistryRepository
+from atlas.adapters.sqlite.project_environment_association_repository import SQLiteProjectEnvironmentAssociationRepository
 from atlas.core.errors import ContractError
 from atlas.core.project_environment_lifecycle import ProjectEnvironmentLifecycleEvent
 from atlas.memory.metadata import EnvironmentMetadata, ProjectMetadata
@@ -33,7 +33,7 @@ class SQLiteProjectEnvironmentLifecycleLedgerTests(unittest.TestCase):
         projects = SQLiteProjectEnvironmentRepository(self.database)
         projects.create_project(ProjectMetadata(ProjectId("atlas"), "active", 1))
         projects.create_environment(EnvironmentMetadata(EnvironmentId("test"), "active", 1))
-        self.associations = SQLiteWorkspaceRegistryRepository(self.database)
+        self.associations = SQLiteProjectEnvironmentAssociationRepository(self.database)
         self.association = ProjectEnvironmentAssociation(
             ProjectId("atlas"), EnvironmentId("test"), ProjectEnvironmentStatus.ACTIVE
         )
@@ -68,7 +68,7 @@ class SQLiteProjectEnvironmentLifecycleLedgerTests(unittest.TestCase):
             ledger = SQLiteProjectEnvironmentLifecycleLedger(
                 self.database, unit_of_work=unit
             )
-            registry = SQLiteWorkspaceRegistryRepository(
+            registry = SQLiteProjectEnvironmentAssociationRepository(
                 self.database, unit_of_work=unit
             )
             ledger.append_event(event)
@@ -89,7 +89,7 @@ class SQLiteProjectEnvironmentLifecycleLedgerTests(unittest.TestCase):
             ledger = SQLiteProjectEnvironmentLifecycleLedger(
                 self.database, unit_of_work=unit
             )
-            registry = SQLiteWorkspaceRegistryRepository(
+            registry = SQLiteProjectEnvironmentAssociationRepository(
                 self.database, unit_of_work=unit
             )
             ledger.append_event(event)
@@ -146,7 +146,7 @@ class SQLiteProjectEnvironmentLifecycleLedgerTests(unittest.TestCase):
                 ledger = SQLiteProjectEnvironmentLifecycleLedger(
                     self.database, unit_of_work=unit
                 )
-                registry = SQLiteWorkspaceRegistryRepository(
+                registry = SQLiteProjectEnvironmentAssociationRepository(
                     self.database, unit_of_work=unit
                 )
                 ledger.append_event(event)
