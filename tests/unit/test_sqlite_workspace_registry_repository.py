@@ -19,7 +19,7 @@ from atlas.adapters.sqlite.project_environment_lifecycle_association_writer impo
 from atlas.core.errors import ConcurrencyError, ContractError, NotFoundError
 from atlas.memory.metadata import EnvironmentMetadata, ProjectMetadata
 from atlas.memory.models import EnvironmentId, ProjectId
-from association_provisioning_test_support import provision_association
+from tests.unit.association_provisioning_test_support import provision_association
 from atlas.workspace.models import (
     ProjectEnvironmentAssociation,
     ProjectEnvironmentStatus,
