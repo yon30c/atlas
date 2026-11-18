@@ -26,8 +26,11 @@ from atlas.adapters.sqlite.project_environment_association_repository import (
 )
 from atlas.adapters.sqlite.project_environment_repository import SQLiteProjectEnvironmentRepository
 from atlas.core.errors import AtlasError
+from atlas.core.project_environment_association_provisioning import (
+    ProjectEnvironmentAssociationProvisioningProvenance,
+    ProjectEnvironmentAssociationProvisioningRequest,
+)
 from atlas.memory.models import EnvironmentId, ProjectId
-from atlas.workspace.models import ProjectEnvironmentAssociation, ProjectEnvironmentStatus
 
 
 def _require_sudo_tty() -> tuple[int, int, str]:
@@ -116,23 +119,21 @@ def main(argv: list[str] | None = None) -> int:
         if input("> ") != confirmation:
             raise PermissionError("confirmación exacta no coincidente; operación cancelada")
 
-        association = ProjectEnvironmentAssociation(
-            ProjectId(project_id),
-            EnvironmentId(environment_id),
-            ProjectEnvironmentStatus.ACTIVE,
-            revision=1,
-        )
-        writer = SQLiteProjectEnvironmentAssociationProvisioningWriter(database)
-        writer.create_association(
-            association,
-            event_id=str(uuid4()),
+        request = ProjectEnvironmentAssociationProvisioningRequest(
             operation_id=args.operation_id,
+            project_id=ProjectId(project_id),
+            environment_id=EnvironmentId(environment_id),
             reason=reason,
+        )
+        provenance = ProjectEnvironmentAssociationProvisioningProvenance(
+            event_id=str(uuid4()),
             real_uid=real_uid,
             effective_uid=effective_uid,
             terminal_id=terminal_id,
             occurred_at=datetime.now(timezone.utc),
         )
+        writer = SQLiteProjectEnvironmentAssociationProvisioningWriter(database)
+        writer.create_association(request, provenance)
         print(
             "Aprovisionamiento registrado: "
             f"project={project_id} environment={environment_id} "
