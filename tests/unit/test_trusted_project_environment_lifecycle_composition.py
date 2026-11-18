@@ -37,7 +37,7 @@ from atlas.application.project_environment_lifecycle_composition import build_tr
 from atlas.identity.verified_identity_context_service import VerifiedIdentityContextService
 from atlas.memory.metadata import EnvironmentMetadata, ProjectMetadata
 from atlas.memory.models import EnvironmentId, ProjectId
-from association_provisioning_test_support import provision_association
+from tests.unit.association_provisioning_test_support import provision_association
 from atlas.workspace.models import ProjectEnvironmentAssociation, ProjectEnvironmentStatus
 
 
