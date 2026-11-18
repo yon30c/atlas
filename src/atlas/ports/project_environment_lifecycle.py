@@ -3,6 +3,7 @@
 from typing import Protocol
 
 from atlas.core.project_environment_lifecycle import ProjectEnvironmentLifecycleEvent
+from atlas.workspace.models import ProjectEnvironmentAssociation
 
 
 class ProjectEnvironmentLifecycleLedgerPort(Protocol):
@@ -15,3 +16,16 @@ class ProjectEnvironmentLifecycleLedgerPort(Protocol):
         self, project_id: str, environment_id: str
     ) -> tuple[ProjectEnvironmentLifecycleEvent, ...]:
         """Return the association's audit history in revision order."""
+
+
+class ProjectEnvironmentLifecycleAssociationWriterPort(Protocol):
+    """Narrow persistence capability for one audited association transition."""
+
+    def update_association(
+        self,
+        association: ProjectEnvironmentAssociation,
+        *,
+        expected_revision: int,
+        lifecycle_event_id: str,
+    ) -> None:
+        """CAS-update the association as part of the caller's lifecycle UoW."""
