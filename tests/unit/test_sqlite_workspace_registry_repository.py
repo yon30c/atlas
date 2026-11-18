@@ -1,10 +1,12 @@
 """Tests for the canonical SQLite workspace registry and explicit scope links."""
 
 from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
 import tempfile
 import unittest
+from uuid import uuid4
 
 from atlas.adapters.sqlite.database import SQLiteDatabase
 from atlas.adapters.sqlite.identity_authority import SQLiteIdentityAuthority
@@ -44,6 +46,33 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
             EnvironmentId("test"), "mount:atlas-main"
         )
 
+    def _transition_association(self, target_status):
+        current = self.repository.get_association(ProjectId("atlas"), EnvironmentId("test"))
+        event_id = str(uuid4())
+        with self.database.unit_of_work() as unit:
+            connection = unit._connection_for(self.database)
+            connection.execute(
+                """INSERT INTO atlas_project_environment_lifecycle_events (
+                    event_id, project_id, environment_id, previous_status, new_status,
+                    previous_revision, new_revision, actor_user_id, actor_identity_id,
+                    verified_identity_context_id, request_id, correlation_id, reason, occurred_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    event_id, current.project_id, current.environment_id,
+                    current.status.value, target_status.value, current.revision,
+                    current.revision + 1, self.identity.user_id, self.identity.identity_id,
+                    str(uuid4()), str(uuid4()), str(uuid4()), "Administrative lifecycle test",
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            )
+            joined = SQLiteWorkspaceRegistryRepository(self.database, unit_of_work=unit)
+            joined.update_association(
+                replace(current, status=target_status, revision=current.revision + 1),
+                expected_revision=current.revision,
+                lifecycle_event_id=event_id,
+            )
+        return self.repository.get_association(ProjectId("atlas"), EnvironmentId("test"))
+
     def test_create_and_read_explicit_project_environment_association(self):
         self.repository.create_association(self.association)
         self.assertEqual(
@@ -60,17 +89,15 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
 
     def test_association_status_uses_compare_and_swap_revision(self):
         self.repository.create_association(self.association)
-        suspended = replace(
-            self.association, status=ProjectEnvironmentStatus.SUSPENDED, revision=2
-        )
-        self.repository.update_association(suspended, expected_revision=1)
+        suspended = self._transition_association(ProjectEnvironmentStatus.SUSPENDED)
         self.assertEqual(
             self.repository.get_association(ProjectId("atlas"), EnvironmentId("test")),
             suspended,
         )
         with self.assertRaises(ConcurrencyError):
             self.repository.update_association(
-                replace(self.association, revision=2), expected_revision=1
+                replace(self.association, revision=2), expected_revision=1,
+                lifecycle_event_id=str(uuid4()),
             )
 
     def test_create_and_read_workspace_with_canonical_owner_and_scope(self):
@@ -90,10 +117,7 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             self.repository.create_workspace(invalid_owner)
 
-        self.repository.update_association(
-            replace(self.association, status=ProjectEnvironmentStatus.SUSPENDED, revision=2),
-            expected_revision=1,
-        )
+        self._transition_association(ProjectEnvironmentStatus.SUSPENDED)
         with self.assertRaises(ContractError):
             self.repository.create_workspace(self.workspace)
 
