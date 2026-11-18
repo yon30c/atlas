@@ -1,6 +1,6 @@
 # I3-2B.7B.3A — contratos de dominio para bootstrap offline
 
-**Estado:** implementado en la rama de trabajo; validación automatizada en Debian pendiente.  
+**Estado:** contratos 7B.3A y adaptador offline 7B.3B implementados y validados por el propietario en Debian.  
 **Alcance:** contratos de dominio y puerto. No implementa persistencia de bootstrap, servicio, CLI ni provisión real.  
 **PR:** #16 — permanece Draft, abierto y sin merge.
 
@@ -105,3 +105,24 @@ El lookup por `operation_id` precede deliberadamente al guard de historial. Así
 - dos intentos concurrentes, con exactamente un resultado creado.
 
 Estas pruebas están publicadas, pero **requieren ejecución en Debian**. No se ha ejecutado el bootstrap real ni se ha tocado una base de datos del usuario.
+
+
+## 7. Validación del propietario — I3-2B.7B.3A y 7B.3B
+
+El propietario ejecutó dos checkpoints consecutivos de la suite completa en Debian:
+
+| Checkpoint | Suite completa | Resultado de compilación |
+|---|---:|---|
+| Inicial | 1,433 pruebas en 26.282 s | `COMPILE_EXIT_CODE=0` |
+| Más reciente | **1,443 pruebas en 25.743 s — OK** | **`COMPILE_EXIT_CODE=0`** |
+
+La segunda ejecución es el checkpoint vigente y confirma diez pruebas adicionales respecto al primero. Ambos resultados fueron comunicados por el propietario; no se atribuyen a CI ni a una ejecución local del asistente.
+
+Con este resultado quedan validados por el propietario:
+- los contratos de dominio y el puerto de bootstrap de 7B.3A;
+- la persistencia V25, el reader runtime y el adaptador SQLite offline de 7B.3B;
+- los casos automatizados publicados para idempotencia, conflicto, USER activo/revisión, rollback, aislamiento runtime y concurrencia.
+
+**Límite importante:** la validación usa bases SQLite temporales de pruebas. No se ejecutó el bootstrap real, no se creó ningún Platform Admin y no se modificó ninguna base productiva.
+
+**Siguiente slice:** I3-2B.7B.3C — servicio de aplicación de bootstrap. Antes de implementarlo se inspeccionarán las convenciones de servicios, Clock, composición y errores del repositorio. El servicio coordinará identidad canónica, tiempo confiable y adaptador offline; todavía no añadirá CLI ni ejecutará provisión real.
