@@ -1,6 +1,6 @@
 # I3-2B.7B.5C — pruebas adversariales y revisión de superficie lifecycle
 
-**Estado:** implementación publicada; validación Debian pendiente.  
+**Estado:** implementación y validación Debian confirmadas por el propietario.  
 **PR:** #16 — Draft, abierto y sin merge.  
 **Dependencia:** 7B.5B validada por el propietario con 1,510 tests OK.  
 **Alcance:** pruebas de integración adversariales y reducción de exportación accidental. Sin endpoint, CLI, runtime registration, migración ni infraestructura.
@@ -51,4 +51,8 @@ echo "COMPILE_EXIT_CODE=$?"
 python -m unittest discover -s tests -v
 ```
 
-No se afirma que estas pruebas se hayan ejecutado. 7B.5C queda pendiente de la validación del propietario. PR #16 debe permanecer Draft, abierto y sin merge.
+### Resultado confirmado por el propietario
+
+El propietario ejecutó la suite completa en Debian: **1,517 tests en 30.234 s — OK**. Con este resultado, 7B.5C queda validada por el propietario. El alcance sigue limitado a pruebas adversariales y revisión de superficie: no habilita runtime, endpoint, CLI, plugins ni nuevas rutas de escritura. No se atribuye un resultado de `compileall`, ya que no fue incluido en la confirmación recibida.
+
+PR #16 debe permanecer Draft, abierto y sin merge.
