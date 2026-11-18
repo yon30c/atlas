@@ -1,6 +1,6 @@
 # Offline Project/Environment Association Provisioning
 
-**Status:** operational trust boundary approved by the owner; implementation in progress. This document-only approval update does not add code, apply migrations, register runtime capabilities, or modify databases.
+**Status:** operational trust boundary approved by the owner; V27 persistence, the narrow writer, and the guarded interactive Linux entrypoint are implemented on this branch. Owner-run Debian validation is still pending. No production database has been provisioned.
 
 ## Decision
 
@@ -41,7 +41,7 @@ The service must not accept a boolean such as `is_admin`, a client claim, a USER
 
 ## Transaction and persistence
 
-The future implementation should use one `SQLiteLocalAuthorityUnitOfWork` transaction to:
+The dedicated writer uses one owned SQLite transaction to:
 1. validate that the canonical Project and Environment records exist;
 2. resolve `operation_id` idempotently;
 3. reject an existing operation ID if its Project, Environment, or reason differs;
@@ -49,7 +49,7 @@ The future implementation should use one `SQLiteLocalAuthorityUnitOfWork` transa
 5. append exactly one immutable provisioning event;
 6. commit association and event atomically.
 
-A new SQLite migration (next schema version) should add a provisioning-event ledger and an association event reference. A deferred foreign-key relationship plus SQL triggers should ensure:
+Migration V27 adds `atlas_project_environment_provisioning_events` and a nullable `provisioning_event_id` reference on `atlas_project_environments`. A deferred bidirectional foreign-key relationship plus SQL triggers ensures:
 - every association created after the migration has a matching provisioning event;
 - every provisioning event references its association;
 - event scope and initial state/revision match the inserted association;
@@ -60,7 +60,7 @@ Associations that predate this migration remain valid with a NULL provisioning-e
 
 ## Capability separation
 
-The general-purpose association repository exposed by `SQLiteLocalAuthorityUnitOfWork` should become read-only. The INSERT capability should move to a narrow internal provisioning writer constructed only inside the offline provisioning composition. It must not be exported through package `__all__`, attached to the general UoW, or registered in runtime composition.
+The general-purpose association repository exposed by `SQLiteLocalAuthorityUnitOfWork` is read-only. INSERT moved to `SQLiteProjectEnvironmentAssociationProvisioningWriter`, which is not exported through package `__all__`, not attached to the general UoW, and not registered in runtime composition. The dedicated CLI constructs it only after validating the host boundary.
 
 The existing lifecycle writer remains separate. Provisioning does not call the lifecycle service and does not create a lifecycle event: creation is not an ACTIVE/SUSPENDED transition.
 
@@ -84,12 +84,12 @@ This slice does not:
 
 ## Implementation sequence
 
-1. Add domain request/provenance/event contracts and contract tests.
-2. Add the immutable provisioning ledger and SQL integrity migration.
-3. Separate the association reader from the narrow INSERT writer.
-4. Add the transactional provisioning service and an unregistered offline composition.
-5. Add a dedicated interactive Linux command with host-provenance checks and typed confirmation.
-6. Add adversarial tests for idempotency, event/association atomicity, direct INSERT denial, and offline command guards.
+1. Implement V27 immutable provisioning ledger and bidirectional deferred integrity constraints. **Implemented; validation pending.**
+2. Separate the association reader from the narrow INSERT writer. **Implemented; validation pending.**
+3. Add atomic persistence and idempotent operation-ID handling. **Implemented; validation pending.**
+4. Add the unregistered interactive Linux command with `sudo`, UID, TTY, schema, and typed-confirmation guards. **Implemented; validation pending.**
+5. Add adversarial tests for legacy-row preservation, idempotency, event/association atomicity, direct INSERT denial, and CLI guards. **Added; owner-run validation pending.**
+6. Complete the final architecture audit and resolve any test findings.
 7. Keep all runtime registration and actual first provisioning disabled.
 
 ## Validation boundary
