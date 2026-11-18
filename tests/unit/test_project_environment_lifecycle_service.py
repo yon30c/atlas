@@ -7,16 +7,13 @@ import unittest
 from uuid import uuid4
 
 from atlas.adapters.sqlite.database import SQLiteDatabase
-from atlas.adapters.sqlite.identity_authority import SQLiteIdentityAuthority
 from atlas.adapters.sqlite.local_authority_unit_of_work import SQLiteLocalAuthorityUnitOfWorkFactory
 from atlas.adapters.sqlite.migrations import SQLITE_MIGRATIONS
 from atlas.adapters.sqlite.platform_admin_bootstrap import SQLitePlatformAdminBootstrapAdapter
 from atlas.adapters.sqlite.project_environment_lifecycle_ledger import SQLiteProjectEnvironmentLifecycleLedger
-from atlas.adapters.sqlite.project_environment_repository import SQLiteProjectEnvironmentRepository
-from atlas.adapters.sqlite.workspace_registry_repository import SQLiteWorkspaceRegistryRepository
 from atlas.application.project_environment_lifecycle import ProjectEnvironmentLifecycleService
 from atlas.core.context import OperationContext
-from atlas.core.errors import AuthorizationError, ConcurrencyError, ContractError
+from atlas.core.errors import AuthorizationError, ConcurrencyError
 from atlas.core.identity import IdentityKind
 from atlas.core.platform_admin import (
     INITIAL_PLATFORM_ADMIN_PERMISSIONS,
@@ -199,7 +196,7 @@ class ProjectEnvironmentLifecycleServiceTests(unittest.TestCase):
 
     def test_missing_admin_authority_denies(self):
         with self.database.unit_of_work() as unit:
-            unit._unit._connection_for(self.database).execute(
+            unit._connection_for(self.database).execute(
                 "UPDATE platform_admin_grants SET status='revoked', revision=revision+1, revoked_at=?, revoked_by_user_id=?",
                 (NOW.isoformat(), self.user.user_id),
             )
