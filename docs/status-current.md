@@ -1,57 +1,79 @@
 # Estado vigente de Atlas
 
-> Corte documental: 16 de noviembre de 2026.
-> Prioridad acordada: Atlas funcional de prueba; endurecimiento avanzado de seguridad en pausa.
-> Rama revisada: `feature/terminal-commands`.
-> Commit base de la validación local: `610f027f1fe91933278e431d8a9ec29dd291b96e`.
-> Este documento registra el estado real conocido y prevalece sobre descripciones históricas anteriores que indiquen que la conversación sigue siendo solo en memoria o que la fase 2 no ha sido validada.
+> Corte documental: 18 de noviembre de 2026.
+> Rama revisada: `design/verified-agent-delegation-i3-2b`.
+> HEAD revisado: `dd95c3cd87448ff99056aea703111f0e9a8632a6`.
+> Suite completa más reciente reportada por el propietario en Debian: **1,513 tests — OK**.
+> La validación focalizada de 7B.6B y `compileall` no están confirmadas en este corte.
+> Este documento diferencia implementación publicada, validación local reportada y capacidades conectadas al runtime.
 
 ## Posicionamiento
 
-Atlas es un proyecto de software funcional en desarrollo incremental: ya ejecuta una experiencia conversacional local con Ollama, persiste conversaciones en SQLite y ofrece administración, exportación y recuperación de conversaciones. No es únicamente un conjunto de contratos o un prototipo visual.
+Atlas es software funcional en desarrollo incremental. Dispone de una experiencia conversacional local con Ollama, persistencia SQLite de conversaciones, administración, exportación y backup cifrado. En paralelo, el repositorio contiene una base creciente de Identity, Authentication, CAM, Project/Environment, Workspace y delegación AGENT.
 
-A la vez, Atlas todavía no es la plataforma autónoma completa de la visión. La capacidad conversacional funcional no implica que ya existan todos los gestores, agentes, automatizaciones o flujos protegidos de extremo a extremo.
+Atlas todavía no es la plataforma autónoma completa de la visión. La presencia de servicios, repositorios y pruebas no significa que las capacidades estén conectadas a la consola ni que exista un runtime protegido de extremo a extremo.
 
-## Capacidades funcionales verificadas en el repositorio
+## Capacidades implementadas en la rama revisada
 
-- Arranque local mediante `python -m atlas` y composición de consola.
-- Integración de Assistant con Ollama local, con streaming y endpoint limitado a loopback.
-- Modo offline informativo.
-- Historial persistente de conversaciones en SQLite independiente de la base de autoridad.
-- Recuperación de la conversación activa al reiniciar.
-- Gestión de conversaciones: crear, listar, seleccionar, renombrar, cerrar y eliminar con confirmación.
-- Exportación JSON versionada.
-- Backup cifrado, verificación y restauración a una ruta nueva.
-- Proyección limitada al modelo (8 turnos y 2.000 caracteres por mensaje), sin truncar el historial almacenado.
-- Eliminación transaccional con rollback ante fallo.
+- Consola conversacional local mediante `python -m atlas`, integración con Ollama, streaming y modo offline informativo.
+- Persistencia SQLite de conversaciones, recuperación de conversación activa, administración, exportación JSON y backup cifrado con verificación/restauración.
+- Interpretación y planificación funcional F1 mediante contratos y servicios aislados; no está conectada al flujo de consola.
+- Capacidades locales de Workspace para listar y leer archivos; protocolo controlado de escritura disponible como componente, pero no habilitado en el catálogo/runtime.
+- Gate CAM local de solo lectura para `workspace.list` y `workspace.read`, con identidad canónica, Project/Environment, Grant y UoW compartida; no conectado a CLI/runtime.
+- Persistencia canónica de Identity(USER), Project, Environment, Grants, asociaciones Project–Environment y Workspaces.
+- Primitivas de autenticación nativa con Argon2id, autenticadores, proofs de un solo uso y persistencia separada de Authentication Authority e Identity Authority.
+- Servicios de identidad verificada USER y AGENT, con validación de evidencia y revalidación dentro de la UoW cuando corresponde.
+- Identidad AGENT, binding nativo, delegaciones explícitas emitidas/revocadas por el propietario y evidencia de delegación verificada de corta duración.
+- Renovación delegada de Grants bajo CAM, con scope exacto y revalidación de identidad, delegación y asociación Project–Environment.
+- Bootstrap administrativo local de Platform Admin y lifecycle de asociaciones Project–Environment con CAS, ledger de eventos y composición confiable.
+- Separación de capacidades lifecycle 7B.6B: repositorio Workspace sin operaciones de transición de asociación y writer lifecycle interno ligado a la UoW del servicio.
 
 ## Evidencia local
 
-El usuario ejecutó en Debian, con `.venv` activado, el 16 de noviembre de 2026:
+El propietario reportó en Debian la ejecución de la suite completa:
 
-| Comprobación | Resultado |
-|---|---:|
-| `python -m unittest tests.unit.test_conversation_deletion -v` | 6/6 OK |
-| `python -m unittest discover -s tests -v` | 844/844 OK |
+```text
+Ran 1513 tests in 30.071s
 
-Las pruebas de eliminación utilizan bases temporales. Esta evidencia es una ejecución local reportada por el usuario; no es una ejecución de GitHub Actions ni una prueba de despliegue en producción. No se ejecutaron pruebas en GitHub durante la revisión documental.
+OK
+```
 
-También se habían realizado verificaciones manuales locales de persistencia, backup, verificación, restauración, exportación y eliminación sobre bases/rutas temporales.
+Este resultado valida la suite completa en el checkout que se ejecutó, pero no sustituye la revisión focalizada requerida para 7B.6B. Tampoco se ha reportado en este corte el resultado de `python -m compileall -q src tests`. No es una ejecución de GitHub Actions ni una prueba de despliegue productivo.
+
+**Comprobación focalizada pendiente para 7B.6B:**
+
+```bash
+PYTHONPATH=tests:tests/unit python -m unittest \
+  test_sqlite_project_environment_lifecycle_ledger \
+  test_sqlite_workspace_registry_repository \
+  test_project_environment_lifecycle_service \
+  test_sqlite_local_authority_unit_of_work -v
+
+python -m compileall -q src tests
+echo "COMPILE_EXIT_CODE=$?"
+```
+
+El resultado completo de 1,513 tests no permite afirmar por sí solo que cada escenario adversarial de CAS, reactivación ACTIVE/SUSPENDED, rechazo de Workspace ante asociación suspendida y read-your-writes del Ledger esté demostrado individualmente.
 
 ## Estado de dominios de la visión
 
 | Dominio | Estado documental |
 |---|---|
-| Atlas Terminal y conversaciones | Funcional en el alcance descrito; validación automatizada local aprobada |
-| Assistant / AtlasCore | Composición conversacional local funcional; coordinación general pendiente |
-| Identity / CAM | Modelos, servicios, contratos y persistencia local implementados parcialmente; autenticación externa y composición integral pendientes |
-| Memory Engine | Infraestructura de dominio, gateway, consistencia, journal, checkpoints y recuperación local implementados parcialmente; persistencia de contenido y autoridad protegida completa pendientes |
-| Broker | Tiene desarrollo operativo en su propio contexto; no debe confundirse con la consola conversacional ni atribuirse a este repositorio si no está en su árbol |
-| Project / Environment Manager | Pendiente como subsistema operativo completo |
-| Skills Manager | Pendiente como subsistema operativo completo; las Skills externas deben pasar por procedencia, análisis, permisos, aprobación, instalación aislada, auditoría y desactivación |
-| Agentes y Scheduler | Pendientes como runtime integrado |
+| Atlas Terminal y conversaciones | Funcional en el alcance conversacional descrito; no ejecuta herramientas |
+| Assistant / AtlasCore | Composición conversacional funcional; planificación aislada, orquestación de capacidades pendiente |
+| Authentication Authority | Primitivas nativas, Argon2id y persistencia implementadas; login desplegado y bootstrap de producción pendientes |
+| Identity Authority | Identidad canónica USER/AGENT y bindings nativos implementados; integración completa de clientes pendiente |
+| Verified identity | Servicios USER/AGENT y revalidación transaccional implementados; consumidores/runtime aún requieren integración y validación E2E |
+| CAM / Grants | Evaluación, emisión, revocación y renovación implementadas parcialmente; no equivalen a una autoridad protegida global |
+| Agent delegation | Contratos, persistencia, emisión/revocación del propietario y verificación de delegación implementados; runtime AGENT no habilitado |
+| Project / Environment | Fuentes canónicas y asociaciones persistidas; lifecycle con ledger y servicio implementados |
+| Workspace | Registro canónico, mount resolver y gate CAM read-only implementados; no conectado a la consola |
+| Memory Engine | Infraestructura de dominio, gateway, consistencia, journal, checkpoints y recuperación local parciales; contenido durable y autoridad protegida completa pendientes |
+| Broker | Desarrollo operativo separado; no integrado al runtime de Assistant |
+| Skills Manager | Pendiente como subsistema operativo; las Skills externas requieren procedencia, análisis, permisos, aprobación, instalación aislada, auditoría y desactivación |
+| Scheduler / Task Manager | Pendientes como runtime integrado |
 | Approval, eventos y notificaciones | Pendientes como flujos integrados completos |
-| Ejecución general de herramientas | No habilitada en la consola actual |
+| Runtime de herramientas | No habilitado en la consola actual |
 
 ## Límites que siguen vigentes
 
