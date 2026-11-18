@@ -21,7 +21,7 @@ from atlas.authentication.credentials import LoginHandle
 from atlas.authentication.native import NativeAuthenticationProof, NativeAuthenticator, NativeProofReference, NativeSubject
 from atlas.core.context import OperationContext
 from atlas.core.enums import DelegationMode
-from atlas.core.errors import AuthorizationError
+from atlas.core.errors import AuthorizationError, ContractError
 from atlas.identity.verified_identity_context_service import VerifiedIdentityContextRejected
 from atlas.core.identity import IdentityStatus
 from atlas.core.platform_admin import (
@@ -126,6 +126,40 @@ class TrustedLifecycleCompositionIntegrationTests(unittest.TestCase):
             project_id="atlas", environment="test", purpose="association lifecycle",
             classification="internal", created_at=NOW,
         )
+
+    def test_lifecycle_composition_reuses_the_supplied_authority_factory(self):
+        lifecycle = build_trusted_project_environment_lifecycle_service(
+            database=self.database,
+            clock=self.clock,
+            attestor=self.attestor,
+            realm=REALM,
+            audience=AUDIENCE,
+            context_ttl=timedelta(minutes=2),
+            unit_of_work_factory=self.factory,
+        )
+
+        self.assertIs(lifecycle._unit_of_work_factory, self.factory)
+        self.assertIs(
+            lifecycle._identity_verifier._uow_factory,
+            self.factory,
+        )
+
+    def test_lifecycle_composition_rejects_a_factory_for_another_database(self):
+        other_database = SQLiteDatabase(
+            Path(self.temp_dir.name) / "other-authority.sqlite"
+        )
+        other_factory = SQLiteLocalAuthorityUnitOfWorkFactory(other_database)
+
+        with self.assertRaises(ContractError):
+            build_trusted_project_environment_lifecycle_service(
+                database=self.database,
+                clock=self.clock,
+                attestor=self.attestor,
+                realm=REALM,
+                audience=AUDIENCE,
+                context_ttl=timedelta(minutes=2),
+                unit_of_work_factory=other_factory,
+            )
 
     def _provision_admin(self):
         # Keep the valid 90-day grant close to expiry so tests can prove grant expiry
