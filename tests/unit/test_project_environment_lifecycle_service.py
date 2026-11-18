@@ -130,9 +130,6 @@ class ProjectEnvironmentLifecycleServiceTests(unittest.TestCase):
             association_writer_factory=lambda unit: SQLiteProjectEnvironmentLifecycleAssociationWriter(
                 self.database, unit_of_work=unit
             ),
-            association_writer_factory=lambda unit: SQLiteProjectEnvironmentLifecycleAssociationWriter(
-                self.database, unit_of_work=unit
-            ),
         )
 
     def _provision_admin(self):
