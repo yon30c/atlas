@@ -28,6 +28,17 @@ class PlatformAdminBootstrapPort(Protocol):
     canonical Identity Authority checks inside that transaction.
     """
 
+    def get_operation(
+        self,
+        operation_id: str,
+    ) -> PlatformAdminBootstrapCommand | None:
+        """Read a previously committed operation for exact retry recovery.
+
+        This lookup is offline-only and must not be exposed by runtime
+        composition. Returned provenance and grant claims are the persisted
+        canonical values, not caller-supplied replacements.
+        """
+
     def provision_first_admin(
         self,
         command: PlatformAdminBootstrapCommand,
