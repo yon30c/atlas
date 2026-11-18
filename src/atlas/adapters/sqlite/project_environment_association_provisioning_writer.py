@@ -13,7 +13,6 @@ from uuid import UUID
 
 from atlas.adapters.sqlite.database import SQLiteDatabase, SQLiteUnitOfWork
 from atlas.core.errors import ContractError
-from atlas.memory.models import EnvironmentId, ProjectId
 from atlas.workspace.models import ProjectEnvironmentAssociation, ProjectEnvironmentStatus
 
 
