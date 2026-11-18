@@ -684,3 +684,7 @@ El verifier sigue siendo un doble controlado; no se afirma validar criptografía
 ### Nota de corrección 7B.4E
 
 El primer ensayo Debian encontró que el doble de prueba de commit pasaba al ledger el wrapper `SQLiteLocalAuthorityUnitOfWork` en lugar del `SQLiteUnitOfWork` interno. Se corrigió el wiring de la prueba a `unit._unit._unit`; no hubo cambios productivos. Validación pendiente de repetición.
+
+### Reejecución focalizada 7B.4E
+
+Tras corregir el doble de prueba, el propietario confirmó **26 tests en 1.664 s — OK**. Suite completa y `compileall` pendientes; la fase no se considera validada todavía.
