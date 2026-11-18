@@ -92,7 +92,7 @@ El corpus, harness y protocolo están en `tests/evaluation/phase3/`. P3-PI-002 s
 
 ## Fase 4 — Atlas funcional de prueba / capacidades del Assistant
 
-**Estado: En curso — base de autoridad e identidad en desarrollo; integración funcional del Assistant pendiente.** El objetivo sigue siendo disponer de un asistente local que complete flujos de trabajo de prueba de principio a fin. La rama actual ha avanzado en autenticación nativa, identidad verificada USER/AGENT, delegación AGENT, renovación CAM y lifecycle de asociaciones Project–Environment. Estos componentes son prerrequisitos de confianza y todavía no están conectados a la consola ni a un runtime protegido. El incremento 7B.6B requiere cerrar validación focalizada antes de avanzar a 7B.6C. El alcance funcional y sus criterios de aceptación están en [docs/functional-test-roadmap.md](functional-test-roadmap.md).
+**Estado: En curso — base de autoridad e identidad en desarrollo; integración funcional del Assistant pendiente.** El objetivo sigue siendo disponer de un asistente local que complete flujos de trabajo de prueba de principio a fin. La rama actual ha avanzado en autenticación nativa, identidad verificada USER/AGENT, delegación AGENT, renovación CAM y lifecycle de asociaciones Project–Environment. Estos componentes son prerrequisitos de confianza y todavía no están conectados a la consola ni a un runtime protegido. El incremento 7B.6B quedó validado y cerrado el 18 de noviembre de 2026 en Debian: 37 pruebas focalizadas OK, `compileall` con código 0 y `main` sincronizada con `origin/main`. El siguiente incremento propuesto es la auditoría read-only 7B.6C de imports, call-sites y exports. El alcance funcional y sus criterios de aceptación están en [docs/functional-test-roadmap.md](functional-test-roadmap.md).
 
 Objetivo: permitir que Atlas comprenda solicitudes, elabore planes y solicite capacidades de forma controlada, manteniendo al modelo fuera de la frontera de autoridad.
 
@@ -131,7 +131,7 @@ El Recovery Gate seguirá cerrado hasta demostrar autoridad, bootstrap y recuper
 | 2026-11-16 | 2 | Confirmada como completada | 6/6 pruebas focalizadas y 844/844 suite local en commit `610f027...` |
 | 2026-11-16 | 3 | Pausada por decisión del propietario | P3-SR con `schema_only`: 9/9 PASS determinísticos en una pasada; SR-008: 5/5. SR-006 conserva revisión semántica pendiente. No es aprobación de seguridad. |
 | 2026-11-16 | 4 | Convertida en prioridad actual: Atlas funcional de prueba | Acuerdo de construir capacidades end-to-end en entorno local de prueba; plan en `docs/functional-test-roadmap.md`. |
-| 2026-11-18 | 4 / Cycle 3.2 | Avance de identidad, delegación AGENT y lifecycle Project–Environment; 7B.6B pendiente de cierre focalizado | Suite completa reportada: 1,513 tests OK. Falta confirmar pruebas focalizadas de 7B.6B y `compileall`; no hay runtime protegido conectado. |
+| 2026-11-18 | 4 / Cycle 3.2 | Avance de identidad, delegación AGENT y lifecycle Project–Environment; 7B.6B validada y cerrada | Suite completa: 1,513 tests OK; validación focalizada: 37 tests OK; `compileall` exit 0; `main`/`origin/main` sincronizadas. Runtime protegido sigue desconectado. |
 
 ## Trabajo transversal fuera de estas fases
 
@@ -148,6 +148,6 @@ Las fases organizan el camino de entrega; no sustituyen el estado de cada domini
 
 ## Actualización de seguimiento — 18 de noviembre de 2026
 
-La rama de trabajo actual incorpora Authentication/Identity Authority nativa, servicios de contexto verificado USER/AGENT, delegación AGENT con consentimiento del propietario, renovación delegada bajo CAM y lifecycle auditable de asociaciones Project–Environment. La separación de capacidades de escritura lifecycle (7B.6B) está implementada, pero no debe marcarse como cerrada hasta recibir las pruebas focalizadas y `compileall` en Debian.
+La rama de trabajo actual incorpora Authentication/Identity Authority nativa, servicios de contexto verificado USER/AGENT, delegación AGENT con consentimiento del propietario, renovación delegada bajo CAM y lifecycle auditable de asociaciones Project–Environment. La separación de capacidades de escritura lifecycle (7B.6B) está implementada y validada en Debian: 37 pruebas focalizadas OK y `compileall` exit 0 sobre `main` (`f0070dd`). Queda cerrada en el alcance validado. 7B.6C se plantea como auditoría read-only de imports/call-sites/exports antes de cualquier cambio adicional.
 
 El propietario reportó la suite completa: **1,513 tests — OK**. Esta evidencia no equivale a validación E2E ni a habilitación de login, endpoints, runtime AGENT o herramientas. La Fase 4 continúa en curso; F3–F5 siguen pendientes como flujos funcionales integrados. La Fase 3 de evaluación avanzada permanece pausada.
