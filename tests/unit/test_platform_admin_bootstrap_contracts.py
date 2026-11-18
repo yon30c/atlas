@@ -259,9 +259,13 @@ class PlatformAdminBootstrapContractTests(unittest.TestCase):
                 now=self.confirmed_at + timedelta(days=2),
             )
 
+        limited_grant = replace(
+            self.grant,
+            permissions=frozenset({PlatformAdminPermission.ASSOCIATION_SUSPEND}),
+        )
         with self.assertRaises(AuthorizationError):
             require_platform_admin_permission(
-                self.grant,
+                limited_grant,
                 permission=PlatformAdminPermission.ASSOCIATION_REACTIVATE,
                 user_id=self.user_id,
                 user_identity_id=self.identity_id,
