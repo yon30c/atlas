@@ -70,7 +70,7 @@ class SQLitePlatformAdminAuthorityTests(unittest.TestCase):
         return grant_id
 
     def test_migrations_through_v27_are_registered_and_idempotently_reapplied(self):
-        self.assertEqual(self.database.apply_migrations(SQLITE_MIGRATIONS), 26)
+        self.assertEqual(self.database.apply_migrations(SQLITE_MIGRATIONS), 27)
         with self.database.connection() as connection:
             version = connection.execute(
                 "SELECT MAX(version) FROM schema_migrations"
