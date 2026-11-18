@@ -235,6 +235,11 @@ class SQLiteProjectEnvironmentAssociationProvisioningTests(unittest.TestCase):
 
     def test_reader_and_general_uow_do_not_expose_creation_capability(self):
         self.assertFalse(hasattr(self.reader, "create_association"))
+        import atlas.adapters.sqlite as sqlite_package
+        self.assertNotIn(
+            "SQLiteProjectEnvironmentAssociationProvisioningWriter",
+            sqlite_package.__all__,
+        )
         from atlas.adapters.sqlite.local_authority_unit_of_work import (
             SQLiteLocalAuthorityUnitOfWork,
         )
