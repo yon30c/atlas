@@ -14,7 +14,6 @@ from atlas.adapters.sqlite.recovery_evidence_trust_policy_repository import (
     SQLiteRecoveryEvidenceIssuerTrustPolicyRepository,
 )
 from atlas.adapters.sqlite.project_environment_repository import SQLiteProjectEnvironmentRepository
-from atlas.adapters.sqlite.project_environment_lifecycle_ledger import SQLiteProjectEnvironmentLifecycleLedger
 from atlas.adapters.sqlite.identity_authority import SQLiteIdentityAuthority
 from atlas.adapters.sqlite.agent_identity_authority import SQLiteAgentIdentityAuthority
 from atlas.adapters.sqlite.agent_delegation_repository import SQLiteAgentDelegationRepository
@@ -47,7 +46,7 @@ __all__ = [
     "SQLiteRecoveryEvidenceIssuerTrustPolicyRepository",
     "SQLiteRecoveryEvidenceIssuerRegistryRepository",
     "SQLiteRecoveryEvidenceAdmissionRepository",
-    "SQLiteProjectEnvironmentRepository", "SQLiteProjectEnvironmentLifecycleLedger", "SQLiteWorkspaceRegistryRepository",
+    "SQLiteProjectEnvironmentRepository", "SQLiteWorkspaceRegistryRepository",
     "SQLiteIdentityAuthority", "SQLiteAgentIdentityAuthority", "SQLiteNativeAgentIdentityAuthority", "SQLiteAgentDelegationRepository",
     "SQLiteNativeIdentityAuthority", "SQLiteNativeAuthenticationAuthority",
     "SQLiteLocalAuthorityUnitOfWork", "SQLiteLocalAuthorityUnitOfWorkFactory",
