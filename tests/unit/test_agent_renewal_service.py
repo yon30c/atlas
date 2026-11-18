@@ -62,7 +62,7 @@ class FakeProjectEnvironment:
         return SimpleNamespace(environment_id=environment_id, status="active", revision=1)
 
 
-class FakeWorkspaceRegistry:
+class FakeProjectEnvironmentAssociations:
     def __init__(self):
         self.association = SimpleNamespace(
             project_id="atlas",
@@ -103,7 +103,7 @@ class FakeUnit:
         self.native_identity = object()
         self.identity = object()
         self.project_environments = FakeProjectEnvironment()
-        self.workspaces = FakeWorkspaceRegistry()
+        self.project_environment_associations = FakeProjectEnvironmentAssociations()
         self.committed = False
 
     def __enter__(self):
@@ -296,7 +296,7 @@ class AgentRenewalServiceTests(unittest.TestCase):
         original = FakeUnit
         def factory():
             unit = original(self.grant, self.renewals)
-            del unit.workspaces
+            del unit.project_environment_associations
             self.units.append(unit)
             return unit
         self.service._unit_of_work_factory = factory
@@ -310,7 +310,7 @@ class AgentRenewalServiceTests(unittest.TestCase):
         original = FakeUnit
         def factory():
             unit = original(self.grant, self.renewals)
-            unit.workspaces.association = None
+            unit.project_environment_associations.association = None
             self.units.append(unit)
             return unit
         self.service._unit_of_work_factory = factory
@@ -324,7 +324,7 @@ class AgentRenewalServiceTests(unittest.TestCase):
         original = FakeUnit
         def factory():
             unit = original(self.grant, self.renewals)
-            unit.workspaces.association = SimpleNamespace(
+            unit.project_environment_associations.association = SimpleNamespace(
                 project_id="atlas",
                 environment_id="development",
                 status=ProjectEnvironmentStatus.SUSPENDED,
