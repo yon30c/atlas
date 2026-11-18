@@ -15,3 +15,4 @@ where = ["src"]
 
 [project.scripts]
 atlas = "atlas.cli:main"
+atlas-platform-admin-bootstrap = "atlas.platform_admin_bootstrap_cli:main"
