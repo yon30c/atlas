@@ -2682,8 +2682,132 @@ CORE_SCHEMA_V25 = SQLiteMigration(
 )
 
 
+# v26 adds an immutable lifecycle ledger for Project/Environment association
+# transitions. Existing associations remain valid with no fabricated history.
+CORE_SCHEMA_V26 = SQLiteMigration(
+    version=26,
+    name="audited_project_environment_association_lifecycle",
+    sql="""
+    CREATE TABLE atlas_project_environment_lifecycle_events (
+        event_id TEXT PRIMARY KEY CHECK (
+            length(event_id) = 36 AND event_id = lower(event_id)
+            AND length(replace(event_id, '-', '')) = 32
+            AND substr(event_id, 9, 1) = '-'
+            AND substr(event_id, 14, 1) = '-'
+            AND substr(event_id, 19, 1) = '-'
+            AND substr(event_id, 24, 1) = '-'
+            AND substr(event_id, 15, 1) = '4'
+            AND substr(event_id, 20, 1) IN ('8', '9', 'a', 'b')
+            AND event_id NOT GLOB '*[^0-9a-f-]*'
+        ),
+        project_id TEXT NOT NULL,
+        environment_id TEXT NOT NULL,
+        previous_status TEXT NOT NULL CHECK (previous_status IN ('active', 'suspended')),
+        new_status TEXT NOT NULL CHECK (new_status IN ('active', 'suspended')),
+        previous_revision INTEGER NOT NULL CHECK (previous_revision > 0),
+        new_revision INTEGER NOT NULL CHECK (new_revision = previous_revision + 1),
+        actor_user_id TEXT NOT NULL REFERENCES atlas_users(user_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+        actor_identity_id TEXT NOT NULL REFERENCES identity_records(identity_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+        verified_identity_context_id TEXT NOT NULL CHECK (
+            length(verified_identity_context_id) = 36
+            AND verified_identity_context_id = lower(verified_identity_context_id)
+            AND length(replace(verified_identity_context_id, '-', '')) = 32
+            AND substr(verified_identity_context_id, 15, 1) = '4'
+            AND substr(verified_identity_context_id, 20, 1) IN ('8', '9', 'a', 'b')
+            AND verified_identity_context_id NOT GLOB '*[^0-9a-f-]*'
+        ),
+        request_id TEXT NOT NULL CHECK (length(trim(request_id)) > 0),
+        correlation_id TEXT NOT NULL CHECK (length(trim(correlation_id)) > 0),
+        reason TEXT NOT NULL CHECK (
+            length(reason) BETWEEN 1 AND 500
+            AND reason = trim(reason)
+            AND instr(reason, char(9)) = 0
+            AND instr(reason, char(10)) = 0
+            AND instr(reason, char(13)) = 0
+            AND instr(reason, char(0)) = 0
+        ),
+        occurred_at TEXT NOT NULL CHECK (length(trim(occurred_at)) > 0),
+        UNIQUE (project_id, environment_id, new_revision),
+        UNIQUE (event_id, project_id, environment_id),
+        FOREIGN KEY (project_id, environment_id)
+            REFERENCES atlas_project_environments(project_id, environment_id)
+            ON UPDATE RESTRICT ON DELETE RESTRICT,
+        CHECK (previous_status != new_status)
+    );
+
+    CREATE INDEX atlas_project_environment_lifecycle_by_association
+        ON atlas_project_environment_lifecycle_events(
+            project_id, environment_id, new_revision
+        );
+    CREATE INDEX atlas_project_environment_lifecycle_by_actor
+        ON atlas_project_environment_lifecycle_events(actor_user_id, occurred_at);
+
+    ALTER TABLE atlas_project_environments
+        ADD COLUMN last_lifecycle_event_id TEXT
+        REFERENCES atlas_project_environment_lifecycle_events(event_id)
+        ON UPDATE RESTRICT ON DELETE RESTRICT
+        DEFERRABLE INITIALLY DEFERRED;
+
+    CREATE TRIGGER atlas_project_environment_lifecycle_event_matches_current
+    BEFORE INSERT ON atlas_project_environment_lifecycle_events
+    WHEN NOT EXISTS (
+        SELECT 1
+        FROM atlas_project_environments association
+        JOIN atlas_users user_record
+          ON user_record.user_id = NEW.actor_user_id
+        JOIN identity_records actor_identity
+          ON actor_identity.identity_id = user_record.identity_id
+        WHERE association.project_id = NEW.project_id
+          AND association.environment_id = NEW.environment_id
+          AND association.status = NEW.previous_status
+          AND association.revision = NEW.previous_revision
+          AND user_record.identity_id = NEW.actor_identity_id
+          AND actor_identity.identity_kind = 'user'
+          AND actor_identity.identity_status = 'active'
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'lifecycle event requires current association and active canonical USER actor');
+    END;
+
+    CREATE TRIGGER atlas_project_environment_lifecycle_event_no_update
+    BEFORE UPDATE ON atlas_project_environment_lifecycle_events
+    BEGIN
+        SELECT RAISE(ABORT, 'Project/Environment lifecycle events are immutable');
+    END;
+
+    CREATE TRIGGER atlas_project_environment_lifecycle_event_no_delete
+    BEFORE DELETE ON atlas_project_environment_lifecycle_events
+    BEGIN
+        SELECT RAISE(ABORT, 'Project/Environment lifecycle events are retained');
+    END;
+
+    CREATE TRIGGER atlas_project_environment_transition_requires_event
+    BEFORE UPDATE ON atlas_project_environments
+    WHEN NEW.status = OLD.status
+      OR NEW.revision != OLD.revision + 1
+      OR NEW.last_lifecycle_event_id IS NULL
+      OR NOT EXISTS (
+          SELECT 1
+          FROM atlas_project_environment_lifecycle_events event
+          WHERE event.event_id = NEW.last_lifecycle_event_id
+            AND event.project_id = OLD.project_id
+            AND event.environment_id = OLD.environment_id
+            AND event.previous_status = OLD.status
+            AND event.new_status = NEW.status
+            AND event.previous_revision = OLD.revision
+            AND event.new_revision = NEW.revision
+      )
+    BEGIN
+        SELECT RAISE(ABORT, 'association transition requires its matching immutable lifecycle event');
+    END;
+    """,
+)
+
+
 SQLITE_MIGRATIONS = (
     CORE_SCHEMA_V1, CORE_SCHEMA_V2, CORE_SCHEMA_V3, CORE_SCHEMA_V4,
     CORE_SCHEMA_V5, CORE_SCHEMA_V6, CORE_SCHEMA_V7, CORE_SCHEMA_V8,
-    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13, CORE_SCHEMA_V14, CORE_SCHEMA_V15, CORE_SCHEMA_V16, CORE_SCHEMA_V17, CORE_SCHEMA_V18, CORE_SCHEMA_V19, CORE_SCHEMA_V20, CORE_SCHEMA_V21, CORE_SCHEMA_V22, CORE_SCHEMA_V23, CORE_SCHEMA_V24, CORE_SCHEMA_V25,
+    CORE_SCHEMA_V9, CORE_SCHEMA_V10, CORE_SCHEMA_V11, CORE_SCHEMA_V12, CORE_SCHEMA_V13, CORE_SCHEMA_V14, CORE_SCHEMA_V15, CORE_SCHEMA_V16, CORE_SCHEMA_V17, CORE_SCHEMA_V18, CORE_SCHEMA_V19, CORE_SCHEMA_V20, CORE_SCHEMA_V21, CORE_SCHEMA_V22, CORE_SCHEMA_V23, CORE_SCHEMA_V24, CORE_SCHEMA_V25, CORE_SCHEMA_V26,
 )
