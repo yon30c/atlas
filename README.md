@@ -60,6 +60,10 @@ La consola local y las conversaciones persistentes siguen siendo funcionales, pe
 - [Diseño V2 del observador LOCAL de procesos](docs/design/local-bootstrap-observer-v2-design.md)
 - [Diseño V3 del observador de cadena sudo](docs/design/local-bootstrap-chain-observer-v3-design.md)
 - [Evaluación Candidate A/B y separación de privilegios](docs/design/local-bootstrap-candidate-evaluation-2026-11-16.md)
+- [Contrato de delegación verificada AGENT I3-2B](docs/design/verified-agent-delegation-contract-i3-2b.md)
+- [Auditoría CAM de renovación delegada](docs/design/i3-2b-cam-renewal-integration-audit.md)
+- [Auditoría de frontera lifecycle 7B.6A](docs/design/i3-2b-7b6a-lifecycle-write-boundary-audit.md)
+- [Separación de capacidades lifecycle 7B.6B](docs/design/i3-2b-7b6b-lifecycle-write-capability-separation.md)
 - [Hoja de ruta general por fases](docs/roadmap.md)
 - [Fase 3 — Inteligencia y comportamiento seguro](docs/phase-3-intelligence.md)
 - [Atlas Terminal](docs/terminal/README.md)
@@ -122,14 +126,14 @@ La ruta predeterminada de la base es `~/.local/state/atlas/conversations.sqlite3
 - Verificación y consumo de pruebas de revocación, coordinación de cambios de autoridad y reservas durables con idempotencia semántica.
 - Contratos y pruebas de autorización, renovación, revocación y límites de acceso.
 
-**Persistencia de identidad SQLite v1–v6:**
+**Persistencia SQLite de identidad — referencia histórica v1–v6:**
 
 - **v1–v3:** dominio local de consistencia, journal, checkpoints e identidad de append.
 - **v4:** ledger durable de cambios de autoridad, invalidaciones y evidencia de recuperación.
 - **v5:** relación canónica entre `UserId` interno e `Identity(USER)`.
 - **v6:** integridad bidireccional de la relación USER mediante claves foráneas diferidas.
 
-La migración v6 exige que una identidad USER tenga su registro canónico de usuario correspondiente y viceversa al confirmar la transacción. Las migraciones son consecutivas, inmutables y verificadas mediante checksum.
+La migración v6 exige que una identidad USER tenga su registro canónico de usuario correspondiente y viceversa al confirmar la transacción. Las migraciones son consecutivas, inmutables y verificadas mediante checksum. El esquema evolucionó posteriormente con persistencia nativa de autenticación/identidad, delegación AGENT, renovaciones y lifecycle Project–Environment; el detalle vigente se registra en `docs/status-current.md` y los diseños de Cycle 3.2/I3-2B.
 
 **Límites pendientes:**
 
@@ -337,14 +341,14 @@ source .venv/bin/activate
 python -m unittest discover -s tests -v
 ```
 
-**Última evidencia local reportada por el usuario (16 de noviembre de 2026):**
+**Última evidencia local reportada por el usuario (18 de noviembre de 2026):**
 
-- Pruebas específicas de eliminación: **6/6 aprobadas**.
-- Suite completa: **844 pruebas aprobadas**, 0 fallos y 0 errores (3.304 segundos).
-- Entorno: Debian, dentro del entorno virtual `.venv`.
-- Código probado: commit `610f027f1fe91933278e431d8a9ec29dd291b96e`.
+- Suite completa: **1,513 tests — OK** (30.071 segundos).
+- Entorno: Debian, dentro del entorno virtual del proyecto.
+- HEAD reportado en la rama de trabajo: `dd95c3cd87448ff99056aea703111f0e9a8632a6`.
+- La validación focalizada de 7B.6B y `python -m compileall -q src tests` todavía no están confirmadas en este corte.
 
-Estas son ejecuciones locales; no son resultados de GitHub Actions ni validación de despliegue productivo. No se ejecutaron pruebas en GitHub durante esta revisión documental.
+La evidencia de 844 tests del 16 de noviembre pertenece a un checkpoint histórico y no representa el estado actual. Las ejecuciones son locales; no son resultados de GitHub Actions ni validación de despliegue productivo.
 
 ## Documentación técnica y contractual
 
@@ -386,14 +390,14 @@ Estas son ejecuciones locales; no son resultados de GitHub Actions ni validació
 
 El orden recomendado evita conectar el Assistant a capacidades que aún no tienen persistencia y autoridad completas:
 
-1. **Cerrar el núcleo durable de Memory Engine:** persistencia de dominio, repositorios, UoW y contratos de contenido.
-2. **Completar la autoridad protegida:** admisión, invalidación, fencing, egress y recuperación dentro de una única composición durable.
-3. **Completar Forget:** autorización directa del propietario, inventario exhaustivo, adaptadores de eliminación y verificación de todos los destinos.
-4. **Cerrar bootstrap y recuperación:** evidencia autenticada, reconciliación y anti-rollback para el perfil que lo requiera; mantener el Gate cerrado hasta entonces.
-5. **Demostrar independencia de Memory Engine:** contrato público, composición mínima y pruebas desde un consumidor externo a Atlas.
-6. **Integrar MemoryGateway con AtlasCore:** solo después de superar las fases anteriores.
-7. **Desarrollar Project/Environment Manager, Skills Manager, agentes y Scheduler.**
-8. **Completar aprobaciones, eventos, notificaciones, runtime de herramientas y recuperación integral de Atlas.**
+1. **Cerrar 7B.6B y completar 7B.6C:** validar lifecycle writer/ledger/workspace en Debian y auditar imports, call-sites y exports antes de exponer nuevas capacidades.
+2. **Cerrar el bootstrap e integración de identidad:** terminar login/sesiones de usuario y el contexto verificado de clientes; no inferir autoridad desde el sistema operativo.
+3. **Completar la autoridad protegida:** admisión, invalidación, fencing, egress y recuperación dentro de una composición durable.
+4. **Integrar Project/Environment y Workspace al flujo de aplicación:** mantener el gate read-only hasta demostrar autorización y composición E2E.
+5. **Completar el núcleo durable de Memory Engine y Forget:** persistencia de contenido, inventario de destinos, adaptadores de eliminación y verificación.
+6. **Demostrar independencia de Memory Engine:** contrato público, composición mínima y pruebas desde un consumidor externo a Atlas.
+7. **Integrar MemoryGateway con AtlasCore** solo después de superar las fases anteriores.
+8. **Desarrollar Task Manager, Skills Manager, agentes en runtime, Scheduler, aprobaciones, eventos, notificaciones y recuperación integral.**
 
 ## Alcance de este repositorio
 
