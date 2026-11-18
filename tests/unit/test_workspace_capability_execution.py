@@ -12,6 +12,7 @@ from atlas.adapters.sqlite.local_authority_unit_of_work import (
 )
 from atlas.adapters.sqlite.database import SQLiteDatabase
 from atlas.adapters.sqlite.migrations import SQLITE_MIGRATIONS
+from atlas.adapters.sqlite.project_environment_lifecycle_association_writer import SQLiteProjectEnvironmentLifecycleAssociationWriter
 from atlas.application.workspace_capability_execution import (
     WorkspaceCapabilityExecutionService,
 )
@@ -58,7 +59,7 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
             unit.project_environments.create_environment(
                 EnvironmentMetadata(EnvironmentId("test"), "active", 1)
             )
-            unit.workspaces.create_association(
+            unit.project_environment_associations.create_association(
                 ProjectEnvironmentAssociation(
                     ProjectId("atlas-demo"),
                     EnvironmentId("test"),
@@ -289,7 +290,7 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
     def test_suspended_project_environment_association_denies(self):
         from dataclasses import replace
         with self.uow_factory() as unit:
-            current = unit.workspaces.get_association(
+            current = unit.project_environment_associations.get_association(
                 ProjectId("atlas-demo"), EnvironmentId("test")
             )
             lifecycle_event_id = str(uuid4())
@@ -309,7 +310,10 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
                     NOW.isoformat(),
                 ),
             )
-            unit.workspaces.update_association(
+            writer = SQLiteProjectEnvironmentLifecycleAssociationWriter(
+                self.database, unit_of_work=unit
+            )
+            writer.update_association(
                 replace(current, status=ProjectEnvironmentStatus.SUSPENDED, revision=2),
                 expected_revision=1,
                 lifecycle_event_id=lifecycle_event_id,
