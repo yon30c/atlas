@@ -19,6 +19,7 @@ from atlas.adapters.sqlite.project_environment_lifecycle_association_writer impo
 from atlas.core.errors import ConcurrencyError, ContractError, NotFoundError
 from atlas.memory.metadata import EnvironmentMetadata, ProjectMetadata
 from atlas.memory.models import EnvironmentId, ProjectId
+from association_provisioning_test_support import provision_association
 from atlas.workspace.models import (
     ProjectEnvironmentAssociation,
     ProjectEnvironmentStatus,
@@ -80,7 +81,7 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
         return self.associations.get_association(ProjectId("atlas"), EnvironmentId("test"))
 
     def test_create_and_read_explicit_project_environment_association(self):
-        self.associations.create_association(self.association)
+        provision_association(self.database, self.association)
         self.assertEqual(
             self.associations.get_association(ProjectId("atlas"), EnvironmentId("test")),
             self.association,
@@ -91,7 +92,7 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
             ProjectId("missing"), EnvironmentId("test"), ProjectEnvironmentStatus.ACTIVE
         )
         with self.assertRaises(ContractError):
-            self.associations.create_association(invalid)
+            provision_association(self.database, invalid)
 
     def test_association_status_uses_compare_and_swap_revision(self):
         self.associations.create_association(self.association)
@@ -194,7 +195,7 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
                 self.assertFalse(hasattr(unit.workspaces, "create_association"))
                 self.assertFalse(hasattr(unit.workspaces, "update_association"))
                 self.assertTrue(hasattr(unit.project_environment_associations, "get_association"))
-                self.assertTrue(hasattr(unit.project_environment_associations, "create_association"))
+                self.assertFalse(hasattr(unit.project_environment_associations, "create_association"))
                 self.assertFalse(hasattr(unit.project_environment_associations, "update_association"))
                 self.assertIs(unit.project_environment_associations._unit_of_work, unit._unit)
                 unit.workspaces.create_workspace(self.workspace)
