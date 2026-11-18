@@ -126,3 +126,19 @@ Con este resultado quedan validados por el propietario:
 **Límite importante:** la validación usa bases SQLite temporales de pruebas. No se ejecutó el bootstrap real, no se creó ningún Platform Admin y no se modificó ninguna base productiva.
 
 **Siguiente slice:** I3-2B.7B.3C — servicio de aplicación de bootstrap. Antes de implementarlo se inspeccionarán las convenciones de servicios, Clock, composición y errores del repositorio. El servicio coordinará identidad canónica, tiempo confiable y adaptador offline; todavía no añadirá CLI ni ejecutará provisión real.
+
+
+## 8. I3-2B.7B.3C — servicio de aplicación
+
+Se publicó el siguiente incremento de aplicación:
+- `src/atlas/application/platform_admin_bootstrap.py`
+- `tests/unit/test_platform_admin_bootstrap_service.py`
+- `docs/design/i3-2b-7b3c-platform-admin-bootstrap-application-service.md`
+
+El servicio resuelve el USER canónico, exige estado ACTIVE, toma el instante UTC del puerto `Clock`, genera los identificadores UUIDv4 de evento y grant, construye el grant inicial exacto de 90 días y delega la escritura al puerto offline. No incorpora el writer a runtime ni abre una transacción paralela.
+
+La lectura de identidad del servicio es preparatoria: el adaptador SQLite conserva la revalidación autoritativa de USER/identity_id/revisión dentro de `BEGIN IMMEDIATE`, junto con idempotencia, exclusividad histórica y escritura atómica.
+
+Se añadieron cinco pruebas unitarias de servicio. **Aún no se han ejecutado en Debian**; la validación del propietario queda pendiente. No se debe considerar 7B.3C cerrada hasta recibir el resultado de las pruebas focalizadas, suite completa y compileall.
+
+La futura fase 7B.3D seguirá siendo responsable de TTY real, captura de UID/terminal y confirmación interactiva. No se ha creado ni ejecutado CLI y no se ha realizado ningún bootstrap real.
