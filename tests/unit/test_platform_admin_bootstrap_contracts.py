@@ -70,6 +70,12 @@ class PlatformAdminBootstrapContractTests(unittest.TestCase):
                 user_id=self.user_id,
                 permissions=frozenset(),
             )
+        with self.assertRaises(ContractError):
+            PlatformAdminBootstrapRequest(
+                operation_id=self.operation_id,
+                user_id=self.user_id,
+                permissions=frozenset({"association.suspend", "association.reactivate"}),
+            )
 
     def test_request_requires_canonical_uuid4_identifiers(self):
         with self.assertRaises(ContractError):
@@ -132,7 +138,13 @@ class PlatformAdminBootstrapContractTests(unittest.TestCase):
         )
 
     def test_command_rejects_mismatched_subject_event_or_permissions(self):
-        variants = (replace(self.grant, user_id=_uuid()),)
+        variants = (
+            replace(self.grant, user_id=_uuid()),
+            replace(
+                self.grant,
+                permissions=frozenset({PlatformAdminPermission.ASSOCIATION_SUSPEND}),
+            ),
+        )
         for grant in variants:
             with self.subTest(grant=grant):
                 with self.assertRaises(ContractError):
