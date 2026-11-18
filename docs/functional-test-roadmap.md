@@ -1,7 +1,7 @@
 # Atlas funcional de prueba — plan de trabajo
 
-> Prioridad acordada: 16 de noviembre de 2026.
-> Rama de trabajo: `feature/terminal-commands`.
+ > Prioridad acordada: 16 de noviembre de 2026.\n> Corte de estado: 18 de noviembre de 2026.
+ > Rama de trabajo actual: `design/verified-agent-delegation-i3-2b`.
 > Objetivo: convertir la base conversacional existente en un asistente local capaz de completar flujos útiles de principio a fin en un entorno de prueba.
 > Este plan no declara Atlas listo para producción.
 
@@ -171,7 +171,7 @@ Los escenarios se ampliarán conforme existan capacidades implementadas. No se m
 
 ## 6. Reglas de desarrollo para esta etapa
 
-- Trabajar sobre la rama `feature/terminal-commands`.
+- Trabajar sobre la rama de incremento vigente, actualmente `design/verified-agent-delegation-i3-2b`; integrar a `main` solo después de validación y revisión documental.
 - Inspeccionar el código y las pruebas existentes antes de crear módulos nuevos.
 - Reutilizar componentes funcionales y evitar reescrituras amplias.
 - Implementar un incremento pequeño por vez.
@@ -208,7 +208,7 @@ Para cada siguiente incremento:
 6. Revisar los resultados antes de continuar.
 7. Actualizar esta documentación con evidencia, commit y estado real.
 
-**Siguiente acción vigente:** Ciclo 3.2: resolver el contexto canónico de la consola y la configuración confiable/ownership de workspaces. No adaptar `LocalConsoleRequestFactory` como identidad autorizada: genera una identidad sintética, sin UserId canónico ni proyecto. Después, continuar F3 y F4/F5. La integración de Memory Engine y Atlas Broker se planifica en las secciones 10 y 11; no se conecta ningún runtime privilegiado antes de cerrar identidad, contexto y autorización.
+**Siguiente acción vigente:** completar la validación focalizada de 7B.6B en Debian y confirmar `compileall`; no avanzar a 7B.6C hasta revisar los resultados. El objetivo de 7B.6C es el inventario exhaustivo de imports/call-sites y la verificación de que no queda una ruta alternativa de transición lifecycle. La consola continúa sin identidad autorizada: `LocalConsoleRequestFactory` no debe convertirse en autoridad. Después de cerrar el lifecycle y la frontera de identidad, continuar la integración funcional F3–F5. No conectar runtime privilegiado, Broker ni herramientas de consola por la sola presencia de contratos o adaptadores.
 
 
 ### F2.3.3b — Inspección de autoridad y consistencia
@@ -718,3 +718,31 @@ La consola no puede fabricar identidad ni contexto verificado. La conversación 
 **Estado:** implementación en rama de trabajo; pendiente de verificación del propietario. La migración aditiva v18 añade asociaciones explícitas muchos-a-muchos Project–Environment y registros de workspace con owner canónico, ámbito compuesto y `root_ref` simbólico `mount:<id>`. No se infieren asociaciones históricas ni se crean workspaces por defecto. Los registros conservan tombstones; identidad, owner, ámbito y root_ref del workspace son inmutables; las actualizaciones de estado usan revisión CAS. La creación requiere un owner existente y una asociación Project–Environment activa. `SQLiteWorkspaceRegistryRepository` queda expuesto como `unit.workspaces` dentro de `SQLiteLocalAuthorityUnitOfWork`. Se añadieron pruebas unitarias para integridad referencial, ownership, asociación activa, CAS, inmutabilidad, validación de root_ref y rollback. **No declarar validado hasta recibir la salida de la suite en Debian.**
 
 Cycle 3.2-A no conecta CLI/runtime, no modifica `WorkspaceCapabilityExecutionService`, no resuelve mounts a rutas físicas y no habilita autenticación ni capacidades protegidas. El siguiente incremento es 3.2-B: resolver `root_ref` desde configuración confiable y revalidar owner, Project, Environment, asociación activa y Grant exacto dentro de la misma UoW antes de filesystem.
+
+
+## 15. Estado de Cycle 3.2 / I3-2B y lifecycle Project–Environment (18-11-2026)
+
+La rama `design/verified-agent-delegation-i3-2b` contiene incrementos de identidad nativa, identidad verificada, delegación AGENT, renovación delegada y lifecycle de asociaciones. Este trabajo amplía las precondiciones de autoridad necesarias para el futuro flujo funcional, pero **no equivale a conectar esas capacidades al Assistant ni a habilitar un runtime AGENT**.
+
+### Implementado en la rama
+
+- Autenticación nativa con credenciales Argon2id, autenticadores y proofs de un solo uso; persistencia separada de Authentication Authority e Identity Authority.
+- Identidad canónica USER/AGENT y bindings nativos separados.
+- Emisión y revocación de delegaciones por el propietario verificado; scopes explícitos y evidencia AGENT de corta duración.
+- Renovación delegada de Grants con acción CAM explícita, cobertura exacta de recursos y revalidación de identidad, Grant, delegación y asociación Project–Environment.
+- Bootstrap local de Platform Admin y lifecycle de asociaciones con eventos inmutables, CAS, ledger y servicio de aplicación.
+- 7B.6A auditó la frontera de escritura lifecycle; 7B.6B separó los repositorios de lectura/Workspace del writer lifecycle y limitó ese writer a la composición confiable.
+
+### Validación conocida
+
+El propietario reportó en Debian la suite completa: **1,513 tests — OK** (30.071 s). Esta evidencia no reemplaza la comprobación focalizada de 7B.6B. En el corte actual siguen pendientes la salida focalizada de los cuatro módulos afectados y el resultado de `python -m compileall -q src tests`. No afirmar que CAS, reactivación, precondición ACTIVE de Workspace y read-your-writes están cerrados hasta revisar esos resultados.
+
+### Secuencia obligatoria
+
+1. Repetir las pruebas focalizadas de Ledger, Workspace Registry, servicio lifecycle y UoW local.
+2. Ejecutar `compileall` y registrar el código de salida.
+3. Confirmar HEAD y árbol limpio en Debian.
+4. Solo si todo pasa, cerrar 7B.6B y comenzar 7B.6C (barrido de imports/call-sites y revisión de exports).
+5. Integrar a `main` mediante la ruta de integración revisada, conservando la rama de trabajo y sin habilitar runtime.
+
+Documentos de diseño: [auditoría 7B.6A](design/i3-2b-7b6a-lifecycle-write-boundary-audit.md), [separación 7B.6B](design/i3-2b-7b6b-lifecycle-write-capability-separation.md) y [auditoría CAM de renovación AGENT](design/i3-2b-cam-renewal-integration-audit.md).
