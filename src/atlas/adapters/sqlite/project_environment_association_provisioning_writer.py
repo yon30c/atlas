@@ -87,7 +87,7 @@ class SQLiteProjectEnvironmentAssociationProvisioningWriter:
         terminal_id = self._text(terminal_id, "terminal_id", 256)
         if isinstance(real_uid, bool) or not isinstance(real_uid, int) or real_uid <= 0:
             raise ContractError("real_uid debe ser un entero positivo")
-        if isinstance(effective_uid, bool) or effective_uid != 0:
+        if isinstance(effective_uid, bool) or not isinstance(effective_uid, int) or effective_uid != 0:
             raise ContractError("effective_uid debe ser exactamente 0")
         if (
             not isinstance(occurred_at, datetime)
