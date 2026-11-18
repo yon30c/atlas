@@ -183,8 +183,9 @@ def handle_admin_connection(
         raise AdminPeerRejected("peer UID is not authorized")
 
     packet, _ancillary, flags, _address = connection.recvmsg(MAX_REQUEST_BYTES + 1)
-    if flags & getattr(socket, "MSG_TRUNC", 0):
-        raise AdminProtocolRejected("request packet was truncated")
+    truncated_flags = getattr(socket, "MSG_TRUNC", 0) | getattr(socket, "MSG_CTRUNC", 0)
+    if flags & truncated_flags:
+        raise AdminProtocolRejected("request packet or ancillary data was truncated")
     request = decode_admin_request(packet)
 
     response = {
