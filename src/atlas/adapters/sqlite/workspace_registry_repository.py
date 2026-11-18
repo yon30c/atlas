@@ -64,6 +64,18 @@ class SQLiteWorkspaceRegistryRepository:
         if new_revision != expected_revision + 1:
             raise ContractError("la nueva revisión debe ser expected_revision + 1")
 
+    @staticmethod
+    def _workspace(row: sqlite3.Row) -> WorkspaceRecord:
+        return WorkspaceRecord(
+            workspace_id=row["workspace_id"],
+            owner_user_id=row["owner_user_id"],
+            project_id=ProjectId(row["project_id"]),
+            environment_id=EnvironmentId(row["environment_id"]),
+            root_ref=row["root_ref"],
+            status=WorkspaceStatus(row["status"]),
+            revision=row["revision"],
+        )
+
     def get_workspace(self, workspace_id: str) -> WorkspaceRecord | None:
         key = self._required(workspace_id, "workspace_id")
         with self._read_connection() as connection:
