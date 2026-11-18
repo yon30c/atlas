@@ -65,3 +65,7 @@ El propietario confirmó la ejecución de la suite completa: **1,497 tests en 30
 ## Prueba adicional de integración — validación pendiente
 
 La revisión integral detectó un posible uso de hora obsoleta si `BEGIN IMMEDIATE` espera por otro escritor. Se movió la captura de `Clock.now()` al interior de la UoW y se añadió `test_clock_is_captured_after_uow_acquisition`, que simula el avance temporal durante la adquisición de la transacción y exige que un grant expirado sea rechazado sin escrituras. Esta prueba nueva y la suite completa deben ejecutarse en Debian antes de cerrar la revisión de integración.
+
+## Validación de regresión temporal — confirmada por el propietario
+
+El propietario confirmó la suite completa con la prueba nueva incluida: **1,498 tests en 29.777 s — OK** y `compileall` con **`COMPILE_EXIT_CODE=0`**. La corrección del momento de captura del Clock queda validada. La prueba focalizada independiente no fue reportada en esta ejecución; la suite completa sí incluyó el archivo de pruebas.
