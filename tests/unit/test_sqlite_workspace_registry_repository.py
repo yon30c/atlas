@@ -60,7 +60,7 @@ class SQLiteWorkspaceRegistryRepositoryTests(unittest.TestCase):
                 (
                     event_id, current.project_id, current.environment_id,
                     current.status.value, target_status.value, current.revision,
-                    current.revision + 1, self.identity.user_id, self.identity.identity_id,
+                    current.revision + 1, self.identity.user_id, self.identity.identity.identity_id,
                     str(uuid4()), str(uuid4()), str(uuid4()), "Administrative lifecycle test",
                     datetime.now(timezone.utc).isoformat(),
                 ),
