@@ -704,3 +704,15 @@ Se revisaron conjuntamente contratos de dominio, puerto, migración V26, ledger 
 ### Cierre del hallazgo temporal de la revisión de integración
 
 El propietario confirmó la suite completa tras la corrección: **1,498 tests en 29.777 s — OK** y `compileall` con **`COMPILE_EXIT_CODE=0`**. La prueba de regresión del avance del reloj durante la adquisición de UoW quedó incluida en la suite y validada. El hallazgo se considera corregido y verificado.
+
+## Límite de confianza confirmado en la revisión V26
+
+La revisión de los triggers V26 y del servicio confirma una separación que debe mantenerse explícita:
+
+- **V26 protege integridad y atomicidad:** evento ligado a la asociación y a su estado/revisión anterior; transición real con revisión +1; marcador de commit correspondiente; historial y marcadores inmutables; actor enlazado a un USER canónico activo.
+- **V26 no demuestra autorización Platform Admin:** el trigger de inserción comprueba que el actor sea el USER canónico activo, pero no evalúa el grant Platform Admin ni su permiso específico.
+- **La autorización de negocio reside en `ProjectEnvironmentLifecycleService`:** revalidación de identidad dentro de la misma UoW, grant activo único, permiso exacto según transición, sujeto/revisión canónicos y ventana temporal.
+- **Consecuencia de arquitectura:** el writer SQL/ledger y `update_association` son superficies internas de infraestructura, no APIs para controladores ni otros consumidores. Cualquier futura ruta HTTP/CLI/agent debe invocar el servicio y no componer escrituras directas. La composición confiable debe mantener restringida la capacidad de construir el ledger writer.
+
+Esto no se clasifica como defecto de V26: la migración ofrece garantías estructurales, mientras que la política Platform Admin se aplica en el servicio. Sí es un requisito de integración antes de exponer la operación fuera de la composición interna. La prueba de servicio usa un verifier controlado; no acredita por sí sola una implementación criptográfica/issuer real. La integración futura debe enlazar el puerto a un verifier confiable que implemente `verify_in_unit_of_work` y probar esa composición real antes de habilitar cualquier endpoint.
+
