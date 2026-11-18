@@ -14,7 +14,7 @@ Definir una intención inmutable para conceder la primera autoridad Platform Adm
 
 - `operation_id`: UUIDv4 canónico que identifica la intención y permite idempotencia.
 - `user_id`: UUIDv4 del usuario Atlas existente que recibirá la autoridad.
-- `permissions`: `frozenset` que debe contener exactamente:
+- `permissions`: `frozenset` tipado con valores `PlatformAdminPermission` (no strings libres) que debe contener exactamente:
   - `association.suspend`
   - `association.reactivate`
 
