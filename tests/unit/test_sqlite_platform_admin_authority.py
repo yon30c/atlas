@@ -139,7 +139,7 @@ class SQLitePlatformAdminAuthorityTests(unittest.TestCase):
             unit.identity.update_user_status(
                 user.user_id,
                 expected_revision=user.identity.revision,
-                status=__import__("atlas.core.identity", fromlist=["IdentityStatus"]).IdentityStatus.SUSPENDED,
+                status=IdentityStatus.SUSPENDED,
             )
             with self.assertRaises(sqlite3.IntegrityError):
                 self._insert_grant(unit, user)
