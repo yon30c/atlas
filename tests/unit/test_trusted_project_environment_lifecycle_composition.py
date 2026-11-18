@@ -1,6 +1,7 @@
 """Real Identity Authority + HMAC integration for trusted lifecycle composition."""
 
 from dataclasses import replace
+from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import tempfile
@@ -9,13 +10,17 @@ from uuid import uuid4
 
 from atlas.adapters.hmac_verified_identity_context_attestor import HmacVerifiedIdentityContextAttestor
 from atlas.adapters.sqlite.database import SQLiteDatabase
-from atlas.adapters.sqlite.local_authority_unit_of_work import SQLiteLocalAuthorityUnitOfWorkFactory
+from atlas.adapters.sqlite.local_authority_unit_of_work import (
+    SQLiteLocalAuthorityUnitOfWork,
+    SQLiteLocalAuthorityUnitOfWorkFactory,
+)
 from atlas.adapters.sqlite.migrations import SQLITE_MIGRATIONS
 from atlas.adapters.sqlite.platform_admin_bootstrap import SQLitePlatformAdminBootstrapAdapter
 from atlas.adapters.sqlite.project_environment_lifecycle_ledger import SQLiteProjectEnvironmentLifecycleLedger
 from atlas.authentication.credentials import LoginHandle
 from atlas.authentication.native import NativeAuthenticationProof, NativeAuthenticator, NativeProofReference, NativeSubject
 from atlas.core.context import OperationContext
+from atlas.core.enums import DelegationMode
 from atlas.core.errors import AuthorizationError
 from atlas.identity.verified_identity_context_service import VerifiedIdentityContextRejected
 from atlas.core.identity import IdentityStatus
@@ -120,7 +125,9 @@ class TrustedLifecycleCompositionIntegrationTests(unittest.TestCase):
         )
 
     def _provision_admin(self):
-        confirmed = NOW - timedelta(days=1)
+        # Keep the valid 90-day grant close to expiry so tests can prove grant expiry
+        # while the independently attested USER context remains valid.
+        confirmed = NOW - timedelta(days=90) + timedelta(minutes=1)
         request = PlatformAdminBootstrapRequest(
             operation_id=_uuid(), user_id=self.user.user_id,
             permissions=INITIAL_PLATFORM_ADMIN_PERMISSIONS,
@@ -281,6 +288,124 @@ class TrustedLifecycleCompositionIntegrationTests(unittest.TestCase):
             self.lifecycle.transition(self.context, evidence, self._request())
         self.assertEqual(self._state(), ("active", 1, 0, 0))
 
+
+    def test_revoked_native_issuer_denies_without_any_lifecycle_write(self):
+        evidence = self._evidence()
+        with self.database.unit_of_work() as unit:
+            connection = unit._connection_for(self.database)
+            connection.execute(
+                "UPDATE native_identity_issuers SET status='REVOKED',
+                "revision=revision+1, updated_at=? WHERE issuer_id=?",
+                (self.clock.now().isoformat(), self.issuer.issuer_id),
+            )
+        with self.assertRaises(AuthorizationError):
+            self.lifecycle.transition(self.context, evidence, self._request())
+        self.assertEqual(self._state(), ("active", 1, 0, 0))
+
+    def test_wrong_realm_configuration_denies_without_any_lifecycle_write(self):
+        evidence = self._evidence()
+        wrong_realm_lifecycle = build_trusted_project_environment_lifecycle_service(
+            database=self.database, clock=self.clock, attestor=self.attestor,
+            realm="atlas.secondary", audience=AUDIENCE,
+            context_ttl=timedelta(minutes=2),
+        )
+        with self.assertRaises(AuthorizationError):
+            wrong_realm_lifecycle.transition(self.context, evidence, self._request())
+        self.assertEqual(self._state(), ("active", 1, 0, 0))
+
+    def test_actor_mismatch_and_delegated_context_deny_without_writes(self):
+        evidence = self._evidence()
+        with self.factory() as unit:
+            other_user = unit.identity.create_user()
+            unit.commit()
+        invalid_contexts = (
+            replace(self.context, actor=other_user.identity),
+            replace(self.context, delegation=DelegationMode.DELEGATED),
+        )
+        for invalid_context in invalid_contexts:
+            with self.subTest(delegation=invalid_context.delegation):
+                with self.assertRaises(AuthorizationError):
+                    self.lifecycle.transition(invalid_context, evidence, self._request())
+                self.assertEqual(self._state(), ("active", 1, 0, 0))
+
+    def test_expired_platform_admin_grant_denies_while_user_context_is_still_valid(self):
+        evidence = self._evidence()
+        self.clock.value += timedelta(seconds=61)
+        self.assertGreater(evidence.expires_at, self.clock.now())
+        with self.assertRaises(AuthorizationError):
+            self.lifecycle.transition(self.context, evidence, self._request())
+        self.assertEqual(self._state(), ("active", 1, 0, 0))
+
+    def test_missing_exact_platform_admin_permission_denies_without_writes(self):
+        with self.factory() as unit:
+            limited_user = unit.identity.create_user()
+            subject = NativeSubject.generate()
+            unit.native_identity.create_native_binding(
+                limited_user, self.issuer.issuer_id, subject.digest,
+                verified_at=self.clock.now() - timedelta(seconds=2),
+            )
+            authenticator_id = _uuid()
+            authenticator = NativeAuthenticator(
+                authenticator_id=authenticator_id, issuer_id=self.issuer.issuer_id,
+                native_subject=subject, login_handle=LoginHandle("atlas.limited-owner"),
+                password_hash_phc=_PHC,
+            )
+            unit.native_authentication.create_native_authenticator(authenticator)
+            reference = NativeProofReference.generate()
+            unit.native_authentication.create_native_authentication_proof(
+                NativeAuthenticationProof(
+                    proof_id=_uuid(), reference_digest=reference.digest,
+                    issuer_id=self.issuer.issuer_id, native_subject=subject,
+                    authenticator_id=authenticator_id, credential_revision=1,
+                    authenticated_at=self.clock.now() - timedelta(seconds=1),
+                    expires_at=self.clock.now() + timedelta(minutes=1),
+                    audience=AUDIENCE,
+                )
+            )
+            event_id, grant_id, operation_id = _uuid(), _uuid(), _uuid()
+            confirmed = NOW - timedelta(days=1)
+            connection = unit._unit._connection_for(self.database)
+            connection.execute(
+                "INSERT INTO platform_admin_bootstrap_events (event_id, grant_id, user_id, user_identity_id, user_identity_revision, operation_id, operator_real_uid, operator_effective_uid, terminal_id, confirmed_at) VALUES (?, ?, ?, ?, ?, ?, 1000, 1000, '/dev/pts/test', ?)",
+                (event_id, grant_id, limited_user.user_id, limited_user.identity.identity_id,
+                 limited_user.identity.revision, operation_id, confirmed.isoformat()),
+            )
+            connection.execute(
+                "INSERT INTO platform_admin_grants (grant_id, user_id, user_identity_id, user_identity_revision, permissions_json, provisioning_method, bootstrap_event_id, issued_at, not_before, expires_at, status, revision) VALUES (?, ?, ?, ?, '[\"association.reactivate\"]', 'offline_bootstrap', ?, ?, ?, ?, 'active', 1)",
+                (grant_id, limited_user.user_id, limited_user.identity.identity_id,
+                 limited_user.identity.revision, event_id, confirmed.isoformat(),
+                 confirmed.isoformat(), (confirmed + timedelta(days=90)).isoformat()),
+            )
+            unit.commit()
+        limited_evidence = self.identity_service.admit_proof(reference)
+        limited_context = OperationContext(
+            request_id=_uuid(), correlation_id=_uuid(), actor=limited_user.identity,
+            user_id=limited_user.user_id, origin="integration-test", delegation=None,
+            project_id="atlas", environment="test", purpose="association lifecycle",
+            classification="internal", created_at=NOW,
+        )
+        with self.assertRaises(AuthorizationError):
+            self.lifecycle.transition(limited_context, limited_evidence, self._request())
+        self.assertEqual(self._state(), ("active", 1, 0, 0))
+
+    def test_commit_failure_rolls_back_real_composed_lifecycle_transaction(self):
+        evidence = self._evidence()
+        with patch.object(SQLiteLocalAuthorityUnitOfWork, "commit",
+                          side_effect=RuntimeError("injected commit failure")):
+            with self.assertRaisesRegex(RuntimeError, "injected commit failure"):
+                self.lifecycle.transition(self.context, evidence, self._request())
+        self.assertEqual(self._state(), ("active", 1, 0, 0))
+
+    def test_lifecycle_writer_is_not_a_public_package_or_uow_capability(self):
+        import atlas.adapters.sqlite as sqlite_package
+        import atlas.application as application_package
+        self.assertNotIn("SQLiteProjectEnvironmentLifecycleLedger", sqlite_package.__all__)
+        self.assertFalse(hasattr(sqlite_package, "SQLiteProjectEnvironmentLifecycleLedger"))
+        self.assertFalse(hasattr(application_package, "build_trusted_project_environment_lifecycle_service"))
+        with self.factory() as unit:
+            self.assertFalse(hasattr(unit, "lifecycle_ledger"))
+            self.assertFalse(hasattr(unit, "project_environment_lifecycle_ledger"))
+            unit.commit()
 
 if __name__ == "__main__":
     unittest.main()
