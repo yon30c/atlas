@@ -488,3 +488,14 @@ La revisión final se realizó directamente en GitHub sobre los nueve archivos d
 - Puertas abiertas: resolver la propiedad segura de la ruta del socket frente a colisiones; decidir listener propio vs activación; definir identidad/UID real del cliente; revisar TOCTOU de cleanup y hardening systemd; validar el probe corregido en Debian; diseñar y probar lifecycle/concurrencia/shutdown antes de implementar el listener.
 
 **Próximo paso:** el propietario ejecutará el probe corregido en Debian desde la rama indicada. El resultado del probe no elimina por sí solo la puerta de colisión ni aprueba despliegue. Los estados históricos de PR/HEAD y validación de las secciones anteriores deben leerse como snapshots de su fecha; esta sección es el estado posterior al merge de PR #28.
+
+### 16.8 Evaluación de propiedad del endpoint IPC — 2026-11-19
+
+La auditoría de preparación separa la propiedad del endpoint del mecanismo de activación. Socket activation sobre filesystem permanece suspendida por la colisión destructiva observada en Debian systemd 257.13.
+
+El diseño lifecycle ahora compara:
+1. Listener creado por el proceso en un directorio privado preaprovisionado de `atlas-runtime`: candidato para el siguiente probe aislado, con fallo cerrado ante cualquier ruta preexistente, sin stale cleanup automático y con límites TOCTOU de cleanup documentados.
+2. Socket activation systemd sobre filesystem: suspendida; no desplegar.
+3. Socket abstracto AF_UNIX/SOCK_SEQPACKET: alternativa experimental; evita pathname/inode y unlink, pero carece de permisos filesystem, permite intentos de conexión local y presenta riesgo de preclaim/DoS.
+
+No se selecciona ni aprueba transporte para producción. Próximo trabajo: diseñar probes temporales independientes para A y C, ejecutar por el propietario en Debian, comparar evidencias y solicitar decisión explícita. No usar sudo, rutas Atlas existentes, system-manager de producción ni bases de autoridad. No implementar listener persistente.
