@@ -25,6 +25,111 @@ HELPER = Path(__file__).with_name("activated_service.py")
 PYTHON = Path(sys.executable)
 
 
+def _path_identity(path: Path) -> tuple[int, int, int]:
+    info = path.lstat()
+    return (info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode))
+
+
+def _identity_matches(path: Path, identity: tuple[int, int, int], kind: str) -> bool:
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return False
+    expected_type = {"file": stat.S_IFREG, "socket": stat.S_IFSOCK, "directory": stat.S_IFDIR}[kind]
+    return (
+        (info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode)) == identity
+        and stat.S_IFMT(info.st_mode) == expected_type
+    )
+
+
+def _unlink_if_same_identity(
+    path: Path, identity: tuple[int, int, int] | None, kind: str
+) -> bool:
+    """Unlink only the recorded object; never remove a replacement at this path."""
+    if identity is None:
+        return False
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return True
+    expected_type = {"file": stat.S_IFREG, "socket": stat.S_IFSOCK}[kind]
+    current_identity = (info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode))
+    if current_identity != identity or stat.S_IFMT(info.st_mode) != expected_type:
+        return False
+    path.unlink()
+    return True
+
+
+def _rmdir_if_same_identity(
+    path: Path, identity: tuple[int, int, int] | None
+) -> bool:
+    """Remove an empty directory only while its recorded identity is present."""
+    if identity is None:
+        return False
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return True
+    current_identity = (info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode))
+    if current_identity != identity or not stat.S_ISDIR(info.st_mode):
+        return False
+    path.rmdir()
+    return True
+
+
+def _create_exclusive_file(path: Path, content: str) -> tuple[int, int, int]:
+    """Create a private unit file without following or overwriting any path."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags, 0o600)
+    identity = None
+    try:
+        os.fchmod(descriptor, 0o600)
+        info = os.fstat(descriptor)
+        identity = (info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode))
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            descriptor = -1
+            stream.write(content)
+        return identity
+    except BaseException:
+        if descriptor >= 0:
+            os.close(descriptor)
+        if identity is not None:
+            _unlink_if_same_identity(path, identity, "file")
+        raise
+
+
+def _ensure_directory_chain(directory: Path) -> dict[Path, tuple[int, int, int]]:
+    """Create missing unit directories and record only directories created here."""
+    missing = []
+    cursor = directory
+    while not cursor.exists():
+        missing.append(cursor)
+        parent = cursor.parent
+        if parent == cursor:
+            raise RuntimeError(f"cannot find an existing parent for {directory}")
+        cursor = parent
+
+    existing = cursor.lstat()
+    if not stat.S_ISDIR(existing.st_mode):
+        raise RuntimeError(f"unit directory ancestor is not a real directory: {cursor}")
+
+    created: dict[Path, tuple[int, int, int]] = {}
+    for candidate in reversed(missing):
+        try:
+            candidate.mkdir(mode=0o700)
+        except FileExistsError:
+            info = candidate.lstat()
+            if not stat.S_ISDIR(info.st_mode):
+                raise RuntimeError(f"unit directory path was replaced: {candidate}")
+            continue
+        created[candidate] = _path_identity(candidate)
+    target_info = directory.lstat()
+    if not stat.S_ISDIR(target_info.st_mode):
+        raise RuntimeError(f"unit directory is not a real directory: {directory}")
+    return created
+
+
 def run_systemctl(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     command = ["systemctl", "--user", *args]
     result = subprocess.run(
@@ -156,22 +261,17 @@ def main() -> int:
     socket_unit = f"atlas-admin-ipc-probe-{token}.socket"
     service_unit = f"atlas-admin-ipc-probe-{token}.service"
     unit_dir = Path.home() / ".config" / "systemd" / "user"
-    missing_unit_dirs = []
-    cursor = unit_dir
-    while not cursor.exists():
-        missing_unit_dirs.append(cursor)
-        cursor = cursor.parent
-    unit_dir.mkdir(parents=True, exist_ok=True)
+    unit_dir_identities = _ensure_directory_chain(unit_dir)
     socket_unit_path = unit_dir / socket_unit
     service_unit_path = unit_dir / service_unit
-    if socket_unit_path.exists() or service_unit_path.exists():
-        raise SystemExit("Unique unit-name collision; refusing to overwrite existing files.")
 
     private_dir = Path(tempfile.mkdtemp(prefix="atlas-admin-ipc-probe-", dir=runtime))
     os.chmod(private_dir, 0o700)
+    private_dir_identity = _path_identity(private_dir)
     socket_path = private_dir / "admin.sock"
+    socket_identity = None
     uid = os.getuid()
-    created_units = False
+    unit_file_identities: dict[Path, tuple[int, int, int]] = {}
     daemon_reloaded = False
 
     socket_contents = f"""[Unit]
@@ -198,11 +298,12 @@ Environment=ATLAS_EXPECTED_SOCKET={socket_path}
 """
 
     try:
-        created_units = True
-        socket_unit_path.write_text(socket_contents, encoding="utf-8")
-        service_unit_path.write_text(service_contents, encoding="utf-8")
-        os.chmod(socket_unit_path, 0o600)
-        os.chmod(service_unit_path, 0o600)
+        unit_file_identities[socket_unit_path] = _create_exclusive_file(
+            socket_unit_path, socket_contents
+        )
+        unit_file_identities[service_unit_path] = _create_exclusive_file(
+            service_unit_path, service_contents
+        )
 
         run_systemctl("daemon-reload")
         daemon_reloaded = True
@@ -216,6 +317,7 @@ Environment=ATLAS_EXPECTED_SOCKET={socket_path}
         info = socket_path.lstat()
         if not stat.S_ISSOCK(info.st_mode):
             raise AssertionError("systemd did not create a filesystem socket")
+        socket_identity = (info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode))
         if stat.S_IMODE(info.st_mode) != 0o600 or info.st_uid != uid:
             raise AssertionError(
                 f"unexpected socket owner/mode: uid={info.st_uid}, "
@@ -234,13 +336,12 @@ Environment=ATLAS_EXPECTED_SOCKET={socket_path}
                 raise AssertionError(f"activated service failed: {service_unit}")
 
         # The socket unit owns the pathname; the one-shot service must not unlink it.
-        if not socket_path.exists() or not stat.S_ISSOCK(socket_path.lstat().st_mode):
-            raise AssertionError("activated service removed the systemd-owned socket")
+        if not _identity_matches(socket_path, socket_identity, "socket"):
+            raise AssertionError("activated service replaced or removed the systemd-owned socket")
         run_systemctl("stop", service_unit, check=False)
         run_systemctl("stop", socket_unit, check=False)
-        if not socket_path.exists():
-            raise AssertionError("RemoveOnStop=no did not preserve the socket path")
-        socket_path.unlink()
+        if not _identity_matches(socket_path, socket_identity, "socket"):
+            raise AssertionError("RemoveOnStop=no did not preserve the original socket object")
         print("PASS: systemd user socket activation, descriptor validation,")
         print("      two activations and private ownership/mode.")
         print("PASS: RemoveOnStop=no leaves pathname cleanup to the test harness.")
@@ -248,26 +349,34 @@ Environment=ATLAS_EXPECTED_SOCKET={socket_path}
     finally:
         run_systemctl("stop", service_unit, check=False)
         run_systemctl("stop", socket_unit, check=False)
-        if created_units:
-            socket_unit_path.unlink(missing_ok=True)
-            service_unit_path.unlink(missing_ok=True)
-            if daemon_reloaded:
-                run_systemctl("daemon-reload", check=False)
-        # This directory was created uniquely by this invocation. Never recurse
-        # through a path outside it; unlink only the expected socket path.
-        if socket_path.exists() or socket_path.is_symlink():
-            info = socket_path.lstat()
-            if stat.S_ISSOCK(info.st_mode) or stat.S_ISREG(info.st_mode):
-                socket_path.unlink()
-        try:
-            private_dir.rmdir()
-        except OSError:
-            print(f"Manual cleanup may be needed for temporary directory: {private_dir}", file=sys.stderr)
-        for created_dir in missing_unit_dirs:
-            try:
-                created_dir.rmdir()
-            except OSError:
-                pass
+        for unit_path, identity in unit_file_identities.items():
+            if not _unlink_if_same_identity(unit_path, identity, "file"):
+                print(
+                    f"Refusing to remove a replaced or unexpected unit file: {unit_path}",
+                    file=sys.stderr,
+                )
+        if daemon_reloaded:
+            run_systemctl("daemon-reload", check=False)
+
+        # A missing identity means systemd never created a socket we can safely
+        # claim. In that case leave any unexpected object untouched for inspection.
+        if not _unlink_if_same_identity(socket_path, socket_identity, "socket"):
+            if socket_path.exists() or socket_path.is_symlink():
+                print(
+                    f"Refusing to remove a replaced or unexpected socket path: {socket_path}",
+                    file=sys.stderr,
+                )
+        if not _rmdir_if_same_identity(private_dir, private_dir_identity):
+            print(
+                f"Manual inspection/cleanup may be needed for temporary directory: {private_dir}",
+                file=sys.stderr,
+            )
+        for created_dir, identity in reversed(list(unit_dir_identities.items())):
+            if not _rmdir_if_same_identity(created_dir, identity):
+                print(
+                    f"Leaving unit directory not owned by this invocation: {created_dir}",
+                    file=sys.stderr,
+                )
 
 
 if __name__ == "__main__":
