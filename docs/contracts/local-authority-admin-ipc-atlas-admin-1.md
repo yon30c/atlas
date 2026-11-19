@@ -469,13 +469,13 @@ No se permiten propiedades adicionales, propiedades ausentes, valores `null`, bo
 
 **Tipos y restricciones estructurales:**
 
-- `operator_real_uid`: entero JSON no negativo. Puede ser cualquier UID representable por el esquema; no se exige UID distinto de cero.
-- `frontend_effective_uid`: entero JSON no negativo. Puede ser cualquier UID representable por el esquema; no se exige UID cero. La autorización efectiva sigue siendo una política separada.
+- `operator_real_uid`: entero JSON no negativo y representable por el tipo UID del sistema operativo de destino. Se admite cualquier UID válido; no se exige UID distinto de cero.
+- `frontend_effective_uid`: entero JSON no negativo y representable por el tipo UID del sistema operativo de destino. Se admite cualquier UID válido; no se exige UID cero. La autorización efectiva sigue siendo una política separada.
 - `tty_session`: objeto obligatorio con exactamente cuatro propiedades:
   - `terminal_device`: cadena UTF-8 no vacía, ruta absoluta, sin byte NUL y con longitud máxima de 256 bytes. Es una declaración del frontend; el servicio no abre, resuelve ni inspecciona esa ruta como parte de la validación de evidencia.
-  - `session_id`: entero JSON positivo.
-  - `process_group_id`: entero JSON positivo.
-  - `foreground_process_group_id`: entero JSON positivo. En el instante de autorización, el frontend debe haber observado que este valor coincide con `process_group_id`; el frontend también debe comprobar el TTY foreground y la relación de terminal/sesión exigida por el contrato. El servicio valida la coherencia declarada entre ambos números, pero no afirma haber observado el terminal del frontend.
+  - `session_id`: entero JSON positivo y representable por el tipo PID del sistema operativo de destino.
+  - `process_group_id`: entero JSON positivo y representable por el tipo PID del sistema operativo de destino.
+  - `foreground_process_group_id`: entero JSON positivo y representable por el tipo PID del sistema operativo de destino. En el instante de autorización, el frontend debe haber observado que este valor coincide con `process_group_id`; el frontend también debe comprobar el TTY foreground y la relación de terminal/sesión exigida por el contrato. El servicio valida la coherencia declarada entre ambos números, pero no afirma haber observado el terminal del frontend.
 - `authorized_at`: cadena UTC en formato exacto `YYYY-MM-DDTHH:MM:SS.ffffffZ` (seis dígitos de fracción, sufijo literal `Z`, sin offset alternativo). El frontend la genera después de aceptar la confirmación tipada y antes de transmitir la solicitud. No sustituye el reloj de recepción del servicio.
 - `confirmed_scope`: objeto no anulable, con esquema exacto dependiente de `operation`, definido abajo.
 
@@ -525,7 +525,7 @@ En cada variante:
 5. Para `authority.migrations.apply`, las versiones son enteros JSON y `target_version` debe ser mayor que `expected_current_version`. `plan_digest` debe coincidir exactamente con el digest del payload; su gramática canónica queda pendiente.
 6. Los nombres canónicos e IDs se representan como cadenas JSON; sus gramáticas siguen pendientes en §9.11. No se relaja por ello la igualdad exacta entre los valores que el servicio compara.
 
-El servicio deriva de forma independiente el objeto esperado de alcance a partir de la operación y del payload. La comparación es estructural y exacta, sin coerción de tipos, normalización oportunista ni aceptación de subconjuntos. Cualquier diferencia produce rechazo antes de iniciar efectos de dominio.
+El servicio deriva de forma independiente el objeto esperado de alcance a partir de la operación, del payload y, para el nombre canónico de la base durante `authority.initialize`, de su configuración protegida. La comparación es estructural y exacta, sin coerción de tipos, normalización oportunista ni aceptación de subconjuntos. Cualquier diferencia produce rechazo antes de iniciar efectos de dominio.
 
 La frase de confirmación tipada (`confirmation_phrase`) permanece en el payload de cada mutación y se valida por separado contra la gramática de esa operación. No se duplica dentro de `confirmed_scope`: el alcance estructurado contiene los datos que el frontend presentó, y la frase es una prueba de confirmación interactiva distinta.
 
