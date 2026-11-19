@@ -4,6 +4,7 @@ import array
 import json
 import os
 import socket
+import struct
 import unittest
 import uuid
 from unittest.mock import Mock
@@ -34,6 +35,25 @@ def _request_packet(**overrides):
 
 
 class AuthorityAdminIPCProtocolTests(unittest.TestCase):
+    @unittest.skipUnless(
+        hasattr(socket, "SO_PEERCRED"),
+        "Linux SO_PEERCRED is required",
+    )
+    def test_peer_credentials_decode_uid_and_gid_as_unsigned(self):
+        connection = Mock()
+        connection.getsockopt.return_value = struct.pack(
+            "iII",
+            123,
+            0xF0000000,
+            0xE0000000,
+        )
+
+        peer = read_peer_credentials(connection)
+
+        self.assertEqual(peer.pid, 123)
+        self.assertEqual(peer.uid, 0xF0000000)
+        self.assertEqual(peer.gid, 0xE0000000)
+
     def test_accepts_only_the_non_mutating_ping_operation(self):
         request = decode_admin_request(_request_packet())
         self.assertEqual(request.protocol, PROTOCOL_ID)
