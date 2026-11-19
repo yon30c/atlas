@@ -8,6 +8,7 @@ Only the non-mutating authority.ping operation is implemented.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from importlib.metadata import PackageNotFoundError, version as distribution_version
 import json
 import math
 import socket
@@ -17,6 +18,8 @@ from typing import Any, Mapping
 
 
 PROTOCOL_ID = "atlas-admin/1"
+SERVICE_DISTRIBUTION = "atlas-assistant"
+SOURCE_TREE_SERVICE_VERSION = "0.1.0"
 MAX_REQUEST_BYTES = 16 * 1024
 MAX_RESPONSE_BYTES = 64 * 1024
 MAX_JSON_DEPTH = 16
@@ -76,6 +79,15 @@ class AdminRequest:
     request_id: str
     operation: str
     payload: Mapping[str, Any]
+
+
+def _service_version() -> str:
+    """Return installed distribution metadata, with the source version fallback."""
+    try:
+        return distribution_version(SERVICE_DISTRIBUTION)
+    except PackageNotFoundError:
+        # Keep this fallback synchronized with [project].version in pyproject.toml.
+        return SOURCE_TREE_SERVICE_VERSION
 
 
 def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -369,7 +381,11 @@ def handle_admin_connection(
         "status": "completed",
         "code": "OK",
         "summary": "Operation completed",
-        "result": {},
+        "result": {
+            "protocol_version": PROTOCOL_ID,
+            "service_version": _service_version(),
+            "handler_status": "available",
+        },
         "audit_ref": None,
     }
     encoded = _encode_response(response)
