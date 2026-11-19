@@ -54,6 +54,31 @@ class SystemdActivationCleanupTests(unittest.TestCase):
         self.assertTrue(path.is_symlink())
         self.assertEqual(target.read_bytes(), b"sentinel")
 
+    def test_directory_creation_rejects_symlinked_components(self):
+        real_parent = self.directory / "real-parent"
+        real_parent.mkdir()
+        linked_parent = self.directory / "linked-parent"
+        linked_parent.symlink_to(real_parent, target_is_directory=True)
+
+        with self.assertRaises(RuntimeError):
+            PROBE._ensure_directory_chain(linked_parent / "systemd" / "user")
+
+    def test_cleanup_refuses_to_unlink_replacement_symlink(self):
+        path = self.directory / "probe.service"
+        target = self.directory / "target"
+        held_original = self.directory / "original.service"
+        path.write_text("original", encoding="utf-8")
+        original_identity = PROBE._path_identity(path)
+        path.rename(held_original)
+        target.write_text("target", encoding="utf-8")
+        path.symlink_to(target)
+
+        self.assertFalse(
+            PROBE._unlink_if_same_identity(path, original_identity, "file")
+        )
+        self.assertTrue(path.is_symlink())
+        self.assertEqual(target.read_text(encoding="utf-8"), "target")
+
     def test_cleanup_refuses_to_unlink_replacement_file(self):
         path = self.directory / "probe.service"
         held_original = self.directory / "original.service"
