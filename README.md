@@ -15,7 +15,7 @@ La visión de Atlas se apoya en estos principios:
 
 La autonomía de Atlas no equivale a autoridad. Comprender una solicitud, generar una respuesta o proponer un plan no autoriza ni ejecuta una operación.
 
-> **Corte documental:** 18 de noviembre de 2026. Rama revisada: `design/verified-agent-delegation-i3-2b`. Commit de código evaluado: `dd95c3cd87448ff99056aea703111f0e9a8632a6`. La suite completa más reciente reportada por el propietario en Debian ejecutó 1,513 pruebas y terminó en `OK`. La validación focalizada de 7B.6B y `compileall` todavía no están confirmadas en este corte. Este README distingue código implementado, validación reportada y capacidades aún no conectadas al runtime. Un contrato, puerto, modelo o reducer no demuestra por sí solo que una capacidad esté habilitada en un runtime completo.
+> **Corte documental:** 19 de noviembre de 2026. Rama de trabajo revisada: `work/authority-admin-protocol-contract-alignment` (PR #28, Draft, sin merge). HEAD documental revisado: `2b3f039864f1666b564db5385d164f78bd21baf1`. La suite completa más reciente comunicada por el propietario en Debian ejecutó **1,583 pruebas — OK (1 skipped)**; esa ejecución no debe atribuirse al HEAD actual porque después se incorporó una corrección final del decoder para enteros JSON extremos. La nueva validación focalizada y completa de esa corrección sigue pendiente en Debian. Este README distingue implementación, evidencia local comunicada y capacidades no habilitadas. Un contrato, puerto, modelo o reducer no demuestra por sí solo que una capacidad esté habilitada en un runtime completo.
 
 ## Estado general del desarrollo
 
@@ -32,6 +32,7 @@ Atlas es software funcional en desarrollo incremental, no solamente un conjunto 
 | CAM y autorización | **Evaluación de Grants y flujos de renovación implementados parcialmente; no equivale a runtime protegido completo** |
 | Delegación AGENT | **Identidad, binding, delegación del propietario, evidencia verificada y renovación delegada implementados; runtime AGENT no habilitado** |
 | Project/Environment y Workspace | **Persistencia canónica, asociación lifecycle, registro Workspace y gate CAM read-only implementados; integración con consola pendiente** |
+| Autoridad administrativa local IPC (`atlas-admin/1`) | **Contrato de siete operaciones y prototipo de `authority.ping`; seis operaciones no implementadas y denegadas. Listener persistente y despliegue no aprobados** |
 | Memory Engine | **Dominio, Gateway, consistencia, journal, recuperación local y reducers implementados parcialmente** |
 | Persistencia durable del contenido Memory | **Pendiente** |
 | Forget de extremo a extremo | **Modelos y reducer implementados; adaptadores y ejecución completa pendientes** |
@@ -45,7 +46,7 @@ Atlas es software funcional en desarrollo incremental, no solamente un conjunto 
 
 ## Desarrollo actual: autoridad, identidad y delegación
 
-La consola local y las conversaciones persistentes siguen siendo funcionales, pero el desarrollo más reciente se concentra en la base de autoridad: autenticación nativa, identidad verificada USER/AGENT, delegaciones emitidas por el propietario, renovación delegada bajo CAM y lifecycle de asociaciones Project–Environment. El incremento actual 7B.6B separa la capacidad de escritura lifecycle de los repositorios generales y restringe el writer a la composición confiable. La suite completa reportada en Debian es de 1,513 pruebas OK; faltan confirmar las pruebas focalizadas de 7B.6B y `compileall` antes de cerrar el incremento. No se habilitan login de producción, endpoints protegidos, runtime AGENT, herramientas de consola ni ejecución privilegiada. Consulta el [estado vigente](docs/status-current.md), el [plan funcional](docs/functional-test-roadmap.md), el [mapa de arquitectura](docs/functional-architecture-map.md) y la [hoja de ruta general](docs/roadmap.md).
+La consola local y las conversaciones persistentes siguen siendo funcionales. El desarrollo de autoridad incluye autenticación nativa, identidad verificada USER/AGENT, delegaciones del propietario, renovación delegada bajo CAM, lifecycle de asociaciones Project–Environment y el protocolo IPC administrativo local `atlas-admin/1`. En el IPC, el contrato normativo ya define siete operaciones y el prototipo implementa únicamente `authority.ping`; las otras seis siguen sin implementar y denegadas. El esquema de `operator_evidence` está aprobado documentalmente, pero normalización de `reason`, gramáticas canónicas y esquemas completos de resultados siguen pendientes. La suite completa más reciente comunicada fue de 1,583 pruebas OK con una omitida, pero precede a la corrección final del decoder y no valida el HEAD actual. No se habilitan login de producción, endpoints protegidos, runtime AGENT, herramientas de consola ni ejecución privilegiada. Consulta el [estado vigente](docs/status-current.md), el [contrato IPC normativo](docs/contracts/local-authority-admin-ipc-atlas-admin-1.md), el [contexto de proyecto](docs/PROJECT_CONTEXT.md), el [plan funcional](docs/functional-test-roadmap.md), el [mapa de arquitectura](docs/functional-architecture-map.md) y la [hoja de ruta general](docs/roadmap.md).
 
 ## Documentación del proyecto
 
@@ -60,6 +61,8 @@ La consola local y las conversaciones persistentes siguen siendo funcionales, pe
 - [Diseño V2 del observador LOCAL de procesos](docs/design/local-bootstrap-observer-v2-design.md)
 - [Diseño V3 del observador de cadena sudo](docs/design/local-bootstrap-chain-observer-v3-design.md)
 - [Evaluación Candidate A/B y separación de privilegios](docs/design/local-bootstrap-candidate-evaluation-2026-11-16.md)
+- [Contrato IPC administrativo local `atlas-admin/1`](docs/contracts/local-authority-admin-ipc-atlas-admin-1.md)
+- [Contexto técnico vigente del proyecto](docs/PROJECT_CONTEXT.md)
 - [Contrato de delegación verificada AGENT I3-2B](docs/design/verified-agent-delegation-contract-i3-2b.md)
 - [Auditoría CAM de renovación delegada](docs/design/i3-2b-cam-renewal-integration-audit.md)
 - [Auditoría de frontera lifecycle 7B.6A](docs/design/i3-2b-7b6a-lifecycle-write-boundary-audit.md)
@@ -341,14 +344,14 @@ source .venv/bin/activate
 python -m unittest discover -s tests -v
 ```
 
-**Última evidencia local reportada por el usuario (18 de noviembre de 2026):**
+**Última evidencia de pruebas comunicada por el propietario (18–19 de noviembre de 2026):**
 
-- Suite completa: **1,513 tests — OK** (30.071 segundos).
-- Entorno: Debian, dentro del entorno virtual del proyecto.
-- Commit de código evaluado: `dd95c3cd87448ff99056aea703111f0e9a8632a6`; los commits documentales posteriores no modificaron ese código.
-- La validación focalizada de 7B.6B y `python -m compileall -q src tests` todavía no están confirmadas en este corte.
+- Suite completa: **1,583 tests — OK (skipped=1)**; ejecución comunicada en Debian, dentro del entorno virtual del proyecto.
+- Esa ejecución es evidencia del checkout probado en ese momento, **no del HEAD actual**: posteriormente se incorporó la corrección final del decoder para enteros JSON extremos.
+- La nueva validación focalizada y completa de esa corrección está pendiente de ejecución local en Debian. No se debe presentar el HEAD actual como validado.
+- La validación de 7B.6B (37 tests OK) y `python -m compileall -q src tests` con exit code 0 pertenecen al checkpoint anterior de autoridad/almacenamiento documentado en `docs/status-current.md`; no son validación del IPC ni del HEAD actual.
 
-La evidencia de 844 tests del 16 de noviembre pertenece a un checkpoint histórico y no representa el estado actual. Las ejecuciones son locales; no son resultados de GitHub Actions ni validación de despliegue productivo.
+La evidencia de 844, 1,513 y 1,547 tests pertenece a checkpoints históricos distintos y no debe mezclarse con la ejecución de 1,583. Las ejecuciones son locales; no son resultados de GitHub Actions ni validación de despliegue productivo.
 
 ## Documentación técnica y contractual
 
@@ -404,9 +407,9 @@ El orden recomendado evita conectar el Assistant a capacidades que aún no tiene
 Este repositorio contiene el código y la documentación de Atlas. La existencia de un contrato o componente no autoriza cambios en infraestructura, servicios, datos o entornos externos. Las migraciones y adaptadores deben validarse primero con bases temporales y pruebas de upgrade, integridad, concurrencia y recuperación.
 
 
-## Estado del incremento de autoridad — 18 de noviembre de 2026
+## Estado del incremento de autoridad e IPC — 19 de noviembre de 2026
 
-La rama actual incorpora, además de la base conversacional y del trabajo de Memory descrito arriba:
+La rama de trabajo incorpora, además de la base conversacional y del trabajo de Memory descrito arriba:
 
 - Autenticación nativa: credenciales Argon2id, autenticadores, proofs de un solo uso y persistencia separada de Authentication Authority e Identity Authority.
 - Identidad verificada USER y AGENT, con bindings canónicos y revalidación mediante servicios confiables.
@@ -414,5 +417,8 @@ La rama actual incorpora, además de la base conversacional y del trabajo de Mem
 - Renovaciones delegadas de Grants bajo evaluación CAM exacta y revalidación de identidad, delegación y asociación Project–Environment.
 - Bootstrap administrativo local de Platform Admin y lifecycle de asociaciones Project–Environment con ledger de eventos.
 - Separación de lectura y escritura lifecycle: el repositorio general de Workspace no expone la transición; el writer lifecycle se limita a la composición del servicio autorizado.
+- Protocolo IPC administrativo local `atlas-admin/1`: transporte Unix `SOCK_SEQPACKET`, autenticación del peer mediante `SO_PEERCRED`, envelope y límites estrictos, catálogo cerrado de siete operaciones y contratos individuales para cada una.
+- Prototipo actual: solo `authority.ping` está implementada. `authority.diagnose`, `authority.migrations.plan`, `authority.operation.status`, `authority.initialize`, `authority.migrations.apply` y `authority.project_environment.provision` están especificadas pero no implementadas y deben permanecer denegadas.
+- `operator_evidence`: semántica y estructura JSON aprobadas en el contrato (§§9.11.1–9.11.2). La evidencia es una declaración no confiable del frontend; no sustituye `SO_PEERCRED`, identidad Atlas ni autorización de dominio. La normalización de `reason`, gramáticas canónicas de IDs/nombre de DB/versiones/digests y esquemas completos de resultados/códigos siguen pendientes.
 
-**Límites:** estos componentes no habilitan por sí solos login público, endpoints, agentes en runtime, ejecución de herramientas, shell, Docker ni privilegios del host. La fase 7B.6B está implementada en la rama, pero su validación focalizada aún debe confirmarse. El detalle y la evidencia se mantienen en [docs/status-current.md](docs/status-current.md) y en los diseños enlazados desde el [roadmap funcional](docs/functional-test-roadmap.md).
+**Límites:** el IPC no implica listener persistente, daemon, systemd, permisos definitivos del host, acceso directo del frontend a SQLite ni autorización para ejecutar mutaciones sobre la base real. Estos componentes tampoco habilitan por sí solos login público, endpoints, agentes en runtime, ejecución de herramientas, shell, Docker ni privilegios del host. PR #28 permanece abierto y Draft; no está integrado. No se ejecutaron pruebas durante las actualizaciones documentales descritas aquí. El detalle normativo está en [el contrato IPC](docs/contracts/local-authority-admin-ipc-atlas-admin-1.md), y el estado de trabajo y validación en [PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md). Para el checkpoint anterior de autoridad/almacenamiento, consulta [docs/status-current.md](docs/status-current.md); no confundirlo con el estado de esta rama.
