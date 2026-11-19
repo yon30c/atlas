@@ -301,7 +301,7 @@ def read_peer_credentials(connection: socket.socket) -> PeerCredentials:
         socket.SO_PEERCRED,
         struct.calcsize("iII"),
     )
-    if len(raw) != struct.calcsize("3i"):
+    if len(raw) != struct.calcsize("iII"):
         raise AdminIPCError("kernel returned malformed peer credentials")
     pid, uid, gid = struct.unpack("iII", raw)
     if pid <= 0 or uid < 0 or gid < 0:
