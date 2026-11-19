@@ -103,6 +103,7 @@ def _ensure_directory_chain(directory: Path) -> dict[Path, tuple[int, int, int]]
     """Create missing directories while rejecting symlinks in every path component."""
     absolute = directory.absolute()
     created: dict[Path, tuple[int, int, int]] = {}
+    cursor = Path(absolute.anchor)
     try:
         for component in absolute.parts[1:]:
             cursor = cursor / component
