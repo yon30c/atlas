@@ -45,6 +45,11 @@ class AuthorityAdminIPCProtocolTests(unittest.TestCase):
             decode_admin_request(_request_packet(operation="authority.migrate"))
         self.assertEqual(raised.exception.code, "UNKNOWN_OPERATION")
 
+    def test_rejects_catalogued_but_unimplemented_operation(self):
+        with self.assertRaises(AdminProtocolRejected) as raised:
+            decode_admin_request(_request_packet(operation="authority.diagnose"))
+        self.assertEqual(raised.exception.code, "OPERATION_DENIED")
+
     def test_rejects_extra_request_fields(self):
         with self.assertRaises(AdminProtocolRejected) as raised:
             decode_admin_request(_request_packet(executor_uid=0))
@@ -177,7 +182,7 @@ class AuthorityAdminIPCPeerTests(unittest.TestCase):
             "handler_status",
         })
 
-    def test_sends_rejected_envelope_for_invalid_operation(self):
+    def test_sends_rejected_envelope_for_catalogued_but_unimplemented_operation(self):
         request_id = str(uuid.uuid4())
         self.client.send(_request_packet(
             request_id=request_id,
@@ -188,13 +193,13 @@ class AuthorityAdminIPCPeerTests(unittest.TestCase):
                 self.server,
                 allowed_peer_uids={os.getuid()},
             )
-        self.assertEqual(raised.exception.code, "UNKNOWN_OPERATION")
+        self.assertEqual(raised.exception.code, "OPERATION_DENIED")
         response = json.loads(self.client.recv(4096).decode("utf-8"))
         self.assertEqual(response, {
             "protocol": PROTOCOL_ID,
             "request_id": request_id,
             "status": "rejected",
-            "code": "UNKNOWN_OPERATION",
+            "code": "OPERATION_DENIED",
             "summary": "Request rejected",
             "result": {},
             "audit_ref": None,
@@ -209,7 +214,7 @@ class AuthorityAdminIPCPeerTests(unittest.TestCase):
             )
         self.assertEqual(raised.exception.code, "INVALID_JSON")
         response = json.loads(self.client.recv(4096).decode("utf-8"))
-        self.assertEqual(response["request_id"], None)
+        self.assertIsNone(response["request_id"])
         self.assertEqual(response["status"], "rejected")
         self.assertEqual(response["code"], "INVALID_JSON")
         self.assertEqual(response["result"], {})
