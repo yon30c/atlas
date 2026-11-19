@@ -328,11 +328,11 @@ Esquema aprobado:
 
 **Criterio de confianza importante:** el servicio puede validar la coherencia estructural declarada —incluida la igualdad entre process group y foreground process group—, pero no puede demostrar solo con esos valores que el frontend observó realmente el TTY foreground. La comprobación local de terminal, sesión, grupos de proceso y foreground corresponde al frontend privilegiado. La evidencia no es autenticación fuerte, prueba de presencia humana ni autorización de dominio.
 
-**Pendiente, sin bloquear el cierre estructural:** gramáticas canónicas de nombre de DB, IDs, versiones y digest; esquemas completos de resultados y tabla exhaustiva de códigos/mapeo status-code. La normalización de `reason` ya está aprobada en §9.11.3. No ampliar campos ni capacidades mientras se cierran los detalles restantes.
+**Pendiente, sin bloquear el cierre estructural:** esquemas completos de resultados y tabla exhaustiva de códigos/mapeo status-code. Las gramáticas canónicas de IDs, nombre de DB, versiones y representación textual del digest quedaron aprobadas posteriormente y se registran en §9.11.4. La serialización canónica del plan que alimenta SHA-256 sigue pendiente.
 
 **Alcance del cambio:** documentación únicamente. No se modificó código ejecutable ni se ejecutaron pruebas. Las seis operaciones administrativas no implementadas continúan deshabilitadas; solo `authority.ping` está implementada. PR #28 sigue Draft y sin merge. No se aprobó listener persistente, systemd, UID de producción, acceso real a SQLite ni ejecución de mutaciones.
 
-**Siguiente paso recomendado:** continuar con las gramáticas canónicas pendientes de IDs, nombre de DB, versiones y digest, sin inferir formatos no aprobados.
+**Siguiente paso recomendado:** especificar la serialización canónica exacta del plan para `plan_digest`; después cerrar esquemas completos de resultados y mapeo status-code, sin habilitar operaciones.
 
 
 ---
@@ -353,3 +353,21 @@ Decisión aprobada:
 **Alcance:** documentación únicamente. No se modificó código ejecutable ni se ejecutaron pruebas. Las seis operaciones administrativas no implementadas continúan deshabilitadas; solo `authority.ping` está implementada. PR #28 permanece Draft y sin merge.
 
 **Siguiente paso:** especificar las gramáticas canónicas restantes de IDs, nombre de DB, versiones y digest. Cada gramática debe revisarse contra los modelos y contratos existentes antes de proponerla.
+
+
+## 14. Aprobación de gramáticas canónicas IPC — 2026-11-19
+
+El propietario aprobó la recomendación de gramáticas canónicas para los valores administrativos restantes. La fuente normativa es `docs/contracts/local-authority-admin-ipc-atlas-admin-1.md`, §9.11.4.
+
+- `project_id` y `environment_id`: ASCII lowercase, dígitos y guion; 1–128 caracteres; primer y último carácter alfanumérico; regex `^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$`. Sin normalización ni corrección silenciosa. Siguen siendo IDs opacos y deben resolverse contra registros canónicos.
+- `canonical_database_name`: literal exacto `authority.sqlite3`, derivado por el servicio de configuración protegida; no es un selector de ruta del cliente.
+- Versiones de migración: enteros JSON estrictos (no bool/float/string), rango 1..`2^63-1`; `target_version > expected_current_version`; sin coerción ni notación alternativa en la representación JSON canónica.
+- `plan_digest`: SHA-256 expresado como 64 caracteres hexadecimales ASCII en minúsculas, sin prefijo. Payload, alcance confirmado y digest recalculado deben coincidir exactamente.
+
+**Compatibilidad:** la gramática IPC no modifica retroactivamente los tipos de dominio ni registros históricos. Antes de habilitar provisioning, debe comprobarse que los IDs existentes cumplen la gramática; no renombrar ni migrar automáticamente.
+
+**Pendiente:** la serialización canónica exacta del contenido del plan antes de calcular SHA-256 no quedó decidida. También siguen pendientes los esquemas completos de resultados y la tabla exhaustiva de códigos/mapeo status-code. Por ello `authority.migrations.apply` y las demás operaciones no implementadas continúan deshabilitadas.
+
+**Alcance:** documentación únicamente. No se modificó código ejecutable ni se ejecutaron pruebas. Solo `authority.ping` está implementada. PR #28 permanece Draft y sin merge; no se aprobó listener persistente, systemd, UID de producción, acceso real a SQLite ni ejecución de mutaciones.
+
+**Siguiente paso:** definir la serialización canónica del plan/digest, contrastándola con la representación determinista existente en Atlas sin introducir incompatibilidad ni ampliar el payload.
