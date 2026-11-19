@@ -564,7 +564,7 @@ Ambos campos usan la misma gramática ASCII:
 - Longitud: de 1 a 128 bytes ASCII inclusive (equivalente a 1–128 caracteres, porque solo se admite ASCII).
 - Caracteres permitidos: letras minúsculas ASCII `a-z`, dígitos `0-9` y guion ASCII `-`.
 - El primer y último carácter deben ser una letra minúscula o un dígito.
-- No se admiten mayúsculas, guion bajo, puntos, espacios, barras, Unicode no ASCII ni separadores repetidos con semántica especial.
+- No se admiten mayúsculas, guion bajo, puntos, espacios, barras ni Unicode no ASCII. Se permiten guiones consecutivos en el interior; no tienen semántica especial.
 - Expresión regular normativa: `^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$`.
 - La cadena recibida debe cumplir la gramática directamente. No se aplica trim, lowercase, transliteración, normalización Unicode ni corrección silenciosa.
 - Los valores siguen siendo identificadores opacos: el protocolo no deriva rutas, nombres de archivo, nombres SQL ni permisos a partir de ellos.
