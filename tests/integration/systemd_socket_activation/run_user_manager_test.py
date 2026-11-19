@@ -100,33 +100,28 @@ def _create_exclusive_file(path: Path, content: str) -> tuple[int, int, int]:
 
 
 def _ensure_directory_chain(directory: Path) -> dict[Path, tuple[int, int, int]]:
-    """Create missing unit directories and record only directories created here."""
-    missing = []
-    cursor = directory
-    while not cursor.exists():
-        missing.append(cursor)
-        parent = cursor.parent
-        if parent == cursor:
-            raise RuntimeError(f"cannot find an existing parent for {directory}")
-        cursor = parent
-
-    existing = cursor.lstat()
-    if not stat.S_ISDIR(existing.st_mode):
-        raise RuntimeError(f"unit directory ancestor is not a real directory: {cursor}")
-
+    """Create missing directories while rejecting symlinks in every path component."""
+    absolute = directory.absolute()
     created: dict[Path, tuple[int, int, int]] = {}
-    for candidate in reversed(missing):
+    cursor = Path(absolute.anchor)
+
+    for component in absolute.parts[1:]:
+        cursor = cursor / component
         try:
-            candidate.mkdir(mode=0o700)
-        except FileExistsError:
-            info = candidate.lstat()
-            if not stat.S_ISDIR(info.st_mode):
-                raise RuntimeError(f"unit directory path was replaced: {candidate}")
-            continue
-        created[candidate] = _path_identity(candidate)
-    target_info = directory.lstat()
-    if not stat.S_ISDIR(target_info.st_mode):
-        raise RuntimeError(f"unit directory is not a real directory: {directory}")
+            info = cursor.lstat()
+        except FileNotFoundError:
+            try:
+                cursor.mkdir(mode=0o700)
+            except FileExistsError:
+                info = cursor.lstat()
+                if not stat.S_ISDIR(info.st_mode):
+                    raise RuntimeError(f"unit directory path was replaced: {cursor}")
+            else:
+                created[cursor] = _path_identity(cursor)
+                continue
+        if not stat.S_ISDIR(info.st_mode):
+            raise RuntimeError(f"unit directory component is not a real directory: {cursor}")
+
     return created
 
 
