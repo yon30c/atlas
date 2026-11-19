@@ -51,7 +51,7 @@ El único request aceptado tiene exactamente estas claves:
 }
 ```
 
-No se admite compatibilidad con el sobre experimental `version: 1`. La allowlist del código sigue limitada a `authority.ping`; no se han activado alias ni operaciones adicionales.
+No se admite compatibilidad con el sobre experimental `version: 1`. El código reconoce exactamente los siete nombres del catálogo cerrado de §11. Solo `authority.ping` está implementada; las otras seis se rechazan con `OPERATION_DENIED`, mientras que nombres ajenos al catálogo reciben `UNKNOWN_OPERATION`. No se han activado alias ni operaciones adicionales.
 
 ### Response de éxito
 
@@ -155,4 +155,4 @@ No se ejecutaron pruebas desde GitHub ni desde esta intervención.
 
 ## 8. Criterio de cierre
 
-La implementación y documentación de las etapas 1–5 están preparadas en la rama de trabajo. La etapa solo se considera validada e integrable en la rama base después de que el propietario ejecute las pruebas en Debian y se revisen sus resultados.
+La implementación y documentación de las etapas 1–5 están preparadas en la rama de trabajo. La revisión final también verificó que los siete nombres del catálogo se distinguen de nombres desconocidos y que los seis todavía no implementados se rechazan con `OPERATION_DENIED`. La etapa solo se considera validada e integrable en la rama base después de que el propietario ejecute las pruebas en Debian y se revisen sus resultados.
