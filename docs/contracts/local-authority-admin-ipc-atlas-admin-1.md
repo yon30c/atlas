@@ -520,10 +520,10 @@ En cada variante:
 
 1. El conjunto de propiedades es exacto; no se admiten claves extra, ausentes ni valores nulos.
 2. `operation` debe coincidir exactamente con el nombre de operación del envelope.
-3. Los demás valores deben coincidir exactamente, tipo incluido, con los campos de alcance correspondientes del payload de la misma solicitud.
-4. `reason` se repite deliberadamente y debe ser idéntico, carácter por carácter, al `reason` del payload. La normalización admitida se aplica antes de construir ambos valores y se especifica por separado; no se normaliza silenciosamente uno para hacerlo coincidir con el otro.
+3. Los valores de alcance deben coincidir exactamente, tipo incluido, con la fuente autoritativa correspondiente: para `authority.migrations.apply` y `authority.project_environment.provision`, con los campos respectivos del payload; para `authority.initialize`, `canonical_database_name` debe coincidir con el nombre canónico derivado por el servicio desde su configuración protegida y la `confirmation_phrase` del payload debe corresponder exactamente a ese mismo nombre.
+4. `reason` se repite deliberadamente y debe ser idéntico, carácter por carácter, al `reason` del payload. No se normaliza silenciosamente uno para hacerlo coincidir con el otro; la regla de normalización previa a la construcción del request sigue pendiente y se especifica por separado.
 5. Para `authority.migrations.apply`, las versiones son enteros JSON y `target_version` debe ser mayor que `expected_current_version`. `plan_digest` debe coincidir exactamente con el digest del payload; su gramática canónica queda pendiente.
-6. Los nombres canónicos e IDs se representan como cadenas JSON; sus gramáticas siguen pendientes en §9.11. No se relaja por ello la igualdad exacta entre payload y alcance confirmado.
+6. Los nombres canónicos e IDs se representan como cadenas JSON; sus gramáticas siguen pendientes en §9.11. No se relaja por ello la igualdad exacta entre los valores que el servicio compara.
 
 El servicio deriva de forma independiente el objeto esperado de alcance a partir de la operación y del payload. La comparación es estructural y exacta, sin coerción de tipos, normalización oportunista ni aceptación de subconjuntos. Cualquier diferencia produce rechazo antes de iniciar efectos de dominio.
 
