@@ -32,8 +32,8 @@ class SystemdActivationCleanupTests(unittest.TestCase):
 
     def test_unit_file_creation_is_exclusive_and_private(self):
         path = self.directory / "probe.service"
-        identity = PROBE._create_exclusive_file(path, "[Service]\\n")
-        self.assertEqual(path.read_text(encoding="utf-8"), "[Service]\\n")
+        identity = PROBE._create_exclusive_file(path, "[Service]\n")
+        self.assertEqual(path.read_text(encoding="utf-8"), "[Service]\n")
         self.assertEqual(stat.S_IMODE(path.lstat().st_mode), 0o600)
         self.assertTrue(PROBE._identity_matches(path, identity, "file"))
 
