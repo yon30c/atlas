@@ -220,3 +220,22 @@ Leer primero, desde la rama activa y directamente en GitHub:
 10. Documentos I3-2B/7B pertinentes cuando se trabaje sobre identidad, Platform Admin o lifecycle.
 
 Al iniciar cada sesión, volver a consultar ramas, HEADs, PRs, comparación con base y contenido real de los documentos. Este archivo es una guía de contexto, no reemplaza los contratos normativos ni la inspección del estado vivo de GitHub.
+
+
+---
+
+## 9. Continuación de revisión de seguridad — 2026-11-19
+
+Esta sección prevalece sobre los SHA y recuentos de commits históricos indicados en §3; al iniciar una sesión nueva, volver a consultar GitHub.
+
+- PR #28 continúa abierto y en Draft, con base `test/authority-admin-systemd-activation`; no está integrado.
+- La rama de trabajo es `work/authority-admin-protocol-contract-alignment`. En la revisión se observaron 24 commits sobre la base y cero detrás.
+- El propietario confirmó en Debian 13 la suite completa previa: 1.583 tests, `OK (skipped=1)`, cero fallos y cero errores. Esta evidencia corresponde al estado anterior a la corrección adicional descrita abajo.
+- La revisión del decoder encontró un caso no cubierto: un literal entero JSON de más de 4.300 dígitos puede hacer que `json.loads` lance `ValueError` por el límite de conversión de enteros de Python, escapando del rechazo protocolario.
+- Corrección publicada: `decode_admin_request` captura `ValueError` y `RecursionError` y los convierte en `INVALID_JSON`. Se añadió una prueba con un entero de 5.000 dígitos y se actualizó la auditoría IPC y el documento del prototipo.
+- **Validación de esta corrección:** pendiente. No atribuir el resultado anterior de 1.583 tests a este cambio nuevo.
+- No se implementó listener, daemon, socket activation, acceso SQLite ni ninguna de las seis operaciones administrativas no habilitadas.
+
+### Siguiente acción única
+
+El propietario debe actualizar su checkout desde la rama remota de trabajo, ejecutar primero la prueba focalizada y después la suite completa. Solo tras recibir el resultado se continúa la revisión final del diff. Mantener PR #28 en Draft; no hacer merge ni tocar `main`.
