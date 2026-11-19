@@ -167,7 +167,7 @@ La descripción actual del PR reporta:
 - `git diff --check`: correcto.
 - Suite completa: 1.583 ejecutadas, 1 omitida y 2 errores iniciales en `test_platform_admin_ipc_filesystem.py`, debidos a expectativas antiguas del envelope experimental.
 - Se actualizaron esas expectativas para `atlas-admin/1`, respuesta ping `completed` y desconexión `AdminPeerDisconnected`.
-- **Pendiente obligatorio:** repetir en Debian la suite IPC específica y la suite completa después del último cambio. No declarar PR validado ni listo para integrar hasta recibir esos resultados.
+- **Validación completada por el propietario en Debian 13:** la suite completa reportó `Ran 1583 tests in 34.367s` y `OK (skipped=1)`: 1.583 ejecutadas, cero fallos, cero errores y una omitida. Esto confirma que desaparecieron los dos errores previos de `test_platform_admin_ipc_filesystem.py` tras alinear sus expectativas con `atlas-admin/1` y `AdminPeerDisconnected`. La evidencia fue comunicada por el propietario; no se ejecutaron pruebas desde GitHub. La auditoría `docs/design/local-authority-admin-ipc-contract-audit.md` registra el resultado. **Pendiente:** revisión final de seguridad/diff y aprobación explícita antes de integrar; PR #28 permanece Draft.
 
 La rama base `test/authority-admin-systemd-activation` contiene el prototipo de socket activation en entorno de pruebas aislado. No equivale a instalación ni activación del servicio Atlas en el host. El diseño del lifecycle del listener sigue siendo propuesta y exige pruebas adversariales; no se deben tocar las unidades/servicios existentes.
 
@@ -186,7 +186,7 @@ La rama base `test/authority-admin-systemd-activation` contiene el prototipo de 
 
 ## 7. Próximo paso acordado
 
-**Esperar la validación del propietario en Debian sobre el HEAD exacto `9f3cf520639bb892b75fc59efedc7e490a94ee2a` de `work/authority-admin-protocol-contract-alignment`.**
+**Realizar la revisión final de seguridad y del diff del PR #28**, manteniéndolo en Draft hasta completar esa revisión y recibir aprobación explícita para integrar. La suite completa ya fue validada por el propietario en Debian 13: 1.583 tests, `OK (skipped=1)`, 34.367 s.
 
 Comandos previstos por la documentación de la rama:
 
@@ -202,7 +202,7 @@ git diff --check
 # ya utilizado y validado en este checkout de Debian.
 ```
 
-El propietario debe compartir el comando exacto, número de tests, skips y resultado. Si hay fallos, inspeccionar y corregir en GitHub sobre la rama correspondiente; repetir validación local en Debian. No avanzar a listener/daemon, operaciones administrativas reales ni merge hasta cerrar esta validación y revisar el PR.
+La suite completa ya fue ejecutada y reportada por el propietario: `Ran 1583 tests in 34.367s` / `OK (skipped=1)`. La corrección de expectativas filesystem está validada por esa ejecución. El siguiente trabajo es revisión final del PR y de los límites de seguridad. No avanzar a listener/daemon, operaciones administrativas reales ni merge sin revisión y aprobación explícita.
 
 ## 8. Fuentes que deben releerse al iniciar una sesión
 
