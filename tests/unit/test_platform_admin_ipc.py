@@ -149,7 +149,7 @@ class AuthorityAdminIPCPeerTests(unittest.TestCase):
         self.assertEqual(peer.gid, os.getgid())
         self.assertGreater(peer.pid, 0)
 
-    def test_accepts_current_uid_and_returns_contract_response(self):
+    def test_ping_returns_contract_result_without_domain_health_claim(self):
         packet = _request_packet()
         self.client.send(packet)
 
@@ -165,8 +165,17 @@ class AuthorityAdminIPCPeerTests(unittest.TestCase):
         self.assertEqual(response["status"], "completed")
         self.assertEqual(response["code"], "OK")
         self.assertEqual(response["summary"], "Operation completed")
-        self.assertEqual(response["result"], {})
         self.assertIsNone(response["audit_ref"])
+        result = response["result"]
+        self.assertEqual(result["protocol_version"], PROTOCOL_ID)
+        self.assertIsInstance(result["service_version"], str)
+        self.assertTrue(result["service_version"])
+        self.assertEqual(result["handler_status"], "available")
+        self.assertEqual(set(result), {
+            "protocol_version",
+            "service_version",
+            "handler_status",
+        })
 
     def test_rejects_peer_uid_not_in_allowlist_before_reading_request(self):
         with self.assertRaises(AdminPeerRejected) as raised:
