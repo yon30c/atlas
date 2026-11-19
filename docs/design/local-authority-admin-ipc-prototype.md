@@ -1,6 +1,6 @@
 # Prototipo IPC Unix para operaciones administrativas de autoridad
 
-**Estado:** prototipo experimental; la suite completa de 1.583 tests fue validada en una revisión anterior. La corrección posterior del decoder está pendiente de validación local Debian; pendiente revisión adversarial final.  
+**Estado:** prototipo experimental; la suite completa de 1.583 tests fue validada en una revisión anterior. La corrección del decoder y la regresión de UID/GID están pendientes de validación local Debian; la revisión adversarial de consistencia y frontera de confianza está completada.  
 **Fase:** 2.5.2.  
 **No habilitado para producción.**
 
