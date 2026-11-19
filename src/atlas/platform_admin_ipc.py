@@ -25,6 +25,7 @@ MAX_RESPONSE_BYTES = 64 * 1024
 MAX_JSON_DEPTH = 16
 CONNECTION_TIMEOUT_SECONDS = 5.0
 MAX_CONNECTION_TIMEOUT_SECONDS = 60.0
+_OVERSIZED_JSON_INTEGER = object()
 
 _CATALOG_OPERATIONS = frozenset({
     "authority.ping",
@@ -142,11 +143,26 @@ def _reject_nonstandard_constant(value: str) -> None:
     )
 
 
+def _parse_json_integer(value: str) -> int | object:
+    """Parse an integer, preserving an invalid sentinel if Python rejects its size."""
+    try:
+        return int(value)
+    except ValueError:
+        # Keep the JSON structure parseable so a valid request_id elsewhere in
+        # the envelope can still be recovered and attached to INVALID_JSON.
+        return _OVERSIZED_JSON_INTEGER
+
+
 def _validate_json_values_and_depth(value: Any) -> None:
-    """Reject non-finite floats and containers nested deeper than the contract."""
+    """Reject oversized integers, non-finite floats and excessive nesting."""
     pending: list[tuple[Any, int]] = [(value, 1)]
     while pending:
         current, depth = pending.pop()
+        if current is _OVERSIZED_JSON_INTEGER:
+            raise AdminProtocolRejected(
+                "JSON integer exceeds the interpreter conversion limit",
+                code="INVALID_JSON",
+            )
         if isinstance(current, float) and not math.isfinite(current):
             raise AdminProtocolRejected(
                 "JSON numbers must be finite",
@@ -193,12 +209,12 @@ def decode_admin_request(packet: bytes) -> AdminRequest:
             text,
             object_pairs_hook=_reject_duplicate_keys,
             parse_constant=_reject_nonstandard_constant,
+            parse_int=_parse_json_integer,
         )
     except AdminProtocolRejected:
         raise
     except (ValueError, RecursionError) as exc:
-        # ValueError also covers Python's integer-string conversion limit;
-        # hostile oversized numeric literals must become protocol rejections.
+        # Parser-level failures must become controlled protocol rejections.
         raise AdminProtocolRejected(
             "request is not valid strict JSON",
             code="INVALID_JSON",
