@@ -13,6 +13,8 @@ import unittest
 import uuid
 
 from atlas.platform_admin_ipc import (
+    PROTOCOL_ID,
+    AdminPeerDisconnected,
     AdminPeerRejected,
     AdminProtocolRejected,
     handle_admin_connection,
@@ -22,7 +24,7 @@ from atlas.platform_admin_ipc import (
 def _ping_packet():
     return json.dumps(
         {
-            "version": 1,
+            "protocol": PROTOCOL_ID,
             "request_id": str(uuid.uuid4()),
             "operation": "authority.ping",
             "payload": {},
@@ -87,7 +89,7 @@ class AuthorityAdminIPCFilesystemTests(unittest.TestCase):
         with open(target, "rb") as existing:
             self.assertEqual(existing.read(), b"symlink-target")
 
-    def test_filesystem_socket_accepts_one_ping_and_returns_response(self):
+    def test_filesystem_socket_accepts_one_ping_and_returns_contract_response(self):
         listener = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
         self.addCleanup(listener.close)
         listener.bind(self.socket_path)
@@ -110,10 +112,23 @@ class AuthorityAdminIPCFilesystemTests(unittest.TestCase):
 
         response = json.loads(client.recv(4096).decode("utf-8"))
         self.assertEqual(peer.uid, os.getuid())
-        self.assertEqual(response["request_id"], request.request_id)
-        self.assertEqual(response["status"], "ok")
+        self.assertEqual(response, {
+            "protocol": PROTOCOL_ID,
+            "request_id": request.request_id,
+            "status": "completed",
+            "code": "OK",
+            "summary": "Operation completed",
+            "result": {
+                "protocol_version": PROTOCOL_ID,
+                "service_version": response["result"]["service_version"],
+                "handler_status": "available",
+            },
+            "audit_ref": None,
+        })
+        self.assertIsInstance(response["result"]["service_version"], str)
+        self.assertTrue(response["result"]["service_version"])
 
-    def test_disconnect_before_request_is_rejected(self):
+    def test_disconnect_before_request_is_reported_as_peer_disconnect(self):
         listener = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
         self.addCleanup(listener.close)
         listener.bind(self.socket_path)
@@ -127,7 +142,7 @@ class AuthorityAdminIPCFilesystemTests(unittest.TestCase):
         client.close()
         self.addCleanup(connection.close)
 
-        with self.assertRaises(AdminProtocolRejected):
+        with self.assertRaises(AdminPeerDisconnected):
             handle_admin_connection(
                 connection,
                 allowed_peer_uids={os.getuid()},
