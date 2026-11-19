@@ -301,26 +301,35 @@ No se ejecutaron pruebas en esta actualización. La corrección final del decode
 
 ---
 
-## 12. Cierre parcial de operator_evidence — 2026-11-19
+## 12. Cierre de semántica y representación de operator_evidence — 2026-11-19
 
-**Contrato actualizado:** `docs/contracts/local-authority-admin-ipc-atlas-admin-1.md`, §9.11.1.
+La revisión cerró primero la semántica y frontera de confianza de los cinco elementos de evidencia: UID real observado, UID efectivo del frontend, TTY/sesión, timestamp de autorización y alcance confirmado. Todos son declaraciones no confiables del frontend; no sustituyen `SO_PEERCRED`, identidad Atlas ni autorización de dominio.
 
-La revisión del siguiente pendiente se centró en `operator_evidence`, compartido por las tres mutaciones. Se fijaron las semánticas y los límites de confianza de sus cinco elementos ya exigidos:
+La representación JSON se aprobó posteriormente según las decisiones expresas del propietario y quedó incorporada en el contrato normativo, §9.11.2. La subsección §9.11.1 conserva las restricciones semánticas y de confianza.
 
-- UID real observado: declaración del frontend sobre el UID real del contexto del operador; no identifica a una persona ni autentica una identidad Atlas.
-- UID efectivo del frontend: declaración sobre el UID efectivo del proceso frontend; no equivale al UID del operador ni al peer IPC.
-- TTY/sesión: observación declarada por el frontend del terminal/sesión usados para la confirmación; no prueba presencia física, identidad ni autorización.
-- Timestamp de autorización: instante declarado por el frontend para la aceptación de la confirmación; no es hora de recepción ni de commit de la autoridad.
-- Alcance confirmado: operación y destinos concretos presentados al operador; el servicio debe derivar el alcance permitido desde la operación y el payload y rechazar cualquier discrepancia.
+**Estado actual:** estructura y tipos JSON aprobados; algunas gramáticas canónicas y la normalización de `reason` siguen pendientes. No se debe volver a tratar la estructura de `operator_evidence` como una decisión pendiente ni inferir por ello aprobación de implementación/despliegue.
 
-**Frontera de confianza obligatoria:** el objeto completo es una declaración no confiable del frontend y solo conserva procedencia declarada. El servicio mantiene separados los valores declarados, las credenciales kernel obtenidas por `SO_PEERCRED` y sus propios datos temporales/resultado de commit. El frontend privilegiado es responsable de exigir TTY foreground y confirmación tipada; recibir la declaración no permite al servicio afirmar que verificó independientemente el TTY del frontend.
+## 13. Revisión y aprobación del esquema operator_evidence — 2026-11-19
 
-**No se cerró todavía la representación JSON.** Siguen pendientes de aprobación los nombres exactos de propiedades, tipos, reglas de nullability, gramática del identificador de TTY/sesión, formato/zona horaria del timestamp y estructura exacta del alcance. La subsección §9.11.1 aclara semántica y seguridad, no aprueba esos detalles ni añade campos/capacidades.
+**Contrato normativo actualizado:** `docs/contracts/local-authority-admin-ipc-atlas-admin-1.md`, §§9.11.1–9.11.2.
 
-- Solo se modificó documentación; no se cambió código ejecutable.
-- No se ejecutaron pruebas.
-- Las seis operaciones no implementadas continúan deshabilitadas; solo ping está implementada.
-- PR #28 permanece Draft y sin merge.
-- La rama de trabajo sigue siendo `work/authority-admin-protocol-contract-alignment`.
+Decisiones del propietario:
+- TTY/sesión: conservar los cuatro campos (`terminal_device`, `session_id`, `process_group_id`, `foreground_process_group_id`).
+- UID: `operator_real_uid` y `frontend_effective_uid` admiten cualquier entero JSON no negativo; no se exige UID 0 ni se concede autorización por el valor.
+- Alcance: `reason` se incluye también en `confirmed_scope` y debe coincidir exactamente con el `reason` del payload.
 
-**Siguiente decisión necesaria:** aprobar una representación estructurada concreta para los cinco elementos de `operator_evidence`, o indicar qué fuentes/formatos debe reflejar. No convertir la propuesta del asistente en contrato aprobado sin esa decisión.
+Esquema aprobado:
+- `operator_evidence` tiene exactamente cinco propiedades obligatorias no anulables: `operator_real_uid`, `frontend_effective_uid`, `tty_session`, `authorized_at`, `confirmed_scope`.
+- `tty_session` contiene exactamente los cuatro campos acordados. `terminal_device` es cadena UTF-8 no vacía, ruta absoluta, sin NUL y máximo 256 bytes; los tres IDs de sesión/grupos son enteros positivos.
+- `authorized_at` usa UTC estricto `YYYY-MM-DDTHH:MM:SS.ffffffZ`, generado después de la aceptación de confirmación y antes de transmitir.
+- `confirmed_scope` tiene un esquema exacto por mutación: initialize incluye operación, nombre canónico de DB y motivo; migrations.apply incluye operación, versiones, digest y motivo; provision incluye operación, project ID, environment ID y motivo.
+- El campo `operation` debe coincidir con el envelope. Los valores de alcance y el motivo deben coincidir exactamente y por tipo con el payload. No se permite coerción ni normalización oportunista.
+- `confirmation_phrase` permanece en el payload y se valida por separado; no se duplica en `confirmed_scope`.
+
+**Criterio de confianza importante:** el servicio puede validar la coherencia estructural declarada —incluida la igualdad entre process group y foreground process group—, pero no puede demostrar solo con esos valores que el frontend observó realmente el TTY foreground. La comprobación local de terminal, sesión, grupos de proceso y foreground corresponde al frontend privilegiado. La evidencia no es autenticación fuerte, prueba de presencia humana ni autorización de dominio.
+
+**Pendiente, sin bloquear el cierre estructural:** gramáticas canónicas de nombre de DB, IDs y digest; normalización exacta de `reason`; esquemas completos de resultados y tabla exhaustiva de códigos/mapeo status-code. No ampliar campos ni capacidades mientras se cierran esos detalles.
+
+**Alcance del cambio:** documentación únicamente. No se modificó código ejecutable ni se ejecutaron pruebas. Las seis operaciones administrativas no implementadas continúan deshabilitadas; solo `authority.ping` está implementada. PR #28 sigue Draft y sin merge. No se aprobó listener persistente, systemd, UID de producción, acceso real a SQLite ni ejecución de mutaciones.
+
+**Siguiente paso recomendado:** continuar con el siguiente pendiente independiente de §9.11: definir la normalización exacta de `reason`, revisando primero los precedentes de dominio y evitando alterar el significado de motivos ya registrados.
