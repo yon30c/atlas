@@ -410,6 +410,19 @@ El catálogo de siete operaciones es normativamente cerrado. Las especificacione
 - Ninguna de estas especificaciones aprueba el despliegue del listener, systemd, permisos definitivos del host ni operaciones sobre la DB real.
 
 
+
+### 9.11 Detalles de representación aún por cerrar
+
+Las decisiones de dominio recuperadas fijan los campos y semánticas de los payloads anteriores, pero no todas las gramáticas de sus valores. Antes de implementar las seis operaciones pendientes deben cerrarse, sin ampliar los campos:
+
+- La estructura exacta y la validación campo por campo de `operator_evidence`; ya están fijados como mínimo UID real observado, UID efectivo del frontend, TTY/sesión, timestamp de autorización y alcance exacto confirmado. No se debe tratar ninguno como sustituto de `SO_PEERCRED` ni inventar valores probatorios.
+- La normalización exacta de `reason` dentro del límite de 1–500 caracteres.
+- Las gramáticas canónicas de `project_id`, `environment_id`, `canonical-database-name` y las representaciones de versión/digest.
+- Los esquemas completos de cada objeto de resultado, incluidos nombres de campos, tipos y códigos estables por fallo/precondición.
+- El mapeo exhaustivo de resultados de dominio a `status/code` del envelope, incluidos los casos de `BLOCKED`, `NOT_INITIALIZED`, `COMMITTED_EXACT` y `NOT_COMMITTED`.
+
+Estas precisiones son cierre de esquema, no permiso para agregar campos, rutas, selectores ni capacidades. Hasta que estén aprobadas, las operaciones siguen no implementadas y deshabilitadas.
+
 ## 10. Códigos de rechazo y errores
 
 Los códigos son identificadores estables y no deben derivarse de mensajes de excepción. El texto de resumen puede evolucionar sin cambiar el código.
@@ -432,9 +445,11 @@ La implementación de referencia actual utiliza:
 - `UNAUTHORIZED_PEER`
 - `PEER_DISCONNECTED`
 - `TIMEOUT`
+- `IDEMPOTENCY_CONFLICT` (requerido por las reglas compartidas de mutación).
+- `RESULT_UNKNOWN` (requerido cuando no puede demostrarse el resultado durable de una mutación).
 - `INTERNAL_ERROR`
 
-Esta lista documenta los códigos emitidos por el prototipo; no declara que todos los errores de dominio futuros estén ya catalogados. Los códigos de cada operación deben añadirse a su especificación individual antes de habilitarla.
+La implementación actual del prototipo emite los códigos de transporte/protocolo anteriores; `IDEMPOTENCY_CONFLICT` y `RESULT_UNKNOWN` son además códigos normativos requeridos por las reglas compartidas de mutación, aunque no estén implementados en el prototipo. Los códigos concretos para conflictos de precondición y fallos de cada operación (por ejemplo, diagnósticos bloqueados o asociación existente) todavía requieren una tabla estable por operación antes de implementar esas operaciones. No se deben inventar códigos ad hoc a partir de excepciones.
 
 ### 10.2 Política de respuesta por clase
 
