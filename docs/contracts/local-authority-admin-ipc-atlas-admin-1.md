@@ -299,7 +299,7 @@ No admite filtros, SQL, paginación arbitraria ni consulta de otros registros.
 
 **Resultado:** uno de estos resultados de dominio:
 
-- `COMMITTED_EXACT`: existe registro durable con el mismo operation ID y digest/tipo esperado; devuelve tipo de operación, digest, timestamp y referencia de auditoría.
+- `COMMITTED_EXACT`: existe un único registro durable para el `operation_id` y el ledger demuestra que el tipo, la intención canónica y el digest persistido son internamente coherentes; devuelve tipo de operación, digest, timestamp y referencia de auditoría. El servicio no compara contra una intención del caller porque esta consulta no la recibe; el cliente compara el tipo y digest devueltos con la intención que conserva localmente.
 - `NOT_COMMITTED`: el ledger está disponible, íntegro y permite demostrar que no existe commit para ese ID; devuelve evidencia mínima de la comprobación.
 - `UNKNOWN`: ledger ausente, corrupto, inaccesible, inconsistente o incapaz de demostrar presencia/ausencia.
 
