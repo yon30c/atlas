@@ -213,11 +213,12 @@ Leer primero, desde la rama activa y directamente en GitHub:
 3. `docs/roadmap.md` y `docs/functional-test-roadmap.md` — secuencia de producto.
 4. `docs/architecture.md` y `docs/functional-architecture-map.md` — composición y límites.
 5. `docs/design/local-authority-storage-operational-contract.md` — contrato operativo de almacenamiento.
+6. `docs/contracts/local-authority-admin-ipc-atlas-admin-1.md` — fuente normativa única del protocolo y especificaciones individuales del catálogo.
 6. `docs/design/local-authority-administrative-operations-design.md` — diseño/catálogo de operaciones.
-7. `docs/design/local-authority-admin-ipc-contract-audit.md` y `docs/design/local-authority-admin-ipc-prototype.md` — estado IPC actual.
-8. `docs/design/local-authority-admin-listener-lifecycle.md` — lifecycle propuesto; no aprobado.
-9. `docs/design/ME-D4J-sqlite-unit-of-work.md` — evolución y límites de UoW/Recovery Gate.
-10. Documentos I3-2B/7B pertinentes cuando se trabaje sobre identidad, Platform Admin o lifecycle.
+8. `docs/design/local-authority-admin-ipc-contract-audit.md` y `docs/design/local-authority-admin-ipc-prototype.md` — estado IPC actual.
+9. `docs/design/local-authority-admin-listener-lifecycle.md` — lifecycle propuesto; no aprobado.
+10. `docs/design/ME-D4J-sqlite-unit-of-work.md` — evolución y límites de UoW/Recovery Gate.
+11. Documentos I3-2B/7B pertinentes cuando se trabaje sobre identidad, Platform Admin o lifecycle.
 
 Al iniciar cada sesión, volver a consultar ramas, HEADs, PRs, comparación con base y contenido real de los documentos. Este archivo es una guía de contexto, no reemplaza los contratos normativos ni la inspección del estado vivo de GitHub.
 
@@ -262,7 +263,7 @@ Reglas consolidadas:
 - JSON UTF-8 estricto, claves duplicadas/campos desconocidos/valores no finitos rechazados; truncamiento y ancillary data prohibidos.
 - Envelope de respuesta con `protocol`, `request_id`, `status`, `code`, `summary`, `result`, `audit_ref`.
 - Estados normativos cerrados: `completed`, `rejected`, `pending`, `unknown`.
-- Catálogo cerrado de siete operaciones. Solo `authority.ping` tiene especificación individual suficiente e implementación en el prototipo; las otras seis permanecen deshabilitadas y requieren contratos individuales aprobados.
+- Catálogo cerrado de siete operaciones. `authority.ping` está implementada en el prototipo. Las otras seis cuentan ahora con especificaciones individuales trasladadas desde el diseño aprobado: payloads, precondiciones, resultados, efectos y restricciones; permanecen sin implementar y deshabilitadas.
 - La allowlist de UID es configuración explícita del caller; `SO_PEERCRED` no es identidad humana ni autorización Atlas. No se aprueba aquí UID de producción, listener persistente ni systemd.
 - Los límites 16/64 KiB sustituyen expresamente la propuesta anterior de 64 KiB para request en el diseño administrativo.
 
@@ -275,3 +276,24 @@ Documentos subordinados alineados:
 **Validación:** no se ejecutaron pruebas durante la edición documental. La suite 1.583/1 omitida es evidencia histórica anterior a la corrección final del decoder; esa corrección permanece pendiente de validación local Debian. No declarar el HEAD actual validado.
 
 **Siguiente paso:** revisar la coherencia final de referencias/citas normativas y actualizar el estado/PR para que la nueva fuente sea visible, sin habilitar operaciones adicionales ni avanzar a despliegue.
+
+
+---
+
+## 11. Contratos individuales consolidados — 2026-11-18
+
+Se recuperaron las especificaciones aprobadas previamente para las siete operaciones y se incorporaron en `docs/contracts/local-authority-admin-ipc-atlas-admin-1.md`, §§9.1–9.10.
+
+- Lecturas: `authority.ping`, `authority.diagnose`, `authority.migrations.plan`, `authority.operation.status`. No mutan estado de dominio ni crean DB/ledger/sidecars/directorios/archivos. `operation.status` recibe `operation_id` solo como identificador de consulta.
+- Mutaciones: exactamente `authority.initialize`, `authority.migrations.apply`, `authority.project_environment.provision`. Requieren `operation_id` UUIDv4, `reason` normalizado de 1–500 caracteres, `operator_evidence`, TTY foreground y confirmación tipada/exacta en frontend.
+- Idempotencia: mismo operation ID + digest canónico devuelve resultado registrado; mismo ID con intención distinta => `IDEMPOTENCY_CONFLICT`. Commit no demostrable => `unknown/RESULT_UNKNOWN`, resolver mediante `authority.operation.status`.
+- `diagnose`: perfiles `quick` y `deep`; ruta solo de configuración protegida; resultados PASS/FAIL/UNKNOWN/NOT_APPLICABLE; nunca repara ni muta.
+- `migrations.plan`: payload vacío; DB/ledger/manifiesto read-only; plan ordenado con digest; historial divergente => BLOCKED.
+- `operation.status`: payload con operation ID; solo ledger read-only; COMMITTED_EXACT / NOT_COMMITTED / UNKNOWN.
+- `initialize`: bootstrap exclusivo de DB nueva, frase `INITIALIZE <canonical-database-name>`; no acepta ruta y no borra automáticamente restos parciales.
+- `migrations.apply`: forward-only, plan/digest revalidado, frase `MIGRATE <expected_current_version> -> <target_version>`; ledger schema + evento administrativo en el mismo commit.
+- `project_environment.provision`: crea solo asociación inicial ACTIVE/revision 1, frase `PROVISION <project_id> -> <environment_id>`; no crea ni modifica Project/Environment/USER/AGENT/Grant u otros recursos.
+- El contrato especifica los detalles de comportamiento recuperados, pero §9.11 deja explícitos cierres de representación pendientes: esquema campo por campo de `operator_evidence`, normalización de `reason`, gramáticas canónicas de IDs/versiones/digests, esquemas completos de resultados y tabla exhaustiva de códigos/mapeo de estados. No inventar estos detalles.
+- Solo ping está implementada; las otras seis permanecen deshabilitadas. La incorporación documental no autoriza ejecución real, listener, systemd ni acceso a la DB real.
+
+No se ejecutaron pruebas en esta actualización. La corrección final del decoder continúa pendiente de validación local Debian. PR #28 permanece Draft.
