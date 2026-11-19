@@ -1,6 +1,6 @@
 # Auditoría y cierre de alineación IPC administrativo con atlas-admin/1
 
-**Estado:** etapas 1–5 implementadas; la suite completa de 1.583 tests corresponde a una revisión anterior. La corrección posterior del decoder para enteros JSON extremos está pendiente de validación local Debian; pendiente revisión final antes de integrar.  
+**Estado:** etapas 1–5 del prototipo implementadas; cierre documental del contrato de resultados, canonicalización e invariantes de códigos publicado en revisión 1.1. La corrección posterior del decoder para enteros JSON extremos sigue pendiente de validación local Debian; pendiente revisión final antes de integrar.  
 **Base de trabajo:** `test/authority-admin-systemd-activation`.  
 **Rama de trabajo:** `work/authority-admin-protocol-contract-alignment`.  
 **Fuente normativa IPC:** `docs/contracts/local-authority-admin-ipc-atlas-admin-1.md`. Este documento de auditoría es descriptivo y no sustituye el contrato.  
@@ -114,7 +114,7 @@ La validación fue ejecutada por el propietario en Debian; no se ejecutaron prue
 ## 7. Límites y riesgos pendientes
 
 - Las seis operaciones restantes tienen payloads, precondiciones, resultados, efectos y restricciones documentados en §§9.3–9.8 del contrato normativo, pero no están implementadas ni habilitadas.
-- Antes de implementarlas deben cerrarse los detalles de representación indicados en §9.11: esquema exacto de `operator_evidence`, normalización de `reason`, gramáticas de IDs/versiones/digests, esquemas completos de resultados y mapeo exhaustivo de códigos/estados.
+- El cierre documental de representación quedó completado en contrato §§9.11.1–9.11.6; los resultados exactos están en §9.12 y el mapeo de códigos/estados en §10.4. Esto no equivale a implementación ni validación de las operaciones.
 - No hay listener persistente, daemon ni activación systemd en este PR.
 - La concurrencia/backpressure corresponde al futuro listener y debe probarse antes de implementarlo.
 - La conducta de EOF/paquete vacío se mantiene conservadora.
@@ -135,3 +135,17 @@ La revisión del decoder identificó que Python puede lanzar `ValueError` al con
 **Corrección revisada:** el decoder usa `parse_int` para convertir los enteros normales y, si Python rechaza un literal por su límite de conversión, conserva un sentinel interno. Así puede terminar de parsear la estructura, validar/extraer el UUIDv4 y después rechazar el sentinel como `INVALID_JSON`, adjuntando el `request_id` validado. El sentinel nunca llega al payload aceptado. Se conserva el rechazo de JSON inválido y no se eleva el límite global del intérprete.
 
 **Validación:** la prueba focalizada reportada por el propietario falló antes de esta segunda corrección (`request_id=None`, esperado UUIDv4). La corrección revisada está publicada; prueba focalizada y suite completa quedan pendientes de nueva ejecución en Debian.
+
+
+## 10. Cierre documental de canonicalización, resultados y códigos — 2026-11-19
+
+La revisión 1.1 del contrato normativo `atlas-admin/1` cerró en una sola fuente:
+
+1. **Plan/digest:** §9.11.5 reutiliza `atlas.memory.local_auth.canonical_json_bytes` (canonical JSON v1) y define la proyección exacta `atlas-admin-migration-plan`, sus campos, orden de migraciones, exclusiones, serialización UTF-8 y SHA-256 lowercase. Un plan bloqueado no produce digest aplicable.
+2. **Idempotencia de mutaciones:** §9.11.6 define una proyección distinta `atlas-admin-operation-intent`; excluye operation ID, request ID, frase de confirmación y evidencia de cada intento, e incluye la intención semántica y `reason`. La autoridad calcula el digest.
+3. **Resultados:** §9.12 define los objetos exactos para las siete operaciones, incluidos los resultados discriminados de `authority.operation.status`, el contenido de cada migración y las referencias de auditoría.
+4. **Códigos/estados:** §10.4 fija códigos de dominio, operación aplicable y estado envelope. `pending` no se utiliza por ninguna operación actual; commit incierto de mutación es siempre `unknown/RESULT_UNKNOWN`.
+
+**Límites que no cambian:** solo `authority.ping` está implementada. Las otras seis operaciones siguen deshabilitadas; no existe listener persistente, daemon, systemd ni acceso administrativo real a SQLite. No se modificó código ejecutable ni se ejecutaron pruebas. La suite histórica de 1.583 tests no valida HEAD actual ni la corrección pendiente del decoder.
+
+**Siguiente paso:** revisión de consistencia cruzada del contrato y documentos subordinados, seguida de revisión final de seguridad/diff. El propietario debe validar el decoder en Debian por separado.
