@@ -323,7 +323,7 @@ Esquema aprobado:
 - `tty_session` contiene exactamente los cuatro campos acordados. `terminal_device` es cadena UTF-8 no vacía, ruta absoluta, sin NUL y máximo 256 bytes; los tres IDs de sesión/grupos son enteros positivos.
 - `authorized_at` usa UTC estricto `YYYY-MM-DDTHH:MM:SS.ffffffZ`, generado después de la aceptación de confirmación y antes de transmitir.
 - `confirmed_scope` tiene un esquema exacto por mutación: initialize incluye operación, nombre canónico de DB y motivo; migrations.apply incluye operación, versiones, digest y motivo; provision incluye operación, project ID, environment ID y motivo.
-- El campo `operation` debe coincidir con el envelope. Los valores de alcance y el motivo deben coincidir exactamente y por tipo con el payload. No se permite coerción ni normalización oportunista.
+- El campo `operation` debe coincidir con el envelope. Los valores de alcance y el motivo deben coincidir exactamente y por tipo con su fuente autoritativa: payload para migrations.apply/provision, configuración protegida y frase de confirmación para initialize. No se permite coerción ni normalización oportunista.
 - `confirmation_phrase` permanece en el payload y se valida por separado; no se duplica en `confirmed_scope`.
 
 **Criterio de confianza importante:** el servicio puede validar la coherencia estructural declarada —incluida la igualdad entre process group y foreground process group—, pero no puede demostrar solo con esos valores que el frontend observó realmente el TTY foreground. La comprobación local de terminal, sesión, grupos de proceso y foreground corresponde al frontend privilegiado. La evidencia no es autenticación fuerte, prueba de presencia humana ni autorización de dominio.
