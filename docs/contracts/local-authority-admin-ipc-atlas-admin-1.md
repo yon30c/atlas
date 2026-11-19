@@ -411,15 +411,11 @@ El catálogo de siete operaciones es normativamente cerrado. Las especificacione
 
 
 
-### 9.11 Detalles de representación aún por cerrar
+### 9.11 Representación canónica y evidencia administrativa
 
-Las decisiones de dominio y las aprobaciones expresas del propietario fijan ya la estructura de `operator_evidence`, la normalización de `reason` y las gramáticas de los identificadores/valores administrativos definidos en §9.11.4. Antes de implementar las seis operaciones pendientes todavía deben cerrarse:
+Las decisiones aprobadas fijan la estructura de `operator_evidence`, la normalización de `reason`, las gramáticas de valores y la serialización del plan en §§9.11.1–9.11.5. Los resultados exactos por operación se fijan en §9.12 y los códigos/estados en §10.
 
-- Los esquemas completos de cada objeto de resultado, incluidos nombres de campos, tipos y códigos estables por fallo/precondición.
-- El mapeo exhaustivo de resultados de dominio a `status/code` del envelope, incluidos los casos de `BLOCKED`, `NOT_INITIALIZED`, `COMMITTED_EXACT` y `NOT_COMMITTED`.
-- La serialización canónica exacta del contenido del plan que alimenta el SHA-256 de `plan_digest`; la gramática textual del digest sí queda fijada en §9.11.4.
-
-Estas precisiones son cierre de esquema, no permiso para agregar campos, rutas, selectores ni capacidades. Las seis operaciones no implementadas siguen deshabilitadas.
+Estas precisiones son cierre de esquema, no permiso para agregar campos, rutas, selectores ni capacidades. Las seis operaciones no implementadas siguen deshabilitadas hasta que exista implementación y validación específicas.
 
 ### 9.11.1 Semántica y frontera de confianza de la evidencia
 
@@ -596,9 +592,231 @@ Esta restricción es específica del límite IPC administrativo. No cambia retro
 - Representación: exactamente 64 caracteres ASCII hexadecimales en minúsculas (`[0-9a-f]{64}`), sin prefijo (`sha256:`), espacios, padding ni terminador.
 - El valor debe coincidir exactamente entre payload, `confirmed_scope` y digest recalculado por la autoridad.
 - El digest identifica la integridad del plan, no es un token, credencial, autorización ni sustituto de revalidar manifiesto, ledger, secuencia y checksums.
-- La serialización canónica exacta de los campos del plan antes de calcular SHA-256 permanece pendiente de especificación; hasta cerrarla, no se debe implementar ni habilitar `authority.migrations.apply` basándose solo en esta gramática.
+- La serialización y proyección exactas se definen en §9.11.5.
 
 Cualquier valor fuera de estas reglas se rechaza antes de iniciar efectos de dominio.
+
+### 9.11.5 Serialización canónica del plan de migraciones
+
+**Estado:** baseline normativo de `atlas-admin/1`. Reutiliza exclusivamente la canonicalización JSON v1 ya existente en `atlas.memory.local_auth.canonical_json_bytes`; no introduce un segundo canonicalizador.
+
+La autoridad calcula `plan_digest` sobre la siguiente proyección lógica exacta. No se aceptan campos adicionales ni se omiten campos:
+
+```json
+{
+  "canonicalization_version": 1,
+  "database_name": "authority.sqlite3",
+  "format": "atlas-admin-migration-plan",
+  "format_version": 1,
+  "migrations": [
+    {
+      "checksum": "<sha256-lowercase>",
+      "name": "<published-migration-name>",
+      "version": 28
+    }
+  ],
+  "protocol": "atlas-admin/1",
+  "current_version": 27,
+  "target_version": 28
+}
+```
+
+Reglas normativas:
+
+1. `migrations` contiene exactamente las migraciones pendientes desde `current_version + 1` hasta `target_version`, inclusive, en orden estrictamente ascendente de `version`. Cada entrada contiene exactamente `version`, `name` y `checksum`; los valores se toman del manifiesto de migraciones publicadas y se verifican contra el ledger.
+2. `current_version` y `target_version` son los enteros JSON estrictos de §9.11.4. `target_version` es la última versión publicada compatible del manifiesto y debe ser mayor que `current_version` para un plan aplicable.
+3. `name` es el nombre exacto e inmutable de la migración publicada. `checksum` es el SHA-256 lowercase de los bytes UTF-8 exactos del SQL publicado, sin normalización de saltos de línea, espacios ni Unicode.
+4. La proyección se serializa como canonical JSON v1: claves de objeto ordenadas lexicográficamente por sus cadenas Unicode; arrays conservan el orden definido arriba; separadores compactos `(",", ":")`; `ensure_ascii=False`; codificación UTF-8 estricta; `allow_nan=False`. No se emiten BOM, espacios de formato ni salto de línea final. No se aplica normalización Unicode a cadenas.
+5. Solo se admiten en esta proyección objetos con claves string, arrays, cadenas Unicode válidas, enteros JSON y los tipos adicionales que canonical JSON v1 soporte explícitamente; para este esquema concreto no existen booleanos, null, floats, sets, datetimes ni dataclasses.
+6. Los bytes canónicos son el resultado de `canonical_json_bytes(projection)`. El digest es `lowercase_hex(SHA256(canonical_bytes))`, sin prefijo.
+7. El digest no incluye `plan_digest` (evita circularidad), `status`, razones de bloqueo, timestamps, `request_id`, `operation_id`, `reason`, `confirmation_phrase`, `operator_evidence`, ruta física, propietario/modo del archivo ni datos de ejecución. Estos valores no alteran el contenido de las migraciones pendientes.
+8. La autoridad recalcula manifiesto, ledger, proyección y digest dentro del contexto protegido inmediatamente antes de aplicar. Compara byte por byte el digest recibido y el digest derivado; cualquier diferencia rechaza con `MIGRATION_PLAN_STALE` antes de escribir.
+9. Un plan `BLOCKED` no es aplicable y devuelve `plan_digest: null`; no se crea un digest ejecutable para un historial incompleto, divergente o no verificable.
+10. Un cambio futuro de proyección o canonicalización exige nueva versión de formato/canonicalización y revisión explícita del contrato. No se reinterpretan digests históricos bajo una proyección nueva.
+
+La función existente `canonical_json_bytes` también admite dataclasses, enums, fechas UTC y conjuntos para otros dominios. Esas capacidades no amplían el esquema de esta proyección IPC. La autoridad construye primero el objeto JSON exacto anterior y no entrega objetos arbitrarios al canonicalizador.
+
+### 9.12 Esquemas exactos de resultados por operación
+
+Los siguientes esquemas definen el objeto `result` del envelope. Todos los objetos tienen exactamente los campos indicados: no se admiten campos ausentes, adicionales, nulls no declarados ni coerciones de tipo. Los arrays mantienen el orden especificado. Las cadenas de resumen son breves, seguras y no contienen rutas físicas, SQL, secretos ni trazas.
+
+#### 9.12.1 `authority.ping`
+
+Resultado exacto:
+
+```json
+{
+  "protocol_version": "atlas-admin/1",
+  "service_version": "0.1.0",
+  "handler_status": "available"
+}
+```
+
+`service_version` es la versión de distribución/fallback descrita en §9.1. No se devuelve `audit_ref` de envelope (es null).
+
+#### 9.12.2 `authority.diagnose`
+
+Resultado exacto:
+
+```json
+{
+  "profile": "quick",
+  "overall_status": "PASS",
+  "checks": [
+    {
+      "check_id": "database_file",
+      "status": "PASS",
+      "code": "OK",
+      "summary": "Database file is a regular file",
+      "duration_ms": 1
+    }
+  ]
+}
+```
+
+- `profile`: `quick` o `deep`, igual al payload.
+- `overall_status`: `PASS`, `FAIL`, `UNKNOWN` o `NOT_INITIALIZED`. `NOT_INITIALIZED` se usa cuando el destino está ausente en el estado pre-bootstrap; no se trata como corrupción por sí solo.
+- `checks`: array no vacío, ordenado por el orden fijo de ejecución de la implementación y limitado a las comprobaciones del perfil solicitado. Cada elemento tiene exactamente:
+  - `check_id`: identificador estable de comprobación: `database_file`, `database_path`, `directory_permissions`, `file_permissions`, `readonly_access`, `sqlite_version`, `migration_ledger`, `migration_sequence`, `migration_checksums`, `integrity_check`.
+  - `status`: `PASS`, `FAIL`, `UNKNOWN` o `NOT_APPLICABLE`.
+  - `code`: código de §10.4 o `OK`; el código describe el resultado de esa comprobación, no sustituye el estado global.
+  - `summary`: texto breve, no sensible.
+  - `duration_ms`: entero JSON no negativo, sin booleanos ni floats.
+- Quick incluye comprobaciones aplicables de archivo/ruta/permisos, acceso read-only, versión SQLite y ledger/secuencia/checksums. Deep añade `integrity_check`. Las comprobaciones no aplicables se marcan `NOT_APPLICABLE`; las no ejecutadas por fallo previo no se presentan como PASS.
+- El envelope es `completed/OK` si el diagnóstico terminó y pudo devolver sus comprobaciones, incluso cuando `overall_status` sea FAIL, UNKNOWN o NOT_INITIALIZED. Si el diagnóstico no pudo producir un resultado estructurado fiable, devuelve `rejected/DIAGNOSTIC_UNAVAILABLE` cuando el canal permita respuesta.
+
+#### 9.12.3 `authority.migrations.plan`
+
+Resultado exacto:
+
+```json
+{
+  "current_version": 27,
+  "target_version": 28,
+  "migrations": [
+    {
+      "version": 28,
+      "name": "example_migration",
+      "checksum": "<64-lowercase-hex>"
+    }
+  ],
+  "plan_digest": "<64-lowercase-hex>",
+  "plan_status": "APPLICABLE",
+  "block_reasons": []
+}
+```
+
+- `current_version` y `target_version`: enteros JSON estrictos de §9.11.4 o null si no pueden determinarse de forma fiable.
+- `migrations`: array de entradas exactas `{version, name, checksum}`, orden ascendente. Array vacío solo si no hay migraciones pendientes.
+- `plan_digest`: SHA-256 de §9.11.5 o null cuando `plan_status=BLOCKED`.
+- `plan_status`: `APPLICABLE` o `BLOCKED`.
+- `block_reasons`: array ordenado y no vacío si BLOCKED; vacío si APPLICABLE. Cada entrada tiene exactamente `code` y `summary`, con code de §10.4. No se devuelve SQL ni ruta.
+- Si `current_version` ya es la última versión publicada, `target_version=current_version`, `migrations=[]`, `plan_status=APPLICABLE`; el digest se calcula sobre esa proyección con array vacío. `authority.migrations.apply` no acepta un plan sin migraciones.
+- Envelope: `completed/OK` para APPLICABLE; `completed/PLAN_BLOCKED` para BLOCKED. El resultado de un plan bloqueado es un resultado de lectura completado, no una mutación rechazada.
+
+#### 9.12.4 `authority.operation.status`
+
+Resultado discriminado exacto por `operation_state`:
+
+```json
+{
+  "operation_id": "<uuidv4>",
+  "operation_state": "COMMITTED_EXACT",
+  "operation": "authority.initialize",
+  "intent_digest": "<64-lowercase-hex>",
+  "committed_at": "2026-11-19T02:15:30.123456Z",
+  "audit_ref": "<opaque-reference>"
+}
+```
+
+Variantes:
+
+- `COMMITTED_EXACT`: exactamente `operation_id`, `operation_state`, `operation`, `intent_digest`, `committed_at`, `audit_ref`. El ledger demuestra que el ID y digest corresponden a la intención exacta.
+- `NOT_COMMITTED`: exactamente `operation_id`, `operation_state`, `ledger_verified: true`. Solo se devuelve si el ledger está íntegro/legible y demuestra la ausencia del ID.
+- `UNKNOWN`: exactamente `operation_id`, `operation_state`, `reason_code`; reason_code es uno de `LEDGER_UNAVAILABLE`, `LEDGER_CORRUPT`, `LEDGER_INCONSISTENT`, `INTENT_MISMATCH`. No afirma presencia ni ausencia.
+- La consulta en sí responde `completed/OK` si pudo producir una de las tres variantes, incluso cuando operation_state=UNKNOWN. El estado UNKNOWN del resultado de dominio no significa que la consulta IPC haya quedado sin respuesta o con ejecución incierta.
+- Esta operación nunca reintenta, repara, revierte ni inicia la operación consultada. Envelope `audit_ref=null` porque la consulta es read-only; en COMMITTED_EXACT se devuelve la referencia persistida dentro del resultado.
+
+#### 9.12.5 `authority.initialize`
+
+Resultado exacto de commit demostrado:
+
+```json
+{
+  "operation_id": "<uuidv4>",
+  "database_name": "authority.sqlite3",
+  "initial_version": 27,
+  "installed_migrations": [
+    {
+      "version": 1,
+      "name": "local_consistency_core",
+      "checksum": "<64-lowercase-hex>"
+    }
+  ],
+  "committed_at": "2026-11-19T02:15:30.123456Z",
+  "audit_ref": "<opaque-reference>"
+}
+```
+
+- `database_name` es literal §9.11.4.
+- `initial_version` debe ser la última versión bootstrap publicada e instalada; coincide con la mayor versión en `installed_migrations`.
+- `installed_migrations` incluye todas las migraciones bootstrap aplicadas, en orden ascendente y con nombre/checksum exactos.
+- `committed_at` usa UTC exacto `YYYY-MM-DDTHH:MM:SS.ffffffZ`, generado por la autoridad al confirmar.
+- `audit_ref` es una referencia opaca durable, no null.
+- Envelope de éxito `completed/OK`; envelope audit_ref coincide byte por byte con result.audit_ref.
+
+#### 9.12.6 `authority.migrations.apply`
+
+Resultado exacto de commit demostrado:
+
+```json
+{
+  "operation_id": "<uuidv4>",
+  "previous_version": 27,
+  "target_version": 29,
+  "final_version": 29,
+  "applied_migrations": [
+    {
+      "version": 28,
+      "name": "example_migration",
+      "checksum": "<64-lowercase-hex>"
+    }
+  ],
+  "committed_at": "2026-11-19T02:15:30.123456Z",
+  "audit_ref": "<opaque-reference>"
+}
+```
+
+- Versiones cumplen §9.11.4; `final_version=target_version`.
+- `applied_migrations` incluye exactamente todas las migraciones del plan, en orden ascendente; no puede omitir ni agregar.
+- `committed_at` es timestamp UTC de la autoridad después de commit demostrado.
+- `audit_ref` es durable y no null; envelope audit_ref coincide byte por byte.
+- Envelope de éxito `completed/OK`.
+
+#### 9.12.7 `authority.project_environment.provision`
+
+Resultado exacto de commit demostrado:
+
+```json
+{
+  "operation_id": "<uuidv4>",
+  "project_id": "project-alpha",
+  "environment_id": "production",
+  "association_status": "ACTIVE",
+  "revision": 1,
+  "event_id": "<uuidv4>",
+  "committed_at": "2026-11-19T02:15:30.123456Z",
+  "audit_ref": "<opaque-reference>"
+}
+```
+
+- IDs son idénticos a los payloads y cumplen §9.11.4.
+- `association_status` es siempre `ACTIVE`; `revision` es el entero literal 1.
+- `event_id` es UUIDv4 canónico del evento inmutable de dominio.
+- `committed_at` y `audit_ref` cumplen las reglas de mutaciones anteriores.
+- Envelope de éxito `completed/OK`; envelope audit_ref coincide byte por byte.
+
+Los resultados de éxito de mutación solo se devuelven después de commit durable demostrado. Si el commit es ambiguo, no se devuelve un resultado de éxito parcial: envelope `unknown/RESULT_UNKNOWN` y `result={}`; el cliente resuelve mediante `authority.operation.status`.
 
 
 
@@ -628,7 +846,7 @@ La implementación de referencia actual utiliza:
 - `RESULT_UNKNOWN` (requerido cuando no puede demostrarse el resultado durable de una mutación).
 - `INTERNAL_ERROR`
 
-La implementación actual del prototipo emite los códigos de transporte/protocolo anteriores; `IDEMPOTENCY_CONFLICT` y `RESULT_UNKNOWN` son además códigos normativos requeridos por las reglas compartidas de mutación, aunque no estén implementados en el prototipo. Los códigos concretos para conflictos de precondición y fallos de cada operación (por ejemplo, diagnósticos bloqueados o asociación existente) todavía requieren una tabla estable por operación antes de implementar esas operaciones. No se deben inventar códigos ad hoc a partir de excepciones.
+La implementación actual del prototipo emite los códigos de transporte/protocolo anteriores; `IDEMPOTENCY_CONFLICT` y `RESULT_UNKNOWN` son además códigos normativos requeridos por las reglas compartidas de mutación, aunque no estén implementados en el prototipo. La tabla completa de códigos de dominio, su operación aplicable y su estado envelope está en §10.4. No se deben inventar códigos ad hoc a partir de excepciones.
 
 ### 10.2 Política de respuesta por clase
 
@@ -649,6 +867,45 @@ La asignación anterior refleja el comportamiento del prototipo y la regla de ci
 Una desconexión o timeout después de que una mutación pueda haber comenzado no prueba que la mutación no se haya producido. El cliente no debe repetir automáticamente una mutación con un identificador nuevo.
 
 Cada operación mutadora debe especificar antes de habilitarse su identificador de operación, digest/identidad de intención, política de repetición, consulta de estado y reconciliación de commit ambiguo. No se presupone idempotencia por pertenecer al protocolo. Las reglas generales de idempotencia de Atlas no sustituyen la declaración individual de cada operación.
+
+### 10.4 Tabla normativa de códigos de dominio y mapeo status/code
+
+El envelope usa los estados de §8. La tabla siguiente es exhaustiva para los resultados de dominio de las siete operaciones. Los códigos de transporte/protocolo de §10.1 conservan la política de §10.2.
+
+| Código | Operación | Estado envelope | Significado y condición |
+|---|---|---|---|
+| `OK` | Todas | `completed` | La operación/consulta concluyó conforme a su contrato. En diagnose significa que las comprobaciones se devolvieron, no que la DB esté sana. |
+| `PLAN_BLOCKED` | `authority.migrations.plan` | `completed` | Se devolvió un plan bloqueado estructurado; detalles en `result.block_reasons`. |
+| `DIAGNOSTIC_UNAVAILABLE` | `authority.diagnose` | `rejected` | No pudo producirse un conjunto fiable de comprobaciones. |
+| `NOT_INITIALIZED` | `authority.diagnose`, `authority.migrations.plan`, `authority.initialize` | `completed` en diagnose/plan; `rejected` en initialize | La base no existe durante diagnóstico/plan pre-bootstrap, o no se cumple la precondición de inicialización según la variante; para plan se representa también como razón de bloqueo. |
+| `DATABASE_ALREADY_INITIALIZED` | `authority.initialize` | `rejected` | Existe un destino o estado de DB/ledger que impide bootstrap nuevo. |
+| `DATABASE_PATH_INVALID` | Mutaciones de DB y lecturas que usan ruta | `rejected` | La ruta protegida, tipo de archivo o condición symlink no satisface el contrato. |
+| `DATABASE_PERMISSIONS_INVALID` | Operaciones DB | `rejected` | Owner, mode o acceso esperado no se cumple. |
+| `DATABASE_UNAVAILABLE` | Operaciones DB | `rejected` | No puede abrirse o leerse la base de forma fiable. |
+| `MIGRATION_HISTORY_INVALID` | diagnose, plan, initialize, apply, provision | `completed` en diagnose/plan si se devuelve como check/block; `rejected` en mutaciones | Ledger discontinuo, historial incompleto/futuro o secuencia inválida. |
+| `MIGRATION_CHECKSUM_MISMATCH` | diagnose, plan, initialize, apply, provision | `completed` en diagnose/plan si se devuelve como check/block; `rejected` en mutaciones | Nombre o checksum no coincide con manifiesto publicado. |
+| `MIGRATION_PLAN_STALE` | `authority.migrations.apply` | `rejected` | La proyección/digest recalculado no coincide exactamente con el plan confirmado. |
+| `MIGRATION_TARGET_UNAVAILABLE` | `authority.migrations.apply` | `rejected` | El target ya no es la última versión publicada compatible o no es alcanzable por secuencia completa. |
+| `PROJECT_NOT_FOUND` | `authority.project_environment.provision` | `rejected` | No existe el Project canónico. |
+| `ENVIRONMENT_NOT_FOUND` | `authority.project_environment.provision` | `rejected` | No existe el Environment canónico. |
+| `PROJECT_NOT_ELIGIBLE` | `authority.project_environment.provision` | `rejected` | El Project existe pero no cumple elegibilidad del dominio. |
+| `ENVIRONMENT_NOT_ELIGIBLE` | `authority.project_environment.provision` | `rejected` | El Environment existe pero no cumple elegibilidad del dominio. |
+| `ASSOCIATION_ALREADY_EXISTS` | `authority.project_environment.provision` | `rejected` | La asociación ya existe; provisioning no es una operación de actualización/idempotencia de asociación. |
+| `ASSOCIATION_CONFLICT` | `authority.project_environment.provision` | `rejected` | Existe una asociación/estado incompatible que impide la asociación inicial. |
+| `SCHEMA_INCOMPATIBLE` | Mutaciones | `rejected` | El esquema/ledger no satisface la versión mínima compatible con la operación. |
+| `IDEMPOTENCY_CONFLICT` | Las tres mutaciones | `rejected` | El mismo operation_id existe con digest o intención distinta. |
+| `RESULT_UNKNOWN` | Las tres mutaciones | `unknown` | No puede demostrarse si el commit durable ocurrió. `result` es exactamente `{}`; resolver con operation.status. |
+| `INTERNAL_ERROR` | Todas | `rejected` si se demuestra que no hubo commit; `unknown` para mutación si el commit no puede determinarse | Fallo interno sin exponer detalles; no se deriva código de la excepción. |
+
+Reglas de clasificación:
+
+1. Un código de dominio devuelto en `result.checks[].code` o `result.block_reasons[].code` conserva su significado, pero el envelope sigue el estado/código de la fila aplicable a la operación y al resultado global.
+2. `NOT_INITIALIZED`, `MIGRATION_HISTORY_INVALID` y `MIGRATION_CHECKSUM_MISMATCH` en diagnose/plan son observaciones completadas (`completed`), no errores de transporte ni rechazo de una mutación.
+3. `authority.operation.status` devuelve envelope `completed/OK` cuando la consulta se ejecutó y devuelve COMMITTED_EXACT, NOT_COMMITTED o UNKNOWN como estado del objeto result. Si la consulta del ledger no puede producir un resultado estructurado, aplica `rejected/DATABASE_UNAVAILABLE` o `rejected/INTERNAL_ERROR` según la causa.
+4. `pending` no es utilizado por ninguna de las siete operaciones en este contrato: todas son síncronas y responden con resultado terminal. Se conserva en el enum común para futuras revisiones que definan explícitamente una operación asíncrona; no se puede emitir por conveniencia.
+5. Una excepción antes de efectos, o una transacción cuyo rollback se demuestra, puede responder `rejected/INTERNAL_ERROR`. Una mutación cuyo commit no puede probarse responde siempre `unknown/RESULT_UNKNOWN`; nunca `rejected`.
+6. Para mutaciones completadas, `audit_ref` del envelope es obligatorio, no null, y debe coincidir exactamente con `result.audit_ref`. Para lecturas y rechazos es null. `authority.operation.status` mantiene el envelope audit_ref null y expone la referencia consultada solo en la variante COMMITTED_EXACT.
+7. No hay códigos alias, códigos dinámicos, valores derivados de clases/mensajes de excepción ni códigos de dominio adicionales implícitos. Un nuevo código requiere revisión del contrato.
 
 ## 11. Requisitos de seguridad comunes
 
