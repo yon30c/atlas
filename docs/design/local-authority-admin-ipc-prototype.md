@@ -1,8 +1,12 @@
 # Prototipo IPC Unix para operaciones administrativas de autoridad
 
-**Estado:** prototipo experimental; suite completa validada por el propietario en Debian 13 (1.583 tests, 1 omitido, cero fallos); pendiente revisión adversarial final.  
+**Estado:** prototipo experimental; la suite completa de 1.583 tests fue validada en una revisión anterior. La corrección posterior del decoder está pendiente de validación local Debian; pendiente revisión adversarial final.  
 **Fase:** 2.5.2.  
 **No habilitado para producción.**
+
+## Fuente normativa
+
+El contrato normativo único del protocolo es [Contrato IPC administrativo de autoridad local — atlas-admin/1](../contracts/local-authority-admin-ipc-atlas-admin-1.md). Este archivo describe el prototipo y su estado observado; ante cualquier discrepancia prevalece el contrato normativo.
 
 ## Alcance implementado
 
@@ -16,9 +20,9 @@ El módulo `src/atlas/platform_admin_ipc.py` prueba estas propiedades:
 6. El payload de `authority.ping` debe ser exactamente el objeto vacío `{}`.
 7. El tamaño máximo del request es 16 KiB y el de la respuesta es 64 KiB.
 8. La validación rechaza claves duplicadas, campos extra, protocolo desconocido, UUID no canónico/no UUIDv4, UTF-8 inválido, JSON inválido, números no finitos, profundidad superior a 16, payload de ping no vacío, paquete truncado y datos ancillary.
-9. Los rechazos de protocolo exponen códigos estables independientes del texto de excepción. Cuando el peer está autorizado y el paquete no está truncado ni contiene ancillary prohibido, el handler envía el envelope `rejected` de §10.5; usa el request ID solo si pudo validarlo de forma canónica, y `null` en caso contrario.
+9. Los rechazos de protocolo exponen códigos estables independientes del texto de excepción. Cuando el peer está autorizado y el paquete no está truncado ni contiene ancillary prohibido, el handler envía el envelope `rejected` de §7 del contrato normativo IPC; usa el request ID solo si pudo validarlo de forma canónica, y `null` en caso contrario.
 10. Para peer no autorizado, truncamiento, ancillary prohibido o cierre de transporte, el handler no intenta enviar una respuesta.
-11. La respuesta de éxito usa el envelope común de §10.5: protocolo, request ID, estado, código, resumen, resultado y referencia de auditoría.
+11. La respuesta de éxito usa el envelope común de §7 del contrato normativo IPC: protocolo, request ID, estado, código, resumen, resultado y referencia de auditoría.
 12. El resultado de ping contiene únicamente `protocol_version`, `service_version` y `handler_status: "available"`. La versión se obtiene de los metadatos de la distribución `atlas-assistant`; para ejecución directa desde un checkout sin metadatos instalados se usa el fallback sincronizado con `[project].version` de `pyproject.toml`.
 13. Ping no abre SQLite, no inspecciona la ruta ni el filesystem de la DB, no devuelve configuración interna y no crea sesión ni conserva estado entre conexiones.
 14. Los timeouts de lectura y escritura son independientes; cada uno tiene default 5 s y máximo 60 s.
@@ -48,7 +52,7 @@ git diff --check
 git status --short --branch
 ```
 
-**Resultado comunicado:** `Ran 1583 tests in 34.367s` / `OK (skipped=1)`. Se ejecutaron 1.583 tests, con cero fallos y cero errores; uno fue omitido. La suite completa confirma que las pruebas filesystem quedaron alineadas con el envelope `atlas-admin/1` y la semántica `AdminPeerDisconnected`. Esta validación fue ejecutada por el propietario en su servidor Debian local, no desde GitHub. La revisión adversarial final sigue pendiente.
+**Resultado histórico comunicado:** `Ran 1583 tests in 34.367s` / `OK (skipped=1)`. Se ejecutaron 1.583 tests, con cero fallos y cero errores; uno fue omitido. Esa ejecución validó el checkout probado antes de la corrección posterior del decoder. No acredita el HEAD actual. La corrección posterior para enteros JSON extremos está pendiente de validación focalizada y completa por el propietario en Debian. No se ejecutaron pruebas desde GitHub. La revisión adversarial final sigue pendiente.
 
 ## Siguiente prueba antes de crear un listener
 
