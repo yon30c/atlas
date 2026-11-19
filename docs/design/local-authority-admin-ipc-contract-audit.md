@@ -13,7 +13,7 @@ La auditoría inicial encontró que el prototipo demostraba `AF_UNIX/SOCK_SEQPAC
 
 Las etapas 1–5 alinearon el envelope, los límites, la validación estricta, los errores de transporte y el resultado de ping. La revisión también corrigió una brecha: los errores de protocolo recuperables producen una respuesta `rejected` segura, no una excepción sin envelope.
 
-La implementación sigue siendo deliberadamente estrecha: solo acepta `authority.ping`. Las otras seis operaciones del catálogo se reconocen, pero se rechazan con `OPERATION_DENIED`.
+La implementación sigue siendo deliberadamente estrecha: solo acepta `authority.ping`. Las otras seis operaciones ya tienen especificaciones individuales consolidadas en el contrato normativo, pero siguen sin implementarse y se rechazan con `OPERATION_DENIED`.
 
 ## 2. Hallazgos iniciales y resolución
 
@@ -23,7 +23,7 @@ La implementación sigue siendo deliberadamente estrecha: solo acepta `authority
 | A-02 | Request máximo 64 KiB | 16 KiB |
 | A-03 | Response máximo 4 KiB | 64 KiB |
 | A-04 | Response experimental | Envelope normativo §7 |
-| A-05 | Ping sin versión de servicio/estado | Resultado mínimo §15.2 |
+| A-05 | Ping sin versión de servicio/estado | Resultado mínimo del contrato normativo §9.1 |
 | A-06 | Errores sin códigos estables | Códigos estables para transporte/protocolo |
 | A-07 | Sin límite de profundidad | Máximo 16 niveles |
 | A-08 | Timeout compartido | Lectura/escritura independientes, default 5 s, máximo 60 s |
@@ -113,7 +113,8 @@ La validación fue ejecutada por el propietario en Debian; no se ejecutaron prue
 
 ## 7. Límites y riesgos pendientes
 
-- No se implementaron `diagnose`, `migrations.plan`, `operation.status`, `initialize`, `migrations.apply` ni `project_environment.provision`.
+- Las seis operaciones restantes tienen payloads, precondiciones, resultados, efectos y restricciones documentados en §§9.3–9.8 del contrato normativo, pero no están implementadas ni habilitadas.
+- Antes de implementarlas deben cerrarse los detalles de representación indicados en §9.11: esquema exacto de `operator_evidence`, normalización de `reason`, gramáticas de IDs/versiones/digests, esquemas completos de resultados y mapeo exhaustivo de códigos/estados.
 - No hay listener persistente, daemon ni activación systemd en este PR.
 - La concurrencia/backpressure corresponde al futuro listener y debe probarse antes de implementarlo.
 - La conducta de EOF/paquete vacío se mantiene conservadora.
