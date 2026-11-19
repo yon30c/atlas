@@ -16,16 +16,16 @@ import uuid
 from typing import Any, Mapping
 
 
-PROTOCOL_VERSION = 1
-MAX_REQUEST_BYTES = 64 * 1024
-MAX_RESPONSE_BYTES = 4 * 1024
+PROTOCOL_ID = "atlas-admin/1"
+MAX_REQUEST_BYTES = 16 * 1024
+MAX_RESPONSE_BYTES = 64 * 1024
 CONNECTION_TIMEOUT_SECONDS = 5.0
 MAX_CONNECTION_TIMEOUT_SECONDS = 60.0
 _ALLOWED_OPERATIONS = frozenset({"authority.ping"})
 
 
 class AdminIPCError(Exception):
-    """Base class for rejected administrative IPC requests."""
+    """Base class for administrative IPC transport failures."""
 
 
 class AdminPeerRejected(AdminIPCError):
@@ -49,7 +49,7 @@ class PeerCredentials:
 class AdminRequest:
     """Validated, immutable request accepted by the prototype protocol."""
 
-    version: int
+    protocol: str
     request_id: str
     operation: str
     payload: Mapping[str, Any]
@@ -69,7 +69,7 @@ def _reject_nonstandard_constant(value: str) -> None:
 
 
 def decode_admin_request(packet: bytes) -> AdminRequest:
-    """Decode one bounded JSON packet and enforce the exact prototype schema."""
+    """Decode one bounded JSON packet and enforce the exact ping schema."""
     if not isinstance(packet, bytes):
         raise AdminProtocolRejected("packet must be bytes")
     if not packet or len(packet) > MAX_REQUEST_BYTES:
@@ -88,16 +88,12 @@ def decode_admin_request(packet: bytes) -> AdminRequest:
 
     if not isinstance(decoded, dict):
         raise AdminProtocolRejected("request must be a JSON object")
-    if set(decoded) != {"version", "request_id", "operation", "payload"}:
+    if set(decoded) != {"protocol", "request_id", "operation", "payload"}:
         raise AdminProtocolRejected("request contains missing or unknown fields")
 
-    version = decoded["version"]
-    if (
-        isinstance(version, bool)
-        or not isinstance(version, int)
-        or version != PROTOCOL_VERSION
-    ):
-        raise AdminProtocolRejected("unsupported protocol version")
+    protocol = decoded["protocol"]
+    if not isinstance(protocol, str) or protocol != PROTOCOL_ID:
+        raise AdminProtocolRejected("unsupported protocol")
 
     request_id = decoded["request_id"]
     if not isinstance(request_id, str):
@@ -122,7 +118,7 @@ def decode_admin_request(packet: bytes) -> AdminRequest:
         raise AdminProtocolRejected("authority.ping payload must be an empty object")
 
     return AdminRequest(
-        version=PROTOCOL_VERSION,
+        protocol=PROTOCOL_ID,
         request_id=request_id,
         operation=operation,
         payload={},
@@ -217,10 +213,13 @@ def handle_admin_connection(
     request = decode_admin_request(packet)
 
     response = {
-        "version": PROTOCOL_VERSION,
+        "protocol": PROTOCOL_ID,
         "request_id": request.request_id,
-        "status": "ok",
-        "operation": request.operation,
+        "status": "completed",
+        "code": "OK",
+        "summary": "Operation completed",
+        "result": {},
+        "audit_ref": None,
     }
     encoded = _encode_response(response)
     try:
