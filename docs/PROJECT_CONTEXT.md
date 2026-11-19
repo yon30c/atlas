@@ -371,3 +371,16 @@ El propietario aprobó la recomendación de gramáticas canónicas para los valo
 **Alcance:** documentación únicamente. No se modificó código ejecutable ni se ejecutaron pruebas. Solo `authority.ping` está implementada. PR #28 permanece Draft y sin merge; no se aprobó listener persistente, systemd, UID de producción, acceso real a SQLite ni ejecución de mutaciones.
 
 **Siguiente paso:** definir la serialización canónica del plan/digest, contrastándola con la representación determinista existente en Atlas sin introducir incompatibilidad ni ampliar el payload.
+
+
+## 15. Revisión de integridad documental de gramáticas IPC — 2026-11-19
+
+Se corrigió y verificó la incorporación de §9.11.4 en el contrato normativo. La revisión confirmó una sola cabecera del documento y una sola sección §9.11.4; la expresión regular quedó completa y el tratamiento de guiones consecutivos está explícito.
+
+**HEAD de la rama observado antes de esta actualización:** `8726435fcc69ec3e792d0560206701bf8f4c4419`. Este SHA identifica el estado revisado, no el commit que añade esta sección de contexto.
+
+**Estado de la rama:** PR #28 abierto, Draft y sin merge. No se modificó `main`.
+
+**Validación:** no se ejecutaron pruebas ni se modificó código ejecutable. La revisión fue documental y de integridad del texto publicado. La suite reportada previamente no valida los commits documentales actuales ni la corrección del decoder pendiente.
+
+**Siguiente paso:** definir la serialización canónica exacta del plan para `plan_digest`, revisando los mecanismos deterministas ya existentes en Atlas; después cerrar esquemas completos de resultados y mapeo de códigos/estados.
