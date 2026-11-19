@@ -1,6 +1,6 @@
 # Prototipo IPC Unix para operaciones administrativas de autoridad
 
-**Estado:** prototipo experimental; la suite completa de 1.583 tests fue validada en una revisión anterior. La corrección del decoder y la regresión de UID/GID están pendientes de validación local Debian; la revisión adversarial de consistencia y frontera de confianza está completada.  
+**Estado:** prototipo experimental; validación local comunicada por el propietario en Debian: 29 tests focalizados IPC y 1,590 tests de suite completa (`OK (skipped=1)`) sobre el HEAD de código `aae8beda568dee6996ce603fe936085e61fd1165`. La revisión adversarial y la revisión final del diff están completadas. No está habilitado para producción ni se aprueba listener o despliegue.  
 **Fase:** 2.5.2.  
 **No habilitado para producción.**
 
@@ -52,7 +52,7 @@ git diff --check
 git status --short --branch
 ```
 
-**Resultado histórico comunicado:** `Ran 1583 tests in 34.367s` / `OK (skipped=1)`. Se ejecutaron 1.583 tests, con cero fallos y cero errores; uno fue omitido. Esa ejecución validó el checkout probado antes de la corrección posterior del decoder. No acredita el HEAD actual. La corrección posterior para enteros JSON extremos está pendiente de validación focalizada y completa por el propietario en Debian. No se ejecutaron pruebas desde GitHub. La revisión adversarial final sigue pendiente.
+**Resultado local comunicado por el propietario (19 de noviembre de 2026):** prueba focalizada `python -m unittest -v tests.unit.test_platform_admin_ipc` — 29 tests, `OK`; suite completa — `Ran 1590 tests in 36.674s` / `OK (skipped=1)`. La ejecución completa tuvo cero fallos, cero errores y una prueba omitida. El checkout probado corresponde al HEAD de código `aae8beda568dee6996ce603fe936085e61fd1165` e incluye la corrección del decoder y la regresión de UID/GID unsigned. Los commits documentales posteriores no alteraron el código ejecutable. No se ejecutaron pruebas desde GitHub.
 
 ## Siguiente prueba antes de crear un listener
 
@@ -69,9 +69,9 @@ No ejecutar estas pruebas contra sockets, servicios, usuarios o directorios de A
 
 ## Decisión pendiente
 
-El socket Unix permanece como candidato. La aprobación de este prototipo no aprueba todavía el canal de producción, la configuración systemd ni las operaciones administrativas.
+El socket Unix permanece como candidato experimental. La revisión y la validación de pruebas no aprueban el canal de producción, un listener persistente, la configuración systemd ni las operaciones administrativas.
 
 
 ## Revisión adicional del decoder
 
-Los literales enteros JSON extremos pueden exceder el límite de conversión de Python aunque el paquete respete los 16 KiB. El decoder los marca mediante un sentinel interno durante `parse_int`, completa el parseo para recuperar un `request_id` canónico y luego los rechaza como `INVALID_JSON`. El sentinel nunca puede formar parte de una solicitud aceptada. La primera corrección solo capturaba `ValueError` y perdió el `request_id`; la prueba focalizada detectó esa regresión. La implementación con sentinel queda pendiente de validación local Debian.
+Los literales enteros JSON extremos pueden exceder el límite de conversión de Python aunque el paquete respete los 16 KiB. El decoder los marca mediante un sentinel interno durante `parse_int`, completa el parseo para recuperar un `request_id` canónico y luego los rechaza como `INVALID_JSON`. El sentinel nunca puede formar parte de una solicitud aceptada. La primera corrección solo capturaba `ValueError` y perdió el `request_id`; la prueba focalizada detectó esa regresión. La implementación con sentinel fue validada por la prueba focalizada y la suite completa comunicadas arriba.
