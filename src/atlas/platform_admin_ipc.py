@@ -26,6 +26,11 @@ MAX_JSON_DEPTH = 16
 CONNECTION_TIMEOUT_SECONDS = 5.0
 MAX_CONNECTION_TIMEOUT_SECONDS = 60.0
 _ALLOWED_OPERATIONS = frozenset({"authority.ping"})
+_NO_ERROR_RESPONSE_CODES = frozenset({
+    "UNAUTHORIZED_PEER",
+    "MESSAGE_TRUNCATED",
+    "ANCILLARY_DATA_FORBIDDEN",
+})
 
 
 class AdminIPCError(Exception):
@@ -58,8 +63,10 @@ class AdminProtocolRejected(AdminIPCError):
         message: str,
         *,
         code: str = "INVALID_REQUEST",
+        request_id: str | None = None,
     ) -> None:
         super().__init__(message, code=code)
+        self.request_id = request_id
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +95,22 @@ def _service_version() -> str:
     except PackageNotFoundError:
         # Keep this fallback synchronized with [project].version in pyproject.toml.
         return SOURCE_TREE_SERVICE_VERSION
+
+
+def _canonical_request_id(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed_id = uuid.UUID(value)
+    except (ValueError, AttributeError):
+        return None
+    if (
+        str(parsed_id) != value
+        or parsed_id.version != 4
+        or parsed_id.variant != uuid.RFC_4122
+    ):
+        return None
+    return value
 
 
 def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -169,7 +192,16 @@ def decode_admin_request(packet: bytes) -> AdminRequest:
             code="INVALID_JSON",
         ) from exc
 
-    _validate_json_values_and_depth(decoded)
+    safe_request_id = (
+        _canonical_request_id(decoded.get("request_id"))
+        if isinstance(decoded, dict)
+        else None
+    )
+    try:
+        _validate_json_values_and_depth(decoded)
+    except AdminProtocolRejected as exc:
+        exc.request_id = safe_request_id
+        raise
 
     if not isinstance(decoded, dict):
         raise AdminProtocolRejected("request must be a JSON object")
@@ -177,6 +209,7 @@ def decode_admin_request(packet: bytes) -> AdminRequest:
         raise AdminProtocolRejected(
             "request contains missing or unknown fields",
             code="INVALID_REQUEST",
+            request_id=safe_request_id,
         )
 
     protocol = decoded["protocol"]
@@ -184,23 +217,11 @@ def decode_admin_request(packet: bytes) -> AdminRequest:
         raise AdminProtocolRejected(
             "unsupported protocol identifier",
             code="UNSUPPORTED_PROTOCOL_VERSION",
+            request_id=safe_request_id,
         )
 
-    request_id = decoded["request_id"]
-    if not isinstance(request_id, str):
-        raise AdminProtocolRejected("request_id must be a string")
-    try:
-        parsed_id = uuid.UUID(request_id)
-    except (ValueError, AttributeError) as exc:
-        raise AdminProtocolRejected(
-            "request_id must be a canonical UUIDv4",
-            code="INVALID_REQUEST",
-        ) from exc
-    if (
-        str(parsed_id) != request_id
-        or parsed_id.version != 4
-        or parsed_id.variant != uuid.RFC_4122
-    ):
+    request_id = _canonical_request_id(decoded["request_id"])
+    if request_id is None:
         raise AdminProtocolRejected(
             "request_id must be a canonical UUIDv4",
             code="INVALID_REQUEST",
@@ -211,11 +232,13 @@ def decode_admin_request(packet: bytes) -> AdminRequest:
         raise AdminProtocolRejected(
             "operation must be a string",
             code="INVALID_REQUEST",
+            request_id=request_id,
         )
     if operation not in _ALLOWED_OPERATIONS:
         raise AdminProtocolRejected(
             "operation is not available in this prototype",
             code="UNKNOWN_OPERATION",
+            request_id=request_id,
         )
 
     payload = decoded["payload"]
@@ -223,6 +246,7 @@ def decode_admin_request(packet: bytes) -> AdminRequest:
         raise AdminProtocolRejected(
             "authority.ping payload must be an empty object",
             code="INVALID_ARGUMENTS",
+            request_id=request_id,
         )
 
     return AdminRequest(
@@ -297,6 +321,32 @@ def _encode_response(response: Mapping[str, Any]) -> bytes:
     return packet
 
 
+def _send_response(
+    connection: socket.socket,
+    response: Mapping[str, Any],
+    *,
+    timeout_seconds: float,
+) -> None:
+    encoded = _encode_response(response)
+    connection.settimeout(timeout_seconds)
+    try:
+        sent = connection.send(encoded)
+    except TimeoutError as exc:
+        raise AdminIPCError(
+            "response send timed out",
+            code="TIMEOUT",
+        ) from exc
+    except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError) as exc:
+        raise AdminPeerDisconnected("peer disconnected before response delivery") from exc
+    except OSError as exc:
+        raise AdminIPCError("response send failed", code="INTERNAL_ERROR") from exc
+    if sent != len(encoded):
+        raise AdminIPCError(
+            "response packet was not sent atomically",
+            code="INTERNAL_ERROR",
+        )
+
+
 def handle_admin_connection(
     connection: socket.socket,
     *,
@@ -358,8 +408,8 @@ def handle_admin_connection(
 
     if not packet:
         # SOCK_SEQPACKET may expose both a zero-length packet and orderly EOF
-        # as an empty receive. The contract requires treating both as a
-        # transport close, without executing an operation or sending a reply.
+        # as an empty receive. Treat both as transport closure: no operation
+        # is executed and no response is sent.
         raise AdminPeerDisconnected("empty receive treated as peer closure")
 
     if flags & getattr(socket, "MSG_TRUNC", 0):
@@ -373,37 +423,40 @@ def handle_admin_connection(
             code="ANCILLARY_DATA_FORBIDDEN",
         )
 
-    request = decode_admin_request(packet)
-
-    response = {
-        "protocol": PROTOCOL_ID,
-        "request_id": request.request_id,
-        "status": "completed",
-        "code": "OK",
-        "summary": "Operation completed",
-        "result": {
-            "protocol_version": PROTOCOL_ID,
-            "service_version": _service_version(),
-            "handler_status": "available",
-        },
-        "audit_ref": None,
-    }
-    encoded = _encode_response(response)
-    connection.settimeout(write_timeout)
     try:
-        sent = connection.send(encoded)
-    except TimeoutError as exc:
-        raise AdminIPCError(
-            "response send timed out",
-            code="TIMEOUT",
-        ) from exc
-    except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError) as exc:
-        raise AdminPeerDisconnected("peer disconnected before response delivery") from exc
-    except OSError as exc:
-        raise AdminIPCError("response send failed", code="INTERNAL_ERROR") from exc
-    if sent != len(encoded):
-        raise AdminIPCError(
-            "response packet was not sent atomically",
-            code="INTERNAL_ERROR",
-        )
+        request = decode_admin_request(packet)
+    except AdminProtocolRejected as exc:
+        if exc.code not in _NO_ERROR_RESPONSE_CODES:
+            _send_response(
+                connection,
+                {
+                    "protocol": PROTOCOL_ID,
+                    "request_id": exc.request_id,
+                    "status": "rejected",
+                    "code": exc.code,
+                    "summary": "Request rejected",
+                    "result": {},
+                    "audit_ref": None,
+                },
+                timeout_seconds=write_timeout,
+            )
+        raise
+
+    _send_response(
+        connection,
+        {
+            "protocol": PROTOCOL_ID,
+            "request_id": request.request_id,
+            "status": "completed",
+            "code": "OK",
+            "summary": "Operation completed",
+            "result": {
+                "protocol_version": PROTOCOL_ID,
+                "service_version": _service_version(),
+                "handler_status": "available",
+            },
+            "audit_ref": None,
+        },
+        timeout_seconds=write_timeout,
+    )
     return peer, request
