@@ -161,7 +161,7 @@ Reglas:
 - `code` es un código estable de máquina; no debe depender del texto de excepción.
 - `summary` es una descripción breve, segura y no sensible.
 - `result` es un objeto cuyo esquema depende de la operación; en rechazos de protocolo sin resultado de dominio se utiliza `{}`.
-- `audit_ref` es una referencia opaca o `null`. Su formato, persistencia y obligatoriedad para operaciones concretas deben definirse en la especificación individual. No se debe inventar una referencia ni presentar `null` como evidencia de auditoría durable.
+- `audit_ref` es una referencia opaca o `null`. Su tipo y obligatoriedad se fijan en los resultados individuales de §9.12. No se debe inventar una referencia ni presentar `null` como evidencia de auditoría durable.
 
 La respuesta no contiene secretos, trazas internas, rutas sensibles ni detalles que permitan convertir errores en una filtración de información.
 
@@ -303,7 +303,7 @@ No admite filtros, SQL, paginación arbitraria ni consulta de otros registros.
 - `NOT_COMMITTED`: el ledger está disponible, íntegro y permite demostrar que no existe commit para ese ID; devuelve evidencia mínima de la comprobación.
 - `UNKNOWN`: ledger ausente, corrupto, inaccesible, inconsistente o incapaz de demostrar presencia/ausencia.
 
-Si existe un registro para el ID pero el caller no puede demostrar que corresponde a la misma intención, no se devuelve `COMMITTED_EXACT`; se devuelve conflicto/resultado desconocido según la evidencia disponible. Esta operación nunca inicia, reintenta, repara ni revierte la operación consultada.
+Si existe un registro para el ID y el ledger demuestra que el registro, su intención canónica y su digest persistido son internamente coherentes, se devuelve `COMMITTED_EXACT` con el tipo y digest almacenados. Como el payload de consulta solo contiene `operation_id`, el servicio no puede comparar con una intención del caller que no recibió; el cliente compara el digest devuelto con su intención local. Si el ledger no permite demostrar coherencia o unicidad, se devuelve `UNKNOWN`. Esta operación nunca inicia, reintenta, repara ni revierte la operación consultada.
 
 ### 9.6 authority.initialize — bootstrap único
 
@@ -768,7 +768,7 @@ Resultado discriminado exacto por `operation_state`:
 
 Variantes:
 
-- `COMMITTED_EXACT`: exactamente `operation_id`, `operation_state`, `operation`, `intent_digest`, `committed_at`, `audit_ref`. `operation` es exactamente uno de `authority.initialize`, `authority.migrations.apply` o `authority.project_environment.provision`. El ledger demuestra que existe un único registro durable internamente íntegro para ese ID y que su intención canónica coincide con su digest persistido según §9.11.6. Como el payload de consulta contiene solo `operation_id`, el cliente compara el `operation` y `intent_digest` devueltos con la intención que conserva localmente; el servicio no afirma haber comparado una intención que no recibió.
+- `COMMITTED_EXACT`: exactamente `operation_id`, `operation_state`, `operation`, `intent_digest`, `committed_at`, `audit_ref`. `operation` es exactamente uno de `authority.initialize`, `authority.migrations.apply` o `authority.project_environment.provision`. `intent_digest` es una cadena de 64 caracteres hexadecimales lowercase. El ledger demuestra que existe un único registro durable internamente íntegro para ese ID y que su intención canónica coincide con su digest persistido según §9.11.6. Como el payload de consulta contiene solo `operation_id`, el cliente compara el `operation` y `intent_digest` devueltos con la intención que conserva localmente; el servicio no afirma haber comparado una intención que no recibió.
 - `NOT_COMMITTED`: exactamente `operation_id`, `operation_state`, `ledger_verified: true`. Solo se devuelve si el ledger está íntegro/legible y demuestra la ausencia del ID.
 - `UNKNOWN`: exactamente `operation_id`, `operation_state`, `reason_code`; reason_code es uno de `LEDGER_UNAVAILABLE`, `LEDGER_CORRUPT`, `LEDGER_INCONSISTENT`. No afirma presencia ni ausencia.
 - La consulta en sí responde `completed/OK` si pudo producir una de las tres variantes, incluso cuando operation_state=UNKNOWN. El estado UNKNOWN del resultado de dominio no significa que la consulta IPC haya quedado sin respuesta o con ejecución incierta.
