@@ -26,6 +26,7 @@ MAX_JSON_DEPTH = 16
 CONNECTION_TIMEOUT_SECONDS = 5.0
 MAX_CONNECTION_TIMEOUT_SECONDS = 60.0
 _OVERSIZED_JSON_INTEGER = object()
+_MAX_UID_VALUE = (1 << (struct.calcsize("I") * 8)) - 1
 
 _CATALOG_OPERATIONS = frozenset({
     "authority.ping",
@@ -298,11 +299,11 @@ def read_peer_credentials(connection: socket.socket) -> PeerCredentials:
     raw = connection.getsockopt(
         socket.SOL_SOCKET,
         socket.SO_PEERCRED,
-        struct.calcsize("3i"),
+        struct.calcsize("iII"),
     )
     if len(raw) != struct.calcsize("3i"):
         raise AdminIPCError("kernel returned malformed peer credentials")
-    pid, uid, gid = struct.unpack("3i", raw)
+    pid, uid, gid = struct.unpack("iII", raw)
     if pid <= 0 or uid < 0 or gid < 0:
         raise AdminIPCError("kernel returned invalid peer credentials")
     return PeerCredentials(pid=pid, uid=uid, gid=gid)
@@ -415,7 +416,7 @@ def handle_admin_connection(
 
     allowed = frozenset(allowed_peer_uids)
     if not allowed or any(
-        isinstance(uid, bool) or not isinstance(uid, int) or uid < 0
+        isinstance(uid, bool) or not isinstance(uid, int) or uid < 0 or uid > _MAX_UID_VALUE
         for uid in allowed
     ):
         raise AdminProtocolRejected(
