@@ -211,41 +211,204 @@ Un nombre fuera de esta lista se rechaza como `UNKNOWN_OPERATION`. Un nombre cat
 
 Ping acredita únicamente que el handler del protocolo pudo procesar la solicitud. No acredita disponibilidad de SQLite, salud de la base, listener persistente, autorización de dominio ni capacidad de ejecutar otras operaciones.
 
-### 9.2 authority.diagnose
+### 9.2 Reglas individuales compartidas
 
-**Estado:** nombre aprobado; contrato individual IPC pendiente de especificación y aprobación.
+Las siguientes reglas aplican a las operaciones del catálogo y no amplían sus payloads.
 
-El diseño administrativo existente describe una intención de diagnóstico read-only, pero todavía no constituye un esquema IPC individual completo. Antes de habilitarla deben fijarse payload exacto, resultado, clasificación de datos, códigos, límites de ejecución, semántica de disponibilidad y evidencia/auditoría. Hasta entonces permanece deshabilitada.
+**Lecturas**
 
-### 9.3 authority.migrations.plan
+- No reciben `operation_id`, motivo ni confirmación de mutación, salvo `authority.operation.status`, cuyo `operation_id` identifica la operación consultada y no una nueva mutación.
+- No cambian el estado de dominio ni crean DB, ledger, sidecars, directorios o archivos.
+- Pueden emitir telemetría operacional a journald, pero no insertan eventos de mutación en el ledger SQLite.
+- La lectura de SQLite, cuando corresponda, abre la ruta canónica en modo read-only y activa `query_only`.
 
-**Estado:** nombre aprobado; contrato individual IPC pendiente de especificación y aprobación.
+**Mutaciones**
 
-La intención de solo lectura descrita en el diseño administrativo no basta para habilitarla. Deben aprobarse payload, resultado determinista, tratamiento de ledger/checksums/versiones, errores, límites y relación con la operación apply. Hasta entonces permanece deshabilitada.
+Las únicas tres mutaciones del catálogo son `authority.initialize`, `authority.migrations.apply` y `authority.project_environment.provision`.
 
-### 9.4 authority.operation.status
+- Requieren `operation_id` UUIDv4, `reason` de 1–500 caracteres normalizados y `operator_evidence`.
+- `operator_evidence` incluye como mínimo UID real observado, UID efectivo del frontend, TTY/sesión observada, timestamp de autorización y alcance exacto confirmado. Se registra como evidencia declarada por el frontend; el servicio no la confunde con `SO_PEERCRED`, identidad de ejecución ni identidad Atlas USER.
+- La confirmación tipada se verifica en el frontend privilegiado antes de enviar la solicitud. El servicio vuelve a validar alcance, estado, invariantes y digest; no confía en la confirmación visual como sustituto de las precondiciones de dominio.
+- El peer IPC debe superar `SO_PEERCRED` y la allowlist. La política local de UID no convierte cualquier payload de ese peer en una operación válida.
+- El mismo `operation_id` y digest canónico devuelve el resultado ya registrado. El mismo ID con intención distinta devuelve `IDEMPOTENCY_CONFLICT`.
+- Ninguna mutación se declara `completed` antes de demostrar el commit durable. Si no puede determinarse el resultado, devuelve `unknown/RESULT_UNKNOWN` y exige resolverlo con `authority.operation.status`.
 
-**Estado:** nombre aprobado; contrato individual IPC pendiente de especificación y aprobación.
+### 9.3 authority.diagnose — diagnóstico read-only
 
-No se presume el identificador de consulta, alcance, visibilidad, retención ni tratamiento de operaciones desconocidas. Deben especificarse payload, resultado y reglas de autorización antes de habilitarla.
+**Payload exacto:**
 
-### 9.5 authority.initialize
+```json
+{"profile":"quick"}
+```
 
-**Estado:** nombre aprobado; contrato individual IPC pendiente de especificación y aprobación.
+`profile` acepta exactamente `quick` o `deep`. No admite ruta, nombre de archivo, SQL, tabla, pragma libre ni selector de directorio. La ubicación se toma exclusivamente de configuración protegida del servicio. No admite campos adicionales.
 
-El diseño de inicialización explícita es material de diseño subordinado. No autoriza la operación. Deben fijarse payload, confirmación/procedencia, exclusividad de creación, transacción/bootstrap, resultados ambiguos, auditoría y códigos antes de habilitarla.
+**Perfil quick:** inspecciona existencia/tipo del destino, symlink, propietario/modo de directorios y archivo, accesibilidad read-only, versión SQLite y coherencia básica de versión/ledger/checksums cuando el ledger está disponible. No ejecuta una comprobación íntegra costosa.
 
-### 9.6 authority.migrations.apply
+**Perfil deep:** incluye quick y además ejecuta la comprobación de integridad SQLite definida por la implementación (`integrity_check`, o una alternativa documentada y etiquetada). El resultado indica explícitamente qué comprobaciones se ejecutaron, cuáles no, su duración y estado.
 
-**Estado:** nombre aprobado; contrato individual IPC pendiente de especificación y aprobación.
+**Resultado:** objeto de comprobaciones individuales con estado `PASS`, `FAIL`, `UNKNOWN` o `NOT_APPLICABLE`, código estable y resumen seguro. Diferencia DB ausente, DB inaccesible, ledger ausente, historial inconsistente, checksum divergente, archivo inesperado, permisos incorrectos y comprobación no ejecutada.
 
-Deben fijarse payload, vínculo con un plan, confirmación, política de migración, atomicidad, ledger, idempotencia, reconciliación de commit ambiguo, auditoría y códigos. Hasta entonces permanece deshabilitada.
+**Reglas:**
 
-### 9.7 authority.project_environment.provision
+- La ausencia de DB durante el estado pre-bootstrap no equivale por sí sola a corrupción; se informa como `NOT_INITIALIZED`.
+- Un diagnóstico parcial nunca se resume como saludable.
+- Si la DB no existe, no se crea para diagnosticar.
+- No hace checkpoint, vacuum, repair, migrate, chmod, chown, unlink ni limpieza de WAL/SHM.
+- Ningún contenido de tablas de identidad, credenciales, autenticadores o secretos se devuelve al frontend.
 
-**Estado:** nombre aprobado; contrato individual IPC pendiente de especificación y aprobación.
+### 9.4 authority.migrations.plan — plan determinista de migración
 
-El diseño administrativo describe una propuesta de provisioning, pero la operación no puede habilitarse solo por esa descripción. Deben consolidarse payload, autorización/procedencia, precondiciones, atomicidad, idempotencia, ledger, resultado y errores en una especificación individual aprobada.
+**Payload exacto:** objeto vacío `{}`. No acepta ruta ni selección de archivo/migración.
+
+**Lecturas:** configuración protegida, manifiesto de migraciones publicadas y DB/ledger existente en modo read-only.
+
+**Precondiciones para producir un plan aplicable:**
+
+- DB existente y regular, no symlink;
+- ruta canónica y permisos esperados;
+- ledger inicializado y legible;
+- historial continuo desde la versión inicial;
+- nombres y checksums coincidentes con el manifiesto publicado;
+- versión actual no superior a la versión de código;
+- ninguna migración publicada faltante o alterada.
+
+**Resultado:** `current_version`, `target_version` (última versión publicada compatible), lista ordenada de migraciones pendientes con nombre y checksum, digest del plan calculado por la autoridad y estado `APPLICABLE` o `BLOCKED` con razón estable.
+
+**Reglas:**
+
+- No crea DB, ledger, tablas, WAL/SHM, directorios ni archivos.
+- No permite elegir migraciones, omitir versiones, downgrade ni ejecutar SQL enviado por el cliente.
+- Un historial divergente produce `BLOCKED`, no un plan parcial ejecutable.
+- El digest del plan es informativo y se vuelve a calcular al aplicar; no es un token de autorización ni evita la revalidación.
+
+### 9.5 authority.operation.status — resolución de resultado durable
+
+**Payload exacto:**
+
+```json
+{"operation_id":"<UUIDv4>"}
+```
+
+No admite filtros, SQL, paginación arbitraria ni consulta de otros registros.
+
+**Acceso:** solo lectura del ledger administrativo canónico.
+
+**Resultado:** uno de estos resultados de dominio:
+
+- `COMMITTED_EXACT`: existe registro durable con el mismo operation ID y digest/tipo esperado; devuelve tipo de operación, digest, timestamp y referencia de auditoría.
+- `NOT_COMMITTED`: el ledger está disponible, íntegro y permite demostrar que no existe commit para ese ID; devuelve evidencia mínima de la comprobación.
+- `UNKNOWN`: ledger ausente, corrupto, inaccesible, inconsistente o incapaz de demostrar presencia/ausencia.
+
+Si existe un registro para el ID pero el caller no puede demostrar que corresponde a la misma intención, no se devuelve `COMMITTED_EXACT`; se devuelve conflicto/resultado desconocido según la evidencia disponible. Esta operación nunca inicia, reintenta, repara ni revierte la operación consultada.
+
+### 9.6 authority.initialize — bootstrap único
+
+**Payload requerido:** exactamente los siguientes campos:
+
+- `operation_id`: UUIDv4;
+- `reason`: 1–500 caracteres normalizados;
+- `confirmation_phrase`: nombre canónico exacto esperado por el frontend, en formato `INITIALIZE <canonical-database-name>`;
+- `operator_evidence`: evidencia definida en §9.2.
+
+No acepta ruta, nombre de archivo alternativo, directorio, parámetros SQLite ni lista de migraciones. El path se obtiene exclusivamente de configuración protegida.
+
+**Confirmación frontend:** TTY foreground obligatorio; mostrar que se creará una autoridad nueva y el nombre canónico; exigir la frase exacta. Sin TTY, foreground, motivo o confirmación exacta, no se envía la mutación.
+
+**Precondiciones del servicio:**
+
+- path configurado coincide con el canónico;
+- directorio padre preexistente, privado y con owner/mode esperado;
+- destino inexistente como cualquier tipo de filesystem object, incluyendo symlink;
+- no existe una DB válida, parcial o ledger previo en destino;
+- migraciones de bootstrap publicadas y checksums íntegros;
+- operation ID no usado con otra intención.
+
+**Resultado:** versiones iniciales instaladas, referencia al evento de bootstrap y estado durable. El archivo se crea exclusivamente y sin seguir symlinks; SQLite y el bootstrap se ejecutan como `atlas-runtime`.
+
+**Fallos:** nunca borrar automáticamente un archivo o DB parcialmente creada. Si el proceso cae después de crear el archivo y antes de confirmar el ledger, la siguiente acción es diagnóstico y resolución; no repetir bootstrap a ciegas ni asignar un ID nuevo. La atomicidad del primer evento/ledger y la creación del archivo debe demostrarse en pruebas específicas.
+
+### 9.7 authority.migrations.apply — aplicar migraciones forward-only
+
+**Payload requerido:** exactamente los siguientes campos:
+
+- `operation_id`: UUIDv4;
+- `reason`: 1–500 caracteres normalizados;
+- `expected_current_version`: versión observada por el operador;
+- `target_version`: versión objetivo exacta del plan;
+- `plan_digest`: digest del plan mostrado;
+- `confirmation_phrase`: `MIGRATE <expected_current_version> -> <target_version>`;
+- `operator_evidence`: evidencia definida en §9.2.
+
+No acepta ruta, SQL, archivo, nombre de migración libre ni downgrade.
+
+**Confirmación frontend:** TTY foreground obligatorio; presentar versión actual, destino y migraciones exactas; exigir frase exacta y motivo.
+
+**Precondiciones del servicio, revalidadas inmediatamente antes de escribir:**
+
+- DB existente, regular, no symlink, ruta canónica;
+- owner/mode y directorios correctos;
+- versión real igual a `expected_current_version`;
+- plan/digest recalculado coincide con el plan confirmado;
+- secuencia, nombres y checksums completos;
+- destino es la versión publicada compatible actual;
+- no hay operación incompatible en curso ni estado de ledger ambiguo.
+
+**Efecto:** aplica únicamente todas las migraciones forward-only comprendidas entre current y target, en orden publicado. No permite selección parcial, downgrade, salto ni SQL externo. La actualización del schema ledger y el evento administrativo de éxito quedan en el mismo commit transaccional.
+
+**Resultado:** versión final y lista exacta aplicada, checksums y referencia de auditoría. Si ocurre un error, la transacción se revierte cuando aún no hubo commit. Si el resultado del commit no puede demostrarse, devuelve `unknown/RESULT_UNKNOWN`; no vuelve a aplicar automáticamente.
+
+### 9.8 authority.project_environment.provision — asociación inicial
+
+**Payload requerido:** exactamente los siguientes campos:
+
+- `operation_id`: UUIDv4;
+- `project_id`: ID canónico;
+- `environment_id`: ID canónico;
+- `reason`: 1–500 caracteres normalizados;
+- `confirmation_phrase`: `PROVISION <project_id> -> <environment_id>`;
+- `operator_evidence`: evidencia definida en §9.2.
+
+No acepta datos de Project/Environment para crearlos, cambios de lifecycle, estado deseado arbitrario, actor/UID de ejecución ni campos adicionales.
+
+**Confirmación frontend:** TTY foreground obligatorio; mostrar ambos IDs y el motivo; exigir frase exacta.
+
+**Precondiciones del servicio dentro de una única UoW/transacción:**
+
+- esquema y ledger compatibles, historial/checksums completos;
+- Project y Environment canónicos existentes y elegibles;
+- no existe ya la asociación;
+- no hay asociación previa en estado conflictivo;
+- operation ID/digest cumplen idempotencia;
+- el writer de dominio y el evento administrativo comparten la misma transacción.
+
+**Efecto:** crea solo la asociación inicial `ACTIVE`, revisión 1, y su evento inmutable correspondiente. No crea ni modifica Project, Environment, USER, AGENT, Grant, credenciales ni recursos adyacentes. No suspende, reactiva ni elimina asociaciones.
+
+**Resultado:** IDs canónicos, estado inicial, revisión y referencia a evento de dominio/auditoría. Un conflicto de asociación preexistente no se convierte en actualización automática.
+
+### 9.9 Matriz de capacidades
+
+| Operación | Lee filesystem | Lee SQLite | Escribe SQLite | TTY foreground | Motivo |
+|---|---:|---:|---:|---:|---:|
+| `authority.ping` | No | No | No | No | No |
+| `authority.diagnose` | Sí, ruta canónica | Sí, read-only | No | No | No |
+| `authority.migrations.plan` | Sí, manifiesto/ruta canónica | Sí, read-only | No | No | No |
+| `authority.operation.status` | Sí, ruta canónica | Sí, ledger read-only | No | No | No |
+| `authority.initialize` | Sí, ruta canónica | Bootstrap | Sí | Sí | Sí |
+| `authority.migrations.apply` | Sí, ruta/manifiesto | Sí | Sí | Sí | Sí |
+| `authority.project_environment.provision` | Sí, ruta canónica | Sí | Sí | Sí | Sí |
+
+La tabla describe el comportamiento lógico esperado; no concede al frontend acceso directo al filesystem/SQLite. Todas las lecturas y escrituras de autoridad se ejecutan dentro del servicio bajo la identidad de servicio.
+
+### 9.10 Estado de especificación e implementación
+
+El catálogo de siete operaciones es normativamente cerrado. Las especificaciones individuales anteriores recuperan las decisiones ya aprobadas en el diseño administrativo. Su incorporación aquí no significa que estén implementadas, probadas ni habilitadas.
+
+- `authority.ping`: implementada en el handler de prototipo.
+- Las otras seis operaciones: especificadas, pero no implementadas y no habilitadas.
+- Las tres mutaciones requieren además cerrar y probar ledger, atomicidad, idempotencia, procedencia y reconciliación de commit ambiguo.
+- Ninguna de estas especificaciones aprueba el despliegue del listener, systemd, permisos definitivos del host ni operaciones sobre la DB real.
+
 
 ## 10. Códigos de rechazo y errores
 
