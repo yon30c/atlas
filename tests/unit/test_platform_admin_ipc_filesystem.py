@@ -16,7 +16,6 @@ from atlas.platform_admin_ipc import (
     PROTOCOL_ID,
     AdminPeerDisconnected,
     AdminPeerRejected,
-    AdminProtocolRejected,
     handle_admin_connection,
 )
 
@@ -112,21 +111,22 @@ class AuthorityAdminIPCFilesystemTests(unittest.TestCase):
 
         response = json.loads(client.recv(4096).decode("utf-8"))
         self.assertEqual(peer.uid, os.getuid())
-        self.assertEqual(response, {
-            "protocol": PROTOCOL_ID,
-            "request_id": request.request_id,
-            "status": "completed",
-            "code": "OK",
-            "summary": "Operation completed",
-            "result": {
-                "protocol_version": PROTOCOL_ID,
-                "service_version": response["result"]["service_version"],
-                "handler_status": "available",
-            },
-            "audit_ref": None,
-        })
-        self.assertIsInstance(response["result"]["service_version"], str)
-        self.assertTrue(response["result"]["service_version"])
+        self.assertEqual(response["protocol"], PROTOCOL_ID)
+        self.assertEqual(response["request_id"], request.request_id)
+        self.assertEqual(response["status"], "completed")
+        self.assertEqual(response["code"], "OK")
+        self.assertEqual(response["summary"], "Operation completed")
+        self.assertIsNone(response["audit_ref"])
+
+        result = response["result"]
+        self.assertEqual(result["protocol_version"], PROTOCOL_ID)
+        self.assertIsInstance(result["service_version"], str)
+        self.assertTrue(result["service_version"])
+        self.assertEqual(result["handler_status"], "available")
+        self.assertEqual(
+            set(result),
+            {"protocol_version", "service_version", "handler_status"},
+        )
 
     def test_disconnect_before_request_is_reported_as_peer_disconnect(self):
         listener = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
