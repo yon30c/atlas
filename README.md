@@ -15,7 +15,7 @@ La visión de Atlas se apoya en estos principios:
 
 La autonomía de Atlas no equivale a autoridad. Comprender una solicitud, generar una respuesta o proponer un plan no autoriza ni ejecuta una operación.
 
-> **Corte documental:** 19 de noviembre de 2026. Rama de trabajo revisada: `work/authority-admin-protocol-contract-alignment` (PR #28, Draft, sin merge). HEAD de rama revisado antes de registrar esta actualización: `de72c7ee462875b99ac57388b36cba0f20441200`. La suite completa más reciente comunicada por el propietario en Debian ejecutó **1,583 pruebas — OK (1 skipped)**; esa ejecución no debe atribuirse al HEAD actual porque después se incorporó una corrección final del decoder para enteros JSON extremos. La nueva validación focalizada y completa de esa corrección sigue pendiente en Debian. Este README distingue implementación, evidencia local comunicada y capacidades no habilitadas. Un contrato, puerto, modelo o reducer no demuestra por sí solo que una capacidad esté habilitada en un runtime completo.
+> **Corte documental:** 19 de noviembre de 2026. Rama de trabajo: `work/authority-admin-protocol-contract-alignment` (PR #28, Draft, sin merge). Al iniciar la revisión final, el HEAD observado era `87fde61cf2ebbef7e5d72e00ffeebb369f46c2d2`; los commits documentales de esta revisión pueden moverlo. El propietario comunicó desde Debian una suite completa de **1,590 pruebas — OK (1 skipped)** sobre el HEAD de código `aae8beda568dee6996ce603fe936085e61fd1165`, después de incorporar las correcciones del decoder y de `SO_PEERCRED`. Esta evidencia valida ese HEAD de código, no demuestra seguridad completa ni despliegue. Este README distingue implementación, validación local comunicada y capacidades no habilitadas. Un contrato, puerto, modelo o reducer no demuestra por sí solo que una capacidad esté habilitada en un runtime completo.
 
 ## Estado general del desarrollo
 
@@ -46,7 +46,7 @@ Atlas es software funcional en desarrollo incremental, no solamente un conjunto 
 
 ## Desarrollo actual: autoridad, identidad y delegación
 
-La consola local y las conversaciones persistentes siguen siendo funcionales. El desarrollo de autoridad incluye autenticación nativa, identidad verificada USER/AGENT, delegaciones del propietario, renovación delegada bajo CAM, lifecycle de asociaciones Project–Environment y el protocolo IPC administrativo local `atlas-admin/1`. En el IPC, el contrato normativo ya define siete operaciones y el prototipo implementa únicamente `authority.ping`; las otras seis siguen sin implementar y denegadas. El contrato IPC revisión 1.1 cierra documentalmente `operator_evidence`, la normalización de `reason`, las gramáticas, la serialización canónica de `plan_digest` y del digest de intención (§§9.11.1–9.11.6), los resultados exactos de las siete operaciones (§9.12) y el mapeo de códigos/estados (§10.4). Esto no habilita las seis operaciones aún no implementadas. La suite completa más reciente comunicada fue de 1,583 pruebas OK con una omitida, pero precede a la corrección final del decoder y no valida el HEAD actual. No se habilitan login de producción, endpoints protegidos, runtime AGENT, herramientas de consola ni ejecución privilegiada. Consulta el [estado vigente](docs/status-current.md), el [contrato IPC normativo](docs/contracts/local-authority-admin-ipc-atlas-admin-1.md), el [contexto de proyecto](docs/PROJECT_CONTEXT.md), el [plan funcional](docs/functional-test-roadmap.md), el [mapa de arquitectura](docs/functional-architecture-map.md) y la [hoja de ruta general](docs/roadmap.md).
+La consola local y las conversaciones persistentes siguen siendo funcionales. El desarrollo de autoridad incluye autenticación nativa, identidad verificada USER/AGENT, delegaciones del propietario, renovación delegada bajo CAM, lifecycle de asociaciones Project–Environment y el protocolo IPC administrativo local `atlas-admin/1`. En el IPC, el contrato normativo ya define siete operaciones y el prototipo implementa únicamente `authority.ping`; las otras seis siguen sin implementar y denegadas. El contrato IPC revisión 1.1 cierra documentalmente `operator_evidence`, la normalización de `reason`, las gramáticas, la serialización canónica de `plan_digest` y del digest de intención (§§9.11.1–9.11.6), los resultados exactos de las siete operaciones (§9.12) y el mapeo de códigos/estados (§10.4). Esto no habilita las seis operaciones aún no implementadas. La suite completa más reciente comunicada fue de 1,590 pruebas OK con una omitida, ejecutada por el propietario en Debian sobre el HEAD de código `aae8beda568dee6996ce603fe936085e61fd1165`. No se habilitan login de producción, endpoints protegidos, runtime AGENT, herramientas de consola ni ejecución privilegiada. Consulta el [estado vigente](docs/status-current.md), el [contrato IPC normativo](docs/contracts/local-authority-admin-ipc-atlas-admin-1.md), el [contexto de proyecto](docs/PROJECT_CONTEXT.md), el [plan funcional](docs/functional-test-roadmap.md), el [mapa de arquitectura](docs/functional-architecture-map.md) y la [hoja de ruta general](docs/roadmap.md).
 
 ## Documentación del proyecto
 
@@ -344,14 +344,15 @@ source .venv/bin/activate
 python -m unittest discover -s tests -v
 ```
 
-**Última evidencia de pruebas comunicada por el propietario (18–19 de noviembre de 2026):**
+**Última evidencia de pruebas comunicada por el propietario (19 de noviembre de 2026):**
 
-- Suite completa: **1,583 tests — OK (skipped=1)**; ejecución comunicada en Debian, dentro del entorno virtual del proyecto.
-- Esa ejecución es evidencia del checkout probado en ese momento, **no del HEAD actual**: posteriormente se incorporó la corrección final del decoder para enteros JSON extremos.
-- La nueva validación focalizada y completa de esa corrección está pendiente de ejecución local en Debian. No se debe presentar el HEAD actual como validado.
-- La validación de 7B.6B (37 tests OK) y `python -m compileall -q src tests` con exit code 0 pertenecen al checkpoint anterior de autoridad/almacenamiento documentado en `docs/status-current.md`; no son validación del IPC ni del HEAD actual.
+- Prueba focalizada IPC: `python -m unittest -v tests.unit.test_platform_admin_ipc` — **29 tests, OK**.
+- Suite completa: **1,590 tests — OK (skipped=1)**; duración comunicada: 36.674 segundos.
+- Checkout de código probado: `aae8beda568dee6996ce603fe936085e61fd1165`, actualizado por fast-forward en Debian. La suite incluye la regresión de UID/GID unsigned de `SO_PEERCRED` y el rechazo controlado de enteros JSON extremos conservando el `request_id` canónico.
+- Los commits posteriores registrados en el PR son documentales; no cambian el código ejecutable validado. No se ejecutaron pruebas desde GitHub ni se presenta este resultado como validación de despliegue.
+- La validación de 7B.6B (37 tests OK) y `python -m compileall -q src tests` con exit code 0 pertenece al checkpoint anterior de autoridad/almacenamiento documentado en `docs/status-current.md`; no debe confundirse con esta validación IPC.
 
-La evidencia de 844, 1,513 y 1,547 tests pertenece a checkpoints históricos distintos y no debe mezclarse con la ejecución de 1,583. Las ejecuciones son locales; no son resultados de GitHub Actions ni validación de despliegue productivo.
+La evidencia de 844, 1,513, 1,547 y 1,583 tests pertenece a checkpoints históricos distintos y no debe mezclarse con la ejecución actual de 1,590. Las ejecuciones son locales; no son resultados de GitHub Actions ni validación de despliegue productivo.
 
 ## Documentación técnica y contractual
 
