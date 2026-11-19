@@ -1,8 +1,8 @@
 # Auditoría y cierre de alineación IPC administrativo con atlas-admin/1
 
-**Estado:** etapas 1–5 del prototipo implementadas; cierre documental del contrato de resultados, canonicalización e invariantes de códigos publicado en revisión 1.1. La corrección del decoder para enteros JSON extremos y la nueva regresión de UID/GID siguen pendientes de validación local Debian; la revisión adversarial de consistencia y frontera de confianza quedó completada, sin aprobar integración ni despliegue.  
-**Base de trabajo:** `test/authority-admin-systemd-activation`.  
-**Rama de trabajo:** `work/authority-admin-protocol-contract-alignment`.  
+**Estado:** etapas 1–5 del prototipo implementadas; contrato normativo revisión 1.1 cerrado documentalmente; corrección adversarial del decoder y de `SO_PEERCRED` validada por el propietario en Debian (29 tests focalizados y 1,590 tests de suite completa, 1 omitido) sobre el HEAD de código `aae8beda568dee6996ce603fe936085e61fd1165`. La revisión final del diff no encontró habilitación accidental de operaciones ni un cambio de comportamiento fuera del contrato; sí encontró deriva documental histórica, corregida en esta revisión. No se aprueban listener, despliegue ni integración.  
+**Base de trabajo:** `test/authority-admin-systemd-activation` (`f96db3f8dc55fab282b084a940b152d0cdeac545`).  
+**Rama de trabajo:** `work/authority-admin-protocol-contract-alignment` (94 commits por delante de la base en la comparación consultada al iniciar la revisión final).  
 **Fuente normativa IPC:** `docs/contracts/local-authority-admin-ipc-atlas-admin-1.md`. Este documento de auditoría es descriptivo y no sustituye el contrato.  
 **Alcance:** transporte IPC, validación del protocolo, ping, pruebas y documentación.  
 **Advertencia:** el contrato mantiene estado de propuesta de diseño y no autoriza despliegue, operaciones privilegiadas ni acceso a una base real.
@@ -183,3 +183,33 @@ Esta ejecución valida localmente el estado de la rama en ese HEAD, incluidas la
 **Cierre de validación:** PASS para la suite ejecutada en el HEAD indicado. Esto no demuestra por sí solo seguridad completa, comportamiento de listener/despliegue ni implementación de las operaciones no disponibles.
 
 **Límites:** solo `authority.ping` está implementada. Las otras seis operaciones siguen sin implementar y denegadas. No existe listener persistente, daemon, systemd ni acceso administrativo real a SQLite. PR #28 permanece Draft y sin merge; no se autoriza integración ni despliegue por este resultado.
+
+
+## 13. Revisión final del diff y consistencia documental — 2026-11-19
+
+Se revisaron los nueve archivos del PR #28, el contrato normativo completo, el módulo IPC, las dos suites focalizadas afectadas y los documentos subordinados. La revisión se realizó directamente sobre GitHub; no se ejecutaron pruebas, compilaciones, Actions ni workflows remotos.
+
+### Resultado técnico
+
+- El diff ejecutable se limita a `src/atlas/platform_admin_ipc.py` y sus dos archivos de pruebas. La implementación mantiene `AF_UNIX/SOCK_SEQPACKET`, valida tipo de socket antes de consultar `SO_PEERCRED`, valida el peer antes de recibir el paquete, limita request/response, rechaza truncamiento y ancillary, aplica JSON estricto y timeouts separados.
+- `SO_PEERCRED` se desempaqueta como PID signed y UID/GID unsigned (`iII`); el rango permitido de UID se deriva del ancho de unsigned int. La regresión correspondiente fue incluida en la suite local comunicada.
+- El catálogo reconocido permanece cerrado a siete nombres. `_IMPLEMENTED_OPERATIONS` contiene únicamente `authority.ping`; las otras seis operaciones se rechazan como `OPERATION_DENIED`. No se agregó listener, loop de aceptación, socket activation, daemon, systemd, acceso SQLite ni mutación administrativa.
+- El handler procesa una sola solicitud y responde una sola vez; el ciclo de vida de la conexión sigue siendo responsabilidad del futuro caller/listener, que deberá cerrar la conexión y no reutilizarla.
+- El resultado de ping solo informa protocolo, versión del servicio y disponibilidad del handler; no declara salud de SQLite ni disponibilidad de operaciones de dominio.
+- La revisión del contrato confirmó la precedencia de la fuente normativa y la separación entre evidencia declarada por frontend, credenciales kernel y autorización de dominio.
+
+### Hallazgos documentales corregidos
+
+1. `README.md` aún describía 1,583 tests y marcaba la corrección del decoder como pendiente. Se actualizó a 1,590 tests y se identificó el HEAD de código validado.
+2. `docs/design/local-authority-admin-ipc-contract-audit.md` tenía un encabezado de estado que seguía declarando la validación pendiente. Se actualizó para reflejar la evidencia local posterior.
+3. `docs/design/local-authority-admin-ipc-prototype.md` conservaba el mismo estado histórico de 1,583 tests y decoder pendiente. Se actualizó a la validación reportada de 1,590.
+4. `docs/PROJECT_CONTEXT.md` contenía referencias de rama/HEAD antiguas y dos secciones numeradas como §14. Se actualizaron las referencias de rama observadas y se desambiguó la numeración.
+
+### Puertas que permanecen cerradas
+
+- Las seis operaciones no implementadas continúan denegadas.
+- No se aprueba listener persistente, socket activation, daemon, unidad systemd, configuración de usuarios/grupos/sudoers, UID de producción, acceso a SQLite real ni despliegue.
+- No se aprueba merge ni cambio de base del PR #28.
+- La validación local de 1,590 tests acredita el HEAD de código `aae8beda568dee6996ce603fe936085e61fd1165`; los commits posteriores de este ciclo son documentales.
+
+**Conclusión:** revisión final del diff completada sin hallazgos que requieran cambios de código o contrato. La deriva documental detectada se corrigió en los archivos subordinados. PR #28 permanece Draft, abierto y sin merge; cualquier integración requiere aprobación explícita del propietario.
