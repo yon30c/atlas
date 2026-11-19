@@ -239,3 +239,12 @@ Esta sección prevalece sobre los SHA y recuentos de commits históricos indicad
 ### Siguiente acción única
 
 El propietario debe actualizar su checkout desde la rama remota de trabajo, ejecutar primero la prueba focalizada y después la suite completa. Solo tras recibir el resultado se continúa la revisión final del diff. Mantener PR #28 en Draft; no hacer merge ni tocar `main`.
+
+### Resultado de validación posterior y corrección del request_id — 2026-11-19
+
+- El propietario ejecutó la suite tras la primera corrección de enteros extremos: 1.584 tests, FAILED (failures=1, skipped=1).
+- Falló únicamente test_rejects_integer_literals_exceeding_python_conversion_limit: el código de rechazo fue correctamente INVALID_JSON, pero request_id resultó None en vez del UUIDv4 válido del sobre.
+- Causa: capturar ValueError alrededor de json.loads impide la excepción no controlada, pero aborta el parseo antes de que el decoder pueda extraer el identificador.
+- Corrección publicada en la rama: parse_int convierte enteros normales; cuando Python rechaza un literal por el límite de conversión, devuelve un sentinel privado. El decoder termina de construir la estructura, recupera y valida request_id, y rechaza el sentinel como INVALID_JSON. El sentinel nunca puede llegar a una solicitud aceptada. No se modifica el límite global de Python.
+- Estado de la segunda corrección: pendiente de validación local Debian. No considerar validado el caso ni la suite de 1.584 tests.
+- Siguiente acción: ejecutar primero la prueba focalizada test_rejects_integer_literals_exceeding_python_conversion_limit, luego el módulo IPC y finalmente la suite completa. Mantener PR #28 en Draft; no merge ni cambios en main.
