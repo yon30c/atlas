@@ -423,6 +423,30 @@ Las decisiones de dominio recuperadas fijan los campos y semánticas de los payl
 
 Estas precisiones son cierre de esquema, no permiso para agregar campos, rutas, selectores ni capacidades. Hasta que estén aprobadas, las operaciones siguen no implementadas y deshabilitadas.
 
+### 9.11.1 Semántica de la evidencia antes de fijar su representación
+
+La revisión de confianza establece las siguientes restricciones semánticas para los cinco elementos ya exigidos. Esta subsección **no aprueba nombres de propiedades JSON, tipos de serialización, valores nulos ni gramáticas**; esos detalles siguen pendientes de decisión.
+
+| Elemento requerido | Qué representa | Qué no demuestra ni autoriza |
+|---|---|---|
+| UID real observado | El UID real que el frontend afirma haber observado para el contexto del operador que inició la confirmación. | No identifica por sí solo a una persona, no demuestra autenticación Atlas y no sustituye las credenciales kernel del peer IPC. |
+| UID efectivo del frontend | El UID efectivo que el propio frontend afirma observar en su proceso al preparar la solicitud. | No es el UID del operador, no es necesariamente el UID del peer visto por el servicio y no concede privilegios. |
+| TTY/sesión observada | La observación del frontend sobre el terminal y la sesión desde los que se realizó la confirmación interactiva exigida por la operación. | Un nombre de TTY, un identificador de sesión o la mera existencia de un terminal no prueban presencia física, identidad humana ni autorización. |
+| Timestamp de autorización | El instante que el frontend afirma corresponder a la aceptación de la confirmación explícita para esa operación y alcance. | No es la hora de recepción del servicio, no acredita por sí mismo que la confirmación ocurrió y no debe usarse como reloj de commit o de auditoría del servidor. |
+| Alcance exacto confirmado | La operación concreta y los identificadores/valores de destino que el frontend presentó y cuya confirmación solicitó. | No puede ampliar el payload ni convertirse en una ruta, selector, conjunto de capacidades o instrucción ejecutable aportada por el cliente. |
+
+Reglas de interpretación:
+
+1. Todo el objeto operator_evidence es una **declaración no confiable del frontend**. Su registro conserva procedencia declarada; no eleva la confianza de los valores ni transforma la evidencia en una credencial.
+2. El servicio conserva por separado las credenciales observadas mediante SO_PEERCRED y su propia hora de recepción. No copia ni sustituye esos valores con los declarados por el frontend.
+3. El frontend privilegiado es responsable de exigir TTY foreground y confirmación tipada antes de enviar. El servicio no puede afirmar que verificó de forma independiente el TTY del frontend solo porque recibió esos datos.
+4. El servicio vuelve a derivar el alcance permitido desde operation y los campos de payload definidos para esa operación. Si el alcance declarado no coincide exactamente con ese alcance derivado, debe rechazar la solicitud antes de cualquier efecto.
+5. Ningún elemento de operator_evidence reemplaza autenticación/autorización de dominio, allowlist de peer, precondiciones, digest de idempotencia ni auditoría durable.
+6. No se deben aceptar campos libres de texto para UID, TTY, sesión, timestamp o alcance cuando exista una representación estructurada aprobada. La forma concreta y las reglas de normalización permanecen pendientes.
+
+**Recomendación para el cierre posterior:** mantener separados (a) los datos observados/declarados por el frontend, (b) las credenciales kernel observadas por el servicio y (c) el timestamp y resultado de commit generados por la autoridad. No colapsar esas tres procedencias en un único objeto de identidad del operador.
+
+
 ## 10. Códigos de rechazo y errores
 
 Los códigos son identificadores estables y no deben derivarse de mensajes de excepción. El texto de resumen puede evolucionar sin cambiar el código.
