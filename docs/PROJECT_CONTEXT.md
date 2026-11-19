@@ -420,14 +420,14 @@ Esta sección prevalece sobre los pendientes y siguientes pasos históricos de �
 ### 16.4 Revisión adversarial de consistencia y credenciales — 2026-11-19
 
 - Se revisaron contrato 1.1, prototipo, tests, README y documentos subordinados en el HEAD de la rama; no se ejecutaron pruebas ni workflows.
-- Se corrigió la lectura de `SO_PEERCRED`: PID se interpreta como entero con signo y UID/GID como enteros unsigned de 32 bits. La allowlist rechaza UID fuera de ese rango. Se añadió una regresión para UID/GID mayores que `INT_MAX`; falta ejecutarla localmente en Debian.
+- Se corrigió la lectura de `SO_PEERCRED`: PID se interpreta como entero con signo y UID/GID como enteros unsigned de 32 bits. La allowlist rechaza UID fuera de ese rango. Se añadió una regresión para UID/GID mayores que `INT_MAX`; en ese corte aún faltaba ejecutarla. La validación posterior consta en §16.5.
 - Se eliminó en §9.5 una frase ambigua sobre la comparación del digest en `authority.operation.status`: la autoridad valida coherencia interna del ledger; el cliente compara el digest devuelto con su intención local.
 - Se corrigió el bloque IPC del README, que conservaba pendientes ya cerrados en revisión 1.1.
 - El futuro caller/listener debe cerrar cada conexión después de una sola solicitud/respuesta; el handler no es un listener y el lifecycle permanece fuera del alcance implementado.
 - No se encontraron razones para habilitar operaciones nuevas. Solo `authority.ping` continúa implementada; las otras seis permanecen denegadas. No se aprueba listener, systemd, acceso SQLite, UID de producción ni mutaciones reales.
-- La regresión nueva y la corrección del decoder de enteros JSON extremos requieren validación focalizada y suite completa por el propietario en Debian.
+- En ese corte, la regresión nueva y la corrección del decoder de enteros JSON extremos requerían validación focalizada y suite completa por el propietario en Debian; ambas quedaron validadas posteriormente según §16.5.
 
-**Estado:** revisión adversarial documental/código completada con correcciones publicadas; validación local pendiente. PR #28 continúa Draft y sin merge.
+**Estado en ese corte:** revisión adversarial documental/código completada con correcciones publicadas; la validación local seguía pendiente. Este estado fue sustituido por la validación PASS registrada en §16.5.
 
 
 ### 16.5 Validación local posterior de la revisión adversarial — 2026-11-19
@@ -444,3 +444,27 @@ El propietario actualizó su checkout Debian mediante fast-forward hasta `aae8be
 **Límites sin cambio:** solo `authority.ping` está implementada; las otras seis operaciones continúan denegadas/no habilitadas. No hay listener persistente, daemon, systemd ni acceso administrativo real a SQLite. PR #28 permanece Draft y sin merge; no se toca `main`.
 
 **Siguiente paso al cierre de esta actualización:** revisión final de seguridad y del diff completo del PR #28; sus resultados se registran en §16.6. Cualquier integración requiere aprobación explícita del propietario.
+
+
+### 16.6 Revisión final del diff y cierre documental — 2026-11-19
+
+La revisión final se realizó directamente en GitHub sobre los nueve archivos del PR #28, incluyendo el contrato normativo, el módulo IPC, sus dos archivos de pruebas y los documentos subordinados.
+
+**Resultado técnico:**
+- No se identificó habilitación accidental de operaciones: `_IMPLEMENTED_OPERATIONS` conserva únicamente `authority.ping`; las otras seis siguen rechazadas con `OPERATION_DENIED`.
+- No se añadieron listener, loop de aceptación, socket activation, daemon, unidad systemd, acceso SQLite ni mutaciones administrativas.
+- El transporte mantiene las comprobaciones de tipo de socket, `SO_PEERCRED`, allowlist, recepción acotada, rechazo de truncamiento/ancillary, JSON estricto, timeouts independientes y respuesta única.
+- El resultado de ping no afirma salud de SQLite ni capacidad de operaciones de dominio.
+- La separación entre evidencia declarada del frontend, credenciales kernel y autorización de dominio permanece explícita en el contrato.
+- No se encontró un hallazgo que requiera cambiar código ejecutable o decisiones normativas en este PR.
+
+**Deriva documental corregida:**
+- README actualizado de 1,583 a 1,590 tests y con HEAD exacto probado.
+- Auditoría y prototipo actualizados para reflejar validación local PASS.
+- Contexto actualizado con el estado de ramas/PR observado, la validación y la revisión final; se corrigió una numeración duplicada §14.
+
+**Validación:** 29 tests focalizados y 1,590 tests de suite completa comunicados por el propietario en Debian sobre el HEAD de código `aae8beda568dee6996ce603fe936085e61fd1165`. Los commits de este ciclo son documentales y no modifican código ejecutable. No se ejecutaron pruebas, compilaciones ni workflows remotos durante la revisión.
+
+**Límites:** PR #28 permanece abierto, Draft y sin merge. La rama sigue 94 commits por delante de su base en la comparación consultada al inicio de esta revisión (la cifra puede cambiar con commits documentales). No se modifica `main`, no se cambia la base del PR y no se autoriza despliegue ni integración. Cualquier merge requiere aprobación explícita del propietario.
+
+**Siguiente paso:** revisión/decisión del propietario sobre si desea marcar PR #28 como Ready for review o mantenerlo Draft. No se realizará ese cambio sin autorización expresa.
