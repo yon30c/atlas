@@ -65,3 +65,8 @@ No ejecutar estas pruebas contra sockets, servicios, usuarios o directorios de A
 ## Decisión pendiente
 
 El socket Unix permanece como candidato. La aprobación de este prototipo no aprueba todavía el canal de producción, la configuración systemd ni las operaciones administrativas.
+
+
+## Revisión adicional del decoder
+
+Los literales enteros JSON extremos pueden provocar `ValueError` durante la conversión interna de Python aunque el paquete respete el límite de 16 KiB. El decoder ahora traduce ese caso a `INVALID_JSON` en lugar de dejar escapar una excepción. La prueba de regresión usa 5.000 dígitos y queda pendiente de validación local Debian.
