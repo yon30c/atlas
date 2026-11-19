@@ -606,6 +606,7 @@ La autoridad calcula `plan_digest` sobre la siguiente proyección lógica exacta
 ```json
 {
   "canonicalization_version": 1,
+  "current_version": 27,
   "database_name": "authority.sqlite3",
   "format": "atlas-admin-migration-plan",
   "format_version": 1,
@@ -617,7 +618,6 @@ La autoridad calcula `plan_digest` sobre la siguiente proyección lógica exacta
     }
   ],
   "protocol": "atlas-admin/1",
-  "current_version": 27,
   "target_version": 28
 }
 ```
@@ -636,6 +636,40 @@ Reglas normativas:
 10. Un cambio futuro de proyección o canonicalización exige nueva versión de formato/canonicalización y revisión explícita del contrato. No se reinterpretan digests históricos bajo una proyección nueva.
 
 La función existente `canonical_json_bytes` también admite dataclasses, enums, fechas UTC y conjuntos para otros dominios. Esas capacidades no amplían el esquema de esta proyección IPC. La autoridad construye primero el objeto JSON exacto anterior y no entrega objetos arbitrarios al canonicalizador.
+
+### 9.11.6 Digest canónico de intención de mutación
+
+El digest de intención usado por idempotencia y devuelto por `authority.operation.status` es distinto de `plan_digest`. Reutiliza canonical JSON v1 y SHA-256, pero usa una proyección específica de cada operación. No se reutiliza el digest del plan como digest de intención.
+
+La envoltura común exacta es:
+
+```json
+{
+  "canonicalization_version": 1,
+  "format": "atlas-admin-operation-intent",
+  "format_version": 1,
+  "intent": {},
+  "operation": "authority.initialize",
+  "protocol": "atlas-admin/1"
+}
+```
+
+El objeto `intent` contiene exactamente los campos semánticos siguientes:
+
+- `authority.initialize`: `{ "database_name": "authority.sqlite3", "reason": "<reason-canonico>" }`. El nombre procede de configuración protegida, no del payload.
+- `authority.migrations.apply`: `{ "expected_current_version": <int>, "plan_digest": "<64-lowercase-hex>", "reason": "<reason-canonico>", "target_version": <int> }`.
+- `authority.project_environment.provision`: `{ "environment_id": "<environment-id>", "project_id": "<project-id>", "reason": "<reason-canonico>" }`.
+
+La proyección se serializa con las reglas exactas de canonical JSON v1 de §9.11.5 (UTF-8 estricto, claves ordenadas, arrays si los hubiera en futuras revisiones, separadores compactos, sin floats ni normalización Unicode) y el digest es lowercase hexadecimal de SHA-256 sobre esos bytes.
+
+Se excluyen deliberadamente `operation_id` (clave de idempotencia), `request_id`, `confirmation_phrase` (derivable de los campos confirmados), `operator_evidence` (procedencia de cada intento, no intención de dominio), timestamps de transporte/confirmación y datos de ejecución. `reason` sí se incluye y debe llegar en forma canónica conforme a §9.11.3.
+
+La autoridad calcula este digest por sí misma. Para un `operation_id` ya registrado:
+- digest y tipo de operación iguales: devuelve el resultado durable original sin repetir efectos;
+- digest o tipo distintos: `rejected/IDEMPOTENCY_CONFLICT`;
+- ledger incapaz de demostrar la correspondencia: no inventa coincidencia; usa `unknown/RESULT_UNKNOWN` o el resultado estructurado de `authority.operation.status` según el punto de detección.
+
+Cambiar esta proyección requiere una nueva versión de formato y revisión explícita. No se reinterpretan registros históricos con una proyección posterior.
 
 ### 9.12 Esquemas exactos de resultados por operación
 
@@ -676,14 +710,14 @@ Resultado exacto:
 ```
 
 - `profile`: `quick` o `deep`, igual al payload.
-- `overall_status`: `PASS`, `FAIL`, `UNKNOWN` o `NOT_INITIALIZED`. `NOT_INITIALIZED` se usa cuando el destino está ausente en el estado pre-bootstrap; no se trata como corrupción por sí solo. Si no está NOT_INITIALIZED, la precedencia agregada es `FAIL` si alguna comprobación es FAIL; en su ausencia `UNKNOWN` si alguna comprobación es UNKNOWN; en otro caso `PASS` (las comprobaciones NOT_APPLICABLE no degradan el resultado).
+- `overall_status`: `PASS`, `FAIL`, `UNKNOWN` o `NOT_INITIALIZED`. `NOT_INITIALIZED` se usa cuando el destino está ausente en el estado pre-bootstrap; no se trata como corrupción por sí solo. La precedencia agregada es `FAIL` si alguna comprobación es FAIL; en su ausencia `NOT_INITIALIZED` si el archivo está ausente y las comprobaciones previas de ruta/directorio no fallaron; en su ausencia `UNKNOWN` si alguna comprobación es UNKNOWN; en otro caso `PASS` (las comprobaciones NOT_APPLICABLE no degradan el resultado).
 - `checks`: array no vacío, ordenado por el orden fijo de ejecución de la implementación y limitado a las comprobaciones del perfil solicitado. Cada elemento tiene exactamente:
   - `check_id`: identificador estable de comprobación: `database_file`, `database_path`, `directory_permissions`, `file_permissions`, `readonly_access`, `sqlite_version`, `migration_ledger`, `migration_sequence`, `migration_checksums`, `integrity_check`.
   - `status`: `PASS`, `FAIL`, `UNKNOWN` o `NOT_APPLICABLE`.
-  - `code`: código de §10.4 o `OK`; el código describe el resultado de esa comprobación, no sustituye el estado global.
+  - `code`: código de comprobación de §10.4 (`OK`, `NOT_APPLICABLE`, `NOT_INITIALIZED`, `DATABASE_PATH_INVALID`, `DATABASE_PERMISSIONS_INVALID`, `DATABASE_UNAVAILABLE`, `MIGRATION_HISTORY_INVALID`, `MIGRATION_CHECKSUM_MISMATCH`, `SQLITE_VERSION_UNSUPPORTED` o `INTEGRITY_CHECK_FAILED`); describe esa comprobación, no sustituye el estado global.
   - `summary`: texto breve, no sensible.
   - `duration_ms`: entero JSON no negativo, sin booleanos ni floats.
-- Orden estable de `checks`: `database_file`, `database_path`, `directory_permissions`, `file_permissions`, `readonly_access`, `sqlite_version`, `migration_ledger`, `migration_sequence`, `migration_checksums`; el perfil deep añade `integrity_check` al final. Quick incluye las comprobaciones aplicables de archivo/ruta/permisos, acceso read-only, versión SQLite y ledger/secuencia/checksums. Las comprobaciones no aplicables se marcan `NOT_APPLICABLE`; las no ejecutadas por fallo previo se marcan `UNKNOWN` con código explicativo, nunca PASS.
+- Orden estable de `checks`: `database_file`, `database_path`, `directory_permissions`, `file_permissions`, `readonly_access`, `sqlite_version`, `migration_ledger`, `migration_sequence`, `migration_checksums`; el perfil deep añade `integrity_check` al final. Quick incluye las comprobaciones aplicables de archivo/ruta/permisos, acceso read-only, versión SQLite y ledger/secuencia/checksums. Las comprobaciones no aplicables se marcan `NOT_APPLICABLE` con code `NOT_APPLICABLE`; las no ejecutadas por fallo previo se marcan `UNKNOWN` con el código de la causa, nunca PASS.
 - El envelope es `completed/OK` si el diagnóstico terminó y pudo devolver sus comprobaciones, incluso cuando `overall_status` sea FAIL, UNKNOWN o NOT_INITIALIZED. Si el diagnóstico no pudo producir un resultado estructurado fiable, devuelve `rejected/DIAGNOSTIC_UNAVAILABLE` cuando el canal permita respuesta.
 
 #### 9.12.3 `authority.migrations.plan`
@@ -711,7 +745,7 @@ Resultado exacto:
 - `migrations`: array de entradas exactas `{version, name, checksum}`, orden ascendente. Array vacío solo si no hay migraciones pendientes.
 - `plan_digest`: SHA-256 de §9.11.5 o null cuando `plan_status=BLOCKED`.
 - `plan_status`: `APPLICABLE` o `BLOCKED`.
-- `block_reasons`: array ordenado y no vacío si BLOCKED; vacío si APPLICABLE. Cada entrada tiene exactamente `code` y `summary`, con code de §10.4. No se devuelve SQL ni ruta.
+- `block_reasons`: array ordenado y no vacío si BLOCKED; vacío si APPLICABLE. Cada entrada tiene exactamente `code` y `summary`, con code de §10.4. Orden estable de prioridad: `NOT_INITIALIZED`, `DATABASE_PATH_INVALID`, `DATABASE_PERMISSIONS_INVALID`, `DATABASE_UNAVAILABLE`, `MIGRATION_HISTORY_INVALID`, `MIGRATION_CHECKSUM_MISMATCH`, `SCHEMA_INCOMPATIBLE`, `MIGRATION_TARGET_UNAVAILABLE`. No se repiten códigos; no se devuelve SQL ni ruta.
 - Si `current_version` ya es la última versión publicada, `target_version=current_version`, `migrations=[]`, `plan_status=APPLICABLE`; el digest se calcula sobre esa proyección con array vacío. `authority.migrations.apply` no acepta un plan sin migraciones.
 - Envelope: `completed/OK` para APPLICABLE; `completed/PLAN_BLOCKED` para BLOCKED. El resultado de un plan bloqueado es un resultado de lectura completado, no una mutación rechazada.
 
@@ -732,7 +766,7 @@ Resultado discriminado exacto por `operation_state`:
 
 Variantes:
 
-- `COMMITTED_EXACT`: exactamente `operation_id`, `operation_state`, `operation`, `intent_digest`, `committed_at`, `audit_ref`. El ledger demuestra que existe un único registro durable internamente íntegro para ese ID y que su intención canónica coincide con su digest persistido. Como el payload de consulta contiene solo `operation_id`, el cliente compara el `operation` y `intent_digest` devueltos con la intención que conserva localmente; el servicio no afirma haber comparado una intención que no recibió.
+- `COMMITTED_EXACT`: exactamente `operation_id`, `operation_state`, `operation`, `intent_digest`, `committed_at`, `audit_ref`. El ledger demuestra que existe un único registro durable internamente íntegro para ese ID y que su intención canónica coincide con su digest persistido según §9.11.6. Como el payload de consulta contiene solo `operation_id`, el cliente compara el `operation` y `intent_digest` devueltos con la intención que conserva localmente; el servicio no afirma haber comparado una intención que no recibió.
 - `NOT_COMMITTED`: exactamente `operation_id`, `operation_state`, `ledger_verified: true`. Solo se devuelve si el ledger está íntegro/legible y demuestra la ausencia del ID.
 - `UNKNOWN`: exactamente `operation_id`, `operation_state`, `reason_code`; reason_code es uno de `LEDGER_UNAVAILABLE`, `LEDGER_CORRUPT`, `LEDGER_INCONSISTENT`. No afirma presencia ni ausencia.
 - La consulta en sí responde `completed/OK` si pudo producir una de las tres variantes, incluso cuando operation_state=UNKNOWN. El estado UNKNOWN del resultado de dominio no significa que la consulta IPC haya quedado sin respuesta o con ejecución incierta.
@@ -746,7 +780,7 @@ Resultado exacto de commit demostrado:
 {
   "operation_id": "<uuidv4>",
   "database_name": "authority.sqlite3",
-  "initial_version": 27,
+  "initial_version": 1,
   "installed_migrations": [
     {
       "version": 1,
@@ -762,7 +796,7 @@ Resultado exacto de commit demostrado:
 - `database_name` es literal §9.11.4.
 - `initial_version` debe ser la última versión bootstrap publicada e instalada; coincide con la mayor versión en `installed_migrations`.
 - `installed_migrations` incluye todas las migraciones bootstrap aplicadas, en orden ascendente y con nombre/checksum exactos.
-- `committed_at` usa UTC exacto `YYYY-MM-DDTHH:MM:SS.ffffffZ`, generado por la autoridad inmediatamente antes del commit y persistido en la misma transacción. Representa el instante de registro del commit, no una medición posterior del instante físico en que SQLite confirmó la escritura.
+- `committed_at` usa UTC exacto `YYYY-MM-DDTHH:MM:SS.ffffffZ`, generado por la autoridad inmediatamente antes del commit y persistido en la misma transacción. Representa el instante de registro del commit, no una medición posterior del instante físico en que SQLite confirmó la escritura. Esta semántica aplica a los tres resultados de mutación.
 - `audit_ref` es una referencia opaca durable, no null.
 - Envelope de éxito `completed/OK`; envelope audit_ref coincide byte por byte con result.audit_ref.
 
@@ -878,11 +912,11 @@ El envelope usa los estados de §8. La tabla siguiente es exhaustiva para los re
 | `OK` | Todas | `completed` | La operación/consulta concluyó conforme a su contrato. En diagnose significa que las comprobaciones se devolvieron, no que la DB esté sana. |
 | `PLAN_BLOCKED` | `authority.migrations.plan` | `completed` | Se devolvió un plan bloqueado estructurado; detalles en `result.block_reasons`. |
 | `DIAGNOSTIC_UNAVAILABLE` | `authority.diagnose` | `rejected` | No pudo producirse un conjunto fiable de comprobaciones. |
-| `NOT_INITIALIZED` | `authority.diagnose`, `authority.migrations.plan` | `completed` | La base no existe durante diagnóstico/plan pre-bootstrap; se representa como estado global de diagnóstico o razón de bloqueo del plan. Initialize espera precisamente el destino ausente y usa `DATABASE_ALREADY_INITIALIZED` cuando no se cumple esa precondición. |
+| `NOT_INITIALIZED` | `authority.diagnose`, `authority.migrations.plan` | `completed/OK` como check de diagnose; `completed/PLAN_BLOCKED` como razón de bloqueo de plan | La base no existe durante diagnóstico/plan pre-bootstrap; se representa como estado global de diagnóstico o razón de bloqueo del plan. Initialize espera precisamente el destino ausente y usa `DATABASE_ALREADY_INITIALIZED` cuando no se cumple esa precondición. |
 | `DATABASE_ALREADY_INITIALIZED` | `authority.initialize` | `rejected` | Existe un destino o estado de DB/ledger que impide bootstrap nuevo. |
-| `DATABASE_PATH_INVALID` | diagnose, plan, mutaciones de DB | `completed/OK` como check en diagnose; `completed/PLAN_BLOCKED` como bloqueo en plan; `rejected` en mutaciones | La ruta protegida, tipo de archivo o condición symlink no satisface el contrato. |
-| `DATABASE_PERMISSIONS_INVALID` | diagnose, plan, mutaciones de DB | `completed/OK` como check en diagnose; `completed/PLAN_BLOCKED` como bloqueo en plan; `rejected` en mutaciones | Owner, mode o acceso esperado no se cumple. |
-| `DATABASE_UNAVAILABLE` | diagnose, plan, operation.status y mutaciones de DB | `completed/OK` como check en diagnose; `completed/PLAN_BLOCKED` como bloqueo en plan; `rejected` si una operación no puede producir su resultado; mutación con commit incierto usa `unknown/RESULT_UNKNOWN` | No puede abrirse o leerse la base de forma fiable. |
+| `DATABASE_PATH_INVALID` | diagnose, plan, operation.status, mutaciones de DB | `completed/OK` como check en diagnose; `completed/PLAN_BLOCKED` como bloqueo en plan; `rejected` si la operación no puede continuar | La ruta protegida, tipo de archivo o condición symlink no satisface el contrato. |
+| `DATABASE_PERMISSIONS_INVALID` | diagnose, plan, operation.status, mutaciones de DB | `completed/OK` como check en diagnose; `completed/PLAN_BLOCKED` como bloqueo en plan; `rejected` si la operación no puede continuar | Owner, mode o acceso esperado no se cumple. |
+| `DATABASE_UNAVAILABLE` | diagnose, plan, operation.status y mutaciones de DB | `completed/OK` como check en diagnose; `completed/PLAN_BLOCKED` como bloqueo en plan; `rejected` si una lectura no puede producir resultado; mutación usa `rejected` solo si se demuestra que no hubo commit y `unknown/RESULT_UNKNOWN` si no puede determinarse | No puede abrirse o leerse la base de forma fiable. |
 | `MIGRATION_HISTORY_INVALID` | diagnose, plan, initialize, apply, provision | `completed/OK` como check en diagnose; `completed/PLAN_BLOCKED` en plan; `rejected` en mutaciones | Ledger discontinuo, historial incompleto/futuro o secuencia inválida. |
 | `MIGRATION_CHECKSUM_MISMATCH` | diagnose, plan, initialize, apply, provision | `completed/OK` como check en diagnose; `completed/PLAN_BLOCKED` en plan; `rejected` en mutaciones | Nombre o checksum no coincide con manifiesto publicado. |
 | `MIGRATION_PLAN_STALE` | `authority.migrations.apply` | `rejected` | La proyección/digest recalculado no coincide exactamente con el plan confirmado. |
@@ -900,6 +934,9 @@ El envelope usa los estados de §8. La tabla siguiente es exhaustiva para los re
 | `LEDGER_UNAVAILABLE` | `authority.operation.status` (reason_code de resultado) | `completed/OK` con `operation_state=UNKNOWN` | No se puede consultar el ledger de forma fiable. |
 | `LEDGER_CORRUPT` | `authority.operation.status` (reason_code de resultado) | `completed/OK` con `operation_state=UNKNOWN` | El ledger no supera las verificaciones de integridad. |
 | `LEDGER_INCONSISTENT` | `authority.operation.status` (reason_code de resultado) | `completed/OK` con `operation_state=UNKNOWN` | El ledger no permite demostrar presencia/ausencia de forma coherente. |
+| `NOT_APPLICABLE` | `authority.diagnose` (check code) | `completed/OK` | La comprobación no aplica al estado observado; no es fallo. |
+| `SQLITE_VERSION_UNSUPPORTED` | `authority.diagnose` (check code), `authority.migrations.plan` | `completed/OK` como check; `completed/PLAN_BLOCKED` como bloqueo | La versión SQLite no satisface el mínimo compatible definido por el runtime. |
+| `INTEGRITY_CHECK_FAILED` | `authority.diagnose` (check code) | `completed/OK` | La comprobación SQLite ejecutada reporta fallo; el resultado global de diagnose es FAIL. |
 
 Reglas de clasificación:
 
