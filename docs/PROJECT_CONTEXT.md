@@ -248,3 +248,30 @@ El propietario debe actualizar su checkout desde la rama remota de trabajo, ejec
 - Corrección publicada en la rama: parse_int convierte enteros normales; cuando Python rechaza un literal por el límite de conversión, devuelve un sentinel privado. El decoder termina de construir la estructura, recupera y valida request_id, y rechaza el sentinel como INVALID_JSON. El sentinel nunca puede llegar a una solicitud aceptada. No se modifica el límite global de Python.
 - Estado de la segunda corrección: pendiente de validación local Debian. No considerar validado el caso ni la suite de 1.584 tests.
 - Siguiente acción: ejecutar primero la prueba focalizada test_rejects_integer_literals_exceeding_python_conversion_limit, luego el módulo IPC y finalmente la suite completa. Mantener PR #28 en Draft; no merge ni cambios en main.
+
+---
+
+## 10. Fuente normativa consolidada de atlas-admin/1 — 2026-11-18
+
+Se creó `docs/contracts/local-authority-admin-ipc-atlas-admin-1.md` como fuente normativa única del protocolo IPC administrativo.
+
+Reglas consolidadas:
+- Envelope exacto `protocol/request_id/operation/payload`; protocolo `atlas-admin/1`, UUIDv4 canónico.
+- Transporte de prototipo `AF_UNIX/SOCK_SEQPACKET`, una solicitud y como máximo una respuesta por conexión; peer kernel `SO_PEERCRED` antes de leer.
+- Request 16 KiB; response 64 KiB; profundidad JSON 16; timeout independiente de lectura/escritura, 5 s por defecto y 60 s máximo.
+- JSON UTF-8 estricto, claves duplicadas/campos desconocidos/valores no finitos rechazados; truncamiento y ancillary data prohibidos.
+- Envelope de respuesta con `protocol`, `request_id`, `status`, `code`, `summary`, `result`, `audit_ref`.
+- Estados normativos cerrados: `completed`, `rejected`, `pending`, `unknown`.
+- Catálogo cerrado de siete operaciones. Solo `authority.ping` tiene especificación individual suficiente e implementación en el prototipo; las otras seis permanecen deshabilitadas y requieren contratos individuales aprobados.
+- La allowlist de UID es configuración explícita del caller; `SO_PEERCRED` no es identidad humana ni autorización Atlas. No se aprueba aquí UID de producción, listener persistente ni systemd.
+- Los límites 16/64 KiB sustituyen expresamente la propuesta anterior de 64 KiB para request en el diseño administrativo.
+
+Documentos subordinados alineados:
+- `docs/design/local-authority-administrative-operations-design.md`: diseño de dominio; ya no es fuente del envelope ni del catálogo IPC completo.
+- `docs/design/local-authority-admin-ipc-contract-audit.md`: auditoría descriptiva; se eliminaron referencias normativas erróneas a §§10.5/11/15 del contrato raíz.
+- `docs/design/local-authority-admin-ipc-prototype.md`: descripción de implementación; referencia el contrato §7 para el envelope.
+- `docs/design/local-authority-admin-listener-lifecycle.md`: continúa siendo diseño separado y no aprobado para despliegue.
+
+**Validación:** no se ejecutaron pruebas durante la edición documental. La suite 1.583/1 omitida es evidencia histórica anterior a la corrección final del decoder; esa corrección permanece pendiente de validación local Debian. No declarar el HEAD actual validado.
+
+**Siguiente paso:** revisar la coherencia final de referencias/citas normativas y actualizar el estado/PR para que la nueva fuente sea visible, sin habilitar operaciones adicionales ni avanzar a despliegue.
