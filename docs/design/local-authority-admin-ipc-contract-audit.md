@@ -1,9 +1,9 @@
 # Auditoría y cierre de alineación IPC administrativo con atlas-admin/1
 
-**Estado:** etapas 1–5 implementadas y suite completa validada por el propietario en Debian; pendiente revisión final antes de integrar.  
+**Estado:** etapas 1–5 implementadas; la suite completa de 1.583 tests corresponde a una revisión anterior. La corrección posterior del decoder para enteros JSON extremos está pendiente de validación local Debian; pendiente revisión final antes de integrar.  
 **Base de trabajo:** `test/authority-admin-systemd-activation`.  
 **Rama de trabajo:** `work/authority-admin-protocol-contract-alignment`.  
-**Contrato normativo revisado:** `docs/design/local-authority-administrative-operations-design.md`, especialmente §10, §11 y §15.  
+**Fuente normativa IPC:** `docs/contracts/local-authority-admin-ipc-atlas-admin-1.md`. Este documento de auditoría es descriptivo y no sustituye el contrato.  
 **Alcance:** transporte IPC, validación del protocolo, ping, pruebas y documentación.  
 **Advertencia:** el contrato mantiene estado de propuesta de diseño y no autoriza despliegue, operaciones privilegiadas ni acceso a una base real.
 
@@ -22,7 +22,7 @@ La implementación sigue siendo deliberadamente estrecha: solo acepta `authority
 | A-01 | Request usaba `version: 1` entero | `protocol: "atlas-admin/1"` exacto |
 | A-02 | Request máximo 64 KiB | 16 KiB |
 | A-03 | Response máximo 4 KiB | 64 KiB |
-| A-04 | Response experimental | Envelope §10.5 |
+| A-04 | Response experimental | Envelope normativo §7 |
 | A-05 | Ping sin versión de servicio/estado | Resultado mínimo §15.2 |
 | A-06 | Errores sin códigos estables | Códigos estables para transporte/protocolo |
 | A-07 | Sin límite de profundidad | Máximo 16 niveles |
@@ -91,7 +91,7 @@ Devuelve únicamente versión de protocolo, versión de servicio y `handler_stat
 
 ## 5. Cinco etapas ejecutadas
 
-1. Auditoría del contrato §10/§11/§15 frente a código, tests y documentación.
+1. Auditoría del contrato las referencias normativas heredadas del contrato raíz frente a código, tests y documentación.
 2. Alineación del envelope y límites 16/64 KiB.
 3. Validación estricta, profundidad, errores estables, timeouts y cierre seguro.
 4. Ping completo sin acceso a DB.
@@ -109,7 +109,7 @@ OK (skipped=1)
 
 **Resultado:** 1.583 tests ejecutados, 0 fallos, 0 errores y 1 omitido. La suite completa confirma que desaparecieron los dos errores previos de `test_platform_admin_ipc_filesystem.py` relacionados con el envelope experimental antiguo y la expectativa incorrecta de desconexión.
 
-La validación fue ejecutada por el propietario en Debian; no se ejecutaron pruebas desde GitHub ni durante la edición remota. Este resultado acredita la suite reportada para el checkout probado, pero no sustituye una revisión final de seguridad ni autoriza merge/despliegue.
+La validación fue ejecutada por el propietario en Debian; no se ejecutaron pruebas desde GitHub ni durante la edición remota. Este resultado acredita únicamente el checkout probado antes de la corrección adicional del decoder. No debe presentarse como validación de HEAD actual. La corrección posterior descrita en §9 queda pendiente de nueva ejecución local.
 
 ## 7. Límites y riesgos pendientes
 
@@ -122,7 +122,7 @@ La validación fue ejecutada por el propietario en Debian; no se ejecutaron prue
 
 ## 8. Criterio de cierre
 
-Las cinco etapas están implementadas y la suite completa fue reportada como correcta por el propietario en Debian. El siguiente paso es revisión final de seguridad y documentación del PR. Mantener PR #28 en Draft hasta concluir esa revisión y obtener aprobación explícita para integrarlo.
+Las cinco etapas están implementadas. La validación de 1.583 tests es histórica respecto de la corrección posterior del decoder; no declarar el HEAD actual validado hasta recibir el nuevo resultado local. El siguiente paso es completar la validación y revisión final de seguridad. Mantener PR #28 en Draft hasta concluir esa revisión y obtener aprobación explícita para integrarlo.
 
 
 ## 9. Hallazgo de revisión final: literales enteros extremos
