@@ -384,3 +384,32 @@ Se corrigió y verificó la incorporación de §9.11.4 en el contrato normativo.
 **Validación:** no se ejecutaron pruebas ni se modificó código ejecutable. La revisión fue documental y de integridad del texto publicado. La suite reportada previamente no valida los commits documentales actuales ni la corrección del decoder pendiente.
 
 **Siguiente paso:** definir la serialización canónica exacta del plan para `plan_digest`, revisando los mecanismos deterministas ya existentes en Atlas; después cerrar esquemas completos de resultados y mapeo de códigos/estados.
+
+
+## 16. Cierre de canonicalización, resultados y códigos IPC — 2026-11-19
+
+Esta sección prevalece sobre los pendientes y siguientes pasos históricos de §§12–15. El contrato normativo `docs/contracts/local-authority-admin-ipc-atlas-admin-1.md` pasó a revisión 1.1 sin cambiar el identificador wire `atlas-admin/1` ni ampliar las siete operaciones.
+
+### 16.1 Serialización y digest
+
+- `plan_digest` se calcula sobre la proyección exacta `atlas-admin-migration-plan` de §9.11.5, serializada mediante `atlas.memory.local_auth.canonical_json_bytes` (canonical JSON v1) y SHA-256 lowercase.
+- La proyección fija protocolo, nombre lógico canónico de DB, versiones y migraciones pendientes ordenadas con sus nombres/checksums. Excluye timestamps, rutas físicas, datos de operador y datos de transporte.
+- Un plan BLOCKED devuelve `plan_digest=null`. Un plan APPLICABLE sin migraciones puede tener digest con current=target y array vacío, pero no se puede aplicar.
+- El digest de intención de mutación es independiente (`atlas-admin-operation-intent`, §9.11.6). Incluye campos semánticos y `reason`; excluye operation ID, request ID, frase de confirmación y evidencia de cada intento. La autoridad lo calcula para idempotencia.
+
+### 16.2 Resultados y códigos
+
+- §9.12 define esquemas exactos de `result` para las siete operaciones, incluidos arrays de checks/migraciones, resultados discriminados de `authority.operation.status`, timestamps UTC y referencias de auditoría.
+- §10.4 cierra códigos de dominio y su mapeo a `status/code`. Los códigos de transporte/protocolo existentes permanecen en §10.1–10.2.
+- Las siete operaciones son síncronas en esta revisión; ninguna emite `pending`. `authority.operation.status` puede devolver `operation_state=UNKNOWN` dentro de un envelope `completed/OK` cuando la consulta sí pudo determinar que el resultado subyacente no es demostrable.
+- Una mutación solo responde `completed/OK` tras commit durable demostrado. Si el commit es incierto responde `unknown/RESULT_UNKNOWN` con `result={}`. `audit_ref` de envelope es obligatorio en éxitos mutables y coincide con `result.audit_ref`.
+
+### 16.3 Estado y límites
+
+- Fuente normativa: contrato IPC revisión 1.1, §§9.11.1–9.11.6, §9.12 y §10.4.
+- Documentación subordinada alineada: `docs/design/local-authority-admin-ipc-contract-audit.md` y `docs/design/local-authority-administrative-operations-design.md`.
+- Solo `authority.ping` está implementada. Las otras seis operaciones siguen reconocidas pero denegadas/no habilitadas.
+- No se modificó código ejecutable ni se ejecutaron pruebas. El resultado histórico de 1.583 tests no valida estos commits documentales ni la corrección del decoder pendiente en Debian.
+- No se aprobó listener persistente, daemon, systemd, UID de producción, acceso real a SQLite, ejecución de mutaciones ni merge.
+
+**Siguiente paso:** revisión cruzada de consistencia de contrato/README/PROJECT_CONTEXT/diseños y descripción de PR; después, el propietario valida el decoder en Debian y se realiza revisión final del diff de seguridad. Mantener PR #28 en Draft y no tocar `main`.
