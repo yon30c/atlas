@@ -1,6 +1,6 @@
 # Auditoría y cierre de alineación IPC administrativo con atlas-admin/1
 
-**Estado:** etapas 1–5 del prototipo implementadas; cierre documental del contrato de resultados, canonicalización e invariantes de códigos publicado en revisión 1.1. La corrección posterior del decoder para enteros JSON extremos sigue pendiente de validación local Debian; pendiente revisión final antes de integrar.  
+**Estado:** etapas 1–5 del prototipo implementadas; cierre documental del contrato de resultados, canonicalización e invariantes de códigos publicado en revisión 1.1. La corrección del decoder para enteros JSON extremos y la nueva regresión de UID/GID siguen pendientes de validación local Debian; la revisión adversarial de consistencia y frontera de confianza quedó completada, sin aprobar integración ni despliegue.  
 **Base de trabajo:** `test/authority-admin-systemd-activation`.  
 **Rama de trabajo:** `work/authority-admin-protocol-contract-alignment`.  
 **Fuente normativa IPC:** `docs/contracts/local-authority-admin-ipc-atlas-admin-1.md`. Este documento de auditoría es descriptivo y no sustituye el contrato.  
