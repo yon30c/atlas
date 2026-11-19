@@ -226,7 +226,7 @@ Las siguientes reglas aplican a las operaciones del catálogo y no amplían sus 
 
 Las únicas tres mutaciones del catálogo son `authority.initialize`, `authority.migrations.apply` y `authority.project_environment.provision`.
 
-- Requieren `operation_id` UUIDv4, `reason` de 1–500 caracteres normalizados y `operator_evidence`.
+- Requieren `operation_id` UUIDv4, `reason` canónico de 1–500 puntos de código Unicode y `operator_evidence`. La normalización normativa de `reason` está definida en §9.11.3; el servicio rechaza valores no canónicos y nunca los corrige silenciosamente.
 - `operator_evidence` incluye como mínimo UID real observado, UID efectivo del frontend, TTY/sesión observada, timestamp de autorización y alcance exacto confirmado. Se registra como evidencia declarada por el frontend; el servicio no la confunde con `SO_PEERCRED`, identidad de ejecución ni identidad Atlas USER.
 - La confirmación tipada se verifica en el frontend privilegiado antes de enviar la solicitud. El servicio vuelve a validar alcance, estado, invariantes y digest; no confía en la confirmación visual como sustituto de las precondiciones de dominio.
 - El peer IPC debe superar `SO_PEERCRED` y la allowlist. La política local de UID no convierte cualquier payload de ese peer en una operación válida.
@@ -415,8 +415,7 @@ El catálogo de siete operaciones es normativamente cerrado. Las especificacione
 
 Las decisiones de dominio recuperadas fijan los campos y semánticas de los payloads anteriores, pero no todas las gramáticas de sus valores. Antes de implementar las seis operaciones pendientes deben cerrarse, sin ampliar los campos:
 
-- La gramática canónica de los valores de `operator_evidence` y la normalización de `reason`; la estructura JSON exacta y los tipos/campos obligatorios de `operator_evidence` quedan fijados en §9.11.2. No se debe tratar ninguno de sus valores como sustituto de `SO_PEERCRED` ni inventar valores probatorios.
-- La normalización exacta de `reason` dentro del límite de 1–500 caracteres.
+- La gramática canónica de los valores restantes de `operator_evidence`; su estructura JSON exacta y sus tipos/campos obligatorios quedan fijados en §9.11.2. No se debe tratar ninguno de sus valores como sustituto de `SO_PEERCRED` ni inventar valores probatorios.
 - Las gramáticas canónicas de `project_id`, `environment_id`, `canonical-database-name` y las representaciones de versión/digest.
 - Los esquemas completos de cada objeto de resultado, incluidos nombres de campos, tipos y códigos estables por fallo/precondición.
 - El mapeo exhaustivo de resultados de dominio a `status/code` del envelope, incluidos los casos de `BLOCKED`, `NOT_INITIALIZED`, `COMMITTED_EXACT` y `NOT_COMMITTED`.
@@ -446,7 +445,7 @@ Reglas de interpretación:
 
 ### 9.11.2 Representación JSON aprobada de operator_evidence
 
-**Estado:** estructura y tipos JSON aprobados por el propietario para las tres mutaciones. Las gramáticas canónicas de algunos valores y la normalización exacta de `reason` continúan pendientes conforme a §9.11.
+**Estado:** estructura y tipos JSON aprobados por el propietario para las tres mutaciones. La normalización de `reason` está aprobada y definida en §9.11.3; las gramáticas canónicas de los demás valores indicados en §9.11 continúan pendientes.
 
 El objeto `operator_evidence` tiene exactamente estas cinco propiedades, todas obligatorias y no anulables:
 
@@ -532,6 +531,30 @@ La frase de confirmación tipada (`confirmation_phrase`) permanece en el payload
 **Reglas del frontend:** debe obtener los cuatro datos TTY/sesión desde sus observaciones locales en el momento de la confirmación; verificar que la terminal usada para la interacción es la esperada, que la sesión y los grupos de procesos corresponden y que el proceso está en foreground; luego construir la evidencia y enviar. No debe rellenar campos desconocidos con cero, valores ficticios o datos de otra sesión.
 
 **Límites de confianza:** aprobar esta representación no convierte la evidencia en autenticación fuerte, prueba de presencia humana ni autorización de dominio. Tampoco aprueba UID de producción, uso obligatorio de root, listener persistente, systemd, acceso directo a SQLite ni ejecución de las mutaciones.
+
+### 9.11.3 Normalización canónica de reason
+
+**Estado:** aprobada expresamente por el propietario el 19 de noviembre de 2026. Esta regla se aplica al campo `reason` de las tres mutaciones y al valor duplicado en `operator_evidence.confirmed_scope.reason`.
+
+La normalización produce una representación canónica antes de solicitar la confirmación tipada:
+
+1. La entrada debe ser una cadena Unicode válida. No se aplica normalización Unicode NFC, NFD, NFKC ni NFKD; las secuencias de puntos de código se conservan exactamente, salvo la transformación de whitespace definida abajo.
+2. Se rechazan todos los caracteres Unicode de categoría general `Cc` (controles), incluidos C0, DEL y C1. No se convierten controles en espacios. En particular, tabuladores, CR y LF se rechazan.
+3. Cada secuencia máxima de caracteres con la propiedad Unicode `White_Space` se sustituye por un único espacio ASCII `U+0020`.
+4. Se eliminan los espacios ASCII `U+0020` resultantes al principio y al final. Una entrada vacía o compuesta únicamente por whitespace se rechaza.
+5. La longitud del resultado canónico debe estar entre 1 y 500 puntos de código Unicode, inclusive. El límite se aplica al resultado normalizado, no a los bytes UTF-8 ni a grafemas visuales.
+
+**Frontera de validación:**
+
+- El frontend prepara el valor canónico antes de presentarlo para confirmación; la confirmación tipada debe mostrar exactamente el valor que se enviará.
+- El servicio valida que el `reason` recibido ya esté en forma canónica. Si aplicar el algoritmo anterior cambiara el valor recibido, lo rechaza; no lo recorta, colapsa ni reescribe silenciosamente.
+- Después de validar la forma canónica, `operator_evidence.confirmed_scope.reason` debe ser idéntico, carácter por carácter y por tipo, al `reason` del payload.
+- La canonicalización del digest de idempotencia utiliza ese valor canónico exacto. No se realizan transformaciones adicionales dependientes de locale.
+- Esta regla define la representación de nuevos requests `atlas-admin/1`; no reescribe, migra ni altera motivos históricos ya almacenados.
+
+**Controles Unicode:** el rechazo cubre la categoría general Unicode `Cc`, no solo C0 y DEL. No se extiende a otras categorías Unicode de formato o carácter invisible (por ejemplo, `Cf`) como parte de esta decisión; cualquier política adicional requeriría aprobación separada.
+
+
 
 ## 10. Códigos de rechazo y errores
 
