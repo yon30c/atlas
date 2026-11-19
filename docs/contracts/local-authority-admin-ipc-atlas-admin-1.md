@@ -415,7 +415,7 @@ El catálogo de siete operaciones es normativamente cerrado. Las especificacione
 
 Las decisiones de dominio recuperadas fijan los campos y semánticas de los payloads anteriores, pero no todas las gramáticas de sus valores. Antes de implementar las seis operaciones pendientes deben cerrarse, sin ampliar los campos:
 
-- La estructura exacta y la validación campo por campo de `operator_evidence`; ya están fijados como mínimo UID real observado, UID efectivo del frontend, TTY/sesión, timestamp de autorización y alcance exacto confirmado. No se debe tratar ninguno como sustituto de `SO_PEERCRED` ni inventar valores probatorios.
+- La gramática canónica de los valores de `operator_evidence` y la normalización de `reason`; la estructura JSON exacta y los tipos/campos obligatorios de `operator_evidence` quedan fijados en §9.11.2. No se debe tratar ninguno de sus valores como sustituto de `SO_PEERCRED` ni inventar valores probatorios.
 - La normalización exacta de `reason` dentro del límite de 1–500 caracteres.
 - Las gramáticas canónicas de `project_id`, `environment_id`, `canonical-database-name` y las representaciones de versión/digest.
 - Los esquemas completos de cada objeto de resultado, incluidos nombres de campos, tipos y códigos estables por fallo/precondición.
@@ -423,11 +423,11 @@ Las decisiones de dominio recuperadas fijan los campos y semánticas de los payl
 
 Estas precisiones son cierre de esquema, no permiso para agregar campos, rutas, selectores ni capacidades. Hasta que estén aprobadas, las operaciones siguen no implementadas y deshabilitadas.
 
-### 9.11.1 Semántica de la evidencia antes de fijar su representación
+### 9.11.1 Semántica y frontera de confianza de la evidencia
 
-La revisión de confianza establece las siguientes restricciones semánticas para los cinco elementos ya exigidos. Esta subsección **no aprueba nombres de propiedades JSON, tipos de serialización, valores nulos ni gramáticas**; esos detalles siguen pendientes de decisión.
+La revisión de confianza establece las siguientes restricciones semánticas para los cinco elementos requeridos:
 
-| Elemento requerido | Qué representa | Qué no demuestra ni autoriza |
+| Elemento | Qué representa | Qué no demuestra ni autoriza |
 |---|---|---|
 | UID real observado | El UID real que el frontend afirma haber observado para el contexto del operador que inició la confirmación. | No identifica por sí solo a una persona, no demuestra autenticación Atlas y no sustituye las credenciales kernel del peer IPC. |
 | UID efectivo del frontend | El UID efectivo que el propio frontend afirma observar en su proceso al preparar la solicitud. | No es el UID del operador, no es necesariamente el UID del peer visto por el servicio y no concede privilegios. |
@@ -437,15 +437,101 @@ La revisión de confianza establece las siguientes restricciones semánticas par
 
 Reglas de interpretación:
 
-1. Todo el objeto operator_evidence es una **declaración no confiable del frontend**. Su registro conserva procedencia declarada; no eleva la confianza de los valores ni transforma la evidencia en una credencial.
-2. El servicio conserva por separado las credenciales observadas mediante SO_PEERCRED y su propia hora de recepción. No copia ni sustituye esos valores con los declarados por el frontend.
+1. Todo el objeto `operator_evidence` es una **declaración no confiable del frontend**. Su registro conserva procedencia declarada; no eleva la confianza de los valores ni transforma la evidencia en una credencial.
+2. El servicio conserva por separado las credenciales observadas mediante `SO_PEERCRED` y su propia hora de recepción. No copia ni sustituye esos valores con los declarados por el frontend.
 3. El frontend privilegiado es responsable de exigir TTY foreground y confirmación tipada antes de enviar. El servicio no puede afirmar que verificó de forma independiente el TTY del frontend solo porque recibió esos datos.
-4. El servicio vuelve a derivar el alcance permitido desde operation y los campos de payload definidos para esa operación. Si el alcance declarado no coincide exactamente con ese alcance derivado, debe rechazar la solicitud antes de cualquier efecto.
-5. Ningún elemento de operator_evidence reemplaza autenticación/autorización de dominio, allowlist de peer, precondiciones, digest de idempotencia ni auditoría durable.
-6. No se deben aceptar campos libres de texto para UID, TTY, sesión, timestamp o alcance cuando exista una representación estructurada aprobada. La forma concreta y las reglas de normalización permanecen pendientes.
+4. El servicio vuelve a derivar el alcance permitido desde `operation` y los campos de payload definidos para esa operación. Si el alcance declarado no coincide exactamente con ese alcance derivado, debe rechazar la solicitud antes de cualquier efecto.
+5. Ningún elemento de `operator_evidence` reemplaza autenticación/autorización de dominio, allowlist de peer, precondiciones, digest de idempotencia ni auditoría durable.
+6. La evidencia conserva separadas tres procedencias: (a) datos observados/declarados por el frontend, (b) credenciales kernel observadas por el servicio y (c) timestamp/resultado de commit generados por la autoridad.
 
-**Recomendación para el cierre posterior:** mantener separados (a) los datos observados/declarados por el frontend, (b) las credenciales kernel observadas por el servicio y (c) el timestamp y resultado de commit generados por la autoridad. No colapsar esas tres procedencias en un único objeto de identidad del operador.
+### 9.11.2 Representación JSON aprobada de operator_evidence
 
+**Estado:** estructura y tipos JSON aprobados por el propietario para las tres mutaciones. Las gramáticas canónicas de algunos valores y la normalización exacta de `reason` continúan pendientes conforme a §9.11.
+
+El objeto `operator_evidence` tiene exactamente estas cinco propiedades, todas obligatorias y no anulables:
+
+```json
+{
+  "operator_real_uid": 1000,
+  "frontend_effective_uid": 0,
+  "tty_session": {
+    "terminal_device": "/dev/pts/2",
+    "session_id": 1234,
+    "process_group_id": 1234,
+    "foreground_process_group_id": 1234
+  },
+  "authorized_at": "2026-11-19T02:15:30.123456Z",
+  "confirmed_scope": {}
+}
+```
+
+No se permiten propiedades adicionales, propiedades ausentes, valores `null`, booleanos donde se exige un entero ni conversiones implícitas desde cadenas.
+
+**Tipos y restricciones estructurales:**
+
+- `operator_real_uid`: entero JSON no negativo. Puede ser cualquier UID representable por el esquema; no se exige UID distinto de cero.
+- `frontend_effective_uid`: entero JSON no negativo. Puede ser cualquier UID representable por el esquema; no se exige UID cero. La autorización efectiva sigue siendo una política separada.
+- `tty_session`: objeto obligatorio con exactamente cuatro propiedades:
+  - `terminal_device`: cadena UTF-8 no vacía, ruta absoluta, sin byte NUL y con longitud máxima de 256 bytes. Es una declaración del frontend; el servicio no abre, resuelve ni inspecciona esa ruta como parte de la validación de evidencia.
+  - `session_id`: entero JSON positivo.
+  - `process_group_id`: entero JSON positivo.
+  - `foreground_process_group_id`: entero JSON positivo. En el instante de autorización, el frontend debe haber observado que este valor coincide con `process_group_id`; el frontend también debe comprobar el TTY foreground y la relación de terminal/sesión exigida por el contrato. El servicio valida la coherencia declarada entre ambos números, pero no afirma haber observado el terminal del frontend.
+- `authorized_at`: cadena UTC en formato exacto `YYYY-MM-DDTHH:MM:SS.ffffffZ` (seis dígitos de fracción, sufijo literal `Z`, sin offset alternativo). El frontend la genera después de aceptar la confirmación tipada y antes de transmitir la solicitud. No sustituye el reloj de recepción del servicio.
+- `confirmed_scope`: objeto no anulable, con esquema exacto dependiente de `operation`, definido abajo.
+
+Los enteros son enteros JSON, no booleanos, cadenas ni números de punto flotante. Los límites de representación del decoder y del protocolo siguen aplicando. UID, session ID y process-group ID son declaraciones del frontend, no credenciales verificadas por el kernel del servicio.
+
+**Esquemas exactos de `confirmed_scope`:**
+
+Para `authority.initialize`:
+
+```json
+{
+  "operation": "authority.initialize",
+  "canonical_database_name": "authority.sqlite3",
+  "reason": "Inicializar la autoridad local"
+}
+```
+
+Para `authority.migrations.apply`:
+
+```json
+{
+  "operation": "authority.migrations.apply",
+  "expected_current_version": 27,
+  "target_version": 29,
+  "plan_digest": "<digest-del-plan>",
+  "reason": "Aplicar las migraciones revisadas"
+}
+```
+
+Para `authority.project_environment.provision`:
+
+```json
+{
+  "operation": "authority.project_environment.provision",
+  "project_id": "<project-id-canonico>",
+  "environment_id": "<environment-id-canonico>",
+  "reason": "Vincular el entorno inicial del proyecto"
+}
+```
+
+En cada variante:
+
+1. El conjunto de propiedades es exacto; no se admiten claves extra, ausentes ni valores nulos.
+2. `operation` debe coincidir exactamente con el nombre de operación del envelope.
+3. Los demás valores deben coincidir exactamente, tipo incluido, con los campos de alcance correspondientes del payload de la misma solicitud.
+4. `reason` se repite deliberadamente y debe ser idéntico, carácter por carácter, al `reason` del payload. La normalización admitida se aplica antes de construir ambos valores y se especifica por separado; no se normaliza silenciosamente uno para hacerlo coincidir con el otro.
+5. Para `authority.migrations.apply`, las versiones son enteros JSON y `target_version` debe ser mayor que `expected_current_version`. `plan_digest` debe coincidir exactamente con el digest del payload; su gramática canónica queda pendiente.
+6. Los nombres canónicos e IDs se representan como cadenas JSON; sus gramáticas siguen pendientes en §9.11. No se relaja por ello la igualdad exacta entre payload y alcance confirmado.
+
+El servicio deriva de forma independiente el objeto esperado de alcance a partir de la operación y del payload. La comparación es estructural y exacta, sin coerción de tipos, normalización oportunista ni aceptación de subconjuntos. Cualquier diferencia produce rechazo antes de iniciar efectos de dominio.
+
+La frase de confirmación tipada (`confirmation_phrase`) permanece en el payload de cada mutación y se valida por separado contra la gramática de esa operación. No se duplica dentro de `confirmed_scope`: el alcance estructurado contiene los datos que el frontend presentó, y la frase es una prueba de confirmación interactiva distinta.
+
+**Reglas del frontend:** debe obtener los cuatro datos TTY/sesión desde sus observaciones locales en el momento de la confirmación; verificar que la terminal usada para la interacción es la esperada, que la sesión y los grupos de procesos corresponden y que el proceso está en foreground; luego construir la evidencia y enviar. No debe rellenar campos desconocidos con cero, valores ficticios o datos de otra sesión.
+
+**Límites de confianza:** aprobar esta representación no convierte la evidencia en autenticación fuerte, prueba de presencia humana ni autorización de dominio. Tampoco aprueba UID de producción, uso obligatorio de root, listener persistente, systemd, acceso directo a SQLite ni ejecución de las mutaciones.
 
 ## 10. Códigos de rechazo y errores
 
