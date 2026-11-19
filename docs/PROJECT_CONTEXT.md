@@ -1,6 +1,6 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-18 (hora local del propietario; los commits más recientes de GitHub aparecen fechados 2026-11-19 UTC).
+> **Última actualización:** 2026-11-19.
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
@@ -415,7 +415,7 @@ Esta sección prevalece sobre los pendientes y siguientes pasos históricos de �
 - No se modificó código ejecutable ni se ejecutaron pruebas. El resultado histórico de 1.583 tests no valida estos commits documentales ni la corrección del decoder pendiente en Debian.
 - No se aprobó listener persistente, daemon, systemd, UID de producción, acceso real a SQLite, ejecución de mutaciones ni merge.
 
-**Siguiente paso:** revisión cruzada de consistencia de contrato/README/PROJECT_CONTEXT/diseños y descripción de PR; después, el propietario valida el decoder en Debian y se realiza revisión final del diff de seguridad. Mantener PR #28 en Draft y no tocar `main`.
+**Siguiente paso histórico al cierre documental:** revisión cruzada de consistencia y diff de seguridad; esta revisión se registra en §16.4. El siguiente paso operativo actual es que el propietario valide en Debian la corrección del decoder y la regresión de UID/GID. Mantener PR #28 en Draft y no tocar `main`.
 
 ### 16.4 Revisión adversarial de consistencia y credenciales — 2026-11-19
 
