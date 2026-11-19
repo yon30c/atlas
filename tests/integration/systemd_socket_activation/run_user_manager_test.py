@@ -56,7 +56,10 @@ def _unlink_if_same_identity(
     current_identity = (info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode))
     if current_identity != identity or stat.S_IFMT(info.st_mode) != expected_type:
         return False
-    path.unlink()
+    try:
+        path.unlink()
+    except OSError:
+        return False
     return True
 
 
@@ -73,7 +76,10 @@ def _rmdir_if_same_identity(
     current_identity = (info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode))
     if current_identity != identity or not stat.S_ISDIR(info.st_mode):
         return False
-    path.rmdir()
+    try:
+        path.rmdir()
+    except OSError:
+        return False
     return True
 
 
@@ -315,8 +321,8 @@ Environment=ATLAS_EXPECTED_SOCKET={socket_path}
             service_unit_path, service_contents
         )
 
-        run_systemctl("daemon-reload")
         daemon_reloaded = True
+        run_systemctl("daemon-reload")
 
         # The runtime directory was freshly created with mode 0700. Never
         # place a pre-existing object at the socket path: systemd 257.13 on
