@@ -468,3 +468,23 @@ La revisión final se realizó directamente en GitHub sobre los nueve archivos d
 **Límites:** PR #28 permanece abierto, Draft y sin merge. La rama sigue 94 commits por delante de su base en la comparación consultada al inicio de esta revisión (la cifra puede cambiar con commits documentales). No se modifica `main`, no se cambia la base del PR y no se autoriza despliegue ni integración. Cualquier merge requiere aprobación explícita del propietario.
 
 **Siguiente paso:** revisión/decisión del propietario sobre si desea marcar PR #28 como Ready for review o mantenerlo Draft. No se realizará ese cambio sin autorización expresa.
+
+### 16.7 Merge de PR #28, baseline de main y auditoría de preparación del listener — 2026-11-19
+
+**Estado confirmado por el propietario en Debian:**
+- PR #28 integrado en `main`; merge commit `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`.
+- Checkout local: rama `main`, `HEAD` igual a `origin/main`, árbol de trabajo limpio.
+- Suite completa: `Ran 1590 tests in 34.895s`, `OK (skipped=1)`.
+- Entorno: Python 3.13.5 en `.venv`.
+- Esta es la línea base local validada posterior al merge. La prueba omitida no es un fallo; su identidad debe localizarse antes de atribuir cobertura a ese caso.
+
+**Auditoría de preparación del listener (revisión estática de GitHub; sin ejecutar pruebas ni workflows):**
+- `src/atlas/platform_admin_ipc.py` sigue siendo un handler de una conexión ya aceptada. No crea/bindea/escucha sockets, no ejecuta `accept()`, no crea daemon ni valida un descriptor heredado de systemd. Solo `authority.ping` está implementada.
+- El diseño lifecycle conserva las invariantes de directorio confiable, no sobrescritura, rechazo de rutas stale, verificación de inode, cleanup limitado, una solicitud por conexión, límites y cierre.
+- La prueba de colisión del user-manager registró en Debian systemd 257.13 que una ruta preexistente con archivo regular perdió su contenido aunque `systemctl start` devolvió éxito. El probe evita repetir ese experimento destructivo y usa una ruta ausente dentro de directorio privado. Socket activation sobre filesystem permanece no aprobada.
+- Hallazgo adicional: `run_user_manager_test.py` construía un request con `version: 1` en vez de `protocol: "atlas-admin/1"` y esperaba `status: "ok"`; el handler real requiere el envelope normativo y responde `completed/OK`. La rama de trabajo `work/systemd-socket-activation-probe-contract-alignment` corrige el probe para usar y validar el contrato real. La corrección aún requiere ejecución local del propietario en Debian.
+- El probe sigue limitado al systemd **user manager** y al UID del usuario que lo ejecuta. No demuestra system-manager, socket root-owned, ejecución bajo `atlas-runtime`, separación real de privilegios ni cliente administrativo privilegiado.
+- No se aprueba listener propio ni socket activation. No se aprueba instalación/configuración de systemd, creación de usuarios, cambios de permisos, acceso SQLite ni mutaciones administrativas.
+- Puertas abiertas: resolver la propiedad segura de la ruta del socket frente a colisiones; decidir listener propio vs activación; definir identidad/UID real del cliente; revisar TOCTOU de cleanup y hardening systemd; validar el probe corregido en Debian; diseñar y probar lifecycle/concurrencia/shutdown antes de implementar el listener.
+
+**Próximo paso:** el propietario ejecutará el probe corregido en Debian desde la rama indicada. El resultado del probe no elimina por sí solo la puerta de colisión ni aprueba despliegue. Los estados históricos de PR/HEAD y validación de las secciones anteriores deben leerse como snapshots de su fecha; esta sección es el estado posterior al merge de PR #28.
