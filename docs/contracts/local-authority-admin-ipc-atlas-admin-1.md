@@ -519,7 +519,7 @@ En cada variante:
 1. El conjunto de propiedades es exacto; no se admiten claves extra, ausentes ni valores nulos.
 2. `operation` debe coincidir exactamente con el nombre de operación del envelope.
 3. Los valores de alcance deben coincidir exactamente, tipo incluido, con la fuente autoritativa correspondiente: para `authority.migrations.apply` y `authority.project_environment.provision`, con los campos respectivos del payload; para `authority.initialize`, `canonical_database_name` debe coincidir con el nombre canónico derivado por el servicio desde su configuración protegida y la `confirmation_phrase` del payload debe corresponder exactamente a ese mismo nombre.
-4. `reason` se repite deliberadamente y debe ser idéntico, carácter por carácter, al `reason` del payload. No se normaliza silenciosamente uno para hacerlo coincidir con el otro; la regla de normalización previa a la construcción del request sigue pendiente y se especifica por separado.
+4. `reason` se repite deliberadamente y debe ser idéntico, carácter por carácter, al `reason` del payload. Ambos valores deben llegar ya normalizados conforme a §9.11.3; el servicio rechaza valores no canónicos y no los corrige silenciosamente.
 5. Para `authority.migrations.apply`, las versiones y `plan_digest` deben cumplir §9.11.4, además de coincidir exactamente con sus valores correspondientes en el payload.
 6. Los nombres canónicos e IDs deben cumplir §9.11.4. No se relaja por ello la igualdad exacta entre los valores que el servicio compara.
 
