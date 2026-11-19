@@ -123,3 +123,12 @@ La validación fue ejecutada por el propietario en Debian; no se ejecutaron prue
 ## 8. Criterio de cierre
 
 Las cinco etapas están implementadas y la suite completa fue reportada como correcta por el propietario en Debian. El siguiente paso es revisión final de seguridad y documentación del PR. Mantener PR #28 en Draft hasta concluir esa revisión y obtener aprobación explícita para integrarlo.
+
+
+## 9. Hallazgo de revisión final: literales enteros extremos
+
+La revisión del decoder identificó que Python puede lanzar `ValueError` al convertir un literal entero JSON que excede el límite de dígitos configurado por el intérprete. El decoder ya convertía errores JSON y recursión excesiva en `INVALID_JSON`, pero no capturaba ese `ValueError`; una solicitud de menos de 16 KiB podía escapar del flujo de rechazo controlado.
+
+**Corrección aplicada en la rama:** capturar `ValueError` junto con `RecursionError` alrededor de `json.loads`, traduciendo ambos a `INVALID_JSON`. Se añadió una prueba con un literal de 5.000 dígitos que verifica también la conservación del UUIDv4 validable.
+
+**Estado:** corrección publicada en GitHub; pendiente de ejecución por el propietario en Debian. No se afirma que esta nueva prueba ni la suite posterior hayan sido ejecutadas todavía.
