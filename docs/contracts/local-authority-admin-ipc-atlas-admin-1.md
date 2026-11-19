@@ -4,7 +4,7 @@
 **Versión del contrato:** 1.0  
 **Estado:** baseline normativo de protocolo para desarrollo y prototipo; no autoriza despliegue ni operaciones administrativas reales.  
 **Protocolo:** `atlas-admin/1`  
-**Fecha:** 18 de noviembre de 2026.
+**Fecha:** 19 de noviembre de 2026.
 
 ## 1. Autoridad, alcance y precedencia
 
