@@ -143,3 +143,13 @@ Se añadieron nueve casos estructurados que cubren propuestas válidas, negativa
 - No se han modificado sudoers, PAM, systemd, SSH, usuarios/grupos ni permisos del host.
 
 Detalle y secuencia propuesta: [Evaluación de Candidate A/B y separación de privilegios](design/local-bootstrap-candidate-evaluation-2026-11-16.md).
+
+## Actualización posterior al merge de PR #28 — 2026-11-19
+
+El estado de este documento se complementa con la línea base validada en `main`:
+- Merge commit: `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`.
+- El propietario reportó desde Debian: 1,590 tests, `OK (skipped=1)`, 34.895 s, Python 3.13.5; checkout `main` sincronizado con `origin/main` y árbol limpio.
+- El handler IPC continúa siendo un prototipo para conexiones ya aceptadas. No existe listener persistente, daemon ni integración de producción con systemd.
+- La prueba opt-in de systemd user-manager tenía un envelope incompatible con el handler `atlas-admin/1`; la rama `work/systemd-socket-activation-probe-contract-alignment` lo corrige y exige respuesta `completed/OK`. Validación local de esa corrección pendiente.
+- La prueba observó una colisión destructiva de ruta en Debian systemd 257.13. La activación de sockets sobre filesystem no está aprobada hasta demostrar una estrategia segura de propiedad de ruta. La prueba ya no repite el escenario destructivo.
+- Esta actualización no autoriza instalación de unidades, cambios del host, usuarios, permisos, acceso SQLite ni operaciones administrativas.
