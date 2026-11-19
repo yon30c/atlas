@@ -10,6 +10,7 @@ from unittest.mock import Mock
 
 from atlas.platform_admin_ipc import (
     MAX_REQUEST_BYTES,
+    PROTOCOL_ID,
     AdminPeerRejected,
     AdminProtocolRejected,
     decode_admin_request,
@@ -20,7 +21,7 @@ from atlas.platform_admin_ipc import (
 
 def _request_packet(**overrides):
     value = {
-        "version": 1,
+        "protocol": PROTOCOL_ID,
         "request_id": str(uuid.uuid4()),
         "operation": "authority.ping",
         "payload": {},
@@ -32,6 +33,7 @@ def _request_packet(**overrides):
 class AuthorityAdminIPCProtocolTests(unittest.TestCase):
     def test_accepts_only_the_non_mutating_ping_operation(self):
         request = decode_admin_request(_request_packet())
+        self.assertEqual(request.protocol, PROTOCOL_ID)
         self.assertEqual(request.operation, "authority.ping")
         self.assertEqual(request.payload, {})
 
@@ -50,19 +52,19 @@ class AuthorityAdminIPCProtocolTests(unittest.TestCase):
     def test_rejects_duplicate_json_keys(self):
         request_id = str(uuid.uuid4())
         packet = (
-            '{"version":1,"request_id":"' + request_id
+            '{"protocol":"' + PROTOCOL_ID + '","request_id":"' + request_id
             + '","operation":"authority.ping","operation":"authority.migrate","payload":{}}'
         ).encode("utf-8")
         with self.assertRaises(AdminProtocolRejected):
             decode_admin_request(packet)
 
-    def test_rejects_boolean_protocol_version(self):
+    def test_rejects_numeric_protocol_version(self):
         with self.assertRaises(AdminProtocolRejected):
-            decode_admin_request(_request_packet(version=True))
+            decode_admin_request(_request_packet(protocol=1))
 
-    def test_rejects_float_protocol_version(self):
+    def test_rejects_unknown_protocol_identifier(self):
         with self.assertRaises(AdminProtocolRejected):
-            decode_admin_request(_request_packet(version=1.0))
+            decode_admin_request(_request_packet(protocol="atlas-admin/2"))
 
     def test_rejects_non_canonical_or_non_v4_request_id(self):
         with self.assertRaises(AdminProtocolRejected):
@@ -100,7 +102,7 @@ class AuthorityAdminIPCPeerTests(unittest.TestCase):
         self.assertEqual(peer.gid, os.getgid())
         self.assertGreater(peer.pid, 0)
 
-    def test_accepts_current_uid_and_returns_one_packet_response(self):
+    def test_accepts_current_uid_and_returns_contract_response(self):
         packet = _request_packet()
         self.client.send(packet)
 
@@ -111,9 +113,13 @@ class AuthorityAdminIPCPeerTests(unittest.TestCase):
 
         response = json.loads(self.client.recv(4096).decode("utf-8"))
         self.assertEqual(peer.uid, os.getuid())
+        self.assertEqual(response["protocol"], PROTOCOL_ID)
         self.assertEqual(response["request_id"], request.request_id)
-        self.assertEqual(response["status"], "ok")
-        self.assertEqual(response["operation"], "authority.ping")
+        self.assertEqual(response["status"], "completed")
+        self.assertEqual(response["code"], "OK")
+        self.assertEqual(response["summary"], "Operation completed")
+        self.assertEqual(response["result"], {})
+        self.assertIsNone(response["audit_ref"])
 
     def test_rejects_peer_uid_not_in_allowlist_before_reading_request(self):
         with self.assertRaises(AdminPeerRejected):
@@ -170,7 +176,6 @@ class AuthorityAdminIPCPeerTests(unittest.TestCase):
                 self.server,
                 allowed_peer_uids={os.getuid()},
             )
-
 
     @unittest.skipUnless(hasattr(socket, "SCM_RIGHTS"), "SCM_RIGHTS is required")
     def test_rejects_ancillary_file_descriptors(self):
