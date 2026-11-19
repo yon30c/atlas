@@ -168,3 +168,18 @@ La revisión se realizó sobre la rama `work/authority-admin-protocol-contract-a
 - No se ejecutaron pruebas, compile, Actions ni comprobaciones en Debian. La prueba nueva y la validación focalizada/completa del decoder quedan a cargo del propietario.
 
 **Resultado de esta revisión:** se corrigieron los hallazgos concretos anteriores en código, prueba y documentación. Esto no equivale a conformidad validada ni aprobación de despliegue. PR #28 permanece Draft y sin merge.
+
+
+## 12. Validación local posterior de la revisión adversarial — 2026-11-19
+
+El propietario actualizó el checkout Debian por fast-forward hasta el HEAD `aae8beda568dee6996ce603fe936085e61fd1165` y comunicó:
+
+- `python -m unittest -v tests.unit.test_platform_admin_ipc`: 29 tests, `OK`.
+- Suite completa: `Ran 1590 tests in 36.674s` / `OK (skipped=1)`.
+- Resultado completo: 1.590 tests ejecutados, cero fallos, cero errores y una prueba omitida.
+
+Esta ejecución valida localmente el estado de la rama en ese HEAD, incluidas la regresión de UID/GID unsigned de `SO_PEERCRED` y la corrección del decoder para literales enteros JSON extremos y conservación del `request_id`. La evidencia procede del propietario en Debian; no se ejecutaron pruebas ni workflows desde GitHub.
+
+**Cierre de validación:** PASS para la suite ejecutada en el HEAD indicado. Esto no demuestra por sí solo seguridad completa, comportamiento de listener/despliegue ni implementación de las operaciones no disponibles.
+
+**Límites:** solo `authority.ping` está implementada. Las otras seis operaciones siguen sin implementar y denegadas. No existe listener persistente, daemon, systemd ni acceso administrativo real a SQLite. PR #28 permanece Draft y sin merge; no se autoriza integración ni despliegue por este resultado.
