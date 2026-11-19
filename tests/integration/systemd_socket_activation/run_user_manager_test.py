@@ -103,24 +103,27 @@ def _ensure_directory_chain(directory: Path) -> dict[Path, tuple[int, int, int]]
     """Create missing directories while rejecting symlinks in every path component."""
     absolute = directory.absolute()
     created: dict[Path, tuple[int, int, int]] = {}
-    cursor = Path(absolute.anchor)
-
-    for component in absolute.parts[1:]:
-        cursor = cursor / component
-        try:
-            info = cursor.lstat()
-        except FileNotFoundError:
+    try:
+        for component in absolute.parts[1:]:
+            cursor = cursor / component
             try:
-                cursor.mkdir(mode=0o700)
-            except FileExistsError:
                 info = cursor.lstat()
-                if not stat.S_ISDIR(info.st_mode):
-                    raise RuntimeError(f"unit directory path was replaced: {cursor}")
-            else:
-                created[cursor] = _path_identity(cursor)
-                continue
-        if not stat.S_ISDIR(info.st_mode):
-            raise RuntimeError(f"unit directory component is not a real directory: {cursor}")
+            except FileNotFoundError:
+                try:
+                    cursor.mkdir(mode=0o700)
+                except FileExistsError:
+                    info = cursor.lstat()
+                    if not stat.S_ISDIR(info.st_mode):
+                        raise RuntimeError(f"unit directory path was replaced: {cursor}")
+                else:
+                    created[cursor] = _path_identity(cursor)
+                    continue
+            if not stat.S_ISDIR(info.st_mode):
+                raise RuntimeError(f"unit directory component is not a real directory: {cursor}")
+    except BaseException:
+        for created_path, identity in reversed(list(created.items())):
+            _rmdir_if_same_identity(created_path, identity)
+        raise
 
     return created
 
@@ -260,9 +263,20 @@ def main() -> int:
     socket_unit_path = unit_dir / socket_unit
     service_unit_path = unit_dir / service_unit
 
-    private_dir = Path(tempfile.mkdtemp(prefix="atlas-admin-ipc-probe-", dir=runtime))
-    os.chmod(private_dir, 0o700)
+    try:
+        private_dir = Path(tempfile.mkdtemp(prefix="atlas-admin-ipc-probe-", dir=runtime))
+    except BaseException:
+        for created_path, identity in reversed(list(unit_dir_identities.items())):
+            _rmdir_if_same_identity(created_path, identity)
+        raise
     private_dir_identity = _path_identity(private_dir)
+    try:
+        os.chmod(private_dir, 0o700)
+    except BaseException:
+        _rmdir_if_same_identity(private_dir, private_dir_identity)
+        for created_path, identity in reversed(list(unit_dir_identities.items())):
+            _rmdir_if_same_identity(created_path, identity)
+        raise
     socket_path = private_dir / "admin.sock"
     socket_identity = None
     uid = os.getuid()
