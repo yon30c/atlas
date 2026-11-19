@@ -196,7 +196,9 @@ def decode_admin_request(packet: bytes) -> AdminRequest:
         )
     except AdminProtocolRejected:
         raise
-    except (json.JSONDecodeError, RecursionError) as exc:
+    except (ValueError, RecursionError) as exc:
+        # ValueError also covers Python's integer-string conversion limit;
+        # hostile oversized numeric literals must become protocol rejections.
         raise AdminProtocolRejected(
             "request is not valid strict JSON",
             code="INVALID_JSON",
