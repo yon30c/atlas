@@ -5,7 +5,7 @@
 **Fase:** 2.5 — operaciones administrativas de autoridad.  
 **Base de código:** `main` después de `5deb6bf1cf1a53a1eb905d5c23e61f4f027c5fee`.
 
-Este diseño desarrolla la frontera establecida en [el contrato operativo de almacenamiento de autoridad local](local-authority-storage-operational-contract.md). La base primaria aún no está desplegada. El CLI de provisioning existente no es apto para ella y no debe ejecutarse contra esa futura base.
+Este diseño desarrolla la frontera establecida en [el contrato operativo de almacenamiento de autoridad local](local-authority-storage-operational-contract.md). Para el transporte IPC, envelope, límites, estados y catálogo, prevalece el [Contrato normativo IPC administrativo atlas-admin/1](../contracts/local-authority-admin-ipc-atlas-admin-1.md). Este documento desarrolla el diseño de dominio y las propuestas de operación; no es la fuente normativa del protocolo ni una especificación IPC individual completa. La base primaria aún no está desplegada. El CLI de provisioning existente no es apto para ella y no debe ejecutarse contra esa futura base.
 
 ## 1. Objetivos y no objetivos
 
@@ -76,7 +76,7 @@ El hecho de que el peer sea root identifica un proceso privilegiado del host; no
 El protocolo debe ser versionado, acotado y estricto:
 
 - Un mensaje de solicitud por conexión.
-- Tamaño máximo definido y pequeño (propuesta inicial: 64 KiB).
+- Tamaño máximo según el contrato normativo `atlas-admin/1`: request 16 KiB y response 64 KiB. La propuesta inicial de request de 64 KiB queda sustituida.
 - JSON UTF-8 con versión explícita, request ID UUIDv4, nombre de operación y payload específico.
 - Rechazo de claves duplicadas, campos desconocidos, tipos inesperados, valores excesivos y mensajes adicionales.
 - No aceptar rutas, SQL, expresiones, código ni argumentos arbitrarios.
@@ -86,7 +86,9 @@ El protocolo debe ser versionado, acotado y estricto:
 
 La canonicalización y el digest del request se calculan en el lado de autoridad, usando una representación versionada. No se confía en un digest enviado por el frontend.
 
-## 4. Catálogo cerrado de operaciones
+## 4. Catálogo de operaciones de dominio
+
+Esta sección describe cinco operaciones de dominio y sus intenciones de diseño. No constituye el catálogo IPC completo. El catálogo normativo de `atlas-admin/1` contiene exactamente siete operaciones, incluidas `authority.ping` y `authority.operation.status`; véase el contrato normativo IPC §9. Las descripciones de esta sección no habilitan una operación ni sustituyen su payload y resultado IPC individual aprobados.
 
 ### 4.1 Diagnóstico de solo lectura
 
@@ -218,7 +220,10 @@ Las consultas de diagnóstico de solo lectura no escriben el ledger SQLite; pued
 
 ### 5.3 Idempotencia y commit ambiguo
 
-- Toda mutación recibe operation ID UUIDv4 y digest de intención.
+**Cierre documental posterior:** los esquemas exactos de resultado por operación y la tabla estable de códigos/estados se encuentran en el contrato normativo IPC §§9.12 y 10.4. Este diseño permanece subordinado y no debe redefinirlos ni ampliar el catálogo. El cierre de contrato no habilita las operaciones.
+
+
+- Toda mutación recibe operation ID UUIDv4 y digest de intención. Para `atlas-admin/1`, la proyección exacta y su canonicalización JSON v1/SHA-256 están fijadas normativamente en el contrato IPC §9.11.6; el digest del plan de migraciones es otro digest y se define por separado en §9.11.5.
 - Repetición del mismo ID y digest devuelve el resultado original.
 - Mismo ID con digest diferente es conflicto y no muta.
 - Un error durante/después de commit no se traduce automáticamente en fracaso.
