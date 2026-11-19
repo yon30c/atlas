@@ -428,3 +428,19 @@ Esta sección prevalece sobre los pendientes y siguientes pasos históricos de �
 - La regresión nueva y la corrección del decoder de enteros JSON extremos requieren validación focalizada y suite completa por el propietario en Debian.
 
 **Estado:** revisión adversarial documental/código completada con correcciones publicadas; validación local pendiente. PR #28 continúa Draft y sin merge.
+
+
+### 16.5 Validación local posterior de la revisión adversarial — 2026-11-19
+
+El propietario actualizó su checkout Debian mediante fast-forward hasta `aae8beda568dee6996ce603fe936085e61fd1165` y comunicó los siguientes resultados:
+
+- Prueba focalizada: `python -m unittest -v tests.unit.test_platform_admin_ipc` — 29 tests, `OK`.
+- Suite completa: `Ran 1590 tests in 36.674s`, `OK (skipped=1)`.
+- Resultado de la suite completa: 1.590 ejecutadas, cero fallos, cero errores y una omitida.
+- La ejecución completa incluye la corrección de decodificación `SO_PEERCRED` (PID signed, UID/GID unsigned) y la regresión de enteros JSON extremos/request_id. La evidencia fue ejecutada y comunicada por el propietario en Debian; no se ejecutaron pruebas ni workflows desde GitHub.
+
+**Clasificación:** validación local PASS para el HEAD `aae8beda568dee6996ce603fe936085e61fd1165`, limitada a la suite de pruebas ejecutada. No equivale a auditoría de seguridad completa, prueba de despliegue ni autorización de integración.
+
+**Límites sin cambio:** solo `authority.ping` está implementada; las otras seis operaciones continúan denegadas/no habilitadas. No hay listener persistente, daemon, systemd ni acceso administrativo real a SQLite. PR #28 permanece Draft y sin merge; no se toca `main`.
+
+**Siguiente paso:** continuar con la revisión final de seguridad y del diff completo del PR #28. Cualquier integración requiere aprobación explícita del propietario.
