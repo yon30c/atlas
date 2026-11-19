@@ -129,6 +129,8 @@ Las cinco etapas están implementadas y la suite completa fue reportada como cor
 
 La revisión del decoder identificó que Python puede lanzar `ValueError` al convertir un literal entero JSON que excede el límite de dígitos configurado por el intérprete. El decoder ya convertía errores JSON y recursión excesiva en `INVALID_JSON`, pero no capturaba ese `ValueError`; una solicitud de menos de 16 KiB podía escapar del flujo de rechazo controlado.
 
-**Corrección aplicada en la rama:** capturar `ValueError` junto con `RecursionError` alrededor de `json.loads`, traduciendo ambos a `INVALID_JSON`. Se añadió una prueba con un literal de 5.000 dígitos que verifica también la conservación del UUIDv4 validable.
+**Primera corrección incompleta:** capturar `ValueError` alrededor de `json.loads` evitaba la excepción no controlada, pero el parseo abortaba antes de recuperar `request_id`. La prueba de regresión detectó que el rechazo devolvía `request_id: null` aunque el UUIDv4 estaba presente y era válido.
 
-**Estado:** corrección publicada en GitHub; pendiente de ejecución por el propietario en Debian. No se afirma que esta nueva prueba ni la suite posterior hayan sido ejecutadas todavía.
+**Corrección revisada:** el decoder usa `parse_int` para convertir los enteros normales y, si Python rechaza un literal por su límite de conversión, conserva un sentinel interno. Así puede terminar de parsear la estructura, validar/extraer el UUIDv4 y después rechazar el sentinel como `INVALID_JSON`, adjuntando el `request_id` validado. El sentinel nunca llega al payload aceptado. Se conserva el rechazo de JSON inválido y no se eleva el límite global del intérprete.
+
+**Validación:** la prueba focalizada reportada por el propietario falló antes de esta segunda corrección (`request_id=None`, esperado UUIDv4). La corrección revisada está publicada; prueba focalizada y suite completa quedan pendientes de nueva ejecución en Debian.
