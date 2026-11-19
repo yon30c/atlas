@@ -25,7 +25,17 @@ MAX_RESPONSE_BYTES = 64 * 1024
 MAX_JSON_DEPTH = 16
 CONNECTION_TIMEOUT_SECONDS = 5.0
 MAX_CONNECTION_TIMEOUT_SECONDS = 60.0
-_ALLOWED_OPERATIONS = frozenset({"authority.ping"})
+
+_CATALOG_OPERATIONS = frozenset({
+    "authority.ping",
+    "authority.diagnose",
+    "authority.migrations.plan",
+    "authority.operation.status",
+    "authority.initialize",
+    "authority.migrations.apply",
+    "authority.project_environment.provision",
+})
+_IMPLEMENTED_OPERATIONS = frozenset({"authority.ping"})
 _NO_ERROR_RESPONSE_CODES = frozenset({
     "UNAUTHORIZED_PEER",
     "MESSAGE_TRUNCATED",
@@ -159,7 +169,7 @@ def _validate_json_values_and_depth(value: Any) -> None:
 
 
 def decode_admin_request(packet: bytes) -> AdminRequest:
-    """Decode one bounded JSON packet and enforce the exact ping schema."""
+    """Decode one bounded JSON packet and enforce the implemented request schema."""
     if not isinstance(packet, bytes):
         raise AdminProtocolRejected("packet must be bytes")
     if not packet:
@@ -234,10 +244,16 @@ def decode_admin_request(packet: bytes) -> AdminRequest:
             code="INVALID_REQUEST",
             request_id=request_id,
         )
-    if operation not in _ALLOWED_OPERATIONS:
+    if operation not in _CATALOG_OPERATIONS:
         raise AdminProtocolRejected(
-            "operation is not available in this prototype",
+            "operation is not in the closed atlas-admin/1 catalog",
             code="UNKNOWN_OPERATION",
+            request_id=request_id,
+        )
+    if operation not in _IMPLEMENTED_OPERATIONS:
+        raise AdminProtocolRejected(
+            "operation is catalogued but not enabled in this prototype",
+            code="OPERATION_DENIED",
             request_id=request_id,
         )
 
