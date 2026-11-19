@@ -1,50 +1,46 @@
-# Auditoría de alineación IPC administrativo con atlas-admin/1
+# Auditoría y cierre de alineación IPC administrativo con atlas-admin/1
 
-**Estado:** etapa 1 completada; auditoría documental y de código, sin cambios de comportamiento.
-**Base de trabajo:** `test/authority-admin-systemd-activation`.
-**Contrato normativo revisado:** `design/authority-admin-operations-contract`, documento `docs/design/local-authority-administrative-operations-design.md`, blob `e7bec4ee4c467fb72cbedc2b89f262714a880f71`.
-**Alcance:** §10.4–10.6, §11, §15.1–15.2; implementación IPC y pruebas unitarias actuales.
-**Advertencia:** el propio contrato mantiene estado de propuesta de diseño y no autoriza despliegue, operaciones privilegiadas ni acceso a una base real.
+**Estado:** etapas 1–5 implementadas en la rama de trabajo; pendientes las pruebas del propietario en Debian y la revisión final antes de integrar.  
+**Base de trabajo:** `test/authority-admin-systemd-activation`.  
+**Rama de trabajo:** `work/authority-admin-protocol-contract-alignment`.  
+**Contrato normativo revisado:** `design/authority-admin-operations-contract`, documento `docs/design/local-authority-administrative-operations-design.md`, blob `e7bec4ee4c467fb72cbedc2b89f262714a880f71`.  
+**Alcance:** §10.4–10.6, §11, §15.1–15.2; implementación IPC y pruebas unitarias.  
+**Advertencia:** el contrato mantiene estado de propuesta de diseño y no autoriza despliegue, operaciones privilegiadas ni acceso a una base real.
 
 ## 1. Resumen ejecutivo
 
-El prototipo actual demuestra una frontera experimental `AF_UNIX/SOCK_SEQPACKET`, autenticación del peer mediante `SO_PEERCRED`, una allowlist de UID y aceptación de un único paquete JSON para `authority.ping`. No implementa todavía el sobre `atlas-admin/1` ni el contrato de respuesta y errores de §10.
+La auditoría inicial encontró que el prototipo demostraba `AF_UNIX/SOCK_SEQPACKET`, `SO_PEERCRED`, allowlist de UID y un ping experimental, pero no implementaba el sobre `atlas-admin/1`, los límites, la respuesta ni los errores normativos.
 
-La brecha no se resuelve con un cambio aislado de nombres: afecta el modelo de request, límites, validación JSON, errores tipados, timeouts, respuesta y pruebas. La implementación de las otras seis operaciones queda expresamente fuera del alcance de esta alineación inicial.
+Las etapas 2–4 alinearon el envelope, los límites, la validación estricta, los errores de transporte y el resultado de ping. La revisión de etapa 5 detectó y corrigió además una brecha: los errores de protocolo recuperables deben producir una respuesta `rejected` segura, no limitarse a propagar una excepción.
 
-## 2. Hallazgos
+La implementación sigue siendo deliberadamente estrecha: solo acepta `authority.ping`. Las otras seis operaciones del catálogo no se habilitaron.
 
-| ID | Severidad | Área | Estado actual | Requisito contractual |
-|---|---|---|---|---|
-| A-01 | Crítica | Request envelope | Usa `version: 1` entero | Debe usar `protocol: "atlas-admin/1"` |
-| A-02 | Alta | Límite de request | `MAX_REQUEST_BYTES = 64 KiB` | Máximo 16 KiB |
-| A-03 | Alta | Límite de response | `MAX_RESPONSE_BYTES = 4 KiB` | Máximo 64 KiB |
-| A-04 | Alta | Response envelope | Devuelve `version`, `status: "ok"`, `operation` | Debe devolver `protocol`, `request_id`, estado contractual, `code`, `summary`, `result` y `audit_ref` |
-| A-05 | Alta | Ping | No devuelve versión del servicio ni estado explícito del handler | §15.2 requiere versión de protocolo, versión de servicio y disponibilidad del handler |
-| A-06 | Alta | Errores | Excepciones genéricas; los mensajes no forman un catálogo estable | Debe mapear a los códigos de §10.6, sin depender de mensajes de excepción |
-| A-07 | Alta | Profundidad JSON | No existe límite explícito de profundidad 16 | Rechazar profundidad superior a 16 |
-| A-08 | Media | Timeout | Un timeout se aplica conjuntamente a recepción y envío | Default 5 s y máximo configurable 60 s para read y write; conviene separarlos |
-| A-09 | Media | Desconexión de peer | `BrokenPipeError` no está manejado explícitamente | Desconexión es error de transporte y no debe tumbar el proceso ni falsear el resultado de una mutación |
-| A-10 | Media | Paquete vacío/EOF | El paquete vacío acaba como rechazo genérico de tamaño; no distingue EOF | Verificar el comportamiento del kernel; si no se distingue, cerrar sin operación ni respuesta |
-| A-11 | Media | Truncamiento/ancillary | `MSG_TRUNC` y `MSG_CTRUNC` comparten rechazo genérico; ancillary presente tiene otro mensaje genérico | Mapear a `MESSAGE_TRUNCATED` y `ANCILLARY_DATA_FORBIDDEN` según la causa |
-| A-12 | Media | UTF-8/JSON | UTF-8 inválido y JSON malformado comparten una excepción genérica | Distinguir `INVALID_UTF8` de `INVALID_JSON`; mantener rechazo de claves duplicadas y constantes no estándar |
-| A-13 | Media | Versión/operación/payload | Versión, operación y payload inválidos comparten `AdminProtocolRejected` | Diferenciar versión no soportada, operación desconocida y argumentos inválidos |
-| A-14 | Baja | Contrato de datos | `AdminRequest.version` representa un entero | Debe reflejar el identificador de protocolo string sin crear alias legacy |
+## 2. Hallazgos de la auditoría inicial
 
-### 2.1 Propiedades ya presentes que deben conservarse
+La siguiente tabla registra el estado encontrado antes de los cambios, no el estado actual:
 
-- Solo `AF_UNIX/SOCK_SEQPACKET`; se rechaza `SOCK_STREAM`.
-- `SO_PEERCRED` se consulta desde el kernel antes de leer el paquete.
-- El UID permitido se entrega mediante allowlist explícita; no se confía en identidad declarada en JSON.
-- Un request por conexión y payload de ping vacío.
-- Se rechazan claves JSON duplicadas, campos extra, UUID no canónico/no UUIDv4, booleano como versión, UTF-8 inválido, JSON inválido, `NaN`/`Infinity`, ancillary data y paquetes truncados.
-- El módulo no abre SQLite, no inspecciona el filesystem de la DB, no crea listener ni cambia UID/GID.
+| ID | Severidad inicial | Hallazgo inicial | Resolución |
+|---|---|---|---|
+| A-01 | Crítica | Request usaba `version: 1` entero | Cerrado: `protocol: "atlas-admin/1"` exacto |
+| A-02 | Alta | Request máximo 64 KiB | Cerrado: 16 KiB |
+| A-03 | Alta | Response máximo 4 KiB | Cerrado: 64 KiB |
+| A-04 | Alta | Response experimental no contractual | Cerrado: envelope §10.5 |
+| A-05 | Alta | Ping no informaba versión del servicio ni handler | Cerrado: resultado mínimo §15.2 |
+| A-06 | Alta | Errores sin códigos estables | Cerrado para errores de transporte/protocolo de esta operación |
+| A-07 | Alta | Sin límite explícito de profundidad | Cerrado: máximo 16 niveles de contenedores JSON |
+| A-08 | Media | Un timeout compartido para lectura/escritura | Cerrado: parámetros independientes, default 5 s, máximo 60 s |
+| A-09 | Media | Desconexión durante envío no manejada | Cerrado: se clasifica como desconexión de transporte, sin falsear resultado |
+| A-10 | Media | Paquete vacío y EOF no diferenciados | Cerrado conservadoramente: ambos se tratan como cierre sin operación ni respuesta |
+| A-11 | Media | Truncamiento y ancillary compartían rechazo genérico | Cerrado: códigos diferenciados; no se responde a esos casos |
+| A-12 | Media | UTF-8 y JSON compartían rechazo genérico | Cerrado: `INVALID_UTF8` y `INVALID_JSON` |
+| A-13 | Media | Versión, operación y payload compartían rechazo genérico | Cerrado: códigos diferenciados |
+| A-14 | Baja | Modelo de request conservaba campo entero `version` | Cerrado: `AdminRequest.protocol` es string |
 
-## 3. Contrato objetivo para la operación implementada
+## 3. Contrato implementado
 
 ### Request
 
-El único request aceptado en esta etapa debe tener exactamente estas claves:
+El único request aceptado tiene exactamente estas claves:
 
 ```json
 {
@@ -55,11 +51,9 @@ El único request aceptado en esta etapa debe tener exactamente estas claves:
 }
 ```
 
-No se conservará compatibilidad con el sobre experimental `version: 1`: aceptar ambos formatos crearía dos protocolos de facto y debilitaría la validación exacta.
+No se admite compatibilidad con el sobre experimental `version: 1`. La allowlist del código sigue limitada a `authority.ping`; no se han activado alias ni operaciones adicionales.
 
-### Response
-
-El ping correcto debe producir un sobre equivalente a:
+### Response de éxito
 
 ```json
 {
@@ -69,46 +63,96 @@ El ping correcto debe producir un sobre equivalente a:
   "code": "OK",
   "summary": "Operation completed",
   "result": {
-    "protocol": "atlas-admin/1",
-    "service_version": "version-defined-by-build-metadata",
-    "handler": "available"
+    "protocol_version": "atlas-admin/1",
+    "service_version": "0.1.0",
+    "handler_status": "available"
   },
   "audit_ref": null
 }
 ```
 
-El campo `service_version` debe provenir de metadatos de versión mantenidos por el proyecto; no se debe inventar ni derivar de una ruta, variable de entorno arbitraria o dato del cliente. Su fuente concreta se resolverá antes de implementar la respuesta.
+La versión de servicio se obtiene de los metadatos de la distribución `atlas-assistant`. Si se ejecuta desde un checkout sin metadatos instalados, se usa el fallback `0.1.0`, que debe mantenerse sincronizado con `[project].version` en `pyproject.toml`.
 
-El resultado no incluirá rutas, configuración, variables de entorno, identidad del operador, datos de SQLite ni inventario interno. Ping no crea sesión ni estado entre conexiones.
+### Response de rechazo recuperable
 
-## 4. Estrategia de implementación por etapas
+Para errores de validación de una solicitud recibida de un peer autorizado, cuando no hay truncamiento ni ancillary prohibido, se envía:
 
-1. **Auditoría (esta etapa):** inventariar discrepancias, conservar invariantes existentes y definir el comportamiento contractual de ping.
-2. **Sobre y límites:** introducir `protocol`, UUIDv4, allowlist cerrada temporal de ping, límites 16/64 KiB y respuesta con estructura contractual. No añadir operaciones de catálogo en esta etapa.
-3. **Validación y transporte:** profundidad JSON 16, errores estables, timeouts read/write explícitos, tratamiento seguro de EOF, truncamiento, ancillary data y desconexión.
-4. **Ping completo:** obtener una versión de servicio confiable, devolver la disponibilidad del handler y mantener cero acceso a SQLite/filesystem de DB y cero efectos laterales.
-5. **Revisión e integración:** revisar diff, documentación y coherencia; preparar instrucciones de validación para Debian. La suite y las pruebas de integración serán ejecutadas por el propietario en Debian, no por esta intervención.
+```json
+{
+  "protocol": "atlas-admin/1",
+  "request_id": "UUIDv4-or-null",
+  "status": "rejected",
+  "code": "INVALID_REQUEST",
+  "summary": "Request rejected",
+  "result": {},
+  "audit_ref": null
+}
+```
 
-Cada etapa tendrá su propio commit y revisión antes de avanzar. No se implementarán `diagnose`, migraciones, status, initialize ni provisioning en esta secuencia.
+El request ID solo se incluye cuando se pudo recuperar y validar como UUIDv4 canónico. Para UTF-8/JSON malformado, claves duplicadas o solicitudes cuyo ID no puede validarse se devuelve `null`.
 
-## 5. Riesgos y decisiones que requieren atención
+Para peer no autorizado, `MSG_TRUNC`, `MSG_CTRUNC`/ancillary prohibido y cierre de transporte, se cierra sin respuesta conforme a §10.5.
 
-- **No ampliar la superficie:** el catálogo normativo contiene siete operaciones, pero esta rama seguirá aceptando solo `authority.ping` hasta que las operaciones read-only y mutables tengan sus propios contratos e implementación revisada.
-- **No confundir protocolo con salud de dominio:** ping solo prueba que el canal y handler responden; no prueba SQLite.
-- **No responder siempre:** peer no autorizado, truncamiento y ancillary prohibido pueden cerrarse sin respuesta conforme a §10.5. La respuesta de error solo se construirá cuando sea seguro recuperar el request ID.
-- **No convertir excepciones de validación en fallos de proceso:** el loop servidor futuro deberá capturar rechazos por conexión y continuar; este módulo todavía no implementa un listener.
-- **Commit ambiguity:** no hay mutaciones en el prototipo; los estados `pending` y `unknown` no deben simularse para ping.
-- **Versión del servicio:** antes de implementar §15.2 se debe localizar la fuente de versión del paquete/proyecto y elegir una única fuente mantenida.
+### Resultado de ping
 
-## 6. Validación existente y alcance de esta intervención
+El resultado contiene exclusivamente:
+- `protocol_version`;
+- `service_version`;
+- `handler_status: "available"`.
 
-El propietario informó previamente que, en Debian, la rama base pasó 1.576 tests con 1 omitido, además de las pruebas aisladas de IPC y de systemd socket activation. Estos resultados corresponden a la rama base antes de los cambios de esta secuencia; no son evidencia de pruebas de esta rama de trabajo.
+No incluye rutas, variables de entorno, configuración secreta, identidad del operador ni inventario interno. Ping no abre SQLite ni inspecciona el filesystem de la DB; tampoco demuestra su salud o integridad.
 
-No se ejecutaron pruebas desde GitHub ni desde esta intervención. Todas las pruebas de las etapas siguientes se solicitarán al propietario en Debian.
+## 4. Validación y transporte implementados
 
-## 7. Criterio de aceptación de esta auditoría
+- UTF-8 estricto, JSON estricto, claves duplicadas rechazadas y constantes no estándar rechazadas.
+- Rechazo de floats no finitos, incluidos valores como `1e999` que se convierten a infinito al parsear.
+- Profundidad máxima de 16 niveles de contenedores JSON.
+- Sobre exacto, UUIDv4 canónico, campos exactos, allowlist cerrada y payload vacío para ping.
+- Request 16 KiB y response 64 KiB.
+- Códigos de rechazo estables: `UNAUTHORIZED_PEER`, `EMPTY_REQUEST`, `REQUEST_TOO_LARGE`, `MESSAGE_TRUNCATED`, `ANCILLARY_DATA_FORBIDDEN`, `INVALID_UTF8`, `INVALID_JSON`, `INVALID_REQUEST`, `UNSUPPORTED_PROTOCOL_VERSION`, `UNKNOWN_OPERATION`, `INVALID_ARGUMENTS` y `TIMEOUT`.
+- Timeouts independientes de lectura/escritura, cada uno con default 5 s y máximo 60 s.
+- `SO_PEERCRED` se consulta antes de leer el paquete.
+- Un solo request por conexión, transporte `AF_UNIX/SOCK_SEQPACKET`.
+- `BrokenPipeError`, reset/cierre del peer y timeout no se convierten en errores de dominio.
+- No hay listener, loop servidor, socket activation ni unidad systemd en este cambio. El futuro loop debe capturar errores por conexión y continuar sin terminar el proceso.
 
-- Las discrepancias entre §10/§15 y el prototipo están identificadas.
-- Se preserva el alcance experimental y la única operación ping.
-- No se toca SQLite, filesystem de DB, listener productivo, systemd ni identidad del proceso.
-- Las siguientes etapas tienen límites explícitos y no habilitan operaciones no revisadas.
+## 5. Cinco etapas ejecutadas
+
+1. **Auditoría:** comparación del contrato §10/§11/§15 con código, pruebas y documentación; hallazgos registrados.
+2. **Sobre y límites:** envelope `atlas-admin/1`, límites 16/64 KiB y envelope de respuesta contractual.
+3. **Validación y errores:** profundidad 16, JSON estricto, códigos estables, timeouts independientes y manejo conservador de cierre/truncamiento/ancillary/desconexión.
+4. **Ping completo:** versión de protocolo, versión de servicio y estado del handler; sin acceso a DB.
+5. **Revisión e integración:** se revisó el diff, se añadió respuesta `rejected` para errores recuperables y se preparó la rama para validación del propietario.
+
+No se implementaron `diagnose`, `migrations.plan`, `operation.status`, `initialize`, `migrations.apply` ni `project_environment.provision`.
+
+## 6. Límites y riesgos pendientes
+
+- **Pruebas:** esta rama no ha sido ejecutada. Los resultados de 1.576 tests y 1 omitido comunicados por el propietario corresponden a la rama base anterior a estos cambios.
+- **Kernel/EOF:** el código adopta la regla conservadora del contrato para una recepción vacía; la validación empírica del comportamiento de Debian sigue pendiente.
+- **Concurrencia:** no existe listener ni límite de concurrencia en este módulo; corresponderá al servidor futuro.
+- **Errores internos:** los códigos de operaciones futuras (`OPERATION_DENIED`, `IDEMPOTENCY_CONFLICT`, `OPERATION_FAILED`, `RESULT_UNKNOWN`, etc.) no se simulan mientras esas operaciones no existan.
+- **Producción:** el cambio no autoriza despliegue, cambios de systemd, acceso a la DB real ni mutaciones.
+
+## 7. Validación que debe ejecutar el propietario en Debian
+
+Desde el checkout de `work/authority-admin-protocol-contract-alignment`:
+
+```bash
+python -m unittest -v tests.unit.test_platform_admin_ipc
+python -m compileall -q src tests
+git diff --check
+git status --short --branch
+```
+
+Después, ejecutar la suite completa del repositorio con el mecanismo de discovery que ya funcionó en Debian y reportar:
+- comando exacto;
+- número de tests ejecutados;
+- skips;
+- resultado completo.
+
+No se ejecutaron pruebas desde GitHub ni desde esta intervención.
+
+## 8. Criterio de cierre
+
+La implementación y documentación de las etapas 1–5 están preparadas en la rama de trabajo. La etapa solo se considera validada e integrable en la rama base después de que el propietario ejecute las pruebas en Debian y se revisen sus resultados.
