@@ -114,6 +114,20 @@ class AuthorityAdminIPCProtocolTests(unittest.TestCase):
                     decode_admin_request(packet)
                 self.assertEqual(raised.exception.code, "INVALID_JSON")
 
+    def test_rejects_integer_literals_exceeding_python_conversion_limit(self):
+        request_id = str(uuid.uuid4())
+        oversized_integer = "9" * 5000
+        packet = (
+            '{"protocol":"' + PROTOCOL_ID + '","request_id":"' + request_id
+            + '","operation":"authority.ping","payload":{},"extra":'
+            + oversized_integer + '}'
+        ).encode("ascii")
+
+        with self.assertRaises(AdminProtocolRejected) as raised:
+            decode_admin_request(packet)
+        self.assertEqual(raised.exception.code, "INVALID_JSON")
+        self.assertEqual(raised.exception.request_id, request_id)
+
     def test_enforces_json_depth_limit(self):
         request_id = str(uuid.uuid4())
         at_limit = (
