@@ -307,7 +307,7 @@ La revisión cerró primero la semántica y frontera de confianza de los cinco e
 
 La representación JSON se aprobó posteriormente según las decisiones expresas del propietario y quedó incorporada en el contrato normativo, §9.11.2. La subsección §9.11.1 conserva las restricciones semánticas y de confianza.
 
-**Estado actual:** estructura y tipos JSON aprobados; algunas gramáticas canónicas y la normalización de `reason` siguen pendientes. No se debe volver a tratar la estructura de `operator_evidence` como una decisión pendiente ni inferir por ello aprobación de implementación/despliegue.
+**Estado actual:** estructura y tipos JSON de `operator_evidence` aprobados; la normalización canónica de `reason` también quedó aprobada y documentada en §9.11.3 del contrato. Siguen pendientes las gramáticas canónicas de otros valores, esquemas completos de resultados y mapeo exhaustivo de códigos/estados. Esto no aprueba implementación ni despliegue.
 
 ## 13. Revisión y aprobación del esquema operator_evidence — 2026-11-19
 
@@ -328,8 +328,28 @@ Esquema aprobado:
 
 **Criterio de confianza importante:** el servicio puede validar la coherencia estructural declarada —incluida la igualdad entre process group y foreground process group—, pero no puede demostrar solo con esos valores que el frontend observó realmente el TTY foreground. La comprobación local de terminal, sesión, grupos de proceso y foreground corresponde al frontend privilegiado. La evidencia no es autenticación fuerte, prueba de presencia humana ni autorización de dominio.
 
-**Pendiente, sin bloquear el cierre estructural:** gramáticas canónicas de nombre de DB, IDs y digest; normalización exacta de `reason`; esquemas completos de resultados y tabla exhaustiva de códigos/mapeo status-code. No ampliar campos ni capacidades mientras se cierran esos detalles.
+**Pendiente, sin bloquear el cierre estructural:** gramáticas canónicas de nombre de DB, IDs, versiones y digest; esquemas completos de resultados y tabla exhaustiva de códigos/mapeo status-code. La normalización de `reason` ya está aprobada en §9.11.3. No ampliar campos ni capacidades mientras se cierran los detalles restantes.
 
 **Alcance del cambio:** documentación únicamente. No se modificó código ejecutable ni se ejecutaron pruebas. Las seis operaciones administrativas no implementadas continúan deshabilitadas; solo `authority.ping` está implementada. PR #28 sigue Draft y sin merge. No se aprobó listener persistente, systemd, UID de producción, acceso real a SQLite ni ejecución de mutaciones.
 
-**Siguiente paso recomendado:** continuar con el siguiente pendiente independiente de §9.11: definir la normalización exacta de `reason`, revisando primero los precedentes de dominio y evitando alterar el significado de motivos ya registrados.
+**Siguiente paso recomendado:** continuar con las gramáticas canónicas pendientes de IDs, nombre de DB, versiones y digest, sin inferir formatos no aprobados.
+
+
+---
+
+## 14. Aprobación de la normalización canónica de reason — 2026-11-19
+
+El propietario aprobó expresamente la propuesta de normalización de `reason`, incluida la ampliación del rechazo de controles Unicode para cubrir C1 además de C0 y DEL. La regla normativa completa está en el contrato `atlas-admin/1`, §9.11.3.
+
+Decisión aprobada:
+- Entrada Unicode válida; sin NFC/NFD/NFKC/NFKD.
+- Rechazo de todos los caracteres Unicode de categoría general `Cc` (incluidos C0, DEL y C1); no se convierten controles en espacios.
+- Cada secuencia de Unicode `White_Space` se colapsa a un espacio ASCII `U+0020`, y se eliminan espacios iniciales/finales.
+- Resultado entre 1 y 500 puntos de código Unicode inclusive.
+- Frontend prepara y confirma el valor canónico; servicio rechaza entradas no canónicas sin corrección silenciosa.
+- `confirmed_scope.reason` coincide carácter por carácter con `payload.reason`; el digest de idempotencia usa ese valor canónico exacto.
+- La regla no altera motivos históricos y no extiende el rechazo a categorías como `Cf` sin aprobación separada.
+
+**Alcance:** documentación únicamente. No se modificó código ejecutable ni se ejecutaron pruebas. Las seis operaciones administrativas no implementadas continúan deshabilitadas; solo `authority.ping` está implementada. PR #28 permanece Draft y sin merge.
+
+**Siguiente paso:** especificar las gramáticas canónicas restantes de IDs, nombre de DB, versiones y digest. Cada gramática debe revisarse contra los modelos y contratos existentes antes de proponerla.
