@@ -1,6 +1,6 @@
 # Prototipo IPC Unix para operaciones administrativas de autoridad
 
-**Estado:** prototipo experimental, pendiente de validación en Debian y revisión adversarial.  
+**Estado:** prototipo experimental; suite completa validada por el propietario en Debian 13 (1.583 tests, 1 omitido, cero fallos); pendiente revisión adversarial final.  
 **Fase:** 2.5.2.  
 **No habilitado para producción.**
 
@@ -37,7 +37,7 @@ Los tests unitarios usan pares de sockets Unix reales para validar el transporte
 - No valida capabilities, saved IDs, entorno, descriptores heredados o hardening de un proceso desplegado.
 - No demuestra aislamiento entre cuentas Linux distintas; el test local inicial permite el UID actual.
 
-## Validación requerida por el propietario en Debian
+## Validación del propietario en Debian
 
 Desde el checkout de `work/authority-admin-protocol-contract-alignment`:
 
@@ -48,7 +48,7 @@ git diff --check
 git status --short --branch
 ```
 
-Se debe informar el número de tests y el resultado exacto. Si el paquete de tests no puede importarse como módulo en ese checkout, ejecutar el archivo con el mecanismo de test ya usado por el repositorio y reportar el comando.
+**Resultado comunicado:** `Ran 1583 tests in 34.367s` / `OK (skipped=1)`. Se ejecutaron 1.583 tests, con cero fallos y cero errores; uno fue omitido. La suite completa confirma que las pruebas filesystem quedaron alineadas con el envelope `atlas-admin/1` y la semántica `AdminPeerDisconnected`. Esta validación fue ejecutada por el propietario en su servidor Debian local, no desde GitHub. La revisión adversarial final sigue pendiente.
 
 ## Siguiente prueba antes de crear un listener
 
