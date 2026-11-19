@@ -49,10 +49,19 @@ python tests/integration/systemd_socket_activation/run_user_manager_test.py
 
 The probe is intentionally not part of unittest discovery. It creates two
 uniquely named files in ~/.config/systemd/user, reloads the user manager, and
-creates one uniquely named directory under XDG_RUNTIME_DIR. It stops only its
-own units, removes only its own unit files and temporary socket/path, then
-reloads the user manager. It does not change the manager's default target or
-enable units.
+creates one uniquely named directory under XDG_RUNTIME_DIR. Unit files are
+created with exclusive creation (no overwrite or symlink following), and the
+probe records device, inode and object type for each resource it creates.
+Cleanup removes a unit file, socket path, or directory only if its current
+identity still matches the recorded object; a replacement is left untouched
+and reported for manual inspection. The probe stops only its own uniquely
+named units and reloads the user manager. It does not change the manager's
+default target or enable units.
+
+The identity check is a defensive cleanup guard, not an atomic unlink-by-inode
+primitive. The probe assumes its user-owned unit directory and private runtime
+directory are not being concurrently manipulated by a hostile process running
+under the same UID. It does not claim protection against that same-UID race.
 
 If the command is interrupted or the machine shuts down mid-run, inspect the
 printed unique unit names and temporary directory before removing anything.
