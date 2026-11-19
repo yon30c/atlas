@@ -149,3 +149,22 @@ La revisión 1.1 del contrato normativo `atlas-admin/1` cerró en una sola fuent
 **Límites que no cambian:** solo `authority.ping` está implementada. Las otras seis operaciones siguen deshabilitadas; no existe listener persistente, daemon, systemd ni acceso administrativo real a SQLite. No se modificó código ejecutable ni se ejecutaron pruebas. La suite histórica de 1.583 tests no valida HEAD actual ni la corrección pendiente del decoder.
 
 **Siguiente paso:** revisión de consistencia cruzada del contrato y documentos subordinados, seguida de revisión final de seguridad/diff. El propietario debe validar el decoder en Debian por separado.
+
+## 11. Revisión adversarial de consistencia y frontera de confianza — 2026-11-19
+
+La revisión se realizó sobre la rama `work/authority-admin-protocol-contract-alignment`, PR #28, sin ejecutar pruebas ni workflows remotos.
+
+### Hallazgos y correcciones
+
+1. **Interpretación de credenciales del kernel:** el prototipo desempaquetaba `SO_PEERCRED` con tres enteros con signo. En Linux, `pid_t` es con signo, pero `uid_t` y `gid_t` son sin signo. Un UID/GID válido por encima de `INT_MAX` se interpretaba como negativo y era rechazado, contradiciendo el contrato de admitir cualquier UID válido del tipo del sistema. Corregido en `src/atlas/platform_admin_ipc.py` usando el formato `iII`; la allowlist también rechaza valores fuera del rango unsigned de 32 bits. Se añadió una regresión unitaria con UID/GID altos. **Pendiente de ejecución local Debian.**
+2. **Digest de `authority.operation.status`:** §9.5 contenía una frase inicial que podía leerse como si la autoridad comparara contra un digest esperado del cliente, aunque el payload solo contiene `operation_id`. Se corrigió la redacción normativa: el servicio demuestra coherencia interna del registro y el cliente compara el digest devuelto con la intención local que conserva.
+3. **Deriva del README:** el resumen IPC del README aún declaraba pendientes la canonicalización del plan, los esquemas de resultados y el mapeo de códigos. Se alineó con el contrato 1.1; esas tareas documentales están cerradas, pero las seis operaciones continúan no implementadas y denegadas.
+
+### Reglas que permanecen como puertas de seguridad
+
+- El handler procesa exactamente un paquete, pero el lifecycle de conexión pertenece al caller. Cualquier futuro listener debe cerrar la conexión después de una única respuesta y nunca reutilizarla para otra solicitud; no se debe tratar la responsabilidad del caller como permiso para mantener conexiones abiertas.
+- `operator_evidence` sigue siendo declaración no confiable del frontend. TTY foreground, UID declarado y timestamp no se convierten en identidad autenticada ni sustituyen `SO_PEERCRED`.
+- Las seis operaciones no implementadas siguen denegadas. No se implementó listener, acceso SQLite ni mutación administrativa.
+- No se ejecutaron pruebas, compile, Actions ni comprobaciones en Debian. La prueba nueva y la validación focalizada/completa del decoder quedan a cargo del propietario.
+
+**Resultado de esta revisión:** se corrigieron los hallazgos concretos anteriores en código, prueba y documentación. Esto no equivale a conformidad validada ni aprobación de despliegue. PR #28 permanece Draft y sin merge.
