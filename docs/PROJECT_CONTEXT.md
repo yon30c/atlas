@@ -297,3 +297,30 @@ Se recuperaron las especificaciones aprobadas previamente para las siete operaci
 - Solo ping está implementada; las otras seis permanecen deshabilitadas. La incorporación documental no autoriza ejecución real, listener, systemd ni acceso a la DB real.
 
 No se ejecutaron pruebas en esta actualización. La corrección final del decoder continúa pendiente de validación local Debian. PR #28 permanece Draft.
+
+
+---
+
+## 12. Cierre parcial de operator_evidence — 2026-11-19
+
+**Contrato actualizado:** `docs/contracts/local-authority-admin-ipc-atlas-admin-1.md`, §9.11.1.
+
+La revisión del siguiente pendiente se centró en `operator_evidence`, compartido por las tres mutaciones. Se fijaron las semánticas y los límites de confianza de sus cinco elementos ya exigidos:
+
+- UID real observado: declaración del frontend sobre el UID real del contexto del operador; no identifica a una persona ni autentica una identidad Atlas.
+- UID efectivo del frontend: declaración sobre el UID efectivo del proceso frontend; no equivale al UID del operador ni al peer IPC.
+- TTY/sesión: observación declarada por el frontend del terminal/sesión usados para la confirmación; no prueba presencia física, identidad ni autorización.
+- Timestamp de autorización: instante declarado por el frontend para la aceptación de la confirmación; no es hora de recepción ni de commit de la autoridad.
+- Alcance confirmado: operación y destinos concretos presentados al operador; el servicio debe derivar el alcance permitido desde la operación y el payload y rechazar cualquier discrepancia.
+
+**Frontera de confianza obligatoria:** el objeto completo es una declaración no confiable del frontend y solo conserva procedencia declarada. El servicio mantiene separados los valores declarados, las credenciales kernel obtenidas por `SO_PEERCRED` y sus propios datos temporales/resultado de commit. El frontend privilegiado es responsable de exigir TTY foreground y confirmación tipada; recibir la declaración no permite al servicio afirmar que verificó independientemente el TTY del frontend.
+
+**No se cerró todavía la representación JSON.** Siguen pendientes de aprobación los nombres exactos de propiedades, tipos, reglas de nullability, gramática del identificador de TTY/sesión, formato/zona horaria del timestamp y estructura exacta del alcance. La subsección §9.11.1 aclara semántica y seguridad, no aprueba esos detalles ni añade campos/capacidades.
+
+- Solo se modificó documentación; no se cambió código ejecutable.
+- No se ejecutaron pruebas.
+- Las seis operaciones no implementadas continúan deshabilitadas; solo ping está implementada.
+- PR #28 permanece Draft y sin merge.
+- La rama de trabajo sigue siendo `work/authority-admin-protocol-contract-alignment`.
+
+**Siguiente decisión necesaria:** aprobar una representación estructurada concreta para los cinco elementos de `operator_evidence`, o indicar qué fuentes/formatos debe reflejar. No convertir la propuesta del asistente en contrato aprobado sin esa decisión.
