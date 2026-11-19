@@ -375,9 +375,9 @@ El propietario aprobó la recomendación de gramáticas canónicas para los valo
 
 ## 15. Revisión de integridad documental de gramáticas IPC — 2026-11-19
 
-Se corrigió y verificó la incorporación de §9.11.4 en el contrato normativo. La revisión confirmó una sola cabecera del documento y una sola sección §9.11.4; la expresión regular quedó completa y el tratamiento de guiones consecutivos está explícito.
+Se corrigió y verificó la incorporación de §9.11.4 en el contrato normativo. La revisión confirmó una sola cabecera del documento y una sola sección §9.11.4; la expresión regular quedó completa, el tratamiento de guiones consecutivos está explícito y la referencia de `reason` en `confirmed_scope` quedó alineada con §9.11.3.
 
-**HEAD de la rama observado antes de esta actualización:** `8726435fcc69ec3e792d0560206701bf8f4c4419`. Este SHA identifica el estado revisado, no el commit que añade esta sección de contexto.
+**HEAD de la rama observado antes de esta actualización:** `fbc0fba60f225fbdd6a30bcabc0537f38b090946`. Este SHA identifica el estado revisado, no el commit que añade esta sección de contexto.
 
 **Estado de la rama:** PR #28 abierto, Draft y sin merge. No se modificó `main`.
 
