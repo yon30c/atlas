@@ -13,10 +13,12 @@ El módulo `src/atlas/platform_admin_ipc.py` prueba estas propiedades:
 3. Se acepta exactamente un paquete por conexión.
 4. El request usa el envelope exacto `atlas-admin/1`, con UUIDv4 canónico, operación allowlisted y payload vacío para `authority.ping`.
 5. El tamaño máximo del request es 16 KiB y el de la respuesta es 64 KiB.
-6. Se rechazan claves duplicadas, campos extra, protocolo desconocido, UUID no canónico/no UUIDv4, UTF-8 inválido, JSON inválido, operación desconocida, payload no vacío, paquete truncado y datos ancillary.
-7. La única operación disponible es `authority.ping`, sin efectos de dominio.
-8. La respuesta usa el envelope común de §10.5: protocolo, request ID, estado, código, resumen, resultado y referencia de auditoría.
-9. Cada conexión tiene timeout de lectura/escritura configurable, default 5 s y máximo 60 s; el handler procesa una conexión y un paquete. El listener futuro debe imponer por separado un límite de concurrencia/backpressure.
+6. La validación rechaza claves duplicadas, campos extra, protocolo desconocido, UUID no canónico/no UUIDv4, UTF-8 inválido, JSON inválido, números no finitos, profundidad superior a 16, operación desconocida, payload no vacío, paquete truncado y datos ancillary.
+7. Los rechazos de protocolo exponen códigos estables independientes del texto de excepción, incluyendo `INVALID_UTF8`, `INVALID_JSON`, `INVALID_REQUEST`, `UNSUPPORTED_PROTOCOL_VERSION`, `UNKNOWN_OPERATION`, `INVALID_ARGUMENTS`, `REQUEST_TOO_LARGE`, `MESSAGE_TRUNCATED` y `ANCILLARY_DATA_FORBIDDEN`.
+8. La única operación disponible es `authority.ping`, sin efectos de dominio.
+9. La respuesta usa el envelope común de §10.5: protocolo, request ID, estado, código, resumen, resultado y referencia de auditoría.
+10. Los timeouts de lectura y escritura son independientes; cada uno tiene default 5 s y máximo 60 s.
+11. EOF/recepción vacía se trata como cierre de transporte sin operación ni respuesta, ya que el handler no asume que puede distinguirlo de un paquete de longitud cero. Una desconexión durante envío tampoco se transforma en un resultado de dominio.
 
 Los tests unitarios usan pares de sockets Unix reales para validar el transporte `SOCK_SEQPACKET` y las credenciales kernel del peer. Los tests no requieren privilegios.
 
@@ -30,7 +32,7 @@ Los tests unitarios usan pares de sockets Unix reales para validar el transporte
 - No registra auditoría administrativa ni identifica al operador humano.
 - No valida capabilities, saved IDs, entorno, descriptores heredados o hardening de un proceso desplegado.
 - No demuestra aislamiento entre cuentas Linux distintas; el test local inicial permite el UID actual.
-- El resultado detallado de ping (versión del servicio y disponibilidad del handler) y la taxonomía completa de errores se completan en etapas posteriores.
+- El resultado detallado de ping (versión del servicio y disponibilidad del handler) se completa en la etapa siguiente.
 
 ## Validación requerida por el propietario en Debian
 
