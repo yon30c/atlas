@@ -416,3 +416,15 @@ Esta sección prevalece sobre los pendientes y siguientes pasos históricos de �
 - No se aprobó listener persistente, daemon, systemd, UID de producción, acceso real a SQLite, ejecución de mutaciones ni merge.
 
 **Siguiente paso:** revisión cruzada de consistencia de contrato/README/PROJECT_CONTEXT/diseños y descripción de PR; después, el propietario valida el decoder en Debian y se realiza revisión final del diff de seguridad. Mantener PR #28 en Draft y no tocar `main`.
+
+### 16.4 Revisión adversarial de consistencia y credenciales — 2026-11-19
+
+- Se revisaron contrato 1.1, prototipo, tests, README y documentos subordinados en el HEAD de la rama; no se ejecutaron pruebas ni workflows.
+- Se corrigió la lectura de `SO_PEERCRED`: PID se interpreta como entero con signo y UID/GID como enteros unsigned de 32 bits. La allowlist rechaza UID fuera de ese rango. Se añadió una regresión para UID/GID mayores que `INT_MAX`; falta ejecutarla localmente en Debian.
+- Se eliminó en §9.5 una frase ambigua sobre la comparación del digest en `authority.operation.status`: la autoridad valida coherencia interna del ledger; el cliente compara el digest devuelto con su intención local.
+- Se corrigió el bloque IPC del README, que conservaba pendientes ya cerrados en revisión 1.1.
+- El futuro caller/listener debe cerrar cada conexión después de una sola solicitud/respuesta; el handler no es un listener y el lifecycle permanece fuera del alcance implementado.
+- No se encontraron razones para habilitar operaciones nuevas. Solo `authority.ping` continúa implementada; las otras seis permanecen denegadas. No se aprueba listener, systemd, acceso SQLite, UID de producción ni mutaciones reales.
+- La regresión nueva y la corrección del decoder de enteros JSON extremos requieren validación focalizada y suite completa por el propietario en Debian.
+
+**Estado:** revisión adversarial documental/código completada con correcciones publicadas; validación local pendiente. PR #28 continúa Draft y sin merge.
