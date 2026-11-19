@@ -69,4 +69,4 @@ El socket Unix permanece como candidato. La aprobación de este prototipo no apr
 
 ## Revisión adicional del decoder
 
-Los literales enteros JSON extremos pueden provocar `ValueError` durante la conversión interna de Python aunque el paquete respete el límite de 16 KiB. El decoder ahora traduce ese caso a `INVALID_JSON` en lugar de dejar escapar una excepción. La prueba de regresión usa 5.000 dígitos y queda pendiente de validación local Debian.
+Los literales enteros JSON extremos pueden exceder el límite de conversión de Python aunque el paquete respete los 16 KiB. El decoder los marca mediante un sentinel interno durante `parse_int`, completa el parseo para recuperar un `request_id` canónico y luego los rechaza como `INVALID_JSON`. El sentinel nunca puede formar parte de una solicitud aceptada. La primera corrección solo capturaba `ValueError` y perdió el `request_id`; la prueba focalizada detectó esa regresión. La implementación con sentinel queda pendiente de validación local Debian.
