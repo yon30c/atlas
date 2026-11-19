@@ -390,7 +390,8 @@ Se corrigió y verificó la incorporación de §9.11.4 en el contrato normativo.
 
 Esta sección prevalece sobre los pendientes y siguientes pasos históricos de §§12–15. El contrato normativo `docs/contracts/local-authority-admin-ipc-atlas-admin-1.md` pasó a revisión 1.1 sin cambiar el identificador wire `atlas-admin/1` ni ampliar las siete operaciones.
 
-**Último HEAD de contrato revisado antes de esta actualización:** `973917c771e5091b4fa9fe63a08091efa74fbb61`.
+**Último HEAD de contrato revisado antes de esta actualización:** `4305c5bf712642a8deb77751cf9db7167d127d8d`.
+**HEAD de la rama observado al registrar este contexto:** `5d2427426da49ab897d98c7ddb84ed898075bbb6`.
 
 ### 16.1 Serialización y digest
 
