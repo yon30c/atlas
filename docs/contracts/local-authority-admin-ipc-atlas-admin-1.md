@@ -495,7 +495,7 @@ Cada operación mutadora debe especificar antes de habilitarse su identificador 
 
 1. **Referencias de sección:** las antiguas referencias IPC a §§10.5, 11 y 15.1–15.2 del contrato raíz son incorrectas para este protocolo. La fuente normativa es este documento.
 2. **Tamaño de solicitud:** 16 KiB es el límite vigente; sustituye la propuesta previa de 64 KiB del diseño de operaciones.
-3. **Catálogo:** siete operaciones exactas; solo ping está implementada en el prototipo. Las otras seis requieren contratos individuales antes de habilitarse.
+3. **Catálogo:** siete operaciones exactas; solo ping está implementada en el prototipo. Las otras seis ya tienen especificaciones individuales en §§9.3–9.8, pero siguen deshabilitadas hasta cerrar los detalles de §9.11, implementar y validar.
 4. **Estados:** el conjunto normativo incluye `completed`, `rejected`, `pending` y `unknown`; el prototipo solo materializa el subconjunto necesario para ping/rechazos.
 5. **Códigos:** la implementación tiene códigos de transporte/protocolo adicionales; este documento registra los observados y exige especificación individual de códigos de dominio.
 6. **Listener:** la especificación del protocolo no aprueba la topología ni el lifecycle del listener persistente.
