@@ -165,6 +165,8 @@ Reglas:
 
 La respuesta no contiene secretos, trazas internas, rutas sensibles ni detalles que permitan convertir errores en una filtración de información.
 
+Para toda respuesta `rejected` sin un resultado de dominio expresamente definido, `result` es exactamente `{}` y `audit_ref` es `null`. No se devuelven resultados parciales de mutación.
+
 ## 8. Estados de respuesta
 
 El conjunto normativo es cerrado:
@@ -626,7 +628,7 @@ Reglas normativas:
 
 1. `migrations` contiene exactamente las migraciones pendientes desde `current_version + 1` hasta `target_version`, inclusive, en orden estrictamente ascendente de `version`. Cada entrada contiene exactamente `version`, `name` y `checksum`; los valores se toman del manifiesto de migraciones publicadas y se verifican contra el ledger.
 2. `current_version` y `target_version` son los enteros JSON estrictos de §9.11.4. `target_version` es la última versión publicada compatible del manifiesto y no puede ser menor que `current_version`. Si es mayor, la lista contiene todas las versiones intermedias; si es igual, la lista es vacía y el plan representa que no hay migraciones pendientes.
-3. `name` es el nombre exacto e inmutable de la migración publicada. `checksum` es el SHA-256 lowercase de los bytes UTF-8 exactos del SQL publicado, sin normalización de saltos de línea, espacios ni Unicode.
+3. `name` es una cadena no vacía, exacta e inmutable del manifiesto de migraciones publicadas. `checksum` es el SHA-256 lowercase de los bytes UTF-8 exactos del SQL publicado, sin normalización de saltos de línea, espacios ni Unicode.
 4. La proyección se serializa como canonical JSON v1: claves de objeto ordenadas lexicográficamente por sus cadenas Unicode; arrays conservan el orden definido arriba; separadores compactos `(",", ":")`; `ensure_ascii=False`; codificación UTF-8 estricta; `allow_nan=False`. No se emiten BOM, espacios de formato ni salto de línea final. No se aplica normalización Unicode a cadenas.
 5. Solo se admiten en esta proyección objetos con claves string, arrays, cadenas Unicode válidas, enteros JSON y los tipos adicionales que canonical JSON v1 soporte explícitamente; para este esquema concreto no existen booleanos, null, floats, sets, datetimes ni dataclasses.
 6. Los bytes canónicos son el resultado de `canonical_json_bytes(projection)`. El digest es `lowercase_hex(SHA256(canonical_bytes))`, sin prefijo.
@@ -745,7 +747,7 @@ Resultado exacto:
 - `migrations`: array de entradas exactas `{version, name, checksum}`, orden ascendente. Array vacío solo si no hay migraciones pendientes.
 - `plan_digest`: SHA-256 de §9.11.5 o null cuando `plan_status=BLOCKED`.
 - `plan_status`: `APPLICABLE` o `BLOCKED`.
-- `block_reasons`: array ordenado y no vacío si BLOCKED; vacío si APPLICABLE. Cada entrada tiene exactamente `code` y `summary`, con code de §10.4. Orden estable de prioridad: `NOT_INITIALIZED`, `DATABASE_PATH_INVALID`, `DATABASE_PERMISSIONS_INVALID`, `DATABASE_UNAVAILABLE`, `MIGRATION_HISTORY_INVALID`, `MIGRATION_CHECKSUM_MISMATCH`, `SCHEMA_INCOMPATIBLE`, `MIGRATION_TARGET_UNAVAILABLE`. No se repiten códigos; no se devuelve SQL ni ruta.
+- `block_reasons`: array ordenado y no vacío si BLOCKED; vacío si APPLICABLE. Cada entrada tiene exactamente `code` y `summary`, con code de §10.4. Orden estable de prioridad: `NOT_INITIALIZED`, `DATABASE_PATH_INVALID`, `DATABASE_PERMISSIONS_INVALID`, `DATABASE_UNAVAILABLE`, `SQLITE_VERSION_UNSUPPORTED`, `MIGRATION_HISTORY_INVALID`, `MIGRATION_CHECKSUM_MISMATCH`, `SCHEMA_INCOMPATIBLE`, `MIGRATION_TARGET_UNAVAILABLE`. No se repiten códigos; no se devuelve SQL ni ruta.
 - Si `current_version` ya es la última versión publicada, `target_version=current_version`, `migrations=[]`, `plan_status=APPLICABLE`; el digest se calcula sobre esa proyección con array vacío. `authority.migrations.apply` no acepta un plan sin migraciones.
 - Envelope: `completed/OK` para APPLICABLE; `completed/PLAN_BLOCKED` para BLOCKED. El resultado de un plan bloqueado es un resultado de lectura completado, no una mutación rechazada.
 
@@ -766,7 +768,7 @@ Resultado discriminado exacto por `operation_state`:
 
 Variantes:
 
-- `COMMITTED_EXACT`: exactamente `operation_id`, `operation_state`, `operation`, `intent_digest`, `committed_at`, `audit_ref`. El ledger demuestra que existe un único registro durable internamente íntegro para ese ID y que su intención canónica coincide con su digest persistido según §9.11.6. Como el payload de consulta contiene solo `operation_id`, el cliente compara el `operation` y `intent_digest` devueltos con la intención que conserva localmente; el servicio no afirma haber comparado una intención que no recibió.
+- `COMMITTED_EXACT`: exactamente `operation_id`, `operation_state`, `operation`, `intent_digest`, `committed_at`, `audit_ref`. `operation` es exactamente uno de `authority.initialize`, `authority.migrations.apply` o `authority.project_environment.provision`. El ledger demuestra que existe un único registro durable internamente íntegro para ese ID y que su intención canónica coincide con su digest persistido según §9.11.6. Como el payload de consulta contiene solo `operation_id`, el cliente compara el `operation` y `intent_digest` devueltos con la intención que conserva localmente; el servicio no afirma haber comparado una intención que no recibió.
 - `NOT_COMMITTED`: exactamente `operation_id`, `operation_state`, `ledger_verified: true`. Solo se devuelve si el ledger está íntegro/legible y demuestra la ausencia del ID.
 - `UNKNOWN`: exactamente `operation_id`, `operation_state`, `reason_code`; reason_code es uno de `LEDGER_UNAVAILABLE`, `LEDGER_CORRUPT`, `LEDGER_INCONSISTENT`. No afirma presencia ni ausencia.
 - La consulta en sí responde `completed/OK` si pudo producir una de las tres variantes, incluso cuando operation_state=UNKNOWN. El estado UNKNOWN del resultado de dominio no significa que la consulta IPC haya quedado sin respuesta o con ejecución incierta.
@@ -794,10 +796,10 @@ Resultado exacto de commit demostrado:
 ```
 
 - `database_name` es literal §9.11.4.
-- `initial_version` debe ser la última versión bootstrap publicada e instalada; coincide con la mayor versión en `installed_migrations`.
+- `initial_version` debe ser la última versión bootstrap publicada e instalada; coincide con la mayor versión en `installed_migrations`. Los valores del ejemplo ilustran la forma, no la versión actual del manifiesto.
 - `installed_migrations` incluye todas las migraciones bootstrap aplicadas, en orden ascendente y con nombre/checksum exactos.
 - `committed_at` usa UTC exacto `YYYY-MM-DDTHH:MM:SS.ffffffZ`, generado por la autoridad inmediatamente antes del commit y persistido en la misma transacción. Representa el instante de registro del commit, no una medición posterior del instante físico en que SQLite confirmó la escritura. Esta semántica aplica a los tres resultados de mutación.
-- `audit_ref` es una referencia opaca durable, no null.
+- `audit_ref` es una cadena UTF-8 no vacía que identifica opacamente el registro durable de auditoría; no es ruta ni URL, no es null y no se interpreta por el cliente.
 - Envelope de éxito `completed/OK`; envelope audit_ref coincide byte por byte con result.audit_ref.
 
 #### 9.12.6 `authority.migrations.apply`
@@ -825,7 +827,7 @@ Resultado exacto de commit demostrado:
 - Versiones cumplen §9.11.4; `final_version=target_version`.
 - `applied_migrations` incluye exactamente todas las migraciones del plan, en orden ascendente; no puede omitir ni agregar.
 - `committed_at` es el timestamp UTC de la autoridad persistido inmediatamente antes del commit en la misma transacción; representa el instante de registro del commit, no una medición posterior del instante físico de confirmación SQLite.
-- `audit_ref` es durable y no null; envelope audit_ref coincide byte por byte.
+- `audit_ref` es una cadena UTF-8 no vacía que identifica opacamente el registro durable de auditoría; no es ruta ni URL, no es null. Envelope audit_ref coincide byte por byte.
 - Envelope de éxito `completed/OK`.
 
 #### 9.12.7 `authority.project_environment.provision`
@@ -848,7 +850,7 @@ Resultado exacto de commit demostrado:
 - IDs son idénticos a los payloads y cumplen §9.11.4.
 - `association_status` es siempre `ACTIVE`; `revision` es el entero literal 1.
 - `event_id` es UUIDv4 canónico del evento inmutable de dominio.
-- `committed_at` y `audit_ref` cumplen las reglas de mutaciones anteriores.
+- `committed_at` y `audit_ref` cumplen las reglas de mutaciones anteriores; `audit_ref` es una cadena UTF-8 no vacía y opaca, no una ruta ni URL.
 - Envelope de éxito `completed/OK`; envelope audit_ref coincide byte por byte.
 
 Los resultados de éxito de mutación solo se devuelven después de commit durable demostrado. Si el commit es ambiguo, no se devuelve un resultado de éxito parcial: envelope `unknown/RESULT_UNKNOWN` y `result={}`; el cliente resuelve mediante `authority.operation.status`.
@@ -927,7 +929,7 @@ El envelope usa los estados de §8. La tabla siguiente es exhaustiva para los re
 | `ENVIRONMENT_NOT_ELIGIBLE` | `authority.project_environment.provision` | `rejected` | El Environment existe pero no cumple elegibilidad del dominio. |
 | `ASSOCIATION_ALREADY_EXISTS` | `authority.project_environment.provision` | `rejected` | La asociación ya existe; provisioning no es una operación de actualización/idempotencia de asociación. |
 | `ASSOCIATION_CONFLICT` | `authority.project_environment.provision` | `rejected` | Existe una asociación/estado incompatible que impide la asociación inicial. |
-| `SCHEMA_INCOMPATIBLE` | Mutaciones | `rejected` | El esquema/ledger no satisface la versión mínima compatible con la operación. |
+| `SCHEMA_INCOMPATIBLE` | `authority.migrations.plan`, mutaciones | `completed/PLAN_BLOCKED` en plan; `rejected` en mutaciones | El esquema/ledger no satisface la versión mínima compatible con la operación. |
 | `IDEMPOTENCY_CONFLICT` | Las tres mutaciones | `rejected` | El mismo operation_id existe con digest o intención distinta. |
 | `RESULT_UNKNOWN` | Las tres mutaciones | `unknown` | No puede demostrarse si el commit durable ocurrió. `result` es exactamente `{}`; resolver con operation.status. |
 | `INTERNAL_ERROR` | Todas | `rejected` si se demuestra que no hubo commit; `unknown` para mutación si el commit no puede determinarse | Fallo interno sin exponer detalles; no se deriva código de la excepción. |
