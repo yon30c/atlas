@@ -220,7 +220,10 @@ Las consultas de diagnóstico de solo lectura no escriben el ledger SQLite; pued
 
 ### 5.3 Idempotencia y commit ambiguo
 
-- Toda mutación recibe operation ID UUIDv4 y digest de intención.
+**Cierre documental posterior:** los esquemas exactos de resultado por operación y la tabla estable de códigos/estados se encuentran en el contrato normativo IPC §§9.12 y 10.4. Este diseño permanece subordinado y no debe redefinirlos ni ampliar el catálogo. El cierre de contrato no habilita las operaciones.
+
+
+- Toda mutación recibe operation ID UUIDv4 y digest de intención. Para `atlas-admin/1`, la proyección exacta y su canonicalización JSON v1/SHA-256 están fijadas normativamente en el contrato IPC §9.11.6; el digest del plan de migraciones es otro digest y se define por separado en §9.11.5.
 - Repetición del mismo ID y digest devuelve el resultado original.
 - Mismo ID con digest diferente es conflicto y no muta.
 - Un error durante/después de commit no se traduce automáticamente en fracaso.
