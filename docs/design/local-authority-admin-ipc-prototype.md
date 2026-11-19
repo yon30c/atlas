@@ -60,6 +60,7 @@ git status --short --branch
 - Verificar que un peer de UID no permitido sea rechazado usando procesos con credenciales Linux distintas (no mocks).
 - Comprobar permisos del socket/directorio, symlink preexistente, path existente y cleanup seguro.
 - Comprobar límites y comportamiento ante desconexión, packet truncado y timeout de lectura/escritura; el listener debe limitar concurrencia.
+- El handler procesa un único paquete; el futuro caller/listener debe cerrar la conexión después de la respuesta y no reutilizarla para una segunda solicitud.
 - Comprobar que no se aceptan descriptores auxiliares SCM_RIGHTS.
 - Confirmar si `SO_PEERCRED` del socket conectado sigue el modelo esperado para el futuro cliente privilegiado.
 - Solo después decidir si se implementa listener persistente o activación systemd.
