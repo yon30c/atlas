@@ -177,6 +177,44 @@ class AuthorityAdminIPCPeerTests(unittest.TestCase):
             "handler_status",
         })
 
+    def test_sends_rejected_envelope_for_invalid_operation(self):
+        request_id = str(uuid.uuid4())
+        self.client.send(_request_packet(
+            request_id=request_id,
+            operation="authority.migrations.apply",
+        ))
+        with self.assertRaises(AdminProtocolRejected) as raised:
+            handle_admin_connection(
+                self.server,
+                allowed_peer_uids={os.getuid()},
+            )
+        self.assertEqual(raised.exception.code, "UNKNOWN_OPERATION")
+        response = json.loads(self.client.recv(4096).decode("utf-8"))
+        self.assertEqual(response, {
+            "protocol": PROTOCOL_ID,
+            "request_id": request_id,
+            "status": "rejected",
+            "code": "UNKNOWN_OPERATION",
+            "summary": "Request rejected",
+            "result": {},
+            "audit_ref": None,
+        })
+
+    def test_sends_rejected_envelope_with_null_id_for_malformed_json(self):
+        self.client.send(b"{")
+        with self.assertRaises(AdminProtocolRejected) as raised:
+            handle_admin_connection(
+                self.server,
+                allowed_peer_uids={os.getuid()},
+            )
+        self.assertEqual(raised.exception.code, "INVALID_JSON")
+        response = json.loads(self.client.recv(4096).decode("utf-8"))
+        self.assertEqual(response["request_id"], None)
+        self.assertEqual(response["status"], "rejected")
+        self.assertEqual(response["code"], "INVALID_JSON")
+        self.assertEqual(response["result"], {})
+        self.assertIsNone(response["audit_ref"])
+
     def test_rejects_peer_uid_not_in_allowlist_before_reading_request(self):
         with self.assertRaises(AdminPeerRejected) as raised:
             handle_admin_connection(
