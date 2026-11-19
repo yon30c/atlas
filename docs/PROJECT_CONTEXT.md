@@ -58,14 +58,14 @@ Repositorio: `yon30c/atlas`; rama predeterminada: `main`.
 
 | Rama | HEAD | Relación / función |
 |---|---|---|
-| `main` | `e9c36dad2061b1c4786d1e1447309e916675a971` | Base estable publicada observada. Último commit: diseño de operaciones administrativas de autoridad local (PR #22). |
-| `test/authority-admin-systemd-activation` | `f96db3f8dc55fab282b084a940b152d0cdeac545` | Rama base de pruebas del canal administrativo y prototipo de socket activation. 26 commits por delante de `main`, 0 por detrás en la comparación observada. |
-| `work/authority-admin-protocol-contract-alignment` | `9f3cf520639bb892b75fc59efedc7e490a94ee2a` | Rama de trabajo más reciente para alinear IPC con `atlas-admin/1`; 20 commits por delante de la rama `test/...`, 0 por detrás. |
-| PR #28 | Draft / abierto | “Alinear IPC administrativo con atlas-admin/1 y completar ping”; head `work/...`, base `test/...`. No está integrado. |
+| `main` | `e9c36dad2061b1c4786d1e1447309e916675a971` | Base estable observada; no modificada por este trabajo. |
+| `test/authority-admin-systemd-activation` | `f96db3f8dc55fab282b084a940b152d0cdeac545` | Base del PR; 26 commits por delante de `main`, 0 por detrás en la comparación consultada. |
+| `work/authority-admin-protocol-contract-alignment` | `87fde61cf2ebbef7e5d72e00ffeebb369f46c2d2` | HEAD observado al iniciar la revisión final; 94 commits por delante de `test/...`, 0 por detrás. Los commits documentales de cierre posteriores pueden mover este SHA. |
+| PR #28 | Draft / abierto | “Alinear IPC administrativo con atlas-admin/1 y completar ping”; head `work/...`, base `test/...`; 9 archivos cambiados. No está integrado. |
 
 La rama de trabajo actual se deriva de la rama de pruebas, que a su vez se deriva de `main`. Por tanto, **no comparar la rama de trabajo solo con `main` para decidir qué contiene PR #28**: revisar también la comparación `test/...` → `work/...` y el PR.
 
-En el momento de esta actualización, GitHub informó que el último commit de la rama de trabajo era `9f3cf520` (“test(ipc): assert complete filesystem ping envelope”). Los nombres y SHA deben volver a consultarse al iniciar una sesión; no asumir que siguen iguales.
+El SHA de la rama de trabajo de la tabla es una observación al inicio de la revisión final del 19 de noviembre de 2026, no una referencia inmutable: volver a consultar el PR y la rama al iniciar cada sesión. La comparación consultada confirmó que la rama `work/...` está 94 commits por delante y 0 por detrás de `test/...`; no comparar PR #28 solo contra `main`.
 
 ### Cambios recientes de main
 
@@ -355,7 +355,7 @@ Decisión aprobada:
 **Siguiente paso:** especificar las gramáticas canónicas restantes de IDs, nombre de DB, versiones y digest. Cada gramática debe revisarse contra los modelos y contratos existentes antes de proponerla.
 
 
-## 14. Aprobación de gramáticas canónicas IPC — 2026-11-19
+## 14.1 Aprobación de gramáticas canónicas IPC — 2026-11-19
 
 El propietario aprobó la recomendación de gramáticas canónicas para los valores administrativos restantes. La fuente normativa es `docs/contracts/local-authority-admin-ipc-atlas-admin-1.md`, §9.11.4.
 
@@ -443,4 +443,4 @@ El propietario actualizó su checkout Debian mediante fast-forward hasta `aae8be
 
 **Límites sin cambio:** solo `authority.ping` está implementada; las otras seis operaciones continúan denegadas/no habilitadas. No hay listener persistente, daemon, systemd ni acceso administrativo real a SQLite. PR #28 permanece Draft y sin merge; no se toca `main`.
 
-**Siguiente paso:** continuar con la revisión final de seguridad y del diff completo del PR #28. Cualquier integración requiere aprobación explícita del propietario.
+**Siguiente paso al cierre de esta actualización:** revisión final de seguridad y del diff completo del PR #28; sus resultados se registran en §16.6. Cualquier integración requiere aprobación explícita del propietario.
