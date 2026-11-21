@@ -1007,3 +1007,20 @@ el matching.
 actual de la rama y realizarse exclusivamente en `Atlas-VM-test`.
 A-THREAT-05 sigue abierta; no usar el runner para limpiar sockets reales.
 El asistente no ejecutó pruebas, builds, workflows ni probes.
+
+
+### Segunda ejecución A-IPC-04 (2026-11-21)
+
+Resultado del propietario sobre `bd3b0e0a1379c7b034e10a33b9b45b329e6e807a`:
+10 PASS / 2 FAIL / 0 INCOMPLETE. SR-06/SR-07 pasan; SR-03 detecta
+el listener en un network namespace distinto. SR-01/SR-11 no encuentran
+los listeners locales y reportan cero filas candidatas. No inferir
+inactividad ni condición stale.
+
+El runner fue ampliado en
+`a7bf92d07d12012d20822b64a57ee0ab17c953e1` para que SR-01/SR-11
+incluyan PID y namespace del inspector, inode del FD del listener,
+identidades del snapshot, filas candidatas por pathname/inode y una
+lectura directa de `/proc/self/net/unix`. El diagnóstico no cambia
+decisiones ni hace conexiones. Ejecutar el HEAD actualizado solo en
+`Atlas-VM-test`; A-THREAT-05 permanece abierta.
