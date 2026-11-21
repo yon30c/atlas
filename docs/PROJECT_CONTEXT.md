@@ -1,6 +1,6 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-20 (revisión estática A-IPC-01).
+> **Última actualización:** 2026-11-20 (validación local A-IPC-01 reportada por el propietario).
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
@@ -10,13 +10,13 @@
 
 - **Repositorio:** `yon30c/atlas`.
 - **Base estable:** `main` en `1bd73d149dbd98e7ee2e5fdc36880883b6b03d16`; PR #29 está integrado mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`.
-- **Rama activa de este incremento:** `experiment/a-ipc-01-private-unix-listener-probe`, creada desde el HEAD `d7a14302061e1cfc52df5097a42d65bd4ba482bb` de la rama documental `design/isolated-private-unix-listener-probe`. Commit que corrigió el runner tras la revisión estática A14: `909d658e5ba177941f46b87a50c891869e5ca6d7`; comparación con la base: por delante, 0 commits por detrás (el conteo ahead es dinámico). No hay PR abierto y `main` no ha sido modificado.
+- **Rama activa de este incremento:** `experiment/a-ipc-01-private-unix-listener-probe`; HEAD sincronizado localmente y remoto `314e7395fbc972f8b9ab4a10dd800e85c11c7b59`. El commit `909d658e5ba177941f46b87a50c891869e5ca6d7` contiene la corrección de código A14; los commits posteriores de este ciclo actualizan documentación. No hay PR abierto y `main` no ha sido modificado.
 - **Validación local más reciente comunicada:** sobre el HEAD de código de PR #29 `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, el propietario reportó en Debian 13 el probe user-manager `PASS` y la suite `Ran 1590 tests in 34.753s`, `OK (skipped=1)`. Esa evidencia no corresponde a esta rama documental ni valida el futuro probe A-IPC-01.
 - **Estado IPC:** contrato `atlas-admin/1` y handler para conexiones ya aceptadas; solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
 - **Transporte:** no hay transporte aprobado para producción. A (listener propio en directorio privado) tiene un diseño de probe aceptado para preparar su implementación experimental. B (socket activation sobre filesystem) permanece suspendida por la colisión destructiva observada en Debian systemd 257.13. C (AF_UNIX abstracto) continúa como alternativa experimental separada.
 - **Diseño A-IPC-01:** `docs/design/local-authority-admin-private-unix-listener-probe.md`, aprobado como base experimental. La implementación opt-in está preparada en `tests/integration/private_unix_listener/run_probe.py`, con instrucciones en `tests/integration/private_unix_listener/README.md`. Usa sandbox temporal sin privilegios, directorio `0700`, socket `0600`, colisiones no destructivas, cleanup condicionado por identidad, SO_PEERCRED, límites y carrera de dos binds simultáneos.
 - **Revisión de código:** revisión estática en GitHub completada. Se corrigió A14 para bloquear workers admitidos hasta observar saturación, exigir los dos slots ocupados y reportar excepciones inesperadas; esto elimina la dependencia de la carrera entre timeout y aceptación. La corrección de código está en el commit `909d658e5ba177941f46b87a50c891869e5ca6d7`. No se ejecutaron pruebas, compilaciones ni workflows.
-- **Validación y método:** no se ejecutaron pruebas, compilaciones ni workflows desde GitHub. El probe A-IPC-01 está pendiente de ejecución por el propietario en Debian. A09 (peer con UID distinto) se marca SKIP deliberado porque el runner no cambia credenciales ni usa sudo; un recorrido sin otros fallos será INCOMPLETE, no PASS.
+- **Validación local A-IPC-01:** el propietario ejecutó el probe en Debian 13, kernel `6.12.117+deb13-amd64`, Python `3.13.5`, UID efectivo `1000`, sobre el commit `314e7395fbc972f8b9ab4a10dd800e85c11c7b59`. Resultado: `overall=INCOMPLETE`; A01–A08 y A10–A16 PASS (15 escenarios); A09 SKIP deliberado por no cambiar UID/GID, usar sudo ni asumir otra identidad. Duración `0.876 s`; cleanup `empty sandbox root removed`. A14 observó `peak_active=2`, `rejected_connections=6`, `handled_connections=8`, `active_after_recovery=0`; A16 confirmó un único ganador. No hubo FAIL. Esta evidencia no demuestra rechazo de un peer de UID distinto.
 
 **Límites vigentes:** la aceptación del diseño no selecciona A como transporte de producción ni autoriza listener persistente, daemon, systemd, unidades de producción, cambios del host, usuarios, grupos, permisos, privilegios, acceso SQLite, provisioning, operaciones administrativas ni despliegue. La colisión destructiva de systemd no debe repetirse. Cualquier decisión posterior de transporte requiere evidencia local y aprobación explícita del propietario.
 
@@ -592,3 +592,25 @@ PYTHONPATH=src python tests/integration/private_unix_listener/run_probe.py
 La inspección de `run_probe.py`, README, diseño y `src/atlas/platform_admin_ipc.py` confirmó que el experimento solo invoca `authority.ping` y no modifica handler, contrato, SQLite, runtime ni servicios. Se detectó una condición potencialmente no determinista en A14 y se corrigió: el harness ahora mantiene los workers admitidos en una compuerta temporal hasta observar la saturación, comprueba que los dos slots estén ocupados y registra excepciones inesperadas. La compuerta tiene un timeout acotado por `MAX_ACCEPT_WAIT_SECONDS` y se libera durante el cierre del harness.
 
 **HEAD revisado:** `909d658e5ba177941f46b87a50c891869e5ca6d7`. **Validación:** pendiente; no se ejecutaron pruebas ni compilaciones. El propietario debe actualizar Debian, inspeccionar el diff y ejecutar el probe manualmente sin sudo. A09 seguirá SKIP deliberado, por lo que el resultado sin otros fallos será INCOMPLETE.
+
+
+### Resultado de ejecución local A-IPC-01 — 2026-11-20
+
+El propietario ejecutó manualmente, sin sudo, el comando opt-in desde Debian:
+
+```bash
+PYTHONPATH=src python tests/integration/private_unix_listener/run_probe.py
+```
+
+Evidencia del JSON comunicado:
+- Checkout: `314e7395fbc972f8b9ab4a10dd800e85c11c7b59`; Debian kernel `6.12.117+deb13-amd64`; Python `3.13.5`; UID efectivo `1000`.
+- Resultado global: `INCOMPLETE`, duración `0.876 s`; cleanup: `empty sandbox root removed`.
+- **15 PASS:** A01–A08 y A10–A16. **A09 SKIP:** no se intentó una conexión desde un UID diferente porque el probe no cambia credenciales, no usa sudo y no presupone una segunda identidad. No hubo escenarios FAIL.
+- A01 observó directorio `0700` (448 decimal) y socket `0600` (384 decimal). Las colisiones A02–A05 preservaron los objetos; A06 conservó el pathname sustituto y A07 eliminó el socket propio sin sustitución.
+- A08/A10 observaron credenciales del peer desde el kernel (PID 3751, UID/GID 1000) y completaron el ping permitido.
+- A14: máximo activo 2, seis conexiones rechazadas, ocho manejadas y cero activas tras recuperación.
+- A16: dos binds concurrentes, exactamente un ganador; el listener ganador siguió operativo.
+
+**Interpretación:** la ejecución respalda los invariantes experimentales cubiertos para un único UID y el harness temporal. No demuestra rechazo multi-UID (A09), autorización completa, separación real de privilegios, resistencia frente a root/procesos del mismo UID, lifecycle de servicio persistente, integración con systemd/SQLite ni idoneidad para producción. El resultado debe conservarse como `INCOMPLETE`, nunca reclasificarse como PASS.
+
+**Siguiente paso:** revisión estática de los resultados y decidir si se puede preparar un mecanismo seguro, separado y explícito para probar A09 sin modificar credenciales ni host desde el runner. No implementar ni desplegar listener persistente ni seleccionar A como transporte de producción sin una decisión posterior del propietario. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub.
