@@ -444,3 +444,25 @@ filesystem permanece suspendida por la colisión destructiva previa.
 La ejecución fue realizada por el propietario en Debian. No se ejecutaron
 pruebas, compilaciones ni workflows desde GitHub. La rama experimental
 permanece separada; `main` no se modificó.
+
+
+## 16.11 Dirección de trabajo elegida por el propietario — 2026-11-21
+
+El propietario decidió continuar con la **alternativa A: listener AF_UNIX/SOCK_SEQPACKET creado por el proceso bajo un directorio filesystem privado**. A partir de esta decisión, A es la línea principal de evaluación y desarrollo; la alternativa C deja de ser una comparación paralela inmediata y podrá reabrirse si el análisis identifica una brecha relevante o el propietario lo solicita. La alternativa B permanece suspendida por la colisión destructiva de pathname observada anteriormente.
+
+Esta decisión no convierte el probe A-IPC-01 en un listener de producción ni aprueba su despliegue. El resultado 16/16 PASS registrado en la sección 16.10 es evidencia experimental limitada al commit y entorno descritos.
+
+### Siguiente revisión de arquitectura
+
+Antes de implementar un listener persistente o conectarlo al handler/SQLite, la revisión estática debe completar:
+
+1. Modelo de amenazas y actores: procesos de distinto UID, mismo UID, root y procesos con capabilities suficientes.
+2. Identidad y autorización: credenciales del kernel, política de allowlist, separación entre DAC y autorización de aplicación, y comportamiento ante identidad inesperada.
+3. Lifecycle: creación del directorio y socket, exclusión de instancias duplicadas, readiness, cierre, reinicio y recuperación tras terminación abrupta.
+4. Ownership y permisos: propietario esperado, modos, umask, symlinks, componentes de ruta, pathname preexistente y sockets stale.
+5. Cleanup: límites de la comparación de identidad inode y del unlink; no presentar el patrón como protección frente a un atacante con autoridad equivalente o superior.
+6. Concurrencia y recursos: backlog, workers, límites, timeouts, backpressure y comportamiento bajo saturación.
+7. Observabilidad y diagnóstico: errores, logs, evidencia de identidad y ausencia de filtración de datos sensibles.
+8. Criterios de aceptación y plan de pruebas local reproducible, manteniendo los experimentos en sandbox temporal sin privilegios.
+
+No se autoriza por esta decisión cambiar usuarios/grupos, permisos del host, systemd, SSH/PAM/firewall, servicios, privilegios, acceso a SQLite, provisioning ni despliegue. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub.
