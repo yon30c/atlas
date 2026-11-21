@@ -156,6 +156,20 @@ def _server_child(socket_path: str, socket_mode: int, allowed_uid: int) -> int:
     accepted = 0
     slots = threading.BoundedSemaphore(WORKERS)
 
+    from atlas.platform_admin_ipc import (
+        MAX_JSON_DEPTH,
+        MAX_REQUEST_BYTES,
+        MAX_RESPONSE_BYTES,
+    )
+    if (
+        MAX_REQUEST_BYTES != REQUEST_LIMIT
+        or MAX_RESPONSE_BYTES != RESPONSE_LIMIT
+        or MAX_JSON_DEPTH != 16
+        or allowed_uid != 0
+    ):
+        emit(event="startup_error", reason="handler limits or root client policy differ from approved probe profile")
+        return 3
+
     uid = os.getuid()
     gid = os.getgid()
     if os.getresuid() != (uid, uid, uid) or os.getresgid() != (gid, gid, gid):
