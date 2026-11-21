@@ -163,6 +163,6 @@ No inferir PASS de MA-03 ni completar cobertura por extrapolación.
 
 - Este documento es un plan de probe, no una implementación.
 - No modifica el contrato atlas-admin/1 ni el handler actual.
-- No se ejecutaron pruebas, compilaciones ni workflows.
+- No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. El propietario ejecutó parcialmente el runner en la VM indicada en §9.1; el commit posterior con MA-03 está pendiente de validación local.
 - No se crearon cuentas, grupos, archivos de configuración del host, sockets persistentes ni servicios.
 - No se autorizó despliegue, acceso SQLite, cambios de privilegios ni producción.
