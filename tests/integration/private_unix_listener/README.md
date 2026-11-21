@@ -645,3 +645,36 @@ The owner ran commit `b5b0128e2646e41e3a2f927251c6fa6dafa897d7` in `Atlas-VM-tes
 CP-02/03 observed listen backlog 8, Recv-Q/Send-Q 8/8, ninth pending connection admitted (connect result 0, queue 9/8), tenth nonblocking connection rejected with EAGAIN (errno 11), queue remained 9/8, accepted count remained 9 after overflow, and worker limit was respected.
 
 **Design gate before CP-05:** the scenario table says a silent client terminates at the 15-second global deadline, but the fixture applies `min(READ_TIMEOUT=5 s, remaining_global)` to its first read. A fully silent client therefore hits the 5-second read timeout first. Clarify whether CP-05 should test the 5-second read/idle timeout or whether global-deadline semantics are intended to differ before implementation.
+
+
+## A-IPC-02 — CP-05 read timeout and CP-06 global deadline (implemented; owner validation pending)
+
+Runner commit: `59fafb801a31d7adf51a6598db78440255744321`.
+
+The approved limits remain unchanged: read/write timeout 5 seconds and
+accept-based global deadline 15 seconds.
+
+- **CP-05:** a real authorized AF_UNIX/SOCK_SEQPACKET peer connects and sends
+  no packet. The fixture records when its first read begins and when the
+  5-second read timeout expires. It requires elapsed time near 5 seconds,
+  confirms the global deadline was not reached, and verifies peer EOF with
+  zero response bytes.
+- **CP-06:** a dedicated fixture server injects an 11-second delay after
+  accept/authentication and before its read phase. The read timeout is clipped
+  to the remaining accept-based global budget (approximately 4 seconds);
+  the fixture must close the peer at approximately 15 seconds from accept.
+  The JSON records monotonic elapsed time, effective read timeout, remaining
+  global budget and peer EOF.
+
+The 11-second delay is **test-only harness instrumentation**. It is not a
+production handler delay and does not simulate a blocked write. The current
+fixture has one receive and one send; with individual read/write timeouts of
+5 seconds, ordinary I/O alone cannot consume the 15-second global budget.
+CP-06 therefore validates that a later read phase inherits the remaining
+accept-based deadline, not a real cumulative read-plus-write workload.
+
+CP-05 and CP-06 are implemented but **not owner-validated**. The full probe
+must still report INCOMPLETE while CP-07..CP-12 remain pending. Run only in
+the disposable `Atlas-VM-test`, directly as root as required by the existing
+runner instructions. The assistant has not run tests, builds or workflows.
+No production handler, host, account, service, SQLite or `main` changes.
