@@ -1142,7 +1142,7 @@ def _assert_no_protocol_response(peer: socket.socket, scenario: str) -> None:
     except BlockingIOError:
         return
     except OSError as exc:
-        raise ProbeFailure(f"{scenario}: peer socket failed while checking response") from exc
+        raise ProbeFailure(f"{scenario}: peer socket failed while checking response (errno={exc.errno}, {exc.strerror})") from exc
     if response:
         raise ProbeFailure(f"{scenario}: handler emitted protocol bytes for rejected transport")
 
