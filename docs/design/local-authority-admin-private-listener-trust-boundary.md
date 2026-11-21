@@ -54,7 +54,7 @@ Bajo TCB-1, el diseño candidato es autenticación mutua de identidad de sistema
 4. Si no coincide, cierra sin leer solicitud y sin enviar envelope de protocolo.
 5. PID/GID pueden registrarse para diagnóstico limitado; no sustituyen la decisión de UID ni se aceptan desde JSON.
 
-**Valor candidato:** UID 0 para el frontend administrativo privilegiado, tal como aparece en el lifecycle. No está aprobado ni probado en el host. El valor definitivo debe corresponder al proceso cliente real y ser fijado por el propietario.
+**Requisito aceptado:** UID 0 para el frontend administrativo privilegiado. La allowlist de diseño del servicio será exactamente `{0}`. El entrypoint real aún no existe/no ha sido revisado; la decisión no equivale a validación operativa del proceso.
 
 ### 4.2 Cliente autentica al servidor
 
@@ -91,7 +91,7 @@ Requisitos:
 - No inferir UID numérico de un nombre mutable después de iniciar el servicio; resolverlo durante preflight confiable y registrar la identidad numérica efectiva.
 - No realizar cambios de usuario/grupo, permisos ni host como parte de esta etapa de diseño.
 
-Los valores numéricos definitivos no se fijan aquí: UID 0 y atlas-runtime siguen siendo candidatos del lifecycle, no una decisión de despliegue.
+La política de cliente queda decidida como UID 0; el UID/GID numérico concreto de `atlas-runtime`, ruta del socket y valores operativos de permisos siguen pendientes y no constituyen una decisión de despliegue.
 
 ## 6. Flujo de conexión y orden obligatorio
 
@@ -122,7 +122,7 @@ El orden del servidor preserva el contrato atlas-admin/1 §3.1 y §6: autenticac
 ## 8. Requisitos previos a implementación
 
 1. El propietario acepta o rechaza explícitamente TCB-1 (todos los procesos atlas-runtime confiables). Si exige aislamiento intra-UID, no implementar A bajo este modelo.
-2. El propietario confirma la identidad del cliente administrativo real y su UID esperado; UID 0 continúa siendo solo candidato.
+2. El entrypoint cliente se implementa y revisa para demostrar que conecta con EUID 0; el requisito de EUID 0 y `client_uids={0}` ya fue aceptado.
 3. Se especifica dónde reside la configuración confiable, quién la posee y cómo se impide que el cliente la modifique.
 4. Se define la política de UID/GID reales/efectivos/saved y capabilities del servicio.
 5. Se define el comportamiento del cliente si el UID de servidor no coincide: cierre antes de enviar cualquier byte.
@@ -154,3 +154,8 @@ La configuración de identidades y endpoint se desarrolla en [Configuración con
 La inspección de docs/design/local-authority-administrative-operations-design.md (nombre canónico en el repositorio: local-authority-admin-administrative-operations-design.md) confirma que el modelo de dominio prevé un frontend privilegiado con EUID 0 (§§2.2/5.1). No se encontró una implementación cliente IPC ni un entrypoint ejecutable que realice connect en el estado revisado. Por tanto, UID 0 es el candidato de diseño recomendado para la allowlist, pero todavía no está validado como identidad efectiva del proceso cliente real.
 
 La fuente y el esquema candidatos están definidos en local-authority-admin-private-listener-identity-config.md. El siguiente paso es definir el entrypoint del frontend cliente y fijar su contexto de ejecución; no se debe implementar listener persistente antes de eso.
+
+
+## Decisión del propietario — EUID 0 (2026-11-21)
+
+El propietario confirma como requisito que el frontend administrativo conecte con EUID 0. El servicio autorizará exclusivamente UID 0 mediante `SO_PEERCRED`; el cliente validará su EUID antes de conectar y el UID de `atlas-runtime` antes de enviar bytes. No se admite otro UID cliente sin nueva decisión explícita. El entrypoint real aún no existe/revisado, por lo que esta es una decisión de diseño, no evidencia de ejecución.
