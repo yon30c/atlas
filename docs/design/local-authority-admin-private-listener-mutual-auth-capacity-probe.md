@@ -556,3 +556,6 @@ El propietario ejecutó el commit `892d934267684fc8d5a179993f71c2b11c614c7e`: MA
 La revisión estática observó que `Server` consume stdout mediante un reader thread asíncrono, mientras CP-10 calculaba `accepted_before` directamente desde `server.events` sin reconciliar eventos todavía en la cola. Esto podía dejar el baseline atrasado y causar una comparación falsa. Commit `7c009dac7fd7c4270ea6edf8bc1a004a8fb8f898`: CP-10 drena eventos previos antes de capturar el baseline y, si la comprobación vuelve a fallar, informa baseline, expected, observed, pending y workers. La comprobación estricta se conserva; no se suprime ni relaja una aceptación real.
 
 **CP-10 sigue pendiente de ejecución**. Esta modificación es una corrección de sincronización/diagnóstico revisada estáticamente, no evidencia de PASS ni de que la causa esté confirmada. No se ejecutaron pruebas, builds ni workflows desde GitHub. Repetir solo en `Atlas-VM-test` desechable.
+
+
+Ajuste complementario en commit `664c398a5afdafda313eb81379cbb85a5b71007d`: `Server.drain(duration)` ahora mantiene la ventana completa aunque la cola esté temporalmente vacía, permitiendo que el reader thread transfiera eventos stdout que aún estaban en tránsito. Esto hace efectiva la sincronización previa del baseline; la aserción de accepts permanece estricta. Sigue pendiente de ejecución del propietario.
