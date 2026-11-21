@@ -26,6 +26,25 @@ import time
 from typing import Callable
 
 
+def _read_bounded(stream, limit: int) -> bytes:
+    """Read up to limit bytes while tolerating short reads from procfs."""
+    if limit < 0:
+        raise ValueError("read limit must not be negative")
+    chunks = []
+    remaining = limit
+    while remaining:
+        chunk = stream.read(min(64 * 1024, remaining))
+        if not isinstance(chunk, bytes):
+            raise CoverageError("procfs reader returned a non-bytes result")
+        if not chunk:
+            break
+        if len(chunk) > remaining:
+            raise CoverageError("procfs reader exceeded the requested byte limit")
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
+
+
 EXPECTED = tuple(f"SR-{number:02d}" for number in range(1, 13))
 SOCK_SEQPACKET_PROC_TYPE = 0x0005
 NETNS_RE = re.compile(r"net:\[(\d+)\]\Z")
@@ -192,8 +211,11 @@ def _parse_unix_table(data: bytes) -> list[dict]:
 def _read_table(pid: str, proc_root: str = "/proc") -> bytes:
     path = os.path.join(proc_root, pid, "net", "unix")
     try:
-        with open(path, "rb", buffering=0) as stream:
-            return stream.read(4 * 1024 * 1024 + 1)
+        # Keep buffering enabled and continue after short reads. A single
+        # unbuffered FileIO.read() may return fewer bytes than requested even
+        # when more procfs records remain available.
+        with open(path, "rb") as stream:
+            return _read_bounded(stream, 4 * 1024 * 1024 + 1)
     except OSError as exc:
         if exc.errno in (errno.ENOENT, errno.ESRCH, errno.ENOTDIR):
             raise ProcessRace(f"PID {pid} disappeared before namespace table read") from exc
@@ -311,8 +333,8 @@ def _listener_diagnostics(
 
     try:
         own_namespace = os.readlink("/proc/self/ns/net")
-        with open("/proc/self/net/unix", "rb", buffering=0) as stream:
-            own_raw = stream.read(4 * 1024 * 1024 + 1)
+        with open("/proc/self/net/unix", "rb") as stream:
+            own_raw = _read_bounded(stream, 4 * 1024 * 1024 + 1)
         if len(own_raw) > 4 * 1024 * 1024:
             raise CoverageError("own namespace unix table exceeds 4 MiB")
         own_rows = _parse_unix_table(own_raw)

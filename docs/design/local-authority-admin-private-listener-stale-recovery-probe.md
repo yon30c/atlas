@@ -1,7 +1,7 @@
 # Plan de probe aislado A-IPC-04 — socket residual y recuperación fail-closed
 
 **Fecha:** 2026-11-21  
-**Estado:** primera ejecución del propietario en Atlas-VM-test: 8 PASS / 4 FAIL. Se corrigieron dos fixtures de parser y se añadieron diagnósticos acotados para SR-01/SR-11; requiere nueva ejecución. No es herramienta de mantenimiento ni autoriza listener persistente, limpieza automática o cambios del host.  
+**Estado:** A-IPC-04 sigue sin validación (última ejecución completa comunicada: 10 PASS / 2 FAIL). Una comparación controlada confirmó lecturas parciales causadas por buffering=0 y una sola llamada read(); el runner se corrigió para acumular lecturas acotadas. La corrección y sus pruebas unitarias quedan pendientes de ejecución por el propietario en Atlas-VM-test. No es herramienta de mantenimiento ni autoriza listener persistente, limpieza automática o cambios del host.  
 **Rama:** `experiment/a-ipc-01-private-unix-listener-probe`  
 **Dependencias:** A-IPC-03 validado; `local-authority-admin-private-listener-stale-recovery.md`; `local-authority-admin-private-listener-path-resolution.md`; TCB-1.
 
@@ -98,7 +98,7 @@ Las decisiones siguientes están incorporadas en el runner. Son decisiones del h
 
 1. **Carreras de PID:** ENOENT, ESRCH y ENOTDIR al inspeccionar un PID se tratan como desaparición/carrera y provocan un reintento completo, limitado a tres intentos. Si la vista PID/namespace cambia entre snapshots, también se reintenta. Si persiste, se aborta. EACCES, EPERM, errores de lectura, procfs no disponible y errores de parsing abortan inmediatamente como cobertura incompleta.
 2. **Alcance de procfs:** el runner identifica el montaje /proc, rechaza hidepid, compara el PID namespace del inspector con el de PID 1 y enumera todos los PID numéricos visibles. El alcance declarado es exclusivamente la vista accesible desde ese montaje/PID namespace; no se afirma cobertura host-wide ni visibilidad de namespaces sin procesos visibles. La enumeración se compara en tres snapshots estables, pero no es una operación atómica frente a creación concurrente de procesos. El procedimiento de mantenimiento requiere una ventana controlada y autoridad confiable para evitar esa carrera.
-3. **Parser:** exige el encabezado exacto Num RefCount Protocol Flags Type St Inode Path; acepta filas con siete campos (sin pathname) u ocho (pathname preservado como último campo), valida el primer campo hexadecimal `Num` con su sufijo obligatorio `:`, los otros cinco campos hexadecimales y el inode decimal. SR-06 incluye una fila realista con ese delimitador y casos que lo omiten o duplican. Solo Type=0005 (SOCK_SEQPACKET) y pathname exacto bloquean. No compara el inode de procfs con el inode filesystem. El runner limita cada tabla a 4 MiB.
+3. **Parser:** exige el encabezado exacto Num RefCount Protocol Flags Type St Inode Path; acepta filas con siete campos (sin pathname) u ocho (pathname preservado como último campo), valida el primer campo hexadecimal `Num` con su sufijo obligatorio `:`, los otros cinco campos hexadecimales y el inode decimal. SR-06 incluye una fila realista con ese delimitador y casos que lo omiten o duplican. Solo Type=0005 (SOCK_SEQPACKET) y pathname exacto bloquean. No compara el inode de procfs con el inode filesystem. El runner limita cada tabla a 4 MiB y debe acumular lecturas cortas hasta EOF o hasta el byte adicional que permite detectar exceso; una única lectura no buffered no garantiza entregar el contenido completo.
 4. **Segundo network namespace:** la VM permitió unshare --net true y el propietario confirmó una tabla AF_UNIX visible solo en el namespace del listener. SR-03 ahora crea un listener fixture real en un namespace adicional y exige detectarlo desde el inventario procfs del proceso padre. La ejecución del runner sigue pendiente.
 5. **Token de aprobación:** SR-10 usa un dataclass inmutable de fixture ligado al pathname y a st_dev, st_ino, tipo, UID, GID y modo observados. El challenge es una constante exclusiva del escenario. No es aprobación humana real, no es una API reutilizable y no autoriza mantenimiento fuera del sandbox.
 
@@ -269,3 +269,26 @@ ni identifica la causa. Próximo diagnóstico: obtener ambas salidas
 completas mientras los sockets sigan abiertos y registrar
 /proc/self/ns/net del proceso creador. No relajar matching, no inferir
 stale y no ejecutar unlink. A-IPC-04 sigue no validado y A-THREAT-05 abierta.
+
+
+## 11. Quinta investigación — lectura parcial de procfs y corrección (2026-11-21)
+
+El propietario aisló las funciones del runner en Atlas-VM-test y confirmó que _fixture_listener() crea correctamente un listener AF_UNIX/SOCK_SEQPACKET. La discrepancia estaba en el lector de tablas:
+
+- _read_table() abría /proc/<pid>/net/unix con buffering=0 y realizaba una sola llamada read(4 MiB + 1).
+- La lectura diagnóstica directa de /proc/self/net/unix repetía el mismo patrón.
+- En una comparación con el listener todavía abierto, el lector de una sola llamada devolvió **4.048 bytes / 58 registros** y no encontró el socket.
+- La lectura buffered completa devolvió **51.172 bytes / 711 registros** e incluyó el pathname esperado, Type 0005, estado 01 e inode de socket 41747.
+
+Esto confirma un defecto de lectura parcial: el código trataba una lectura corta como EOF y analizaba una tabla incompleta. No era un problema de selección del PID representante, matching exacto ni creación/listen del fixture.
+
+### Corrección aplicada en la rama
+
+- Se añadió _read_bounded(stream, limit), que acumula bloques de hasta 64 KiB, continúa tras lecturas cortas y termina en EOF o al alcanzar el límite.
+- _read_table() ahora abre el archivo con buffering normal y utiliza el lector acotado con límite de 4 MiB + 1 byte. El byte adicional permite al llamador detectar y rechazar tablas mayores de 4 MiB.
+- La lectura diagnóstica de /proc/self/net/unix usa el mismo helper; ya no existe una segunda lectura única sin buffering.
+- Se añadió tests/unit/test_private_listener_procfs_read.py para lecturas cortas sucesivas, límite de bytes, EOF y límite negativo.
+
+**Validación pendiente:** el asistente no ejecutó tests, builds, workflows ni probes. El propietario debe ejecutar primero la nueva prueba unitaria y después el runner completo en Atlas-VM-test. Hasta recibir esos resultados, SR-01/SR-11 no se marcan PASS; A-IPC-04 no está validado y A-THREAT-05 permanece abierta.
+
+La corrección no cambia el parser, el matching por pathname exacto y Type=SOCK_SEQPACKET, la cobertura de namespaces, las reglas fail-closed ni la política de no hacer cleanup automático. La ausencia de coincidencia nunca autoriza unlink. No ejecutar en greed, no usar el runner como herramienta de mantenimiento y no habilitar listener persistente ni despliegue.
