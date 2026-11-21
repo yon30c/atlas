@@ -1,7 +1,7 @@
 # Recuperación manual de socket IPC residual — alternativa A
 
 **Fecha:** 2026-11-21  
-**Estado:** procedimiento de diseño candidato; no implementado, no probado y no autorizado para ejecutar en el host.  
+**Estado:** procedimiento de diseño candidato; A-IPC-04 tiene un plan de probe aislado publicado en `local-authority-admin-private-listener-stale-recovery-probe.md`, pero su runner no está implementado ni probado. No autorizado para ejecutar en el host.  
 **Dependencia:** listener pathname canónico, TCB-1, resolución segura de rutas y lifecycle.  
 **Relacionado:** `local-authority-admin-private-listener-path-resolution.md`, `local-authority-admin-listener-lifecycle.md`, `local-authority-admin-private-listener-threat-model-review.md`.
 
@@ -93,7 +93,7 @@ El probe no debe borrar objetos fuera de su sandbox ni ejecutar con sudo. No se 
 
 ## 7. Estado de A-THREAT-05
 
-El procedimiento de diseño queda especificado como candidato, pero A-THREAT-05 **no está cerrado**: faltan validar la enumeración de namespaces, la relación entre entrada filesystem y socket kernel, y la recuperación en un entorno desechable. Tampoco existe una herramienta de mantenimiento ni autorización para operar en el host.
+El procedimiento de diseño queda especificado como candidato, pero A-THREAT-05 **no está cerrado**: faltan validar la enumeración de namespaces, la relación entre entrada filesystem y socket kernel, y la recuperación en un entorno desechable. El plan A-IPC-04 enumera SR-01..SR-12 y sus gates; el runner aún no existe y las preguntas de §7 del plan deben resolverse antes de implementarlo. Tampoco existe una herramienta de mantenimiento ni autorización para operar en el host.
 
 ## 8. Límites
 
