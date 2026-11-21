@@ -140,3 +140,14 @@ A09b tests the separate application control with a disposable fixture that inten
 The private sandbox root is 0700. An A09b fixture nested below it would remain unreachable to a different UID regardless of the fixture's own 0711 mode. The fixture must instead be created as a separate temporary directory directly under a verified shared sticky temporary parent (for example /tmp), with its own mode 0711 and test socket mode 0666. The candidate endpoint remains unchanged.
 
 A09a and A09b require two already-authenticated, ordinary-user sessions: one runs the probe server and the other runs the client under a different pre-existing UID. The runner must not invoke sudo, su, runuser, setuid, systemd, or any credential-switching mechanism. Without a controllable second session, both scenarios remain SKIP.
+
+
+## A09 temporary external identity design
+
+A procedure for a dedicated temporary account `atlas-a09-test` is documented in [the provisioning design](../../../docs/design/a09-temporary-test-identity-provisioning.md). This is a design-only authorization: the account, group, HOME, SSH key and session have **not** been created.
+
+The existing `atlas-sandbox` account is excluded because it belongs to the earlier Atlas Broker/rootless-container environment and has an active lingering user manager. Do not reuse, unlock, stop or modify it.
+
+The proposed peer uses an automatically allocated distinct UID, a dedicated primary group, no supplementary groups, no privileges, a private HOME, a locked password and no linger/services. The candidate authentication is an ephemeral Ed25519 key restricted to loopback and to a non-PTY, non-forwarding SSH command. No sshd/PAM changes or password unlock are allowed; if the current policy rejects public-key login for the locked account, stop and retain SKIP.
+
+A09a and A09b remain separate: A09a tests DAC against the unchanged candidate endpoint (0700/0600); A09b tests real SO_PEERCRED rejection using the separate 0711/0666 fixture. Client/runner coordination still requires design and implementation review. Both scenarios remain SKIP until separately approved, implemented and validated by the owner.
