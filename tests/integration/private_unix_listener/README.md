@@ -363,7 +363,7 @@ tests for timeout expiry and exact backlog saturation remain incomplete.
 **Not yet implemented/validated:** exact kernel backlog saturation; full
 open-FD accounting; idle/read/write deadline adversaries; exception-path
 worker recovery; request/response boundary and JSON-depth adversaries;
-configuration parsing/immutability;
+MA-07/MA-08 configuration fixtures are implemented but pending owner execution;
 pathname component-walk, symlink and collision matrix; stale recovery.
 The current runner reports these omitted scenarios as INCOMPLETE, never PASS.
 A complete overall result is therefore expected to be INCOMPLETE at this stage.
@@ -471,3 +471,40 @@ No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. El
 propietario ejecutó el probe localmente en la VM indicada. `main` no se
 modificó, no se creó PR y no se aprobó listener persistente, transporte de
 producción ni despliegue.
+
+
+### MA-07 / MA-08 — strict config fixture and immutable snapshot (implemented; owner validation pending)
+
+The runner imports \`probe_config.py\`, located beside the runner under
+\`tests/integration/private_unix_listener/\`. It is experimental fixture code,
+not a production configuration parser and not part of \`src/atlas\`.
+
+The fixture grammar is strict ASCII \`key=value\` with eight required keys,
+no defaults, duplicate or unknown keys, and fixed test policy:
+\`client_uids=0\`, \`SOCK_SEQPACKET\`, socket mode 0600 and directory mode
+0700. It is intentionally not a decision about the final production format.
+
+The loader opens the fixture filename relative to an already-open descriptor
+for a root-owned mode-0700 sandbox directory, using \`O_NOFOLLOW\`,
+\`O_NONBLOCK\` and \`O_CLOEXEC\`. It requires a regular root:root file, exact
+mode 0644, one hard link and size 1–4096 bytes; reads through that descriptor;
+compares metadata before/after; parses strictly; and compares service UID/GID
+to the numeric fixture identity.
+
+MA-07 expects rejection for: absent file, duplicate key, unknown key, missing
+required key, altered service identity, symlink, FIFO, group/other-writable
+mode, wrong owner, oversized file and hardlink. It also requires one valid
+fixture to load with the exact expected identity and root-only client policy.
+
+MA-08 loads a snapshot, atomically replaces the pathname with a different
+valid configuration, and verifies the existing frozen dataclass and tuple
+remain unchanged. There is no watcher or reload path.
+
+**Scope limitation:** this validates the final file relative to a trusted
+temporary directory descriptor. It does not validate all path ancestors from
+\`/\`; the PA pathname-resolution probe remains separate. It does not read or
+create \`/etc/atlas/admin-ipc.conf\`, alter the host, or approve production
+configuration.
+
+The owner must execute the updated runner only in disposable \`Atlas-VM-test\`.
+No tests, builds or workflows have been run by the assistant.
