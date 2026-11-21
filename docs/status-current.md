@@ -421,6 +421,6 @@ A-THREAT-05 sigue abierto hasta validar la enumeración de namespaces y la retir
 
 Se publicó `docs/design/local-authority-admin-private-listener-resource-budget.md`. El handler actual limita request 16 KiB, response 64 KiB y JSON depth 16; read/write defaults 5 s, con máximo individual configurable 60 s, pero no deadline global ni accept loop. A14 (2 workers/backlog 8) es solo harness.
 
-Propuesta inicial pendiente de aprobación: 4 conexiones/workers fijos, backlog 8, cola de aplicación 0, read/write 5 s, deadline total 15 s y `RLIMIT_NOFILE=64` provisional. Mutaciones serializadas; operaciones largas con ID/status sin retener conexión. Memoria, CPU, TasksMax y shutdown no están fijados.
+Perfil aprobado por el propietario para probes aislados: 4 conexiones/workers fijos, backlog 8, cola de aplicación 0, read/write 5 s, deadline total 15 s y `RLIMIT_NOFILE=64`. No equivale a configuración de producción. Mutaciones serializadas; operaciones largas con ID/status sin retener conexión. Memoria, CPU, TasksMax, shutdown e inventario real de FDs no están fijados.
 
-A-THREAT-07 sigue abierto hasta aceptar capacidad y validar el perfil en un probe aislado. No se modificó código ni host.
+A-THREAT-07 sigue abierto hasta validar el perfil en un probe aislado. No se modificó código ni host.
