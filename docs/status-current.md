@@ -294,13 +294,26 @@ Se define una separación documental:
 A09b's temporary fixture must not be nested under the private probe root (0700), since DAC on that parent would still block the external UID. It must be a separate sibling directory directly under a verified shared sticky temporary parent (e.g. /tmp), with fixture directory 0711 and test socket 0666. The candidate endpoint remains 0700/0600. A09a/A09b also require a second already-authenticated ordinary-user session with a different pre-existing UID; the runner must not switch credentials or invoke privilege tools. This is a design correction only; neither subscenario is implemented or validated.
 
 
-## A09 — diseño de identidad temporal multi-UID (2026-11-20)
+## A09 — identidad temporal multi-UID provisionada (2026-11-20)
 
-El propietario autorizó diseñar un procedimiento para una identidad temporal dedicada `atlas-a09-test`, pero **no autorizó todavía su creación ni cambios en Debian**. Diseño: [identidad temporal para A09](design/a09-temporary-test-identity-provisioning.md).
+El propietario autorizó la creación de la identidad temporal dedicada atlas-a09-test y confirmó su ejecución y verificación en Debian. La fase de cuenta/grupo/HOME queda completada; esto no autoriza clave SSH, login, ejecución A09 ni cambios adicionales del host.
 
-- La cuenta existente `atlas-sandbox` queda excluida: pertenece al entorno previo de Atlas Broker, tiene linger activo y ejecuta procesos rootless. No se reutiliza ni modifica.
-- La cuenta propuesta tendrá UID asignado automáticamente, grupo primario exclusivo, sin grupos suplementarios ni privilegios, HOME `0700`, contraseña bloqueada, sin linger ni servicios.
-- La autenticación candidata es una clave SSH Ed25519 efímera, restringida a loopback, sin forwarding ni PTY. No se modificará sshd/PAM ni se desbloqueará contraseña. Si la política actual no permite clave pública con la cuenta bloqueada, se detiene el procedimiento.
-- A09a mantiene intacto el endpoint candidato `0700/0600` y comprueba denegación DAC. A09b usa un fixture temporal hermano bajo un padre compartido sticky y comprueba rechazo real mediante `SO_PEERCRED`; no se confunden ambas capas.
-- El diseño de coordinación del cliente externo y la implementación del runner aún requieren revisión. A09a/A09b siguen SKIP y la evidencia local sigue siendo 15 PASS, A09 SKIP, 0 FAIL; global INCOMPLETE.
-- La autorización recibida cubre diseño/documentación únicamente. Crear cuenta/grupo, HOME, claves o sesión SSH requiere aprobación explícita adicional. No se ejecutaron pruebas ni se modificó el host.
+**Evidencia comunicada por el propietario**
+- Cuenta: atlas-a09-test:x:1001:984::/var/lib/atlas-a09-test:/bin/bash; UID 1001, GID primario 984, shell /bin/bash.
+- Grupo dedicado: atlas-a09-test:x:984:; id muestra solo el grupo primario dedicado, sin grupos suplementarios adicionales.
+- passwd -S informa estado L (contraseña bloqueada).
+- HOME /var/lib/atlas-a09-test: directory, owner/group atlas-a09-test, permisos 0700.
+- El UID es automático y distinto del runner (UID 1000). La salida no demuestra todavía ausencia de procesos, sesiones, linger o servicios; comprobarlo antes de usar la cuenta.
+
+**Preflight SSH comunicado**
+- sshd -T: pubkeyauthentication yes, passwordauthentication yes, kbdinteractiveauthentication no, usepam yes, strictmodes yes, permituserenvironment no, pero x11forwarding yes, allowtcpforwarding yes, allowagentforwarding yes, permitopen any y permitlisten any.
+- SSH escucha en 0.0.0.0:22 y [::]:22. El ruleset nftables reportado tiene políticas INPUT ACCEPT para IPv4 e IPv6; no se ha demostrado aislamiento global de SSH a loopback. No modificar SSH/PAM/firewall en este experimento.
+- ssh-keyscan presentó ED25519 SHA256:txiDPT+/ldcIwnN6BPotbeL7QsofAieAeqF3GKMa9xI, coincidente con el fingerprint local previamente obtenido de la host key ED25519. RSA/ECDSA también aparecieron, pero la futura conexión deberá fijar ED25519.
+- No se ha generado/instalado clave, no se ha probado login SSH y no se ha modificado sshd/PAM/firewall. Si se autoriza la siguiente fase, la clave deberá usar restrict, from=127.0.0.1 y comando forzado; esas restricciones limitan esa clave, no el listener SSH global.
+
+**Estado A09 y siguiente paso**
+- A09a/A09b siguen sin implementar ni validar; la ejecución anterior conserva 15 PASS, A09 SKIP, 0 FAIL, global INCOMPLETE.
+- La creación de cuenta no cambia ni amplía la evidencia del runner. No ejecutar A09 hasta implementar y revisar coordinación cliente/runner y obtener aprobación separada.
+- Siguiente paso posible: diseñar/revisar el procedimiento exacto para generar e instalar la clave Ed25519 restringida y probar un comando fijo por SSH. Requiere autorización explícita separada antes de modificar authorized_keys o iniciar sesión.
+- La eliminación futura de la cuenta, grupo y HOME también requiere autorización explícita separada.
+- No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. main permanece intacta; no hay PR ni transporte de producción aprobado.
