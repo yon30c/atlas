@@ -1,6 +1,6 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-21 (A-IPC-02: propietario validó MA-01..MA-10 y CP-01..CP-10 en 75929e1. CP-10 confirmó FDs/threads acotados y recuperación al baseline. CP-11 implementado en 70ee6a7, pendiente de ejecución; CP-12 pendiente; overall INCOMPLETE).
+> **Última actualización:** 2026-11-21 (A-IPC-02: propietario validó MA-01..MA-10 y CP-01..CP-11 en da8c6ea. CP-11 confirmó tres ciclos de saturación/recuperación sin crecimiento de recursos. CP-12 implementado en 0fb5c39, pendiente de ejecución; overall INCOMPLETE).
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
