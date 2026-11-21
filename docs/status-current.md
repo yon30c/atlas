@@ -1001,3 +1001,36 @@ La causa quedó localizada en dos sitios del runner: _read_table() y la lectura 
 **Corrección publicada en esta rama:** helper _read_bounded() con acumulación de lecturas cortas, bloques de hasta 64 KiB y límite de 4 MiB + 1; aplicado a ambas rutas de lectura. Se añadió tests/unit/test_private_listener_procfs_read.py con casos de lecturas parciales, límite, EOF y límite inválido.
 
 **Pendiente de validación del propietario:** ejecutar la prueba unitaria nueva y el runner completo solo en Atlas-VM-test. No se ejecutaron pruebas, builds, workflows ni probes desde GitHub. Hasta entonces A-IPC-04 no está validado, SR-01/SR-11 no se marcan PASS y A-THREAT-05 sigue abierta. No relajar matching, no inferir stale, no ejecutar unlink, no usar en greed y no habilitar cleanup automático, listener persistente o despliegue.
+
+## A-IPC-04 — stale recovery probe validado (2026-11-21)
+
+El propietario ejecutó run_stale_recovery_probe.py en la VM desechable
+Atlas-VM-test sobre el commit 375fb00a3fee230a57f89ffa7897a29309ff1dd2:
+Debian 13, kernel 6.12.117+deb13-amd64, Python 3.13.5, EUID 0,
+fixtures SERVICE 2005:2005 / OTHER 2006:2006.
+
+**Resultado: overall=PASS; 12/12 escenarios PASS, 0 FAIL, 0 INCOMPLETE.**
+El inventario vio 204 procesos y seis network namespaces; el namespace
+principal contenía 710 registros. No hubo reintentos de snapshot y el
+sandbox privado bajo /run fue eliminado después de cerrar procesos y sockets.
+
+La corrección _read_bounded() acumuló lecturas cortas de procfs hasta EOF
+o hasta el límite, tanto en _read_table() como en el diagnóstico directo.
+Con ello SR-01 y SR-11 detectan los listeners locales activos, sin usar
+connect/accept/send/recv para comprobar liveness. SR-03 volvió a detectar
+un listener en un namespace adicional. SR-04/SR-05 abortaron correctamente
+ante cobertura incompleta; SR-08/SR-09 preservaron objetos no admisibles o
+sustituidos; SR-10 retiró únicamente el fixture exacto con token ligado a
+su identidad; SR-12 mantuvo la clasificación fail-closed.
+
+**Estado:** A-IPC-04 queda validado para los escenarios del harness y el
+entorno indicados. El alcance se limita a procesos y namespaces visibles
+desde el montaje procfs y PID namespace usados; no es cobertura host-wide,
+no es atómico ante creación concurrente de procesos y no elimina el límite
+TOCTOU entre revalidación y unlink.
+
+**A-THREAT-05 permanece abierta.** Esta validación no autoriza recuperación
+de sockets reales, limpieza automática, listener persistente, activación
+systemd ni despliegue. No ejecutar en greed producción. La validación fue
+ejecutada por el propietario; el asistente no ejecutó pruebas, builds,
+workflows ni probes.
