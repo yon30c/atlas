@@ -1,6 +1,6 @@
 # Estado vigente de Atlas
 
-> **Corte documental:** 21 de noviembre de 2026. A-IPC-01 reportado 16/16 PASS. A-IPC-02: propietario validó MA-01..MA-10 y CP-01..CP-06 en `0db2628`; CP-05 observó 5.002 s y CP-06 15.006 s desde accept, con EOF y cero respuesta. CP-02/03 confirmó cola efectiva 9 y EAGAIN en décima conexión. CP-07..CP-12 pendientes; overall INCOMPLETE.
+> **Corte documental:** 21 de noviembre de 2026. A-IPC-01 reportado 16/16 PASS. A-IPC-02: propietario validó MA-01..MA-10 y CP-01..CP-07 en `077e01b`; CP-07 confirmó excepción aislada, EOF/0 bytes, slot liberado y recuperación con ping OK. CP-08/09 implementados en `fe7343f`, pendientes de ejecución local; CP-10..CP-12 pendientes. Overall INCOMPLETE.
 > **Main:** permanece en HEAD `1bd73d149dbd98e7ee2e5fdc36880883b6b03d16`; PR #29 está integrado. La suite reportada para el HEAD de código de PR #29 fue 1,590 tests, `OK (skipped=1)`; no se ha reportado una nueva ejecución sobre el merge HEAD.
 > **Rama activa de diseño:** `experiment/a-ipc-01-private-unix-listener-probe`. Se mantiene separada de `main`; no tiene PR propio. PR #30 sigue abierto en Draft y corresponde a la rama de diseño original.
 > **Estado IPC:** el handler procesa conexiones ya aceptadas; solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
@@ -653,3 +653,42 @@ Corrección del runner en 1df8385f3783308636ccd9538d4c1033fd05be33: se permite c
 En commit ccfc495e4bcbe0adc9283f75bee1823d5338451b, MA-01..MA-10 y CP-01..CP-06 volvieron a PASS; CP-07 falló con ECONNRESET. El worker fixture lanzaba la excepción sin consumir el registro SOCK_SEQPACKET enviado por el cliente. El cierre con datos pendientes puede producir reset en vez de EOF; CP-07 no está validado.
 
 Runner corregido en 1df8385f3783308636ccd9538d4c1033fd05be33: CP-07 consume el paquete desencadenante antes de inyectar RuntimeError, para que el cierre pueda probar EOF ordenado y cero bytes de respuesta. La aserción de recuperación permanece intacta. Siguiente paso: actualizar y repetir el runner completo solo en Atlas-VM-test desechable. No ejecutar en greed. No se ejecutaron pruebas, builds ni workflows.
+
+## A-IPC-02 — CP-07 validado; CP-08/CP-09 implementados (2026-11-21)
+
+El propietario ejecutó `077e01b00e8f3c628d5f1cee44b8a58670434789`
+en `Atlas-VM-test`, Debian 13, kernel `6.12.117+deb13-amd64`,
+Python 3.13.5, EUID 0, fixtures SERVICE `2005/2005` y OTHER
+`2006/2006`.
+
+- **MA-01..MA-10: PASS.**
+- **CP-01..CP-07: PASS.** Cuatro workers máximos; backlog efectivo Linux
+  9 para listen(8), décima conexión EAGAIN; CP-05 timeout 5.008 s; CP-06
+  deadline 15.012 s con 3.995 s restantes al iniciar read; CP-07 cerró el
+  peer de la excepción con EOF/0 bytes, recuperó active=0 y procesó una
+  segunda petición ping con código OK. El servidor permaneció vivo.
+- **Cleanup:** sandboxes privado y de traversal bajo `/run` eliminados
+  después de finalizar los procesos hijos.
+- **Resultado global:** INCOMPLETE, sin escenarios FAIL; CP-08..CP-12 no
+  estaban incluidos en el commit ejecutado.
+
+El runner incorporó después CP-08 y CP-09 en commit
+`fe7343fa5b0dc9a63368ad067d5f5ca08c764e01`:
+
+- CP-08 verifica request exactamente 16 KiB, 16 KiB + 1 y un paquete que
+  excede el buffer de recepción; además prueba response exactamente 64 KiB
+  y rechazo de 64 KiB + 1 antes de enviar bytes.
+- CP-09 verifica profundidad total 16 y rechazo de profundidad 17 como
+  `INVALID_JSON`.
+
+**CP-08/CP-09 están implementados y revisados estáticamente, no validados.**
+No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. CP-10..12
+siguen pendientes: contabilidad completa de FDs/threads bajo carga,
+recuperación tras ciclos de saturación y rechazo de startup con
+`RLIMIT_NOFILE` insuficiente sin elevarlo.
+
+**Siguiente paso único:** actualizar `Atlas-VM-test` a la punta actual de
+esta rama y ejecutar el runner completo como root solo dentro de esa VM
+desechable. Nunca en `greed` de producción. No se modifica handler,
+contrato, `main`, host, cuentas, servicios ni SQLite; no se autoriza
+listener persistente ni despliegue.
