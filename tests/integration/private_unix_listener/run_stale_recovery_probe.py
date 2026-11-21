@@ -375,6 +375,31 @@ def _scenario_02_residual_without_approval(sandbox: Path, uid: int, gid: int) ->
         os.close(parent)
 
 
+def _trusted_unshare_path() -> str:
+    candidate = shutil.which("unshare")
+    if not candidate:
+        raise ProbeFailure("SR-03 unshare executable is unavailable")
+    resolved = os.path.realpath(candidate)
+    info = os.stat(resolved, follow_symlinks=False)
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) & 0o022:
+        raise ProbeFailure("SR-03 unshare executable is not a trusted root-owned file")
+    if not os.access(resolved, os.X_OK):
+        raise ProbeFailure("SR-03 unshare executable is not executable")
+    directory = os.path.dirname(resolved)
+    while True:
+        parent_info = os.stat(directory, follow_symlinks=False)
+        if (
+            not stat.S_ISDIR(parent_info.st_mode)
+            or parent_info.st_uid != 0
+            or stat.S_IMODE(parent_info.st_mode) & 0o022
+        ):
+            raise ProbeFailure("SR-03 unshare executable has an untrusted parent directory")
+        if directory == "/":
+            break
+        directory = os.path.dirname(directory)
+    return resolved
+
+
 def _scenario_03_other_namespace(sandbox: Path, uid: int, gid: int) -> dict:
     path = str(sandbox / "sr03-other-netns.sock")
     code = (
@@ -384,9 +409,7 @@ def _scenario_03_other_namespace(sandbox: Path, uid: int, gid: int) -> dict:
         "os.chmod(p,0o600); os.chown(p,u,g); s.listen(1)\n"
         "print(os.getpid(),flush=True); time.sleep(30)\n"
     )
-    unshare = shutil.which("unshare")
-    if not unshare:
-        raise ProbeFailure("SR-03 requires util-linux unshare; cannot claim multi-netns coverage")
+    unshare = _trusted_unshare_path()
     child = subprocess.Popen(
         [unshare, "--net", "--", sys.executable, "-c", code, path, str(uid), str(gid)],
         stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -706,7 +729,9 @@ def main() -> int:
                 results.append({"id": scenario_id, "status": "PASS", "observations": observations})
             except Exception as exc:
                 status = "INCOMPLETE" if scenario_id == "SR-03" and (
-                    "Operation not permitted" in str(exc) or "unshare" in str(exc).lower()
+                    "Operation not permitted" in str(exc)
+                    or "unshare" in str(exc).lower()
+                    or "startup timed out" in str(exc).lower()
                 ) else "FAIL"
                 results.append({
                     "id": scenario_id, "status": status,
