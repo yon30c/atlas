@@ -830,7 +830,11 @@ def _scenario_a09a(root: Path, config: dict[str, object] | None, skip_reason: st
             raise ProbeFailure("A09a SSH worker did not terminate")
         report = _finish_a09_ssh(process, worker, outcome)
         _validate_a09_client_identity(report, config, "A09a")
-        if report.get("connected") is not False or report.get("connect_errno") != errno.EACCES:
+        if (
+            report.get("connected") is not False
+            or type(report.get("connect_errno")) is not int
+            or report.get("connect_errno") != errno.EACCES
+        ):
             raise ProbeFailure(f"A09a expected DAC EACCES, got {report!r}")
         listener.socket.settimeout(0.25)
         try:
@@ -843,8 +847,12 @@ def _scenario_a09a(root: Path, config: dict[str, object] | None, skip_reason: st
         if _identity(listener.path) != listener.identity:
             raise ProbeFailure("A09a candidate socket identity changed")
         info = listener.path.lstat()
-        if stat.S_IMODE(info.st_mode) != 0o600 or stat.S_IMODE(box.path.stat().st_mode) != 0o700:
-            raise ProbeFailure("A09a candidate endpoint permissions changed")
+        if (
+            info.st_uid != os.geteuid()
+            or stat.S_IMODE(info.st_mode) != 0o600
+            or stat.S_IMODE(box.path.stat().st_mode) != 0o700
+        ):
+            raise ProbeFailure("A09a candidate endpoint owner or permissions changed")
         return {
             "peer_uid": report["uid"],
             "peer_gid": report["gid"],
@@ -960,18 +968,26 @@ def _scenario_a09b(root: Path, config: dict[str, object] | None, skip_reason: st
             report.get("connected") is not True
             or report.get("connect_errno") is not None
             or report.get("peer_closed") is not True
-            or not isinstance(report.get("request_bytes_sent"), int)
+            or type(report.get("request_bytes_sent")) is not int
             or report.get("request_bytes_sent", 0) <= 0
+            or type(report.get("bytes_received")) is not int
             or report.get("bytes_received") != 0
             or report.get("closure") not in {"eof", "reset"}
         ):
             raise ProbeFailure(f"A09b peer received data or did not observe server closure: {report!r}")
         if _identity(listener.path) != listener.identity:
             raise ProbeFailure("A09b fixture socket identity changed before cleanup")
-        fixture_mode = stat.S_IMODE(fixture.lstat().st_mode)
-        socket_mode = stat.S_IMODE(listener.path.lstat().st_mode)
-        if fixture_mode != 0o711 or socket_mode != 0o666:
-            raise ProbeFailure("A09b fixture permissions changed during the exchange")
+        fixture_info_after = fixture.lstat()
+        socket_info_after = listener.path.lstat()
+        fixture_mode = stat.S_IMODE(fixture_info_after.st_mode)
+        socket_mode = stat.S_IMODE(socket_info_after.st_mode)
+        if (
+            fixture_info_after.st_uid != os.geteuid()
+            or socket_info_after.st_uid != os.geteuid()
+            or fixture_mode != 0o711
+            or socket_mode != 0o666
+        ):
+            raise ProbeFailure("A09b fixture owner or permissions changed during the exchange")
         return {
             "peer_pid": peer.pid,
             "peer_uid": peer.uid,
