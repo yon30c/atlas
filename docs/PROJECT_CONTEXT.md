@@ -26,7 +26,7 @@
 - **A-THREAT-07:** perfil experimental: 4 workers, `listen(8)`, cola 0, read/write 5 s, deadline global 15 s y `RLIMIT_NOFILE=64`. CP-01..CP-06 validados por el propietario en `0db2628`; AF_UNIX admite 9 pendientes y la décima recibe EAGAIN. CP-07..CP-12 pendientes. No es configuración de producción.
 - **A-THREAT-08:** máquina de estados de readiness/shutdown, drenaje, deadlines y ownership de FDs pendiente.
 - **A-THREAT-09:** A09 usó runner UID 1000 y peer UID 1001; no valida cliente UID 0, servicio `atlas-runtime` ni permisos finales del despliegue.
-- **Próximo paso:** diseñar CP-07 como prueba aislada de excepción en worker, cierre de conexión y liberación garantizada del slot; revisar el código directamente en GitHub y dejar la validación para `Atlas-VM-test`.
+- **Próximo paso:** actualizar Atlas-VM-test al commit `fbd4512d163b31e53b355280e636fb47cf8d66a9` y ejecutar A-IPC-02 para validar CP-07; después revisar CP-08..CP-12. Solo en la VM desechable.
 - **Estado de cambios:** la rama experimental contiene MA-01..MA-10 y CP-01..CP-06 implementados y validados por el propietario en `0db2628`. CP-07..CP-12 siguen pendientes. No se modificó handler productivo, contrato normativo, runtime, SQLite, `main` ni host de producción. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. No se creó PR ni se aprobó listener persistente o despliegue.
 
 **Límites vigentes:** A-IPC-01 valida únicamente los escenarios experimentales ejecutados en el commit/entorno indicados. No demuestra protección frente a root/capabilities suficientes ni procesos maliciosos del mismo UID; no valida separación de privilegios, system-manager, listener persistente, daemon, integración systemd, acceso/autorización SQLite ni operaciones mutantes. No autoriza cambios del host, usuarios, grupos, permisos, privilegios, servicios, provisioning o despliegue.
@@ -980,3 +980,12 @@ Commit ejecutado: 0db262802ce30ec38a4ce52a4f5bfaa3081fc2b1. Entorno: Atlas-VM-te
 - Cleanup correcto; duración 22.095 s.
 - CP-07..CP-12 siguen pendientes; overall INCOMPLETE.
 - CP-06 demuestra contabilidad del presupuesto global mediante instrumentación del harness, no simula trabajo productivo ni escritura bloqueada.
+
+
+### CP-07 — excepción de worker implementada (2026-11-21)
+
+- Runner commit: fbd4512d163b31e53b355280e636fb47cf8d66a9.
+- Un servidor fixture dedicado inyecta una RuntimeError de un solo uso después de aceptar una conexión y entrar en el contexto del socket.
+- El escenario exige EOF y cero bytes de respuesta en el peer fallido, evento worker_error, contador active=0, servidor aún vivo y una segunda petición authority.ping exitosa que vuelve a active=0.
+- La secuencia comprueba el cierre del socket, liberación del slot por finally y continuidad del accept loop. La inyección es test-only; no modifica handler productivo.
+- CP-07 implementado y revisado estáticamente; pendiente de ejecución del propietario. CP-08..CP-12 pendientes; overall INCOMPLETE.
