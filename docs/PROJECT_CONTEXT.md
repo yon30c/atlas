@@ -1231,3 +1231,28 @@ ejecución del HEAD en `Atlas-VM-test`. Nunca ejecutar en `greed`.
 No usar el probe como herramienta de mantenimiento ni habilitar limpieza
 automática, listener persistente o despliegue. El asistente no ejecutó
 pruebas, builds, workflows ni probes.
+
+
+## A-IPC-04 — segunda ejecución y diagnóstico adicional (2026-11-21)
+
+Segunda ejecución del propietario en `Atlas-VM-test`, commit
+`bd3b0e0a1379c7b034e10a33b9b45b329e6e807a`: 10 PASS / 2 FAIL /
+0 INCOMPLETE; 201 procesos visibles; seis namespaces; cleanup confirmado.
+SR-06 y SR-07 ya pasan. SR-03 detecta el listener en un namespace
+adicional. SR-01 y SR-11 siguen sin encontrar listeners locales activos;
+ambos informan `candidate_rows=[]`. La ausencia de fila no autoriza
+clasificar un socket como stale ni ejecutar unlink.
+
+Commit `a7bf92d07d12012d20822b64a57ee0ab17c953e1` amplía los diagnósticos
+de SR-01/SR-11, únicamente al fallar: inspector PID, namespace del
+inspector, inode del descriptor del listener, lista de namespaces del
+snapshot, filas candidatas por pathname o inode y lectura directa de
+`/proc/self/net/unix` con filas coincidentes. No cambia la política
+de matching, no llama connect/accept/send/recv y no convierte ausencia
+de evidencia en PASS.
+
+**Estado:** A-IPC-04 no validado; A-THREAT-05 permanece abierta.
+La próxima ejecución debe usar el HEAD actual en `Atlas-VM-test`.
+Nunca ejecutar en `greed`; no usar como herramienta de mantenimiento,
+no habilitar limpieza automática ni despliegue. No se ejecutaron pruebas,
+builds, workflows ni probes desde GitHub.
