@@ -270,14 +270,16 @@ the reported run.
 
 ## A-IPC-02 — mutual authentication and bounded-capacity probe
 
-**Status:** six initial scenarios were owner-validated on commit
-`fbc8c68e75c7d5d32768442666cf861f7880eb28` with PASS and cleanup verified;
-the overall probe correctly returned INCOMPLETE because required coverage
-remained. The current branch adds MA-03 in commit `7a0d4f1`, pending owner
-execution. This is not a production listener or transport approval. It is separate from the unprivileged A-IPC-01 runner above:
-A-IPC-01 continues to refuse EUID 0; A-IPC-02 requires direct root execution
-inside a disposable VM because it must prove a real EUID 0 client against
-service and alternate numeric fixture identities.
+**Current status (2026-11-21):** owner-reported execution in disposable
+`Atlas-VM-test` passed MA-01..MA-10 and CP-01/CP-04. The report remained
+`INCOMPLETE` because CP-02/CP-03 and CP-05..CP-12 are not implemented or
+validated. The latest checkout was fast-forwarded to
+`901c792cb723d920da4970ecce98ea7f871c4f85` before the run; the JSON's
+`commit` field was `null`, so the runner did not independently identify its
+HEAD. See the latest execution record at the end of this README. This is not
+a production listener or transport approval. A-IPC-01 remains a separate
+unprivileged runner that refuses EUID 0; A-IPC-02 requires direct root
+execution inside a disposable VM.
 
 The runner creates a fresh root-owned mode-0700 private sandbox and a separate
 root-owned mode-0711 traversal fixture root under `/run`. The latter permits the
@@ -528,3 +530,49 @@ Commit `f41df94d0f87d288bfc7e3df45c66295fa19d570` adds two scenarios that call t
 - **MA-10:** the handler receives AF_UNIX/SOCK_STREAM and AF_INET/SOCK_STREAM connections with a valid ping packet already queued. It must reject both with `AdminProtocolRejected/INVALID_REQUEST` before reading; a non-consuming `MSG_PEEK` confirms the first request byte remains queued and the peer receives no protocol bytes.
 - The runner reports MA-09 and MA-10 independently. The remaining INCOMPLETE scenarios are CP-02/CP-03 and CP-05..CP-12.
 - **Owner action:** pull the branch and run the probe only in disposable `Atlas-VM-test`. No test/build/workflow was run by the assistant. MA-09/10 are implemented, not yet validated.
+
+
+## A-IPC-02 — latest owner execution (2026-11-21)
+
+The owner updated the disposable VM checkout by fast-forward from
+`991f91e` to `901c792cb723d920da4970ecce98ea7f871c4f85`, then ran the
+runner directly as EUID 0 with SERVICE fixture UID/GID `2005/2005` and OTHER
+fixture UID/GID `2006/2006`.
+
+Environment: Debian 13; kernel `6.12.117+deb13-amd64`; Python `3.13.5`;
+duration `1.687 s`.
+
+- **MA-01..MA-06: PASS.** Valid root client authenticated service UID 2005;
+  alternate service UID 2006 was rejected before client send; alternate
+  client UID 2006 was rejected before server recv; non-root EUID 2006 was
+  rejected before connect; forged top-level UID/GID/PID claims were rejected
+  as `INVALID_REQUEST`, with kernel peer UID remaining 0.
+- **MA-07: PASS.** Valid fixture configuration accepted; all 11 invalid cases
+  rejected (absent, duplicate, unknown, altered/missing required values,
+  symlink, FIFO, unsafe mode, wrong owner, oversized file and hardlink).
+- **MA-08: PASS.** Frozen fields and immutable collections retained the
+  original `/run/atlas/admin.sock` snapshot after atomic replacement with
+  `/run/atlas/changed.sock`.
+- **MA-09: PASS.** Authorized AF_UNIX/SOCK_SEQPACKET peer closed its write
+  side before sending a request; the handler reported
+  `PEER_DISCONNECTED`, accepted no request and emitted zero response bytes.
+- **MA-10: PASS.** AF_UNIX/SOCK_STREAM and AF_INET/SOCK_STREAM were both
+  rejected as `INVALID_REQUEST` before reading; `MSG_PEEK` confirmed the
+  first request byte remained queued and each peer received zero protocol
+  response bytes.
+- **CP-01/CP-04: PASS.** Four configured workers were observed active at
+  maximum; after recovery, `active_after_recovery=0`.
+- Kernel backlog 8 was configured but **not saturated**.
+- Both private and traversal `/run` sandboxes were removed after child
+  processes exited. No FAIL rows were reported.
+- Overall: **INCOMPLETE**, correctly, because exact backlog saturation,
+  read/write/global deadline adversaries, exception recovery, payload/JSON
+  depth boundaries and full FD accounting remain unimplemented/unvalidated.
+
+The JSON reported `commit: null`; the preceding successful owner-side
+`git pull` fast-forwarded the checkout to `901c792`. Preserve this metadata
+limitation when citing the execution. This owner-reported run is evidence only
+for the scenarios and environment listed. It does not validate the production
+listener lifecycle, path-walk, stale recovery, systemd, SQLite, or deployment,
+and does not approve a persistent listener or production transport. No tests,
+builds or workflows were run by the assistant.
