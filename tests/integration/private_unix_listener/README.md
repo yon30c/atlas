@@ -711,3 +711,10 @@ The exception injection is harness-only; it is not a production handler change. 
 El propietario ejecutó el runner en d054f95f4cce9e33fe55bf61080dcd3f493ed3ce. MA-01..MA-10 y CP-01..CP-06 pasaron de nuevo. CP-07 falló antes de sus aserciones de recuperación porque Server._record trató el evento worker_error deliberadamente inyectado como un error inesperado. No se demostró aún EOF/slot release/segunda petición y CP-07 no está validado.
 
 Runner corregido en c1fdcc12eb3d7a0fcb6cccccb8eb07b0028dcb40: solo el servidor CP-07 permite consumir exactamente un evento con el mensaje de excepción previsto; todos los demás errores de worker siguen siendo fatales. Repetir el runner completo únicamente en Atlas-VM-test desechable, como root, usando el comando de ejecución ya documentado. No ejecutar en greed. No se ejecutaron pruebas, builds ni workflows desde GitHub.
+
+
+### CP-07 — diagnóstico de ConnectionResetError y corrección
+
+En la ejecución del commit ccfc495e4bcbe0adc9283f75bee1823d5338451b, MA-01..MA-10 y CP-01..CP-06 pasaron, pero CP-07 falló con ConnectionResetError (ECONNRESET). El fixture lanzaba la excepción sin leer el paquete SOCK_SEQPACKET enviado por el peer. El cierre con un registro pendiente puede producir reset en lugar de EOF, así que el resultado no demuestra la recuperación esperada.
+
+Runner corregido en 1df8385f3783308636ccd9538d4c1033fd05be33: el worker de CP-07 consume el paquete desencadenante antes de inyectar RuntimeError. El evento de inyección informa trigger_request_bytes. Se conserva la exigencia de EOF, cero respuesta, active=0, servidor vivo y segunda petición válida. Repetir únicamente en Atlas-VM-test desechable, como root; nunca en greed. No se ejecutaron pruebas, builds ni workflows.
