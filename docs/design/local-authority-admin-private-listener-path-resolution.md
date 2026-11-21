@@ -141,7 +141,7 @@ Los escenarios son requisitos de diseño; no se han implementado ni ejecutado.
 
 1. Fijar la ruta real del socket y los owners/modos exactos de cada componente según el plan de instalación.
 2. El bind pathname canónico después de validar la cadena es el baseline TCB-1. El candidato procfs de §4.1 solo requiere un probe si se busca una propiedad adicional de anclaje por descriptor; no es requisito para el baseline y no debe adoptarse sin evaluar sus efectos en `getsockname()` y recuperación stale.
-3. Definir el procedimiento manual y auditado para retirar un socket residual.
+3. Validar en sandbox el procedimiento manual y auditado para retirar un socket residual descrito en [stale-recovery](local-authority-admin-private-listener-stale-recovery.md).
 4. Definir límites de tamaño/formatos y política definitiva de hardlinks para el archivo de configuración.
 5. Identificar el entrypoint cliente y revisar el lanzamiento real con EUID 0.
 6. Diseñar un probe aislado para el recorrido de ruta, autenticación mutua y cleanup; no usar la cuenta temporal A09 ni modificar el host sin autorización independiente.
