@@ -254,3 +254,18 @@ como prueba de stale y no ejecutar unlink.
 reales ni en `greed`; no habilitar cleanup automático, listener persistente
 o despliegue. Resultado aportado y ejecutado por el propietario; el asistente
 no ejecutó pruebas, builds, workflows ni probes.
+
+
+### Comparación manual STREAM/SEQPACKET posterior a la quinta ejecución (2026-11-21)
+
+El propietario creó en un mismo proceso dos listeners temporales AF_UNIX:
+STREAM (tipo 1, FD inode 40634) y SEQPACKET (tipo 5, FD inode 40638).
+Ambos devolvieron pathname esperado y SO_ACCEPTCONN=1. Los filtros
+por pathname en /proc/self/net/unix y ss -xl no devolvieron filas para
+ninguno. La observación no parece exclusiva de SOCK_SEQPACKET.
+
+La salida filtrada no demuestra que las tablas completas estén vacías
+ni identifica la causa. Próximo diagnóstico: obtener ambas salidas
+completas mientras los sockets sigan abiertos y registrar
+/proc/self/ns/net del proceso creador. No relajar matching, no inferir
+stale y no ejecutar unlink. A-IPC-04 sigue no validado y A-THREAT-05 abierta.
