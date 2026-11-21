@@ -294,7 +294,18 @@ def _server_child(
                             worker_exception_pending = False
                             inject_exception = True
                     if inject_exception:
-                        emit(event="worker_fault_injected", fault="RuntimeError")
+                        # Consume the trigger packet before closing the SOCK_SEQPACKET
+                        # peer. Closing with unread record data can produce ECONNRESET
+                        # at the client instead of an orderly EOF, obscuring the
+                        # worker-exception cleanup behavior this scenario measures.
+                        trigger_packet = connection.recv(REQUEST_LIMIT + 1)
+                        if not trigger_packet:
+                            raise ProbeFailure("CP-07 trigger packet was not received")
+                        emit(
+                            event="worker_fault_injected",
+                            fault="RuntimeError",
+                            trigger_request_bytes=len(trigger_packet),
+                        )
                         raise RuntimeError("CP-07 one-shot worker exception")
                     _serve_authenticated(
                         connection, allowed_uid, accepted_at, pre_read_delay_seconds
