@@ -439,3 +439,10 @@ CP-07 usa un servidor fixture dedicado con una inyección de excepción de un so
 El escenario exige: (1) el peer de la conexión fallida observa EOF y cero bytes de respuesta; (2) se observa el RuntimeError esperado; (3) el contador active vuelve a cero; (4) el proceso servidor permanece vivo; y (5) una segunda conexión válida completa authority.ping y vuelve a active=0. La segunda petición verifica que el accept loop y el worker pool continúan operativos tras la excepción.
 
 La inyección es exclusivamente test-only y no modifica handler productivo. CP-07 está implementado y revisado estáticamente en GitHub, pero no está validado hasta la ejecución del propietario en Atlas-VM-test. CP-08..CP-12 siguen pendientes; overall debe permanecer INCOMPLETE. No se ejecutaron pruebas, builds ni workflows desde GitHub.
+
+
+## 9.10 Primera ejecución CP-07 y corrección del harness (2026-11-21)
+
+El propietario ejecutó el runner en d054f95f4cce9e33fe55bf61080dcd3f493ed3ce en Atlas-VM-test. MA-01..MA-10 y CP-01..CP-06 volvieron a PASS. CP-07 no llegó a completar sus aserciones: Server._record clasificó el evento worker_error esperado de la inyección como error fatal genérico y abortó el escenario antes de comprobar EOF, recuperación del contador/slot y segunda petición. El resultado fue overall=FAIL; por tanto CP-07 no se considera validado.
+
+Corrección en runner commit c1fdcc12eb3d7a0fcb6cccccb8eb07b0028dcb40: cada instancia Server recibe un contador explícito de errores de worker esperados (1 solo para el fixture CP-07, 0 en todos los demás escenarios). _record consume únicamente el RuntimeError: CP-07 one-shot worker exception previsto; cualquier otro worker_error continúa siendo fatal. La validación de CP-07 sigue pendiente de una nueva ejecución del propietario en la VM desechable. No se ejecutaron pruebas, builds ni workflows desde GitHub; no se modificó handler productivo, contrato, main, host, cuentas, servicios o SQLite.
