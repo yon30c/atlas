@@ -737,3 +737,12 @@ Siguiente trabajo: resolver el método seguro de bind/pathname, definir recupera
 La API estándar de Python no expone `bindat()`/`dir_fd` para AF_UNIX. Se investigó un candidato Linux procfs: la biblioteca abierta `sockat` documenta un bind mediante `/proc/self/fd/<D-fd>/R/<socket-name>` (directorio temporal privado `D` más symlink `R` al directorio endpoint) y connect mediante `/proc/self/fd/<endpoint-dir-fd>/<socket-name>`. La dirección devuelta por `getsockname()` puede ser la forma procfs temporal, no la ruta canónica. Este patrón es referencia técnica, no dependencia ni aprobación.
 
 El diseño Atlas propone probarlo de forma aislada: D bajo directorio privado Atlas, R único, bind corto a través de procfs, verificación del socket por descriptor endpoint, cleanup de D/R y connect desde otro proceso mediante descriptor. Debe fallar cerrado si procfs no está disponible o cualquier identidad no coincide. Falta demostrar semántica en Debian/kernel objetivo y tratar artefactos ante crash. Referencias: Linux `unix(7)` y documentación `sockat` 0.4.1.
+
+
+### Recuperación manual de socket residual (A-THREAT-05) — 2026-11-21
+
+Se publicó `docs/design/local-authority-admin-private-listener-stale-recovery.md`. Define un procedimiento manual, no automático: servicio detenido, ausencia de procesos que retengan el listener, inspección de tablas AF_UNIX en todos los network namespaces visibles mediante `/proc/<pid>/net/unix`, validación del socket filesystem por descriptor y confirmación humana específica antes de `unlinkat`. No se usa `connect()` como prueba de liveness. Cualquier evidencia incompleta obliga a dejar el objeto intacto.
+
+A-THREAT-05 sigue abierto hasta validar el procedimiento en un sandbox, especialmente la enumeración de namespaces y la correlación con el pathname canónico. El diseño presupone que cliente y servicio comparten network namespace y que el descriptor listener no se hereda ni se pasa mediante SCM_RIGHTS. Si se adopta el bind procfs experimental, la recuperación debe revisarse porque la ruta registrada por el kernel puede no ser el pathname canónico.
+
+**Baseline de rutas:** bajo TCB-1, el bind pathname absoluto canónico después de validar toda la cadena y demostrar que UIDs externos no pueden escribir en ningún ancestro es el baseline más simple. El candidato procfs se conserva como alternativa experimental, no requisito; añade complejidad de observabilidad y recuperación. No hay código ni cambios de host.
