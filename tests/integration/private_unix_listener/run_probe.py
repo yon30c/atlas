@@ -672,7 +672,10 @@ def _start_a09_ssh(
             stdout, stderr = process.communicate(instruction, timeout=A09_SSH_TIMEOUT_SECONDS)
             outcome.update({"stdout": stdout, "stderr": stderr, "returncode": process.returncode})
         except subprocess.TimeoutExpired:
-            process.kill()
+            try:
+                process.kill()
+            except OSError:
+                pass
             stdout, stderr = process.communicate()
             outcome.update({
                 "stdout": stdout,
@@ -684,7 +687,15 @@ def _start_a09_ssh(
             outcome["exception"] = f"{type(exc).__name__}: {exc}"
 
     worker = threading.Thread(target=communicate, name=f"{scenario}-ssh", daemon=True)
-    worker.start()
+    try:
+        worker.start()
+    except BaseException:
+        try:
+            process.kill()
+        except OSError:
+            pass
+        process.wait(timeout=2.0)
+        raise
     return process, worker, outcome
 
 
@@ -695,7 +706,10 @@ def _finish_a09_ssh(
 ) -> dict[str, object]:
     worker.join(timeout=A09_SSH_TIMEOUT_SECONDS + 2.0)
     if worker.is_alive():
-        process.kill()
+        try:
+            process.kill()
+        except OSError:
+            pass
         worker.join(timeout=2.0)
     if worker.is_alive():
         raise ProbeFailure("A09 SSH communication worker did not terminate after child kill")
@@ -791,17 +805,20 @@ def _scenario_a09a(root: Path, config: dict[str, object] | None, skip_reason: st
                 process.kill()
             except OSError as exc:
                 cleanup_errors.append(f"cannot terminate A09a SSH child: {exc}")
+        worker_alive = False
         if worker is not None:
             worker.join(timeout=2.0)
-            if worker.is_alive():
-                cleanup_errors.append("A09a SSH worker remained active after child termination")
+            worker_alive = worker.is_alive()
         listener.socket.close()
-        if helper_path is not None and helper_identity is not None:
-            try:
-                _remove_a09_helper(helper_path, helper_identity)
-            except Exception as exc:
-                cleanup_errors.append(f"A09a helper cleanup failed: {type(exc).__name__}: {exc}")
-        cleanup_errors.extend(box.cleanup())
+        if worker_alive:
+            cleanup_errors.append("A09a child did not terminate; helper, socket pathname and sandbox were preserved")
+        else:
+            if helper_path is not None and helper_identity is not None:
+                try:
+                    _remove_a09_helper(helper_path, helper_identity)
+                except Exception as exc:
+                    cleanup_errors.append(f"A09a helper cleanup failed: {type(exc).__name__}: {exc}")
+            cleanup_errors.extend(box.cleanup())
         if cleanup_errors:
             raise ProbeFailure("; ".join(cleanup_errors))
 
@@ -917,12 +934,14 @@ def _scenario_a09b(root: Path, config: dict[str, object] | None, skip_reason: st
                 process.kill()
             except OSError as exc:
                 cleanup_errors.append(f"cannot terminate A09b SSH child: {exc}")
+        worker_alive = False
         if worker is not None:
             worker.join(timeout=2.0)
-            if worker.is_alive():
-                cleanup_errors.append("A09b SSH worker remained active after child termination")
+            worker_alive = worker.is_alive()
         listener.socket.close()
-        if listener.identity is not None:
+        if worker_alive:
+            cleanup_errors.append("A09b child did not terminate; helper, socket pathname and fixture were preserved")
+        elif listener.identity is not None:
             try:
                 current = _identity(listener.path)
             except FileNotFoundError:
@@ -937,26 +956,27 @@ def _scenario_a09b(root: Path, config: dict[str, object] | None, skip_reason: st
                         cleanup_errors.append(f"cannot remove owned A09b fixture socket: {exc}")
                 else:
                     cleanup_errors.append("A09b fixture socket identity changed; preserved")
-        if helper_path is not None and helper_identity is not None:
-            try:
-                _remove_a09_helper(helper_path, helper_identity)
-            except Exception as exc:
-                cleanup_errors.append(f"A09b helper cleanup failed: {type(exc).__name__}: {exc}")
-        try:
-            current_dir = fixture.lstat()
-        except FileNotFoundError:
-            pass
-        except OSError as exc:
-            cleanup_errors.append(f"cannot inspect A09b fixture directory: {exc}")
-        else:
-            current_identity = (current_dir.st_dev, current_dir.st_ino, stat.S_IFMT(current_dir.st_mode))
-            if current_identity != fixture_identity or not stat.S_ISDIR(current_dir.st_mode):
-                cleanup_errors.append("A09b fixture directory identity changed; preserved")
-            else:
+        if not worker_alive:
+            if helper_path is not None and helper_identity is not None:
                 try:
-                    fixture.rmdir()
-                except OSError as exc:
-                    cleanup_errors.append(f"cannot remove empty A09b fixture directory: {exc}")
+                    _remove_a09_helper(helper_path, helper_identity)
+                except Exception as exc:
+                    cleanup_errors.append(f"A09b helper cleanup failed: {type(exc).__name__}: {exc}")
+            try:
+                current_dir = fixture.lstat()
+            except FileNotFoundError:
+                pass
+            except OSError as exc:
+                cleanup_errors.append(f"cannot inspect A09b fixture directory: {exc}")
+            else:
+                current_identity = (current_dir.st_dev, current_dir.st_ino, stat.S_IFMT(current_dir.st_mode))
+                if current_identity != fixture_identity or not stat.S_ISDIR(current_dir.st_mode):
+                    cleanup_errors.append("A09b fixture directory identity changed; preserved")
+                else:
+                    try:
+                        fixture.rmdir()
+                    except OSError as exc:
+                        cleanup_errors.append(f"cannot remove empty A09b fixture directory: {exc}")
         if cleanup_errors:
             raise ProbeFailure("; ".join(cleanup_errors))
 
