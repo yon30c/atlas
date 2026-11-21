@@ -9,10 +9,10 @@
 > Esta sección es la referencia operativa prioritaria. Las secciones posteriores conservan decisiones y snapshots históricos; cuando un dato histórico contradiga este bloque, prevalece este bloque para el estado actual. No se elimina la historia de decisiones.
 
 - **Repositorio:** `yon30c/atlas`.
-- **Base estable:** `main` conserva el merge de PR #29 en `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`; este incremento no modifica `main`.
+- **Base estable:** `main` HEAD `1bd73d149dbd98e7ee2e5fdc36880883b6b03d16`; contiene el merge de PR #29 (`c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`). Este incremento no modifica `main`.
 - **Rama activa:** `experiment/a-ipc-01-private-unix-listener-probe`.
-- **HEAD remoto verificado antes de esta actualización documental:** `8c96303968dd7c7bbcd37b87333c0c7b1885aca0`. La comparación GitHub de esa referencia con la rama devolvió `identical` (0 ahead / 0 behind). Este SHA es la base de los cambios documentales que se publican en este ciclo.
-- **PR:** no hay PR creado para A-IPC-01; no se ha solicitado merge.
+- **HEAD de esta rama tras la actualización documental:** `386113b9aeb582703f0ed9fbda3e7e9c44f51356`. La comparación contra el HEAD previo `8c96303968dd7c7bbcd37b87333c0c7b1885aca0` muestra 4 commits nuevos (todos documentales). Comparada con `main`, esta rama está 132 commits por delante y 0 por detrás; no hacer merge directo ni asumir que es una rama corta de documentación.
+- **PR relacionado:** PR #30 (`design/isolated-private-unix-listener-probe`) permanece abierto y Draft; es el PR de diseño original, no la rama experimental actual. La rama `experiment/a-ipc-01-private-unix-listener-probe` no es el head de PR #30 y no tiene PR propio identificado. No se ha solicitado merge.
 - **IPC existente:** contrato `atlas-admin/1` y handler para conexiones ya aceptadas. Solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
 - **Decisión de dirección del propietario (2026-11-21):** continuar el desarrollo y la evaluación técnica con la **alternativa A — listener AF_UNIX/SOCK_SEQPACKET creado por el proceso bajo un directorio filesystem privado**. A pasa a ser la línea principal de trabajo; esto **no** constituye selección/aprobación del transporte de producción.
 - **A-IPC-01:** probe experimental implementado y validado por el propietario en Debian 13 sobre el commit `1d5bdb122a8480c36b445be7dd961b93806de74b`: `overall=PASS`, A01–A16 = 16 PASS, 0 SKIP, 0 FAIL; duración 1.72 s. Evidencia: `docs/status-aipc01-validation-2026-11-21.md`.
