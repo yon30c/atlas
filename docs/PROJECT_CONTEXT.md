@@ -13,7 +13,7 @@
 - **Rama activa:** `experiment/a-ipc-01-private-unix-listener-probe`; separada de `main`, sin PR propio. PR #30 sigue abierto en Draft en su rama original de diseño.
 - **IPC existente:** contrato `atlas-admin/1` y handler para conexiones ya aceptadas. Solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
 - **A-IPC-01:** el propietario reportó en Debian 13, commit `1d5bdb122a8480c36b445be7dd961b93806de74b`, resultado 16 PASS, 0 SKIP, 0 FAIL. Registro: `docs/status-aipc01-validation-2026-11-21.md`. No demuestra despliegue.
-- **A-IPC-02:** ejecución del propietario en `Atlas-VM-test`, Debian 13, commit `585dd3d979bc1b800550e4b9c79c382b22cf1f6c`: MA-01..MA-08 y CP-01/04 PASS; global INCOMPLETE; 1.497 s; cleanup de sandboxes `/run` completado. Fixtures 2005/2005 y 2006/2006. Backlog 8 configurado, no saturado. MA-07 rechazó 11 configuraciones inválidas y aceptó la válida; MA-08 confirmó snapshot inmutable ante reemplazo atómico.
+- **A-IPC-02:** ejecución del propietario en `Atlas-VM-test`, Debian 13, commit `585dd3d979bc1b800550e4b9c79c382b22cf1f6c`: MA-01..MA-08 y CP-01/04 PASS en `585dd3d`; global INCOMPLETE; cleanup de sandboxes `/run` completado. Fixtures 2005/2005 y 2006/2006. Backlog 8 configurado, no saturado. MA-07 rechazó 11 configuraciones inválidas y aceptó la válida; MA-08 confirmó snapshot inmutable ante reemplazo atómico.
 - **Alternativa A:** elegida como línea principal de evaluación, no aprobada para producción. Alternativa B suspendida por colisión destructiva en systemd; C no priorizada.
 - **TCB-1 aceptada:** todos los procesos bajo la cuenta dedicada `atlas-runtime` pertenecen a la TCB; no se exige aislamiento intra-UID. La exclusividad operativa de esa cuenta aún debe definirse/verificarse.
 - **Identidad del cliente aceptada:** el frontend administrativo debe conectar con **EUID 0**; la política de diseño del servicio es exactamente `client_uids={0}`. No se admiten otros consumidores sin nueva decisión. El entrypoint IPC real aún no existe/revisado; la decisión no es evidencia operativa.
@@ -26,8 +26,8 @@
 - **A-THREAT-07:** el perfil aprobado para probes aislados es 4 conexiones/workers, backlog 8, cola 0, read/write 5 s, deadline global 15 s y `RLIMIT_NOFILE=64`. CP-01/CP-04 pasaron en la ejecución del propietario sobre `fbc8c68`; backlog exacto, adversarios de timeout, contabilidad de FDs, memoria/CPU/TasksMax y drenaje siguen pendientes. No es configuración de producción.
 - **A-THREAT-08:** máquina de estados de readiness/shutdown, drenaje, deadlines y ownership de FDs pendiente.
 - **A-THREAT-09:** A09 usó runner UID 1000 y peer UID 1001; no valida cliente UID 0, servicio `atlas-runtime` ni permisos finales del despliegue.
-- **Próximo paso:** actualizar `Atlas-VM-test` al HEAD actual de la rama y ejecutar MA-07/08 exclusivamente en esa VM; después avanzar con MA-09/10 y cobertura CP pendiente. Path-walk, colisiones y stale recovery permanecen como fases separadas. Nunca ejecutar en `greed` de producción ni crear cuentas/grupos.
-- **Estado de cambios:** la rama experimental contiene el fixture aislado `probe_config.py` y los escenarios MA-07/08. No se modificó handler, contrato normativo, runtime, SQLite, `main` ni host. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. MA-01..MA-06 y CP-01/04 fueron validados por el propietario en `b4eda57`; MA-07/08 están pendientes de ejecución. No se creó PR ni se aprobó listener persistente o despliegue.
+- **Próximo paso:** actualizar `Atlas-VM-test` al commit `aff7eb694dbabb6725947e3f2179aef3fa566fbf` y ejecutar MA-09/10 exclusivamente en esa VM; después avanzar con CP-02/03 y CP-05..12. Path-walk, colisiones y stale recovery permanecen como fases separadas. Nunca ejecutar en `greed` de producción ni crear cuentas/grupos.
+- **Estado de cambios:** la rama experimental contiene el fixture aislado `probe_config.py` y los escenarios MA-07/08. No se modificó handler, contrato normativo, runtime, SQLite, `main` ni host. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. El propietario validó MA-01..MA-08 y CP-01/04 en `585dd3d`; MA-09/10 están implementados pero pendientes de ejecución. No se creó PR ni se aprobó listener persistente o despliegue.
 
 **Límites vigentes:** A-IPC-01 valida únicamente los escenarios experimentales ejecutados en el commit/entorno indicados. No demuestra protección frente a root/capabilities suficientes ni procesos maliciosos del mismo UID; no valida separación de privilegios, system-manager, listener persistente, daemon, integración systemd, acceso/autorización SQLite ni operaciones mutantes. No autoriza cambios del host, usuarios, grupos, permisos, privilegios, servicios, provisioning o despliegue.
 
@@ -871,3 +871,13 @@ Evidencia recibida de `Atlas-VM-test`, Debian 13, kernel `6.12.117+deb13-amd64`,
 - Duración 1.497 s; cleanup de los dos sandboxes `/run` confirmado; cero filas FAIL; global INCOMPLETE.
 
 La evidencia solo aplica al commit indicado. Permanecen MA-09..MA-10 y CP-02..CP-03/CP-05..CP-12. No implica configuración de producción, path-walk completo, listener persistente ni despliegue. Próximo paso: revisar diseño/runner e implementar MA-09/MA-10 sin ampliar el alcance a código productivo.
+
+## A-IPC-02 — MA-09/MA-10 implementados (2026-11-21)
+
+Commit `aff7eb694dbabb6725947e3f2179aef3fa566fbf` añade escenarios del handler real:
+
+- MA-09: cierre de la dirección de escritura del peer autorizado antes de enviar una petición; se exige `PEER_DISCONNECTED`, cero bytes de respuesta y ninguna petición aceptada.
+- MA-10: AF_UNIX/SOCK_STREAM y AF_INET/SOCK_STREAM son rechazados con `INVALID_REQUEST` antes de consumir un paquete ping encolado; se comprueba con `MSG_PEEK` y ausencia de respuesta.
+- La implementación fue revisada estáticamente; el propietario aún debe ejecutar el runner. No se ejecutaron pruebas/builds/workflows desde GitHub.
+- MA-01..MA-08 y CP-01/04 conservan evidencia de propietario únicamente sobre `585dd3d`. No se atribuye PASS al nuevo commit hasta recibir el resultado local.
+- CP-02/03 y CP-05..12 permanecen pendientes; global INCOMPLETE.
