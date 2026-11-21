@@ -20,7 +20,7 @@ La ruta es una propuesta, no una ruta existente confirmada ni una instrucción p
 Propiedades candidatas:
 
 - Propietario root:root.
-- Modo 0644 si solo contiene identificadores no secretos y debe ser legible por el proceso cliente root y el servicio; alternativamente root:atlas-runtime 0640 si se confirma que el servicio pertenece al grupo lector.
+- Modo candidato 0644, propietario root:root. El archivo contiene solo identificadores y rutas no secretas; ambos procesos pueden leerlo, pero solo root puede modificarlo. Evitar añadir un grupo lector al servicio si no es necesario.
 - Directorio padre root:root y no escribible por atlas-runtime ni por el cliente no privilegiado.
 - Archivo regular, no symlink, con resolución segura de todos los componentes de ruta.
 - Parseo estricto: claves conocidas, sin duplicados, sin interpolación, sin includes, sin expansión de variables, sin valores por defecto permisivos.
@@ -74,15 +74,15 @@ No aceptar UID/GID simbólicos en runtime como autoridad. El provisionamiento po
 
 ## 5. Política de UID/GID y privilegios
 
-La propuesta inicial a evaluar es:
+La propuesta inicial respaldada por el diseño de operaciones existente es:
 
 - Servicio: UID dedicado atlas-runtime, GID primario dedicado atlas-runtime.
-- Cliente: proceso administrativo root (UID 0), si la inspección del diseño real del cliente confirma que corre como root y el propietario lo aprueba.
-- Allowlist del servicio: {0} únicamente si ese cliente root es el único consumidor previsto.
+- Cliente previsto: frontend privilegiado con EUID 0. El documento docs/design/local-authority-administrative-operations-design.md §2.2 y §5.1 describe ese modelo.
+- Allowlist candidata del servicio: {0}, siempre que el cliente IPC real sea ese frontend root y no existan otros consumidores previstos.
 - Servicio sin capabilities adicionales.
 - Sin grupos suplementarios con autoridad sobre el directorio/socket salvo los estrictamente necesarios y documentados.
 
-No se da por confirmada la identidad del cliente. UID 0 no se convierte en valor definitivo por aparecer como candidato en documentos anteriores. Antes de fijar client_uids hay que identificar el proceso real que realizará connect y comprobar su UID en el contexto operativo previsto.
+El modelo documental sí identifica al frontend administrativo previsto como EUID 0; sin embargo, la inspección no encontró un cliente IPC ejecutable/entrypoint implementado que realice connect. Por ello, UID 0 es la identidad de diseño recomendada y el valor candidato de client_uids, pero su confirmación operativa exige identificar el futuro proceso cliente y comprobar su EUID en el modo de lanzamiento real. No se declara validado el par UID 0 ↔ atlas-runtime.
 
 La comprobación de UID/GID real, efectivo y saved debe ser consistente con el modo de lanzamiento elegido. No se debe imponer todavía una política de NoNewPrivileges, bounding set, seccomp o systemd sandbox sin revisar primero cómo se inicia el proceso y qué capacidades necesita. La decisión provisional es no conceder capabilities adicionales al servicio; los mecanismos concretos de hardening se diseñarán después.
 
@@ -112,8 +112,8 @@ El uso de descriptor y resolución segura protege contra sustituciones de ruta d
 
 ## 8. Decisiones aún abiertas
 
-1. Confirmar el proceso cliente concreto y su UID efectivo esperado. UID 0 es hipótesis, no decisión.
-2. Confirmar si el servicio y cliente pueden leer la misma configuración root-owned, o si se requiere configuración duplicada generada desde una fuente canónica.
+1. Identificar el entrypoint concreto que implementará el frontend privilegiado y verificar que su EUID al conectar será 0; el diseño de dominio ya prevé EUID 0, pero no existe cliente IPC ejecutable revisado.
+2. Confirmar que ambos procesos pueden leer el mismo archivo root:root 0644 sin exponer secretos (el esquema no debe contenerlos); si no, diseñar configuración duplicada desde fuente canónica.
 3. Confirmar formato de archivo y ruta definitiva tras revisar convenciones/configuración existentes del repositorio y el modelo de instalación.
 4. Definir valores definitivos de UID/GID, socket path y límites de modo.
 5. Definir política precisa de capabilities y hardening según el entrypoint real.
