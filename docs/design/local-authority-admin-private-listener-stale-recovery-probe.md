@@ -1,7 +1,7 @@
 # Plan de probe aislado A-IPC-04 — socket residual y recuperación fail-closed
 
 **Fecha:** 2026-11-21  
-**Estado:** plan de diseño; runner no implementado ni ejecutado. Requiere revisión estática antes de codificar. No autoriza herramienta de mantenimiento, listener persistente, limpieza automática ni cambios del host.  
+**Estado:** runner run_stale_recovery_probe.py implementado y revisado estáticamente en esta rama; ejecución del propietario pendiente en Atlas-VM-test. No es herramienta de mantenimiento ni autoriza listener persistente, limpieza automática o cambios del host.  
 **Rama:** `experiment/a-ipc-01-private-unix-listener-probe`  
 **Dependencias:** A-IPC-03 validado; `local-authority-admin-private-listener-stale-recovery.md`; `local-authority-admin-private-listener-path-resolution.md`; TCB-1.
 
@@ -72,14 +72,14 @@ El parser de procfs debe separarse del enumerador real para permitir pruebas det
 | SR-11 | Socket activo en namespace del inspector | No se llama connect/accept/send/recv; descriptor listener se cierra en cleanup |
 | SR-12 | Cualquier fallo/timeout/cleanup inesperado | Resultado global INCOMPLETE/FAIL, nunca PASS por omisión; sandbox cleanup acotado y auditado |
 
-SR-03 debe reportarse por separado de la cobertura determinista del parser. Si no se puede crear un segundo network namespace en la VM, el escenario real multi-namespace queda SKIP y la evidencia global no puede afirmar que esa parte fue validada.
+SR-03 se ejecuta realmente con unshare --net y un listener fixture en un namespace distinto; el proceso padre inspecciona el pathname exacto sin conectarse. Si la creación del namespace no está permitida, SR-03 queda INCOMPLETE y el resultado global no puede ser PASS.
 
 ## 6. Modelo de resultado y evidencia
 
 JSON debe registrar como mínimo:
 
 - commit exacto del checkout, kernel, Python, EUID, IDs fixture, duración y cleanup;
-- lista/identidad de namespaces descubiertos e inspeccionados, y representative PID por namespace (sin exponer datos ajenos innecesarios);
+- inventario inicial de namespaces descubiertos, identidad device/inode, PID representativo y conteo de registros; SR-03 registra además el namespace adicional real;
 - conteos de procesos vistos, namespaces deduplicados, tablas leídas y errores de enumeración;
 - pathname fixture, tipo de socket, resultado de matching y decisión (ACTIVE/ABORT/ELIGIBLE/REMOVED);
 - metadata filesystem observada y metadata revalidada (device, inode, type, UID/GID, mode);
@@ -92,16 +92,17 @@ Reglas globales:
 - SR-03 real multi-namespace en SKIP limita la conclusión: puede haber PASS de las pruebas deterministas restantes, pero overall debe ser `INCOMPLETE`;
 - el runner nunca realiza operaciones fuera de su sandbox.
 
-## 7. Preguntas que deben cerrarse antes de implementar
+## 7. Resolución de las preguntas previas a la implementación
 
-1. ¿Qué errores de `/proc` son carreras reintentables por desaparición de PID y cuáles obligan a abort inmediato?
-2. ¿Cómo se demuestra la cobertura del conjunto de procesos/namespaces visible bajo el montaje procfs de la VM, y qué limitación se documenta si hay hidepid/PID namespace?
-3. ¿Qué parser exacto del formato `/proc/<pid>/net/unix` se valida en Debian 13/kernel 6.12.117?
-4. ¿La creación de un segundo network namespace está permitida en la VM? Si no, SR-03 debe permanecer SKIP e impedir una conclusión global completa.
-5. ¿Cómo se vincula el token de aprobación de fixture a una sola identidad observada sin crear una herramienta de mantenimiento reutilizable?
+Las decisiones siguientes están incorporadas en el runner. Son decisiones del harness experimental, no una política productiva aprobada.
 
-No comenzar el runner hasta revisar estas preguntas y el alcance de los resultados.
+1. **Carreras de PID:** ENOENT, ESRCH y ENOTDIR al inspeccionar un PID se tratan como desaparición/carrera y provocan un reintento completo, limitado a tres intentos. Si la vista PID/namespace cambia entre snapshots, también se reintenta. Si persiste, se aborta. EACCES, EPERM, errores de lectura, procfs no disponible y errores de parsing abortan inmediatamente como cobertura incompleta.
+2. **Alcance de procfs:** el runner identifica el montaje /proc, rechaza hidepid, compara el PID namespace del inspector con el de PID 1 y enumera todos los PID numéricos visibles. El alcance declarado es exclusivamente la vista accesible desde ese montaje/PID namespace; no se afirma cobertura host-wide ni visibilidad de namespaces sin procesos visibles. La enumeración se compara en tres snapshots estables, pero no es una operación atómica frente a creación concurrente de procesos. El procedimiento de mantenimiento requiere una ventana controlada y autoridad confiable para evitar esa carrera.
+3. **Parser:** exige el encabezado exacto Num RefCount Protocol Flags Type St Inode Path; acepta filas con siete campos (sin pathname) u ocho (pathname preservado como último campo), valida seis campos hexadecimales y el inode decimal. Solo Type=0005 (SOCK_SEQPACKET) y pathname exacto bloquean. No compara el inode de procfs con el inode filesystem. El runner limita cada tabla a 4 MiB.
+4. **Segundo network namespace:** la VM permitió unshare --net true y el propietario confirmó una tabla AF_UNIX visible solo en el namespace del listener. SR-03 ahora crea un listener fixture real en un namespace adicional y exige detectarlo desde el inventario procfs del proceso padre. La ejecución del runner sigue pendiente.
+5. **Token de aprobación:** SR-10 usa un dataclass inmutable de fixture ligado al pathname y a st_dev, st_ino, tipo, UID, GID y modo observados. El challenge es una constante exclusiva del escenario. No es aprobación humana real, no es una API reutilizable y no autoriza mantenimiento fuera del sandbox.
 
+El runner está implementado y revisado estáticamente; no se ejecutó desde GitHub. Las decisiones anteriores deberán revisarse si la ejecución del propietario descubre diferencias del formato procfs o del comportamiento del kernel.
 ## 8. No objetivos
 
 - No implementar recuperación automática al iniciar el servicio.
