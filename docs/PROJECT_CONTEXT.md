@@ -1,6 +1,6 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-21 (A-IPC-02 completo: propietario ejecutó checkout 66b348e en Atlas-VM-test; MA-01..MA-10 y CP-01..CP-12 PASS, overall PASS, 0 SKIP/FAIL. CP-12 confirmó rechazo de RLIMIT heredado 32/32 sin elevarlo ni crear socket).
+> **Última actualización:** 2026-11-21 (A-IPC-02 completo: propietario ejecutó checkout 66b348e en Atlas-VM-test; MA-01..MA-10 y CP-01..CP-12 PASS. A-IPC-03/A-THREAT-06: plan y runner PR-01..PR-12 implementados y revisados estáticamente en GitHub; ejecución del propietario pendiente).
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
@@ -22,12 +22,12 @@
 - **Resolución de rutas:** `docs/design/local-authority-admin-private-listener-path-resolution.md` define recorrido desde `/` por descriptores y validación de cada componente. Bajo TCB-1, el baseline es bind al pathname absoluto canónico después de verificar que UIDs externos no pueden escribir en ningún ancestro. El bind no es dirfd-atómico. La técnica procfs queda como alternativa experimental, no baseline.
 - **A-THREAT-04:** ventana TOCTOU de unlink aceptada como residual bajo TCB-1 solo con directorio privado, instancia única y revalidación por descriptor; unlink no es atómico.
 - **A-THREAT-05:** procedimiento manual candidato publicado en `local-authority-admin-private-listener-stale-recovery.md`; falta validarlo en sandbox. Startup siempre falla cerrado ante pathname existente y nunca intenta stale cleanup ni usa connect como detector.
-- **A-THREAT-06:** especificación de resolución publicada; falta probe aislado de symlinks, sustitución de ancestros, colisiones y connect canónico.
+- **A-THREAT-06:** especificación y plan de probe publicados; runner A-IPC-03 implementa PR-01..PR-12 para path-walk desde `/`, symlinks, ownership/modos, config vía parent dirfd, descriptor anchoring y DAC. Revisión estática en GitHub; pendiente ejecución del propietario en `Atlas-VM-test`. No incluye bind/connect ni resuelve colisiones/stale recovery.
 - **A-THREAT-07:** perfil experimental: 4 workers, `listen(8)`, cola 0, read/write 5 s, deadline global 15 s y `RLIMIT_NOFILE=64`. CP-01..CP-12 validados por el propietario en checkout `66b348e`. AF_UNIX admite 9 pendientes y la décima recibe EAGAIN en el kernel probado. El perfil sigue siendo evidencia del harness, no configuración de producción.
 - **A-THREAT-08:** máquina de estados de readiness/shutdown, drenaje, deadlines y ownership de FDs pendiente.
 - **A-THREAT-09:** A09 usó runner UID 1000 y peer UID 1001; no valida cliente UID 0, servicio `atlas-runtime` ni permisos finales del despliegue.
-- **Próximo paso:** A-IPC-02 está completo en el alcance del harness. La siguiente etapa debe ser revisión de resultados y planificación de los probes aún pendientes de resolución segura de rutas, colisiones/stale recovery y lifecycle; no implementar listener productivo por inferencia de este PASS.
-- **Estado de cambios:** MA-01..MA-10 y CP-01..CP-12 validados por el propietario en checkout `66b348e`. No se modificó handler productivo, contrato, runtime, SQLite, `main` ni host. No se ejecutaron pruebas/builds/workflows desde GitHub. No se creó PR ni se aprobó listener persistente o despliegue.
+- **Próximo paso:** actualizar `Atlas-VM-test` a la punta de `experiment/a-ipc-01-private-unix-listener-probe` y ejecutar A-IPC-03 PR-01..PR-12 según `tests/integration/private_unix_listener/README.md`. Revisar el JSON antes de diseñar A-THREAT-05 stale/collision y A-THREAT-08 lifecycle. No implementar listener productivo por inferencia de PASS experimentales.
+- **Estado de cambios:** MA-01..MA-10 y CP-01..CP-12 validados por el propietario en checkout `66b348e`; A-IPC-03 implementado en harness y pendiente de validación. No se modificó handler productivo, contrato, runtime, SQLite, `main` ni host. No se ejecutaron pruebas/builds/workflows desde GitHub. No se creó PR ni se aprobó listener persistente o despliegue.
 
 **Límites vigentes:** A-IPC-01 valida únicamente los escenarios experimentales ejecutados en el commit/entorno indicados. No demuestra protección frente a root/capabilities suficientes ni procesos maliciosos del mismo UID; no valida separación de privilegios, system-manager, listener persistente, daemon, integración systemd, acceso/autorización SQLite ni operaciones mutantes. No autoriza cambios del host, usuarios, grupos, permisos, privilegios, servicios, provisioning o despliegue.
 
