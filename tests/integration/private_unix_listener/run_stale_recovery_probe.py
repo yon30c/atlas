@@ -282,23 +282,68 @@ def _matches(snapshot: NamespaceSnapshot, pathname: str) -> bool:
     return False
 
 
-def _listener_diagnostics(snapshot: NamespaceSnapshot, pathname: str) -> dict:
-    """Bounded evidence for a failed active-listener lookup; never affects classification."""
+def _listener_diagnostics(
+    snapshot: NamespaceSnapshot, pathname: str, listener: socket.socket
+) -> dict:
+    """Bounded procfs evidence for a failed lookup; never affects classification."""
     basename = os.path.basename(pathname)
+    socket_inode = os.fstat(listener.fileno()).st_ino
     candidates = []
     for namespace, raw in snapshot.tables:
         for row in _parse_unix_table(raw):
             row_path = row["path"]
-            if row_path and (basename in row_path or row_path.startswith("/run/atlas-aipc04-")):
+            if row_path and (
+                basename in row_path
+                or row_path.startswith("/run/atlas-aipc04-")
+                or row["inode"] == socket_inode
+            ):
                 candidates.append({
                     "namespace": namespace,
                     "path": row_path,
                     "type": row["type"],
                     "inode": row["inode"],
+                    "socket_inode_match": row["inode"] == socket_inode,
                 })
                 if len(candidates) == 12:
-                    return {"expected_path": pathname, "candidate_rows": candidates}
-    return {"expected_path": pathname, "candidate_rows": candidates}
+                    break
+        if len(candidates) == 12:
+            break
+
+    try:
+        own_namespace = os.readlink("/proc/self/ns/net")
+        with open("/proc/self/net/unix", "rb", buffering=0) as stream:
+            own_raw = stream.read(4 * 1024 * 1024 + 1)
+        if len(own_raw) > 4 * 1024 * 1024:
+            raise CoverageError("own namespace unix table exceeds 4 MiB")
+        own_rows = _parse_unix_table(own_raw)
+        own_matches = [
+            {
+                "path": row["path"],
+                "type": row["type"],
+                "inode": row["inode"],
+                "socket_inode_match": row["inode"] == socket_inode,
+            }
+            for row in own_rows
+            if row["path"] == pathname
+            or row["inode"] == socket_inode
+            or (row["path"] and row["path"].startswith("/run/atlas-aipc04-"))
+        ][:12]
+        own_table_error = None
+    except (OSError, CoverageError) as exc:
+        own_namespace = None
+        own_matches = []
+        own_table_error = f"{type(exc).__name__}: {exc}"
+
+    return {
+        "expected_path": pathname,
+        "listener_fd_inode": socket_inode,
+        "inspector_pid": os.getpid(),
+        "inspector_network_namespace": own_namespace,
+        "snapshot_namespace_identities": [item["identity"] for item in snapshot.namespaces],
+        "candidate_rows": candidates,
+        "direct_own_namespace_rows": own_matches,
+        "direct_own_namespace_error": own_table_error,
+    }
 
 
 def _identity_at(parent_fd: int, name: str) -> FsIdentity:
@@ -361,7 +406,7 @@ def _scenario_01_active_local(sandbox: Path, uid: int, gid: int) -> dict:
         if not matched:
             raise ProbeFailure(
                 "SR-01 active pathname absent from visible namespace tables; "
-                f"diagnostics={_listener_diagnostics(snapshot, path)!r}"
+                f"diagnostics={_listener_diagnostics(snapshot, path, listener)!r}"
             )
         return {
             "decision": "ABORT_ACTIVE_OR_POSSIBLY_ACTIVE",
