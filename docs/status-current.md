@@ -1,6 +1,6 @@
 # Estado vigente de Atlas
 
-> **Corte documental:** 21 de noviembre de 2026. A-IPC-01 reportado 16/16 PASS. A-IPC-02: propietario ejecutó checkout `66b348e` en `Atlas-VM-test`; MA-01..MA-10 y CP-01..CP-12 PASS, overall PASS, 0 SKIP/FAIL. A-IPC-03 (A-THREAT-06): PR-01..PR-12 PASS en `b200c292`, propietario validó en `Atlas-VM-test`; cleanup confirmado. A-IPC-04: tercera ejecución en `f10cda0` = 10 PASS / 2 FAIL; SR-01 sin filas procfs incluso en lectura directa y SR-11 con defecto de llamada diagnóstica, corregido estáticamente en `8a89bc9` pendiente de reejecución. A-THREAT-05 sigue abierta. CP-12 rechazó RLIMIT heredado 32/32 sin elevarlo ni crear socket. Evidencias A-IPC-02 y A-IPC-03 al final de este documento.
+> **Corte documental:** 21 de noviembre de 2026. A-IPC-01 reportado 16/16 PASS. A-IPC-02: propietario ejecutó checkout `66b348e` en `Atlas-VM-test`; MA-01..MA-10 y CP-01..CP-12 PASS, overall PASS, 0 SKIP/FAIL. A-IPC-03 (A-THREAT-06): PR-01..PR-12 PASS en `b200c292`, propietario validó en `Atlas-VM-test`; cleanup confirmado. A-IPC-04: cuarta ejecución en `e46070e` = 10 PASS / 2 FAIL; SR-01/SR-11 no encuentran los listeners locales ni en lectura directa de procfs; SR-11 ya produce fallo sustantivo. Diagnóstico ampliado en `a3e2d3d`, pendiente de reejecución. A-THREAT-05 sigue abierta. CP-12 rechazó RLIMIT heredado 32/32 sin elevarlo ni crear socket. Evidencias A-IPC-02 y A-IPC-03 al final de este documento.
 > **Main:** permanece en HEAD `1bd73d149dbd98e7ee2e5fdc36880883b6b03d16`; PR #29 está integrado. La suite reportada para el HEAD de código de PR #29 fue 1,590 tests, `OK (skipped=1)`; no se ha reportado una nueva ejecución sobre el merge HEAD.
 > **Rama activa de diseño:** `experiment/a-ipc-01-private-unix-listener-probe`. Se mantiene separada de `main`; no tiene PR propio. PR #30 sigue abierto en Draft y corresponde a la rama de diseño original.
 > **Estado IPC:** el handler procesa conexiones ya aceptadas; solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
@@ -928,3 +928,16 @@ El propietario ejecutó el commit `f10cda09aec5cb0b9d42ab50f3bb9f6617dc8fda` en 
 - No se llamó connect para comprobar liveness. La limpieza del sandbox privado se completó.
 
 Corrección posterior: commit `8a89bc9f66829886164ed4fe93fd7af232a18f01` pasa el objeto `listener` a `_listener_diagnostics` en SR-11. Es una corrección de diagnóstico, aún no ejecutada por el propietario. SR-01 permanece sin resolver; **A-IPC-04 no está validado y A-THREAT-05 sigue abierta**. No clasificar ausencia de filas como stale ni ejecutar unlink. Próximo paso: revisar la semántica de visibilidad/inode de AF_UNIX en procfs y después repetir el runner corregido solo en `Atlas-VM-test`. Nunca en `greed`.
+
+## A-IPC-04 — cuarta ejecución del propietario y diagnóstico ampliado (2026-11-21)
+
+El propietario ejecutó `e46070e6e1824b06af04a3627feb0f658de9c1f8` en `Atlas-VM-test`: **10 PASS / 2 FAIL / 0 INCOMPLETE**; 204 procesos visibles; seis namespaces en el inventario inicial y siete durante SR-03; cleanup confirmado.
+
+- SR-01 y SR-11 fallaron ambos porque los listeners locales activos no aparecieron en las tablas visibles. La lectura directa de `/proc/self/net/unix` tampoco encontró filas candidatas ni coincidencias por inode, sin error de lectura. Los inodes de FD fueron `39726` y `40202` respectivamente.
+- SR-11 ya no falla por el `TypeError`; produce el mismo fallo sustantivo de detección que SR-01.
+- SR-02..SR-10 y SR-12: PASS. SR-03 detectó de nuevo el listener en namespace adicional; los abortos por cobertura incompleta y la protección de identidad/token siguen pasando.
+- No se llamó connect para probar liveness. El sandbox privado fue eliminado.
+
+La fuente del kernel revisada muestra que la interfaz procfs de AF_UNIX enumera sockets y expone inode/path; la discrepancia requiere diagnóstico adicional, no una relajación del matching. Commit `a3e2d3dcb24842c4ae842f1d8082b4a2dbade374` amplía los diagnósticos de SR-01/SR-11 con FD target, `getsockname()`, `SO_TYPE`, `SO_ACCEPTCONN`, recuento y filas completas (acotadas a 64) de la tabla local. Es un cambio de diagnóstico, no ejecutado aún por el propietario.
+
+**Estado:** A-IPC-04 no validado; A-THREAT-05 abierta. La ausencia de filas no clasifica un socket como stale y no autoriza unlink. Repetir solo en `Atlas-VM-test`, nunca en `greed`. Sin limpieza automática, listener persistente ni despliegue.
