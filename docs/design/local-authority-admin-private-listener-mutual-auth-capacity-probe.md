@@ -1,7 +1,7 @@
 # Plan de probe aislado — autenticación mutua y capacidad IPC
 
 **Fecha:** 2026-11-21  
-**Estado:** primera iteración ejecutada por el propietario en VM desechable sobre `fbc8c68e75c7d5d32768442666cf861f7880eb28`: MA-01, MA-02, MA-04, MA-05, CP-01 y CP-04 PASS; global INCOMPLETE por cobertura pendiente. MA-03 se añadió después en `7a0d4f1` y está pendiente de ejecución. El plan completo sigue parcialmente implementado.  
+**Estado (2026-11-21):** el propietario reportó en `Atlas-VM-test` MA-01..MA-10 y CP-01/CP-04 PASS; global INCOMPLETE porque CP-02/CP-03 y CP-05..CP-12 siguen pendientes. Último checkout actualizado a `901c792cb723d920da4970ecce98ea7f871c4f85`; el JSON del runner informó `commit: null`, por lo que el SHA se asocia al fast-forward inmediatamente anterior y no al campo de reporte. El plan completo sigue parcialmente implementado.  
 **Rama:** experiment/a-ipc-01-private-unix-listener-probe  
 **Decisiones:** TCB-1; frontend EUID 0; client_uids={0}; perfil de capacidad inicial aprobado por el propietario.  
 **Dependencias:** contrato atlas-admin/1, handler IPC, configuración confiable, resolución de rutas, stale recovery y lifecycle.
@@ -274,3 +274,49 @@ Commit `f41df94d0f87d288bfc7e3df45c66295fa19d570` amplía el runner:
 - Evidencia previa MA-01..MA-08 y CP-01/04 pertenece solo al commit `585dd3d979bc1b800550e4b9c79c382b22cf1f6c`; no atribuirla al commit nuevo sin repetir ejecución.
 
 Siguiente paso: actualizar la VM desechable al commit nuevo y ejecutar el runner completo. Después, revisar el JSON antes de abordar la saturación exacta del backlog (CP-02/03).
+
+
+## 9.5 Evidencia del propietario — MA-01..MA-10 y CP-01/CP-04 (2026-11-21)
+
+El propietario ejecutó el runner directamente como EUID 0 en la VM desechable
+`Atlas-VM-test`, Debian 13, kernel `6.12.117+deb13-amd64`, Python
+`3.13.5`, con SERVICE fixture UID/GID `2005/2005` y OTHER fixture
+UID/GID `2006/2006`. La ejecución duró `1.687 s`.
+
+El checkout se actualizó mediante fast-forward de `991f91e` a
+`901c792cb723d920da4970ecce98ea7f871c4f85` inmediatamente antes de la
+ejecución. El JSON devolvió `commit: null`; por tanto, el SHA se registra
+como el checkout actualizado según la salida de `git pull`, no como un
+valor confirmado por el propio runner.
+
+- **MA-01..MA-06: PASS.** Se observó autenticación del cliente EUID 0 frente
+  al servicio UID 2005; rechazo del servidor UID 2006 antes de enviar bytes;
+  rechazo del cliente UID 2006 antes de que el servidor lea o responda;
+  rechazo de cliente EUID 2006 antes de connect; y rechazo
+  `INVALID_REQUEST` de claims falsos UID/GID/PID, conservando UID 0 obtenido
+  del kernel.
+- **MA-07: PASS.** Configuración fixture válida aceptada y 11 casos inválidos
+  rechazados.
+- **MA-08: PASS.** El snapshot congelado conservó
+  `/run/atlas/admin.sock` después del reemplazo atómico del archivo por una
+  configuración con `/run/atlas/changed.sock`.
+- **MA-09: PASS.** El peer AF_UNIX/SOCK_SEQPACKET autorizado cerró su
+  dirección de escritura antes de enviar solicitud; el handler produjo
+  `PEER_DISCONNECTED`, no aceptó una solicitud y no emitió respuesta.
+- **MA-10: PASS.** AF_UNIX/SOCK_STREAM y AF_INET/SOCK_STREAM fueron
+  rechazados con `INVALID_REQUEST` antes de leer. En ambos casos el primer
+  byte permaneció encolado según `MSG_PEEK`, con cero bytes de respuesta.
+- **CP-01/CP-04: PASS.** Máximo observado de workers activos: 4;
+  `active_after_recovery=0`.
+- Backlog kernel 8 configurado, pero no se probó saturación exacta.
+- Cleanup: sandboxes privado y de traversal bajo `/run` eliminados después
+  de finalizar los procesos hijos.
+- Resultado global: **INCOMPLETE**, sin filas FAIL. Permanecen pendientes
+  saturación exacta del backlog, adversarios de deadlines read/write/global,
+  recuperación de excepciones, límites de payload/profundidad JSON y
+  contabilidad completa de FDs (CP-02/CP-03 y CP-05..CP-12).
+
+Esta evidencia es del harness experimental y no valida un listener
+persistente, configuración productiva, resolución de rutas, stale recovery,
+systemd, SQLite, lifecycle ni despliegue. No aprueba un transporte de
+producción. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub.
