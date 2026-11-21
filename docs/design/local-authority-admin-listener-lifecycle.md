@@ -194,3 +194,12 @@ El informe complementario [Revisión estática del modelo de amenazas](local-aut
 - No se ha probado el par de identidades candidato UID 0 ↔ `atlas-runtime`, ni el hardening del proceso de servicio.
 
 **Puerta actual:** continuar diseño de frontera de confianza y autenticación mutua, sin código. No implementar listener persistente hasta cerrar los hallazgos bloqueantes A-THREAT-01 a A-THREAT-05 y fijar criterios de aceptación para los restantes.
+
+
+## Diseño complementario de frontera de confianza — 2026-11-21
+
+Se publicó [Frontera de confianza y autenticación mutua — alternativa A](local-authority-admin-private-listener-trust-boundary.md). El documento propone TCB-1 (todos los procesos bajo atlas-runtime forman un único dominio confiable) y verificación de UID del peer por SO_PEERCRED en ambos extremos. La propuesta no está aprobada: si el propietario requiere resistir procesos hostiles con el mismo UID, TCB-1 no satisface el requisito y se necesita una frontera adicional.
+
+La allowlist del servidor sigue siendo configuración local confiable, inmutable y aún no conectada al listener. El UID 0 del cliente y el UID/GID de atlas-runtime continúan como candidatos, no valores de despliegue aprobados. La consulta SO_PEERCRED del lado cliente tampoco está implementada ni probada.
+
+**Puerta vigente:** obtener decisión explícita del propietario sobre TCB-1/TCB-2 y la identidad real del cliente; luego especificar la fuente de configuración confiable y el probe de autenticación mutua. No modificar código, host, cuentas, permisos ni servicios en esta fase.
