@@ -646,3 +646,10 @@ Runner commit: fbd4512d163b31e53b355280e636fb47cf8d66a9. CP-07 inyecta una Runti
 El propietario ejecutó el runner d054f95 en Atlas-VM-test: MA-01..MA-10 y CP-01..CP-06 PASS; CP-07 abortó porque el colector Server._record clasificó el evento worker_error deliberadamente inyectado como fatal. No se alcanzaron las comprobaciones de EOF, liberación de slot ni segunda petición; resultado overall=FAIL, CP-07 sigue sin validar.
 
 Corrección del runner en c1fdcc12eb3d7a0fcb6cccccb8eb07b0028dcb40: se permite consumir exactamente el RuntimeError previsto solo en el servidor CP-07; cualquier otro worker_error continúa siendo fatal. Siguiente paso: actualizar Atlas-VM-test a este commit y repetir el runner completo. Solo VM desechable; no usar greed. No se ejecutaron pruebas, builds ni workflows desde GitHub.
+
+
+## A-IPC-02 — CP-07 segunda ejecución y corrección del reset
+
+En commit ccfc495e4bcbe0adc9283f75bee1823d5338451b, MA-01..MA-10 y CP-01..CP-06 volvieron a PASS; CP-07 falló con ECONNRESET. El worker fixture lanzaba la excepción sin consumir el registro SOCK_SEQPACKET enviado por el cliente. El cierre con datos pendientes puede producir reset en vez de EOF; CP-07 no está validado.
+
+Runner corregido en 1df8385f3783308636ccd9538d4c1033fd05be33: CP-07 consume el paquete desencadenante antes de inyectar RuntimeError, para que el cierre pueda probar EOF ordenado y cero bytes de respuesta. La aserción de recuperación permanece intacta. Siguiente paso: actualizar y repetir el runner completo solo en Atlas-VM-test desechable. No ejecutar en greed. No se ejecutaron pruebas, builds ni workflows.
