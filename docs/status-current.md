@@ -1,6 +1,6 @@
 # Estado vigente de Atlas
 
-> **Corte documental:** 21 de noviembre de 2026. A-IPC-01 reportado 16/16 PASS. A-IPC-02: propietario validó MA-01..MA-10 y CP-01..CP-07 en `077e01b`; CP-07 confirmó excepción aislada, EOF/0 bytes, slot liberado y recuperación con ping OK. CP-08/09 implementados en `fe7343f`, pendientes de ejecución local; CP-10..CP-12 pendientes. Overall INCOMPLETE.
+> **Corte documental:** 21 de noviembre de 2026. A-IPC-01 reportado 16/16 PASS. A-IPC-02: propietario validó MA-01..MA-10 y CP-01..CP-09 en `caf7bbb`; CP-08/09 confirmaron límites de payload/profundidad. CP-10 implementado en `bf3c623`, pendiente de ejecución; CP-11/12 pendientes. Overall INCOMPLETE.
 > **Main:** permanece en HEAD `1bd73d149dbd98e7ee2e5fdc36880883b6b03d16`; PR #29 está integrado. La suite reportada para el HEAD de código de PR #29 fue 1,590 tests, `OK (skipped=1)`; no se ha reportado una nueva ejecución sobre el merge HEAD.
 > **Rama activa de diseño:** `experiment/a-ipc-01-private-unix-listener-probe`. Se mantiene separada de `main`; no tiene PR propio. PR #30 sigue abierto en Draft y corresponde a la rama de diseño original.
 > **Estado IPC:** el handler procesa conexiones ya aceptadas; solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
@@ -692,3 +692,34 @@ esta rama y ejecutar el runner completo como root solo dentro de esa VM
 desechable. Nunca en `greed` de producción. No se modifica handler,
 contrato, `main`, host, cuentas, servicios ni SQLite; no se autoriza
 listener persistente ni despliegue.
+
+## A-IPC-02 — CP-08/CP-09 validados; CP-10 implementado (2026-11-21)
+
+El propietario ejecutó `caf7bbb8c83388a3723b66a7f4060a01c97c171d`
+en `Atlas-VM-test` (Debian 13, kernel `6.12.117+deb13-amd64`,
+Python 3.13.5, EUID 0; SERVICE 2005/2005, OTHER 2006/2006):
+
+- MA-01..MA-10 y CP-01..CP-09: PASS.
+- CP-08: 16 KiB exactos alcanzaron schema validation; 16 KiB+1 fue
+  `REQUEST_TOO_LARGE`; paquete superior al buffer fue
+  `MESSAGE_TRUNCATED` sin respuesta. Response exacto 64 KiB íntegro;
+  64 KiB+1 rechazado antes de enviar bytes.
+- CP-09: profundidad JSON total 16 llegó a schema validation; profundidad
+  17 produjo `INVALID_JSON`.
+- CP-05/06/07, backlog y autenticación mutua continuaron PASS.
+- Cleanup correcto; duración 22.678 s; global INCOMPLETE porque CP-10..12
+  aún no estaban en el commit ejecutado.
+
+CP-10 fue añadido al runner en `e02bbbb7e3eacb45fbeab620d00cf0463e1c827e`
+y corregido estáticamente en `bf3c62375fd8a3017b332efe406be9d1fd903568`.
+Mide FDs y threads del proceso fixture mediante procfs en baseline, máxima
+carga (4 workers + 9 conexiones pendientes) y recuperación. Exige FD count
+no superior a 64, 4 threads worker + principal (máximo 5), RLIMIT_NOFILE
+soft/hard 64/64, active=0 tras drenar y proceso servidor vivo.
+
+**CP-10 implementado y revisado estáticamente; pendiente de ejecución local.**
+CP-11/12 siguen pendientes: ciclos repetidos de saturación/recuperación y
+rechazo de startup con RLIMIT_NOFILE insuficiente sin elevarlo. El runner
+no cambia el handler ni la configuración del host. No se ejecutaron pruebas,
+builds ni workflows desde GitHub. Próximo paso: actualizar y ejecutar solo
+en `Atlas-VM-test` desechable; nunca en `greed` producción.
