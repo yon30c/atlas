@@ -403,7 +403,7 @@ El propietario informó que el cambio temporal de `authorized_keys` conservó `f
 
 **Diseño publicado:** `docs/design/local-authority-admin-private-listener-path-resolution.md` especifica recorrido de todos los componentes desde `/` con descriptores, `openat`/`dir_fd`, `O_DIRECTORY|O_NOFOLLOW`, validación de cada directorio y lectura de configuración desde descriptor. A-THREAT-06 tiene especificación completa a nivel de diseño: bajo TCB-1, el baseline es bind al pathname absoluto canónico después de validar toda la cadena y demostrar que UIDs externos no pueden escribir en ningún ancestro. El bind no es dirfd-atómico; root y `atlas-runtime` son TCB. El patrón procfs queda opcional, no baseline. Cleanup con `unlinkat` conserva ventana TOCTOU, aceptada bajo las mismas condiciones de exclusividad y listener de instancia única.
 
-**Próximos bloqueos:** (1) probe aislado del recorrido de rutas y bind canónico con colisiones/symlinks; (2) validar el procedimiento de recuperación manual stale (A-THREAT-05); (3) definir límites reales de conexiones/FDs/deadlines (A-THREAT-07); (4) implementar/revisar el entrypoint cliente con EUID 0 y el probe de autenticación mutua. No se modifica código ni contrato. No se ejecutaron pruebas, compilaciones ni workflows; no hubo cambios en Debian/host, `main` ni PR.
+**Bloqueos vigentes tras A-IPC-04:** (1) completar A-THREAT-05: demostrar parada/exclusividad del servicio y ausencia de listener FDs heredados o transferidos; (2) definir límites de lifecycle/readiness/shutdown (A-THREAT-08); (3) implementar/revisar el entrypoint cliente EUID 0 y su integración de autenticación mutua. A-IPC-04 ya validó el harness, pero no un procedimiento operativo de recuperación. No se modifica código ni contrato normativo.
 
 
 ### Candidato técnico para resolver bind/pathname
@@ -415,7 +415,7 @@ La investigación encontró un patrón Linux procfs usado por `sockat` para bind
 
 Se publicó `docs/design/local-authority-admin-private-listener-stale-recovery.md` con un procedimiento de mantenimiento separado: detener servicio, confirmar que no quedan procesos/FDs del listener, inspeccionar las tablas AF_UNIX de los network namespaces visibles (`/proc/<pid>/net/unix`), validar tipo/owner/mode/inode mediante descriptor de directorio, pedir autorización específica y retirar solo el objeto exacto con `unlinkat`. Ante cualquier duda, se conserva el socket. No se conecta para probar si está vivo.
 
-A-THREAT-05 sigue abierto hasta validar la enumeración de namespaces y la retirada exacta en sandbox. Se presupone pathname canónico absoluto como baseline y cliente/servicio en el mismo network namespace; no heredar ni pasar el FD listener. La alternativa procfs queda experimental porque cambia la ruta reportada y complica diagnóstico stale.
+A-IPC-04 validado por el propietario: SR-01..SR-12, 12/12 PASS, commit `375fb00a3fee230a57f89ffa7897a29309ff1dd2`. La prueba unitaria del lector procfs fue reportada PASS inmediatamente antes del probe; el SHA de esa ejecución no está confirmado. La evidencia valida el harness, no una operación real. A-THREAT-05 sigue abierta por alcance limitado al procfs/PID namespace visible, falta de snapshot atómico, necesidad de probar ausencia de FD heredado/transferido y ventana TOCTOU. El baseline sigue siendo pathname canónico; no heredar ni pasar el FD listener. La alternativa procfs queda experimental.
 
 
 ## A-THREAT-07 — presupuesto de recursos aprobado para probes (2026-11-21)
