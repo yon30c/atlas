@@ -775,7 +775,7 @@ def _finish_a09_ssh(
         raise ProbeFailure(f"A09 SSH helper returned invalid JSON: {exc}") from exc
     if not isinstance(report, dict):
         raise ProbeFailure("A09 SSH helper result is not a JSON object")
-    if not stdout.endswith(b"\\n") or stdout.count(b"\\n") != 1:
+    if not stdout.endswith(b"\n") or stdout.count(b"\n") != 1:
         raise ProbeFailure("A09 SSH helper output must be exactly one newline-terminated JSON record")
     if report.get("nonce") != outcome["nonce"]:
         raise ProbeFailure("A09 SSH helper nonce mismatch")
