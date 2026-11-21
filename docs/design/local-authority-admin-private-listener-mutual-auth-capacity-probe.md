@@ -166,3 +166,34 @@ No inferir PASS de MA-03 ni completar cobertura por extrapolación.
 - No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. El propietario ejecutó parcialmente el runner en la VM indicada en §9.1; el commit posterior con MA-03 está pendiente de validación local.
 - No se crearon cuentas, grupos, archivos de configuración del host, sockets persistentes ni servicios.
 - No se autorizó despliegue, acceso SQLite, cambios de privilegios ni producción.
+
+
+## 9.2 Actualización de validación y MA-06 — 2026-11-21
+
+El propietario ejecutó el runner en `Atlas-VM-test`, Debian 13,
+kernel `6.12.117+deb13-amd64`, Python 3.13.5, EUID 0, fixtures
+SERVICE 2005/2005 y OTHER 2006/2006, sobre commit
+`069dbb9520f9e640955d9122f3a8012b2f55ba1a`.
+
+- MA-01 a MA-05: PASS.
+- MA-03 observó EUID cliente 2006, `connect_attempted=false` y
+  `server_observed_connection=false`.
+- CP-01 y CP-04: PASS; máximo de workers activos 4 y recuperación a 0.
+- Backlog 8 configurado, no saturado.
+- Global INCOMPLETE; 1.339 s; cleanup de ambos sandboxes `/run` completado.
+- Sin filas FAIL.
+
+Esta evidencia pertenece únicamente a `069dbb9`. Después se implementó
+MA-06 en `9a8380e`, todavía pendiente de ejecución por el propietario.
+
+**MA-06:** el fixture construye un envelope ping válido con campos top-level
+adicionales `uid`, `gid` y `pid` que pretenden declarar identidad. El
+servidor obtiene primero SO_PEERCRED del kernel y el decoder estricto debe
+rechazar el envelope con `INVALID_REQUEST`; la observación de peer UID debe
+seguir procediendo del kernel, no de esos campos. Esto valida el rechazo de
+claims añadidos al protocolo, no resistencia frente a root comprometido ni
+frente al kernel.
+
+El runner permanece INCOMPLETE. MA-06 está implementado pero no validado;
+no atribuirle PASS hasta recibir el JSON de una ejecución local del commit
+`9a8380e` o posterior que contenga el cambio.
