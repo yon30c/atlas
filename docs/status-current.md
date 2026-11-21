@@ -216,3 +216,16 @@ El experimento evaluará la alternativa A: creación del endpoint AF_UNIX/SOCK_S
 **Exclusiones:** no listener persistente, daemon, systemd, SQLite, operaciones administrativas, cambios del host ni despliegue. No existe todavía comando de ejecución. La validación queda a cargo del propietario en Debian una vez implementado y revisado el probe.
 
 La rama `design/isolated-private-unix-listener-probe` se creó desde `main`. No se modificó `main`, no se abrió PR y no se ejecutaron pruebas ni workflows remotos.
+
+
+### Decisión del propietario — A-IPC-01
+
+El propietario aceptó avanzar con el diseño del probe A-IPC-01. El documento de diseño fue revisado y queda como base para preparar su implementación experimental en una rama separada.
+
+- Directorio temporal privado: modo exacto `0700`; socket: modo exacto `0600`.
+- Se añadió el escenario de carrera de dos binds simultáneos: exactamente un ganador y ningún daño al endpoint ganador.
+- La implementación futura seguirá siendo opt-in, sin privilegios y limitada al sandbox temporal del ejecutor.
+- Esta aceptación no selecciona A como transporte de producción ni autoriza listener persistente, daemon, systemd, SQLite, operaciones administrativas, cambios del host o despliegue.
+- No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. La validación del probe corresponderá al propietario en Debian después de revisar y publicar la implementación.
+
+**Siguiente paso:** preparar la implementación aislada del probe A-IPC-01, sin modificar el handler ni el runtime de Atlas.
