@@ -1,7 +1,7 @@
 # Probe aislado A-IPC-03 — resolución segura de rutas
 
 **Fecha:** 2026-11-21  
-**Estado:** plan y runner A-IPC-03 implementados (PR-01..PR-12); revisión estática en GitHub completada. Ejecución y validación del propietario pendientes. No autoriza listener persistente, cambios del host ni despliegue.  
+**Estado:** propietario validó A-IPC-03 en `b200c292ac0602593c8dbefafb1bd71b79001b06`: PR-01..PR-12 PASS, 0 fallos, cleanup confirmado en `Atlas-VM-test` (Debian 13, kernel 6.12.117, Python 3.13.5). Evidencia limitada a fixtures; no autoriza listener persistente, cambios del host ni despliegue.  
 **Rama:** `experiment/a-ipc-01-private-unix-listener-probe`  
 **Dependencias:** A-IPC-02 completo; `local-authority-admin-private-listener-path-resolution.md`; parser fixture `probe_config.py`.
 
@@ -68,3 +68,14 @@ PR-11 prueba semántica de descriptor-relative access; no afirma que el recorrid
 Fuera de alcance: configuración real `/etc/atlas/admin-ipc.conf`, creación de `/etc/atlas`, directorios de producción, bind/connect, socket stale cleanup, procfs bind, systemd, listener persistente, cliente administrativo, SQLite y cambios del host.
 
 Después de PR-01..PR-12, revisar el resultado y decidir por separado si hace falta un probe de colisión/stale recovery (A-THREAT-05). La ruta real y la matriz definitiva de ownership/modos siguen pendientes de un plan de instalación aprobado.
+
+
+## 8. Registro de validación del propietario — 2026-11-21
+
+- Commit exacto: `b200c292ac0602593c8dbefafb1bd71b79001b06`.
+- Plataforma: Debian 13, kernel `6.12.117+deb13-amd64`, Python 3.13.5, EUID 0.
+- Identidades fixture: SERVICE 2005:2005; OTHER 2006:2006.
+- Resultado: `overall=PASS`, 12 PASS, 0 FAIL, 0 omitidos; 0.062 s; sandbox privado bajo `/run` eliminado después de terminar los procesos hijos.
+- PR-01: 13/13 entradas léxicas rechazadas. PR-02: seis componentes recorridos; endpoint root:root 0700. PR-03: symlinks alpha/beta/gamma rechazados y sentinel intacto. PR-04: componente regular rechazado. PR-05: ancestros group-writable y other-writable rechazados. PR-06: owner externo rechazado. PR-07/08: endpoint SERVICE 0700 aceptado y owner/modo incorrectos rechazados. PR-09: snapshot cargado por parent dirfd validado. PR-10: symlink, FIFO y hardlink rechazados. PR-11: descriptor leyó `anchored-original` después de que el pathname fuese sustituido por symlink. PR-12: OTHER UID no pudo hacer rename ni symlink (errno 13, EACCES).
+
+**Conclusión:** A-THREAT-06 queda validada para los casos fixture probados. El probe no crea socket, no ejecuta bind/connect, no examina la ruta real de configuración ni prueba colisiones ni stale recovery. El diseño de ruta sigue siendo candidato y la ruta/ownership productiva no se ha aprobado.
