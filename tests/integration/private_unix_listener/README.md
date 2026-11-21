@@ -1,11 +1,10 @@
 # A-IPC-01 — private Unix listener probe
 
-**Status:** opt-in experiment, executed locally by the owner on Debian 13 with
-15 scenarios PASS and the original A09 SKIP; overall result INCOMPLETE. The
-review has since split that missing evidence into A09a (DAC) and A09b
-(SO_PEERCRED); neither is implemented or validated yet. This is not a
-production listener and does not select AF_UNIX pathname sockets as the
-production IPC transport.
+**Status:** opt-in experiment, with A09a/A09b helper and runner code now
+implemented on this branch but not yet executed or validated. The last
+owner-reported Debian run predates this implementation and remains 15 PASS,
+A09 SKIP, 0 FAIL; overall INCOMPLETE. This is not a production listener and
+does not select AF_UNIX pathname sockets as the production IPC transport.
 
 ## Scope and safety boundary
 
@@ -70,7 +69,10 @@ The runner prints one JSON report and returns:
 | A15 | A closed listener no longer accepts new connections |
 | A16 | Two concurrent binds produce exactly one winner; winner remains operational |
 
-A09 is split into two independent checks and both remain SKIP in the current runner:
+A09 is split into two independent checks. Both remain SKIP unless the operator
+explicitly enables them with the reviewed SSH identity, the host forced command
+has been separately approved and updated, and shell startup files have been
+reviewed. No A09 execution has yet been reported:
 
 - **A09a (filesystem DAC):** use the candidate endpoint with its unchanged directory mode 0700 and socket mode 0600. A pre-existing different-UID process should be denied before the listener accepts the connection. This proves filesystem reachability isolation only; it does not exercise the handler's SO_PEERCRED allowlist.
 - **A09b (application authorization):** use a separate, disposable fixture whose directory is traversable but not writable by other UIDs (for example 0711) and whose test socket permits connect (for example 0666). A different UID must reach the listener; the real handler must read SO_PEERCRED, reject that UID as UNAUTHORIZED_PEER, and send no protocol response. These relaxed permissions belong only to the isolated fixture and must never be applied to the candidate endpoint or treated as production settings. The fixture must be a sibling of the private probe sandbox, directly under a verified shared sticky temporary parent (such as /tmp), not nested inside the sandbox root (0700), because the parent directory's DAC permissions also govern traversal.
@@ -139,7 +141,7 @@ A09b tests the separate application control with a disposable fixture that inten
 
 The private sandbox root is 0700. An A09b fixture nested below it would remain unreachable to a different UID regardless of the fixture's own 0711 mode. The fixture must instead be created as a separate temporary directory directly under a verified shared sticky temporary parent (for example /tmp), with its own mode 0711 and test socket mode 0666. The candidate endpoint remains unchanged.
 
-The initial two-terminal coordination proposal was superseded by the bounded SSH-subprocess design in the A-IPC-01 design document. The runner remains under the ordinary checkout UID and starts a local SSH client; sshd launches only the fixed forced-command helper under the distinct peer UID. The runner must not invoke sudo, su, runuser, setuid, systemd, or any credential-switching mechanism.
+The initial two-terminal coordination proposal was superseded by the bounded SSH-subprocess implementation described in the A-IPC-01 design document. The runner remains under the ordinary checkout UID and starts a local SSH client; sshd launches only the fixed forced-command helper under the distinct peer UID. The runner must not invoke sudo, su, runuser, setuid, systemd, or any credential-switching mechanism.
 
 
 ## A09 temporary external identity design
@@ -150,7 +152,7 @@ The existing `atlas-sandbox` account is excluded because it belongs to the earli
 
 The peer identity is provisioned. The owner reported a read-only inactivity check: `ps -u atlas-a09-test` returned no processes; `loginctl show-user` reported that UID 1001 is neither logged in nor lingering; `user@1001.service` is inactive; the linger file is absent; and `sudo -l -U atlas-a09-test` confirmed no sudo permission. This is a point-in-time check and does not prove that no unrelated system unit references the account. SSH preflight found public-key authentication enabled, keyboard-interactive disabled and strict modes enabled; X11, TCP and agent forwarding are globally enabled. The SSH daemon listens on all interfaces and the reported nftables INPUT policies are ACCEPT; this experiment does not establish global SSH isolation and must not modify SSH/PAM/firewall. The loopback ED25519 host-key fingerprint matched the locally inspected host key: `SHA256:txiDPT+/ldcIwnN6BPotbeL7QsofAieAeqF3GKMa9xI`.
 
-The owner subsequently installed an ephemeral Ed25519 key restricted with `from="127.0.0.1",restrict` and forced command `/usr/bin/id -u`. A strict local SSH connection returned `1001`, confirming key authentication and the forced identity command. The private key remains outside the repository. This does not validate A09a/A09b. The helper/runner remain unimplemented; changing the forced command to the reviewed A09 helper is a separate host change requiring explicit approval. The latest evidence remains 15 PASS + A09 SKIP + 0 FAIL / INCOMPLETE.
+The owner subsequently installed an ephemeral Ed25519 key restricted with `from="127.0.0.1",restrict` and forced command `/usr/bin/id -u`. A strict local SSH connection returned `1001`, confirming key authentication and the forced identity command. The private key remains outside the repository. This does not validate A09a/A09b. The helper/runner are now implemented on this branch; changing the forced command to the reviewed A09 helper is a separate host change requiring explicit approval. The latest execution evidence remains 15 PASS + original A09 SKIP + 0 FAIL / INCOMPLETE.
 
 
 ## A09 SSH identity — current status (2026-11-21)
@@ -166,3 +168,46 @@ The forced command returned UID `1001`. The private key remains under the owner'
 This proves SSH public-key authentication and the forced identity command only. It does not exercise either A09 subscenario. The runner still implements neither A09a nor A09b and retains the prior 15 PASS + A09 SKIP + 0 FAIL / INCOMPLETE evidence.
 
 The proposed orchestration design is recorded in [the A-IPC-01 design](../../../docs/design/local-authority-admin-private-unix-listener-probe.md#16-diseño-de-coordinación-externa-para-a09aa09b--2026-11-21). It uses a fixed, reviewed helper over stdin/stdout and a bounded SSH subprocess; no credential switching is performed by the runner. Implementing the helper is pending static review. Replacing the current forced command in `authorized_keys` is a separate host security change and requires explicit approval. Do not change it or run A09 yet.
+
+
+## A09 helper/runner implementation — 2026-11-21
+
+The following code is now present on the experimental branch:
+
+- `a09_ssh_client.py`: fixed standard-library-only remote helper. It accepts one bounded JSON instruction from stdin, allows only A09a/A09b, rejects a non-empty `SSH_ORIGINAL_COMMAND`, never executes shell commands, never changes credentials, and does not access the checkout.
+- `run_probe.py`: A09a and A09b are separate report rows. A09 remains disabled by default. Enabling it requires all of:
+  - `--enable-a09`;
+  - `--a09-identity-file` and `--a09-known-hosts`;
+  - `--a09-forced-command-confirmed`, acknowledging the separately approved host-side `authorized_keys` forced-command update;
+  - `--a09-shell-startup-reviewed`, acknowledging read-only review of the peer account's shell startup files.
+- Preflight checks the peer account UID/GID from the local account database, requires a distinct non-root identity, exact key/known_hosts ownership and modes, no hard links, the previously verified loopback ED25519 host-key fingerprint, and `/tmp` as a root-owned 01777 directory.
+- SSH is invoked with `-F /dev/null`, an explicit identity, `IdentityAgent=none`, public-key-only authentication, strict host-key checking, ED25519-only algorithms, no PTY, no forwarding, no proxy, no control master and a bounded connection/total timeout. No remote command is supplied; the authorized-key forced command is the only remote entrypoint.
+- The helper is copied to `/tmp/atlas-a09-client.py` with exclusive creation, mode 0644, and identity-checked cleanup. A pre-existing helper path is never overwritten.
+- A09a requires external `EACCES`, zero accepted connections and unchanged candidate endpoint identity/modes.
+- A09b requires the kernel-observed peer PID/UID/GID to match the helper/account, the real handler to raise `UNAUTHORIZED_PEER`, a non-empty ping request to have been sent, and zero response bytes before EOF/reset. The temporary fixture is a sibling directly under `/tmp`, directory 0711/socket 0666; the candidate endpoint remains 0700/0600.
+- If the SSH child cannot be stopped, the runner preserves the helper/socket/fixture rather than deleting resources that may still be in use; this is a failure requiring manual inspection.
+
+### Do not run A09 yet
+
+The installed key still forces `/usr/bin/id -u`. The implementation expects the separately approved forced command:
+
+```text
+/usr/bin/python3 -I /tmp/atlas-a09-client.py
+```
+
+Changing `authorized_keys` is a host security change and has **not** been authorized or performed. Before that change, the owner must also inspect the peer account's `.bashrc`, `.bash_profile`, `.profile` and relevant shell startup behavior read-only. No SSH/PAM/firewall changes are permitted.
+
+After those independent gates are completed, the opt-in form is:
+
+```bash
+PYTHONPATH=src python tests/integration/private_unix_listener/run_probe.py \
+  --enable-a09 \
+  --a09-identity-file /path/to/id_ed25519 \
+  --a09-known-hosts /path/to/known_hosts \
+  --a09-forced-command-confirmed \
+  --a09-shell-startup-reviewed
+```
+
+The example is documentation only and must not be run until the host change and execution are explicitly approved. A normal invocation without these options leaves A09a/A09b as SKIP and the global result INCOMPLETE.
+
+**Validation status:** implementation only; no tests, builds or workflows were run from GitHub. The owner must review the code, authorize any host-side forced-command change separately, and execute the probe locally on Debian. `main` remains untouched; no PR exists and no production transport is approved.
