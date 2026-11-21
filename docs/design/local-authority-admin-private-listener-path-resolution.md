@@ -140,7 +140,7 @@ Los escenarios son requisitos de diseño; no se han implementado ni ejecutado.
 ## 9. Decisiones pendientes
 
 1. Fijar la ruta real del socket y los owners/modos exactos de cada componente según el plan de instalación.
-2. Probar el candidato Linux procfs de §4.1: descriptor del endpoint, bind mediante `/proc/self/fd`, verificación por descriptor canónico y connect desde otro proceso. No asumir que el patrón de referencia es automáticamente seguro ni adoptar una dependencia sin revisión.
+2. El bind pathname canónico después de validar la cadena es el baseline TCB-1. El candidato procfs de §4.1 solo requiere un probe si se busca una propiedad adicional de anclaje por descriptor; no es requisito para el baseline y no debe adoptarse sin evaluar sus efectos en `getsockname()` y recuperación stale.
 3. Definir el procedimiento manual y auditado para retirar un socket residual.
 4. Definir límites de tamaño/formatos y política definitiva de hardlinks para el archivo de configuración.
 5. Identificar el entrypoint cliente y revisar el lanzamiento real con EUID 0.
