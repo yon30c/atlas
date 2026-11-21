@@ -86,7 +86,7 @@ El runner actual no implementa A09a/A09b ni coordinación con un cliente externo
 4. **Host key:** `ssh-keyscan` obtuvo ED25519 `SHA256:txiDPT+/ldcIwnN6BPotbeL7QsofAieAeqF3GKMa9xI`, coincidente con el fingerprint local previamente leído de `/etc/ssh/ssh_host_ed25519_key.pub`. RSA/ECDSA también fueron anunciadas, pero la prueba deberá fijar ED25519. El archivo temporal de known_hosts no equivale todavía a una autenticación SSH probada.
 5. **Preparar clave efímera:** pendiente de aprobación separada. Generar Ed25519 en runtime privado de `greed`; instalar solo la pública con `from=127.0.0.1`, `restrict` y comando forzado; verificar propietario/modos. No copiar la privada al HOME peer ni al repositorio.
 6. **Probar autenticación mínima:** pendiente de aprobación separada. Ejecutar por SSH solo un comando fijo de identidad; usar `IdentitiesOnly`, `BatchMode`, `StrictHostKeyChecking=yes` y `HostKeyAlgorithms=ssh-ed25519` con known_hosts temporal previamente verificado. Si falla, detenerse; no relajar PAM/SSH ni desbloquear contraseña.
-7. **Orquestar A09:** requiere revisión estática del diseño de coordinación, implementación del cliente/runner y aprobación separada. A09a/A09b deben ejecutarse en sesiones independientes; nunca ejecutar el runner con sudo.
+7. **Orquestar A09:** el helper y runner ya están implementados en la rama experimental; requieren revisión estática, preflight read-only del shell peer, autorización separada para cambiar el comando forzado y aprobación independiente para ejecutar. A09a/A09b se coordinan mediante SSH restringido; nunca ejecutar el runner con sudo.
 8. **Cerrar sesión y limpiar:** después de la prueba autorizada, terminar sesión; comprobar que no quedan procesos del UID; retirar `authorized_keys` y clave privada temporal; la eliminación de cuenta/grupo/HOME requiere autorización separada.
 9. **Verificación posterior:** confirmar ausencia de residuos y que SSH/PAM/sudoers/systemd/otras cuentas permanecen sin cambios.
 
@@ -115,7 +115,7 @@ La implementación del cliente/runner A09 requiere además revisión estática e
 
 - Cuenta `atlas-a09-test`: **creada y verificada por el propietario**; UID `1001`, GID `984`, grupo primario dedicado, sin grupos suplementarios adicionales, HOME `0700`, shell `/bin/bash`, contraseña bloqueada.
 - Inactividad/privilegios verificados por el propietario: sin procesos del UID, sin sesión ni linger según `loginctl`, `user@1001.service` inactive, sin archivo de linger y sin permisos sudo.
-- Claves: **no generadas ni instaladas**; no se ha probado autenticación SSH.
+- Claves: Ed25519 temporal generada e instalada por el propietario; autenticación SSH local confirmada. La clave privada permanece fuera del repositorio.
 - SSH/PAM/firewall: **sin cambios**. El daemon escucha en todas las interfaces; la clave experimental, si se autoriza, deberá limitarse a loopback.
 - Host key ED25519 de loopback verificada por fingerprint coincidente: `SHA256:txiDPT+/ldcIwnN6BPotbeL7QsofAieAeqF3GKMa9xI`.
 - A09a/A09b: **no implementados y no validados**.
@@ -138,7 +138,7 @@ La fase de preparación de clave y la prueba de autenticación mínima ya fueron
 
 La clave privada y el archivo known_hosts son artefactos temporales locales; sus contenidos no deben añadirse al repositorio ni a informes. La ruta privada puede desaparecer al cerrar la sesión runtime; antes de una futura ejecución se debe verificar que ambos archivos sigan presentes y con permisos correctos.
 
-La coordinación propuesta queda documentada en la sección 16 de [Diseño A-IPC-01](local-authority-admin-private-unix-listener-probe.md). La implementación del helper/runner, la sustitución del comando forzado y la ejecución A09 siguen pendientes de revisión y autorización específica. La eliminación de la cuenta/grupo/HOME también sigue requiriendo autorización separada.
+La coordinación propuesta queda documentada en la sección 16 de [Diseño A-IPC-01](local-authority-admin-private-unix-listener-probe.md). El helper/runner ya está implementado en la rama experimental y pendiente de revisión estática; la sustitución del comando forzado y la ejecución A09 siguen requiriendo autorización específica independiente. La eliminación de la cuenta/grupo/HOME también sigue requiriendo autorización separada.
 
 
 ## 10. Actualización — helper/runner A09a/A09b implementados en GitHub (2026-11-21)
