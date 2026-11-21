@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import array
 import base64
+import binascii
 import hashlib
 import errno
 import json
@@ -506,6 +507,23 @@ def _a09_config(args: argparse.Namespace) -> dict[str, object]:
         raise ProbeSkip("A09 key and known_hosts must not be hard-linked files")
     if key_info.st_size > 16 * 1024 or hosts_info.st_size > 16 * 1024:
         raise ProbeSkip("A09 key or known_hosts file exceeds the 16 KiB preflight limit")
+    try:
+        hosts_parent = known_hosts.parent.lstat()
+    except OSError as exc:
+        raise ProbeSkip(f"A09 known_hosts directory cannot be inspected: {exc}") from exc
+    private_parent = (
+        stat.S_ISDIR(hosts_parent.st_mode)
+        and hosts_parent.st_uid == os.geteuid()
+        and stat.S_IMODE(hosts_parent.st_mode) == 0o700
+    )
+    sticky_tmp_parent = (
+        stat.S_ISDIR(hosts_parent.st_mode)
+        and hosts_parent.st_uid == 0
+        and stat.S_IMODE(hosts_parent.st_mode) == 0o1777
+        and known_hosts.parent == Path("/tmp")
+    )
+    if not (private_parent or sticky_tmp_parent):
+        raise ProbeSkip("A09 known_hosts parent must be runner-private 0700 or root-owned sticky /tmp 01777")
 
     try:
         tmp_info = Path("/tmp").lstat()
@@ -533,7 +551,7 @@ def _a09_config(args: argparse.Namespace) -> dict[str, object]:
         raise ProbeSkip("A09 known_hosts must contain exactly one explicit loopback ED25519 entry for port 22")
     try:
         key_blob = base64.b64decode(pinned_keys[0], validate=True)
-    except ValueError as exc:
+    except (ValueError, binascii.Error) as exc:
         raise ProbeSkip("A09 known_hosts ED25519 key encoding is invalid") from exc
     fingerprint = "SHA256:" + base64.b64encode(hashlib.sha256(key_blob).digest()).decode("ascii").rstrip("=")
     if fingerprint != A09_EXPECTED_HOSTKEY:
@@ -561,8 +579,8 @@ def _install_a09_helper() -> tuple[Path, tuple[int, int, int]]:
         raise ProbeSkip("/tmp failed the exact root-owned 01777 precondition")
     source = Path(__file__).with_name("a09_ssh_client.py")
     source_info = source.lstat()
-    if not stat.S_ISREG(source_info.st_mode):
-        raise ProbeFailure("A09 helper source is not a regular file")
+    if not stat.S_ISREG(source_info.st_mode) or source_info.st_size > 16 * 1024:
+        raise ProbeFailure("A09 helper source is not a regular file within the 16 KiB source limit")
     content = source.read_bytes()
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     flags |= getattr(os, "O_NOFOLLOW", 0)
@@ -757,17 +775,28 @@ def _finish_a09_ssh(
         raise ProbeFailure(f"A09 SSH helper returned invalid JSON: {exc}") from exc
     if not isinstance(report, dict):
         raise ProbeFailure("A09 SSH helper result is not a JSON object")
+    if not stdout.endswith(b"\\n") or stdout.count(b"\\n") != 1:
+        raise ProbeFailure("A09 SSH helper output must be exactly one newline-terminated JSON record")
     if report.get("nonce") != outcome["nonce"]:
         raise ProbeFailure("A09 SSH helper nonce mismatch")
     return report
 
 
 def _validate_a09_client_identity(report: dict[str, object], config: dict[str, object], scenario: str) -> None:
+    expected_fields = (
+        {"scenario", "nonce", "pid", "uid", "gid", "connect_errno", "connected"}
+        if scenario == "A09a"
+        else {"scenario", "nonce", "pid", "uid", "gid", "connect_errno", "connected", "request_bytes_sent", "closure", "bytes_received", "peer_closed"}
+    )
+    if set(report) != expected_fields:
+        raise ProbeFailure(f"{scenario}: SSH helper result fields differ from the closed schema")
     if report.get("scenario") != scenario:
         raise ProbeFailure(f"{scenario}: SSH helper reported a different scenario")
+    if type(report.get("uid")) is not int or type(report.get("gid")) is not int:
+        raise ProbeFailure(f"{scenario}: SSH helper credentials are not integer values")
     if report.get("uid") != config["peer_uid"] or report.get("gid") != config["peer_gid"]:
         raise ProbeFailure(f"{scenario}: SSH helper credentials do not match the provisioned peer")
-    if not isinstance(report.get("pid"), int) or report["pid"] <= 0:
+    if type(report.get("pid")) is not int or report["pid"] <= 0:
         raise ProbeFailure(f"{scenario}: SSH helper did not report a valid PID")
 
 
@@ -775,7 +804,13 @@ def _scenario_a09a(root: Path, config: dict[str, object] | None, skip_reason: st
     if config is None:
         raise ProbeSkip(skip_reason or "A09 SSH preflight is unavailable")
     box = CaseSandbox(root, "a09a")
-    listener = OwnedListener(box.path / "s")
+    try:
+        listener = OwnedListener(box.path / "s")
+    except OSError as exc:
+        errors = box.cleanup()
+        if errors:
+            raise ProbeFailure("; ".join(errors)) from exc
+        raise ProbeSkip(f"cannot create A09a listener socket: {exc}") from exc
     helper_path = None
     helper_identity = None
     process = None
