@@ -1,7 +1,7 @@
 # Plan de probe aislado A-IPC-04 — socket residual y recuperación fail-closed
 
 **Fecha:** 2026-11-21  
-**Estado:** A-IPC-04 sigue sin validación (última ejecución completa comunicada: 10 PASS / 2 FAIL). Una comparación controlada confirmó lecturas parciales causadas por buffering=0 y una sola llamada read(); el runner se corrigió para acumular lecturas acotadas. La corrección y sus pruebas unitarias quedan pendientes de ejecución por el propietario en Atlas-VM-test. No es herramienta de mantenimiento ni autoriza listener persistente, limpieza automática o cambios del host.  
+**Estado:** A-IPC-04 validado por el propietario: SR-01..SR-12, 12/12 PASS, 0 FAIL/INCOMPLETE, en commit `375fb00a3fee230a57f89ffa7897a29309ff1dd2` sobre Debian 13/kernel `6.12.117+deb13-amd64` en `Atlas-VM-test`. La prueba unitaria `tests/unit/test_private_listener_procfs_read.py` también fue reportada PASS, ejecutada inmediatamente antes del probe; su commit exacto no está confirmado. La validación no cierra A-THREAT-05 ni autoriza recuperación real, mantenimiento, listener persistente, limpieza automática o cambios del host.
 **Rama:** `experiment/a-ipc-01-private-unix-listener-probe`  
 **Dependencias:** A-IPC-03 validado; `local-authority-admin-private-listener-stale-recovery.md`; `local-authority-admin-private-listener-path-resolution.md`; TCB-1.
 
@@ -336,3 +336,13 @@ no se aprueba recuperación de sockets reales, cleanup automático, listener
 persistente, activación systemd ni despliegue. El mecanismo sigue siendo
 un probe experimental aislado. El asistente no ejecutó pruebas, builds,
 workflows ni probes.
+
+## 12. Registro de validación del propietario — A-IPC-04 (2026-11-21)
+
+El propietario ejecutó el runner sobre `375fb00a3fee230a57f89ffa7897a29309ff1dd2` en `Atlas-VM-test` (Debian 13, kernel `6.12.117+deb13-amd64`, Python 3.13.5, EUID 0; SERVICE `2005:2005`, OTHER `2006:2006`). Resultado: **overall PASS; 12/12 PASS, 0 FAIL, 0 INCOMPLETE**. El inventario reportó 204 procesos, seis namespaces iniciales y 710 registros en el namespace principal; cleanup del sandbox confirmado.
+
+La prueba unitaria `tests/unit/test_private_listener_procfs_read.py` fue reportada PASS por el propietario y se ejecutó inmediatamente antes del probe. No se confirmó el commit checkout en ese momento; por tanto, este documento no atribuye el PASS unitario a `375fb00` ni a otro SHA.
+
+La corrección `_read_bounded()` resolvió las lecturas parciales de procfs observadas: SR-01/SR-11 detectaron listeners activos locales; SR-03 detectó listener en namespace adicional; SR-04/SR-05 abortaron ante cobertura incompleta; SR-08/SR-09 preservaron objetos no admisibles/sustituidos; SR-10 retiró únicamente el fixture exacto con token fixture-only ligado a identidad; SR-12 impidió que fallos/omisiones de cleanup se reportaran como PASS. No se usó `connect()` para liveness ni `accept/recv/send` en SR-11.
+
+**Alcance:** evidencia válida para escenarios del harness, commit, kernel, VM y vista procfs/PID namespace indicados. No es enumeración host-wide, no bloquea cambios concurrentes del conjunto de procesos/namespaces y no elimina la ventana TOCTOU entre revalidación y `unlinkat`. El token del escenario SR-10 es generado internamente por el harness y no representa una interfaz ni una aprobación humana operativa. A-THREAT-05 permanece abierta. El asistente no ejecutó tests, builds, workflows ni probes.
