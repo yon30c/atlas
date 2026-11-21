@@ -1,7 +1,7 @@
 # Plan de probe aislado — autenticación mutua y capacidad IPC
 
 **Fecha:** 2026-11-21  
-**Estado:** primera iteración del harness A-IPC-02 implementada en `tests/integration/private_unix_listener/run_mutual_auth_capacity_probe.py`; revisión estática solamente, no ejecutada. El plan completo sigue parcialmente implementado.  
+**Estado:** primera iteración ejecutada por el propietario en VM desechable sobre `fbc8c68e75c7d5d32768442666cf861f7880eb28`: MA-01, MA-02, MA-04, MA-05, CP-01 y CP-04 PASS; global INCOMPLETE por cobertura pendiente. MA-03 se añadió después en `7a0d4f1` y está pendiente de ejecución. El plan completo sigue parcialmente implementado.  
 **Rama:** experiment/a-ipc-01-private-unix-listener-probe  
 **Decisiones:** TCB-1; frontend EUID 0; client_uids={0}; perfil de capacidad inicial aprobado por el propietario.  
 **Dependencias:** contrato atlas-admin/1, handler IPC, configuración confiable, resolución de rutas, stale recovery y lifecycle.
@@ -133,12 +133,31 @@ INCOMPLETE si el entorno no permite verificar credenciales reales, no se puede m
 
 1. **Implementado, pendiente de ejecución:** harness separado A-IPC-02 con procesos reales: cliente EUID 0, servicio bajo UID/GID numéricos de fixture, autenticación mutua `SO_PEERCRED`, prueba de orden antes de send/recv, cuatro workers fijos, backlog configurado 8, deadline global de 15 s, timeouts 5 s y `RLIMIT_NOFILE=64` en el proceso de servicio.
 2. **Validación del propietario pendiente:** ejecutar exclusivamente en VM desechable con cuatro IDs numéricos reservados para fixtures; el harness no crea cuentas/grupos. El runner declara INCOMPLETE para escenarios todavía no implementados.
-3. Completar EUID-negativo, config parser/snapshot, límites de payload/depth, read/write/deadline adversaries, excepción/recovery, saturación exacta del backlog y contabilidad de FDs.
+3. **MA-03 implementado, pendiente de validación del propietario:** el cliente fixture con EUID distinto de 0 invoca el mismo guard del cliente privilegiado; se exige rechazo antes de crear/conectar un socket y ausencia de accept en el servidor. Después completar config parser/snapshot, límites de payload/depth, read/write/deadline adversaries, excepción/recovery, saturación exacta del backlog y contabilidad de FDs.
 4. Añadir resolución de rutas, symlinks, colisiones y cleanup por descriptor; mantenerlo separado del listener persistente.
 5. Validar manualmente stale recovery en sandbox separado.
 6. Revisar resultados y cerrar hallazgos antes de proponer cualquier listener persistente.
 
 No combinar esta etapa con implementación del entrypoint administrativo real ni con las operaciones authority.diagnose, migraciones, initialize o provisioning.
+
+## 9.1 Evidencia de ejecución del propietario — 2026-11-21
+
+El propietario ejecutó el runner en `Atlas-VM-test`, Debian 13,
+kernel `6.12.117+deb13-amd64`, Python 3.13.5, como EUID 0 real y con
+fixtures SERVICE 2005/2005 y OTHER 2006/2006, sobre commit
+`fbc8c68e75c7d5d32768442666cf861f7880eb28`.
+
+- MA-01, MA-02, MA-04 y MA-05: PASS.
+- CP-01 y CP-04: PASS; máximo observado de workers activos 4, recuperación
+  a 0 workers activos.
+- Backlog configurado 8; saturación real no probada.
+- Global INCOMPLETE; duración 1.177 s.
+- Cleanup: sandboxes privados y de traversal bajo `/run` eliminados tras
+  terminar los procesos hijos.
+
+La evidencia pertenece exclusivamente al commit y escenarios indicados.
+MA-03 se implementó después, en commit `7a0d4f1`; aún requiere ejecución.
+No inferir PASS de MA-03 ni completar cobertura por extrapolación.
 
 ## 10. Límites
 
