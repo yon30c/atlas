@@ -645,7 +645,7 @@ El propietario autorizó expresamente crear una identidad temporal dedicada para
 - Grupo dedicado atlas-a09-test; id muestra únicamente el grupo primario dedicado.
 - Contraseña bloqueada (passwd -S: L).
 - HOME /var/lib/atlas-a09-test, propietario/grupo atlas-a09-test, modo 0700.
-- UID 1001 es distinto del runner (greed, UID 1000). La ausencia de procesos, sesiones, linger y servicios todavía debe comprobarse antes de autenticar la cuenta.
+- UID 1001 es distinto del runner (greed, UID 1000). Preflight posterior comunicado por el propietario: `ps -u atlas-a09-test` sin procesos; `loginctl show-user` informa que UID 1001 no está conectado ni tiene linger; `user@1001.service` está `inactive`; no existe `/var/lib/systemd/linger/atlas-a09-test`; `sudo -l -U atlas-a09-test` confirma que no puede usar sudo. Esto no demuestra ausencia de cualquier unidad de sistema externa que pudiera referenciar la cuenta.
 
 **SSH y red**
 - Configuración efectiva: public-key sí; password sí; keyboard-interactive no; usepam sí; strictmodes sí; permituserenvironment no. X11, TCP y agent forwarding aparecen habilitados globalmente.
