@@ -13,7 +13,7 @@ import os
 from pathlib import Path
 import platform
 import resource
-import select
+import queue
 import shutil
 import signal
 import socket
@@ -314,40 +314,57 @@ class Server:
         self.socket_path = socket_path
         self.socket_identity: tuple[int, int, int] | None = None
         self.events: list[dict[str, object]] = []
+        self._output: queue.Queue[object] = queue.Queue()
+        self._reader = threading.Thread(target=self._read_output, daemon=True)
+        self._reader.start()
 
-    def next_event(self, timeout: float = 3.0) -> dict[str, object]:
+    def _read_output(self) -> None:
         if self.process.stdout is None:
-            raise ProbeFailure("server stdout is unavailable")
-        ready, _write, _error = select.select([self.process.stdout], [], [], timeout)
-        if not ready:
-            raise ProbeFailure("timed out waiting for server evidence")
-        line = self.process.stdout.readline()
-        if not line:
-            stderr = self.process.stderr.read() if self.process.stderr else ""
-            raise ProbeFailure(f"server exited unexpectedly: {stderr}")
+            self._output.put(("reader_error", "server stdout is unavailable"))
+            self._output.put(None)
+            return
         try:
-            event = json.loads(line)
-        except json.JSONDecodeError as exc:
-            raise ProbeFailure(f"server emitted invalid JSON: {line!r}") from exc
-        self.events.append(event)
-        if event.get("event") in {
+            for line in self.process.stdout:
+                try:
+                    self._output.put(json.loads(line))
+                except json.JSONDecodeError:
+                    self._output.put(("parse_error", line.rstrip()))
+        except Exception as exc:
+            self._output.put(("reader_error", f"{type(exc).__name__}: {exc}"))
+        finally:
+            self._output.put(None)
+
+    def _record(self, item: object) -> dict[str, object]:
+        if item is None:
+            stderr = self.process.stderr.read() if self.process.stderr else ""
+            raise ProbeFailure(f"server output closed unexpectedly: {stderr}")
+        if isinstance(item, tuple):
+            raise ProbeFailure(f"server output reader failed: {item}")
+        if not isinstance(item, dict):
+            raise ProbeFailure(f"server emitted invalid event type: {type(item).__name__}")
+        self.events.append(item)
+        if item.get("event") in {
             "startup_error", "server_error", "worker_error",
             "cleanup_error", "cleanup_preserved",
         }:
-            raise ProbeFailure(f"server reported {event}")
-        return event
+            raise ProbeFailure(f"server reported {item}")
+        return item
+
+    def next_event(self, timeout: float = 3.0) -> dict[str, object]:
+        try:
+            item = self._output.get(timeout=timeout)
+        except queue.Empty as exc:
+            raise ProbeFailure("timed out waiting for server evidence") from exc
+        return self._record(item)
 
     def drain(self, duration: float) -> None:
         deadline = time.monotonic() + duration
         while time.monotonic() < deadline:
-            if self.process.stdout is None:
-                raise ProbeFailure("server stdout is unavailable")
-            ready, _write, _error = select.select(
-                [self.process.stdout], [], [], max(0.0, deadline - time.monotonic())
-            )
-            if not ready:
+            try:
+                item = self._output.get(timeout=max(0.0, deadline - time.monotonic()))
+            except queue.Empty:
                 return
-            self.next_event(timeout=0.0)
+            self._record(item)
 
     def wait_event(self, name: str, predicate=None, timeout: float = 5.0):
         deadline = time.monotonic() + timeout
@@ -369,16 +386,17 @@ class Server:
             self.process.kill()
             self.process.wait(timeout=2.0)
             raise ProbeFailure("server did not stop within bounded shutdown wait")
-        if self.process.stdout is not None:
-            remaining = self.process.stdout.read()
-            for line in remaining.splitlines():
-                try:
-                    event = json.loads(line)
-                except json.JSONDecodeError as exc:
-                    raise ProbeFailure(f"server emitted invalid shutdown evidence: {line!r}") from exc
-                self.events.append(event)
-                if event.get("event") in {"server_error", "worker_error", "cleanup_error", "cleanup_preserved"}:
-                    raise ProbeFailure(f"server reported shutdown failure {event}")
+        self._reader.join(timeout=2.0)
+        if self._reader.is_alive():
+            raise ProbeFailure("server output reader did not reach EOF after process exit")
+        while True:
+            try:
+                item = self._output.get_nowait()
+            except queue.Empty:
+                break
+            if item is None:
+                continue
+            self._record(item)
         if self.process.returncode != 0:
             stderr = self.process.stderr.read() if self.process.stderr else ""
             raise ProbeFailure(f"server exited {self.process.returncode}: {stderr}")
@@ -394,7 +412,6 @@ class Server:
         ):
             raise ProbeFailure("socket pathname changed; preserving sandbox for inspection")
         self.socket_path.unlink()
-
 
 def _start_server(
     script: Path,
