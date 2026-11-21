@@ -396,8 +396,15 @@ class Server:
         self.socket_path.unlink()
 
 
-def _start_server(script: Path, socket_path: Path, uid: int, gid: int,
-                  socket_mode: int, allowed_uid: int) -> Server:
+def _start_server(
+    script: Path,
+    socket_path: Path,
+    uid: int,
+    gid: int,
+    socket_mode: int,
+    allowed_uid: int,
+    registry: list[Server],
+) -> Server:
     process = subprocess.Popen(
         [
             sys.executable, str(script), "--server-child",
@@ -413,23 +420,17 @@ def _start_server(script: Path, socket_path: Path, uid: int, gid: int,
         preexec_fn=_drop_identity(uid, gid),
     )
     server = Server(process, socket_path)
-    try:
-        ready = server.wait_event("ready", timeout=5.0)
-        identity = ready.get("socket_identity")
-        if not isinstance(identity, list) or len(identity) != 3:
-            raise ProbeFailure("server did not report its bound socket identity")
-        server.socket_identity = (int(identity[0]), int(identity[1]), int(identity[2]))
-        if ready.get("uid") != uid or ready.get("gid") != gid:
-            raise ProbeFailure("server child did not retain the requested fixture identity")
-        if ready.get("rlimit_nofile") != FD_LIMIT:
-            raise ProbeFailure("server RLIMIT_NOFILE is not exactly 64")
-        return server
-    except Exception:
-        try:
-            server.stop()
-        except Exception:
-            pass
-        raise
+    registry.append(server)
+    ready = server.wait_event("ready", timeout=5.0)
+    identity = ready.get("socket_identity")
+    if not isinstance(identity, list) or len(identity) != 3:
+        raise ProbeFailure("server did not report its bound socket identity")
+    server.socket_identity = (int(identity[0]), int(identity[1]), int(identity[2]))
+    if ready.get("uid") != uid or ready.get("gid") != gid:
+        raise ProbeFailure("server child did not retain the requested fixture identity")
+    if ready.get("rlimit_nofile") != FD_LIMIT:
+        raise ProbeFailure("server RLIMIT_NOFILE is not exactly 64")
+    return server
 
 
 def _connect_as_root(path: Path, expected_server_uid: int, *, send_request: bool):
@@ -560,7 +561,11 @@ def _create_fixture_dir(path: Path, uid: int, gid: int, mode: int) -> None:
 
 
 def _scenario_mutual_auth(
-    root: Path, public_root: Path, args: argparse.Namespace, script: Path
+    root: Path,
+    public_root: Path,
+    args: argparse.Namespace,
+    script: Path,
+    registry: list[Server],
 ) -> dict:
     service_dir = public_root / "auth-service"
     wrong_server_dir = public_root / "wrong-server"
@@ -570,7 +575,7 @@ def _scenario_mutual_auth(
     wrong_socket = wrong_server_dir / "admin.sock"
 
     server = _start_server(
-        script, service_socket, args.service_uid, args.service_gid, 0o666, 0
+        script, service_socket, args.service_uid, args.service_gid, 0o666, 0, registry
     )
     try:
         peer, response = _connect_as_root(service_socket, args.service_uid, send_request=True)
@@ -579,7 +584,7 @@ def _scenario_mutual_auth(
         valid = {"server_uid": peer.uid, "request_id": response["request_id"]}
 
         wrong_server = _start_server(
-            script, wrong_socket, args.other_uid, args.other_gid, 0o600, 0
+            script, wrong_socket, args.other_uid, args.other_gid, 0o600, 0, registry
         )
         try:
             peer, _response = _connect_as_root(wrong_socket, args.service_uid, send_request=False)
@@ -734,10 +739,9 @@ def _main_parent(args: argparse.Namespace) -> int:
         _create_fixture_dir(service_dir, args.service_uid, args.service_gid, 0o711)
         service_socket = service_dir / "capacity.sock"
         server = _start_server(
-            script, service_socket, args.service_uid, args.service_gid, 0o666, 0
+            script, service_socket, args.service_uid, args.service_gid, 0o666, 0, servers
         )
-        servers.append(server)
-        auth = _scenario_mutual_auth(root, public_root, args, script)
+        auth = _scenario_mutual_auth(root, public_root, args, script, servers)
         results.append({"id": "MA-01,MA-02,MA-04,MA-05", "status": "PASS", "observations": auth})
         capacity = _scenario_capacity(server, service_socket)
         results.append({"id": "CP-01,CP-04", "status": "PASS", "observations": capacity})
