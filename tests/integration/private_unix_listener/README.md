@@ -362,13 +362,12 @@ supplementary groups, socket ownership/mode and `RLIMIT_NOFILE=64`; it records
 the configured backlog, read/write timeout and global deadline. Behavioral
 tests for timeout expiry and exact backlog saturation remain incomplete.
 
-**Not yet implemented/validated:** exact kernel backlog saturation; full
-open-FD accounting; idle/read/write deadline adversaries; exception-path
-worker recovery; request/response boundary and JSON-depth adversaries;
-MA-07/MA-08 configuration fixtures are implemented but pending owner execution;
-pathname component-walk, symlink and collision matrix; stale recovery.
-The current runner reports these omitted scenarios as INCOMPLETE, never PASS.
-A complete overall result is therefore expected to be INCOMPLETE at this stage.
+**Not yet implemented/validated:** full open-FD accounting; idle/read/write
+deadline adversaries; exception-path worker recovery; request/response boundary
+and JSON-depth adversaries; pathname component-walk, symlink and collision
+matrix; stale recovery. CP-02/CP-03 backlog saturation has now been implemented
+in the runner but is pending owner execution on the disposable VM. The runner
+continues to report all unimplemented or unvalidated scenarios as INCOMPLETE.
 
 ### Safety and result codes
 
@@ -576,3 +575,31 @@ for the scenarios and environment listed. It does not validate the production
 listener lifecycle, path-walk, stale recovery, systemd, SQLite, or deployment,
 and does not approve a persistent listener or production transport. No tests,
 builds or workflows were run by the assistant.
+
+
+## A-IPC-02 — última ejecución del propietario y CP-02/CP-03 implementados (2026-11-21)
+
+El propietario ejecutó el runner en `Atlas-VM-test`, Debian 13, kernel
+`6.12.117+deb13-amd64`, Python 3.13.5, EUID 0, fixtures SERVICE
+2005/2005 y OTHER 2006/2006. Resultado comunicado: MA-01..MA-10 PASS;
+CP-01/CP-04 PASS; duración 1.687 s; cleanup de ambos sandboxes `/run`
+completado; cero FAIL. Global INCOMPLETE por CP-02/CP-03 y CP-05..CP-12
+pendientes en el commit ejecutado. El checkout estaba en
+`901c792cb723d920da4970ecce98ea7f871c4f85`; el JSON informó
+`commit: null`.
+
+Después de esa ejecución, el runner añadió CP-02/CP-03:
+- Observa `Recv-Q` y `Send-Q` del listener AF_UNIX mediante
+  `ss -x -l -n -H` de iproute2.
+- Ocupa los cuatro workers y exige que exactamente ocho conexiones queden
+  pendientes en el backlog configurado.
+- Intenta una novena conexión no bloqueante y exige `EAGAIN`, sin aumento
+  de cola ni aceptación por la aplicación.
+- Verifica que el número de workers/aceptaciones no exceda cuatro durante
+  la saturación.
+
+**Estado de CP-02/CP-03:** implementación estática en GitHub, pendiente de
+ejecución y validación del propietario. Requiere `ss` root-owned y no
+escribible por grupo/otros; si no está disponible o no puede observarse el
+listener, el runner declara INCOMPLETE. No se han ejecutado pruebas,
+compilaciones ni workflows desde GitHub. CP-05..CP-12 continúan pendientes.
