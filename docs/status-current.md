@@ -327,7 +327,7 @@ El propietario confirmó la instalación de una clave Ed25519 efímera y una con
 
 La coordinación A09 se diseñó en [local-authority-admin-private-unix-listener-probe.md](design/local-authority-admin-private-unix-listener-probe.md), sección 16. El modelo propuesto es un helper remoto fijo, sin órdenes genéricas, ejecutado mediante un subprocess SSH con opciones estrictas; el runner permanece UID 1000 y no cambia credenciales. A09a conserva endpoint 0700/0600 y espera EACCES antes de accept. A09b usa fixture hermano independiente bajo /tmp sticky (0711/0666), envía ping y exige que el handler real observe el UID externo y rechace UNAUTHORIZED_PEER antes de leer el request, sin respuesta.
 
-**Pendiente:** helper/runner A09a/A09b no implementados; cambio de comando forzado de authorized_keys no autorizado todavía; ejecución A09 no autorizada todavía. Cambiar authorized_keys requiere aprobación explícita específica. No modificar sshd_config, PAM, firewall, systemd, handler, contrato, runtime, SQLite ni servicios. La evidencia A-IPC-01 sigue en 15 PASS + A09 SKIP + 0 FAIL, global INCOMPLETE. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub.
+**Estado de aquella actualización:** el helper/runner aún no estaban implementados. Esa nota histórica queda supersedida por la actualización posterior de esta misma página: el código A09a/A09b ya está implementado en la rama, pero no ejecutado ni validado. El cambio de comando forzado de authorized_keys continúa sin autorización específica. No modificar sshd_config, PAM, firewall, systemd, handler, contrato, runtime, SQLite ni servicios. La evidencia local sigue en 15 PASS + A09 SKIP + 0 FAIL, global INCOMPLETE.
 
 
 ## A09 — helper y runner implementados, host change pendiente (2026-11-21)
