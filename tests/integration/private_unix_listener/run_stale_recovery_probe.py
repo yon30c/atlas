@@ -530,11 +530,7 @@ def _scenario_09_replacement(sandbox: Path, uid: int, gid: int) -> dict:
         current = _identity_at(parent, Path(path).name)
         if current == observed:
             raise ProbeFailure("SR-09 replacement retained the original identity")
-        # This equality check is the fixture equivalent of the final revalidation gate.
-        if current != observed:
-            decision = "ABORT_IDENTITY_CHANGED"
-        else:
-            raise ProbeFailure("SR-09 replacement was not detected")
+        decision = "ABORT_IDENTITY_CHANGED"
         if (sandbox / Path(path).name).read_bytes() != b"replacement-sentinel":
             raise ProbeFailure("SR-09 replacement sentinel changed")
         return {
