@@ -418,10 +418,19 @@ def _connect_as_root(path: Path, expected_server_uid: int, *, send_request: bool
     return peer, decoded
 
 
-def _wait_metrics(server: Server, *, active: int, timeout: float = 4.0):
+def _wait_metrics(
+    server: Server,
+    *,
+    active: int,
+    accepted_at_least: int = 0,
+    timeout: float = 4.0,
+):
     return server.wait_event(
         "metrics",
-        predicate=lambda item: item.get("active") == active,
+        predicate=lambda item: (
+            item.get("active") == active
+            and int(item.get("accepted", 0)) >= accepted_at_least
+        ),
         timeout=timeout,
     )
 
@@ -563,10 +572,14 @@ def _scenario_capacity(server: Server, socket_path: Path) -> dict:
             predicate=lambda item: int(item.get("accepted", 0)) >= WORKERS + 1,
             timeout=5.0,
         )
-        _wait_metrics(server, active=1, timeout=5.0)
+        _wait_metrics(
+            server, active=1, accepted_at_least=WORKERS + 1, timeout=5.0
+        )
         clients[WORKERS].close()
         clients = []
-        final = _wait_metrics(server, active=0, timeout=5.0)
+        final = _wait_metrics(
+            server, active=0, accepted_at_least=WORKERS + 1, timeout=5.0
+        )
         max_active = max(
             [int(item.get("max_active", 0)) for item in server.events if item.get("event") == "metrics"]
         )
