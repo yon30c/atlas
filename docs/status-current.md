@@ -309,7 +309,7 @@ El propietario autorizó la creación de la identidad temporal dedicada atlas-a0
 - sshd -T: pubkeyauthentication yes, passwordauthentication yes, kbdinteractiveauthentication no, usepam yes, strictmodes yes, permituserenvironment no, pero x11forwarding yes, allowtcpforwarding yes, allowagentforwarding yes, permitopen any y permitlisten any.
 - SSH escucha en 0.0.0.0:22 y [::]:22. El ruleset nftables reportado tiene políticas INPUT ACCEPT para IPv4 e IPv6; no se ha demostrado aislamiento global de SSH a loopback. No modificar SSH/PAM/firewall en este experimento.
 - ssh-keyscan presentó ED25519 SHA256:txiDPT+/ldcIwnN6BPotbeL7QsofAieAeqF3GKMa9xI, coincidente con el fingerprint local previamente obtenido de la host key ED25519. RSA/ECDSA también aparecieron, pero la futura conexión deberá fijar ED25519.
-- No se ha generado/instalado clave, no se ha probado login SSH y no se ha modificado sshd/PAM/firewall. Si se autoriza la siguiente fase, la clave deberá usar restrict, from=127.0.0.1 y comando forzado; esas restricciones limitan esa clave, no el listener SSH global.
+En ese preflight inicial aún no se había generado/instalado clave ni probado login. La fase se completó posteriormente: existe una clave Ed25519 restringida con `from="127.0.0.1",restrict`, y la conexión local devolvió UID 1001. El comando forzado actual es `/usr/bin/id -u`; no se ha cambiado. sshd/PAM/firewall globales siguen sin cambios.
 
 **Estado A09 y siguiente paso**
 - A09a/A09b siguen sin implementar ni validar; la ejecución anterior conserva 15 PASS, A09 SKIP, 0 FAIL, global INCOMPLETE.
