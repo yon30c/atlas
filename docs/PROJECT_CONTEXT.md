@@ -1089,3 +1089,29 @@ Static review found an asynchronous stdout event-reader queue: CP-10 read `serve
 
 
 Follow-up `664c398a5afdafda313eb81379cbb85a5b71007d` changes `Server.drain(duration)` to wait for the full interval despite temporary queue emptiness, giving the asynchronous stdout reader time to transfer pending child events before CP-10 baseline capture. Strict accepted-count assertion retained; owner re-execution still required.
+
+## A-IPC-02 — CP-10 validado; CP-11/CP-12 pendientes (2026-11-21)
+
+El propietario ejecutó `75929e1f9f3a17e2a19bb9a98d30e7cd86b26a0a`
+como root en la VM desechable `Atlas-VM-test` (Debian 13,
+kernel `6.12.117+deb13-amd64`, Python 3.13.5; SERVICE 2005/2005,
+OTHER 2006/2006).
+
+- MA-01..MA-10 y CP-01..CP-10: PASS.
+- CP-10: cuatro workers activos y nueve conexiones pendientes; accepted
+  estable en 22 durante saturación.
+- Recursos del proceso fixture: baseline 4 FDs/5 threads; saturación
+  8 FDs/5 threads; recuperación 4 FDs/5 threads. `RLIMIT_NOFILE`
+  soft/hard 64/64; active tras recovery 0; servidor vivo.
+- Duración 22.725 s; sandboxes privado y traversal bajo `/run`
+  eliminados correctamente tras finalizar los procesos hijos.
+- Overall INCOMPLETE exclusivamente por CP-11/CP-12 todavía no
+  implementados.
+
+CP-11 debe comprobar ciclos repetidos de saturación/recuperación sin
+crecimiento de recursos ni pérdida de disponibilidad. CP-12 debe comprobar
+que el fixture rechaza startup cuando recibe un `RLIMIT_NOFILE`
+insuficiente, sin elevarlo. Esta evidencia solo valida el commit/VM
+indicados; no es política productiva ni aprobación de listener persistente,
+systemd o despliegue. El asistente no ejecutó pruebas, builds ni workflows.
+
