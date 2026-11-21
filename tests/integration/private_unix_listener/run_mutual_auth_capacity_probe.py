@@ -583,16 +583,28 @@ def _preflight(args: argparse.Namespace) -> tuple[Path, Path]:
     if SS_BIN is None:
         raise ProbeIncomplete("iproute2 ss is required for exact kernel backlog observation")
     try:
-        ss_info = Path(SS_BIN).resolve(strict=True).stat()
+        ss_path = Path(SS_BIN).resolve(strict=True)
+        ss_info = ss_path.stat()
     except OSError as exc:
         raise ProbeIncomplete(f"cannot validate ss executable: {exc}") from exc
     if (
         not stat.S_ISREG(ss_info.st_mode)
         or ss_info.st_uid != 0
         or stat.S_IMODE(ss_info.st_mode) & 0o022
-        or not os.access(SS_BIN, os.X_OK)
+        or not os.access(ss_path, os.X_OK)
     ):
         raise ProbeIncomplete("ss executable must be a root-owned regular file not writable by group/others")
+    for parent in (ss_path.parent, *ss_path.parents):
+        parent_info = parent.stat()
+        if (
+            not stat.S_ISDIR(parent_info.st_mode)
+            or parent_info.st_uid != 0
+            or stat.S_IMODE(parent_info.st_mode) & 0o022
+        ):
+            raise ProbeIncomplete("ss executable path must have root-owned, non-writable directory ancestors")
+        if parent == Path("/"):
+            break
+    SS_BIN = str(ss_path)
     run_dir = Path("/run")
     info = run_dir.lstat()
     if (
@@ -1020,7 +1032,7 @@ def _scenario_capacity(server: Server, socket_path: Path) -> dict:
             "observed_max_active": max_active,
             "observed_max_workers": max_workers,
             "active_after_recovery": final.get("active"),
-            "backlog_saturation": "not tested; kernel backlog is configured but not filled",
+            "backlog_saturation": "measured separately by CP-02/CP-03",
         }
     finally:
         for client in clients:
