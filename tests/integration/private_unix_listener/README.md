@@ -58,7 +58,8 @@ The runner prints one JSON report and returns:
 | A06 | Cleanup preserves a replacement pathname |
 | A07 | Cleanup removes the unchanged socket created by this instance |
 | A08 | Allowed peer completes one authority.ping request |
-| A09 | Different-UID peer rejection; deliberately SKIP unless a safe external identity mechanism is added |
+| A09a | DAC blocks a different-UID client from the private 0700/0600 candidate endpoint; no SO_PEERCRED authorization claim |
+| A09b | Separate temporary fixture lets a different-UID client reach the handler; real SO_PEERCRED UID is rejected before request processing, with no protocol response |
 | A10 | Allowed peer UID/PID/GID are read from kernel credentials and match the current authorized UID |
 | A11 | Disconnect before request is handled without a fabricated response |
 | A12 | Truncated packet and ancillary data are rejected without an error response |
@@ -67,11 +68,12 @@ The runner prints one JSON report and returns:
 | A15 | A closed listener no longer accepts new connections |
 | A16 | Two concurrent binds produce exactly one winner; winner remains operational |
 
-A09 is intentionally not simulated with mocks and the runner will not create a
-second identity or switch credentials. It is reported as SKIP, which makes
-the overall result INCOMPLETE. This limitation must remain visible until the
-owner can provide a separately running, pre-existing unprivileged peer without
-changing host state or credentials from this probe.
+A09 is split into two independent checks and both remain SKIP in the current runner:
+
+- **A09a (filesystem DAC):** use the candidate endpoint with its unchanged directory mode 0700 and socket mode 0600. A pre-existing different-UID process should be denied before the listener accepts the connection. This proves filesystem reachability isolation only; it does not exercise the handler's SO_PEERCRED allowlist.
+- **A09b (application authorization):** use a separate, disposable fixture whose directory is traversable but not writable by other UIDs (for example 0711) and whose test socket permits connect (for example 0666). A different UID must reach the listener; the real handler must read SO_PEERCRED, reject that UID as UNAUTHORIZED_PEER, and send no protocol response. These relaxed permissions belong only to the isolated fixture and must never be applied to the candidate endpoint or treated as production settings.
+
+Both checks require a pre-existing unprivileged identity and an externally launched client. The runner must not create accounts, change UID/GID, use sudo, or alter host configuration. If the owner cannot safely provide that external peer, retain SKIP and overall INCOMPLETE. Do not replace the real credential exchange with mocks.
 
 A14 tests the resource ceiling of this temporary probe harness, not a production
 listener implementation. Admitted workers are held behind a test-only release
@@ -122,3 +124,10 @@ separation, resistance to root or same-UID malicious processes, persistent
 service lifecycle, systemd integration, SQLite authorization, or production
 suitability. Keep the overall result classified as INCOMPLETE while A09 is
 unverified; do not relabel it PASS.
+
+
+## A09 security-layer distinction
+
+The candidate endpoint's DAC boundary (directory 0700, socket 0600) prevents another UID from reaching the listener. A kernel-level access denial occurs before accept() and therefore cannot prove that the application inspected SO_PEERCRED. A09a records this filesystem control.
+
+A09b tests the separate application control with a disposable fixture that intentionally permits connection from the external test UID. Its permissions are test scaffolding only; it does not weaken or replace the candidate endpoint's DAC boundary. The two results must be reported separately.
