@@ -78,7 +78,7 @@ El lifecycle menciona una cuenta dedicada sin login y prohíbe ejecución arbitr
 
 **Severidad: ALTA — requiere estrategia explícita y aceptación del riesgo.**
 
-El lifecycle reconoce que `lstat/stat` seguido de `unlink` no es una operación atómica condicionada por inode. La comparación `st_dev + st_ino + tipo` evita borrar sustitutos en los casos observados, pero no elimina la carrera entre la comprobación y el unlink frente a un actor que pueda modificar el directorio. Root queda fuera del modelo; un proceso con el mismo UID puede modificar el directorio.
+El lifecycle reconoce que `lstat/stat` seguido de `unlink` no es una operación atómica condicionada por inode. La comparación `st_dev + st_ino + tipo` evita borrar sustitutos en los casos observados, pero no elimina la carrera entre comprobación y unlink. Bajo TCB-1, UIDs externos no deben poder modificar el directorio privado; root y procesos del mismo UID `atlas-runtime` son parte de la TCB. La ventana TOCTOU permanece como limitación técnica y no se declara atómica.
 
 **Requisito antes de implementar:** definir quién puede modificar el directorio durante el cleanup, cuál es el límite de confianza aceptado y cómo se registra un cleanup omitido. No describir el patrón como protección frente a root o procesos con autoridad equivalente. Preferir operaciones relativas a un descriptor de directorio y resolución sin symlinks; documentar que eso no convierte el unlink condicionado por inode en atómico.
 
@@ -96,7 +96,9 @@ El diseño correctamente prohíbe stale cleanup automático y establece que un p
 
 El lifecycle recomienda descriptor de directorio, `dir_fd` y `O_NOFOLLOW`, además de validar propietario/modo. Debe aclararse cómo se resuelven **todos** los componentes de la ruta, no solo el componente final: abrir el directorio final con `O_NOFOLLOW` no demuestra por sí solo que ningún componente padre haya sido sustituido por symlink durante una resolución absoluta ordinaria.
 
-**Requisito antes de implementar:** fijar una ruta constante; abrir y validar la cadena de directorios desde una raíz confiable o utilizar una primitiva Linux adecuada que impida escape/symlink conforme a la política; operar luego de forma relativa al descriptor validado. Registrar propietario, modo, tipo y dispositivo/inode del directorio abierto.
+**Diseño candidato publicado:** [Resolución segura de rutas y ownership](local-authority-admin-private-listener-path-resolution.md) define recorrido componente a componente desde `/` mediante `openat`/ `dir_fd`, `O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC`, validación `fstat` de cada directorio y apertura del archivo final relativa al descriptor padre. También distingue la configuración root-managed del directorio privado del endpoint y documenta que `bind()` pathname no recibe `dir_fd` en la API Python estándar.
+
+**Estado:** el requisito está especificado a nivel de diseño, pero no cerrado para implementación. Falta revisar/probar el método concreto de bind respecto del directorio validado y demostrar el recorrido completo con escenarios de symlink/escape. No usar `realpath()` ni asumir que `O_NOFOLLOW` en el último componente protege los ancestros.
 
 ### A-THREAT-07 — Límites del probe no equivalen a límites del servicio
 
@@ -191,3 +193,10 @@ El siguiente artefacto de diseño ya está publicado: [Frontera de confianza y a
 Esta propuesta no cierra los hallazgos por sí sola. Requiere decisión del propietario sobre confianza intra-UID, confirmación de identidad/UID del cliente, configuración confiable e inmutable y pruebas aisladas en ambos extremos. El mecanismo no autentica un ejecutable específico ni protege frente a root, kernel o procesos que ya formen parte de la TCB.
 
 El siguiente paso ya no es redactar el diseño inicial: es obtener la decisión de confianza e identidad del propietario. No se implementó ni ejecutó código.
+
+
+## Actualización — EUID 0 y especificación de rutas (2026-11-21)
+
+El propietario confirmó EUID 0 como requisito del frontend administrativo; la allowlist de diseño queda exactamente `{0}`. Esto cierra la decisión de política del propietario, pero no demuestra el EUID del futuro entrypoint, que aún no existe/revisado. La política se valida en ambos extremos: cliente EUID 0 antes de conectar y servidor `SO_PEERCRED.uid == 0` antes de `recv`; el cliente valida el UID de `atlas-runtime` antes de `send`.
+
+A-THREAT-06 cuenta ahora con una especificación de diseño dedicada, pero permanece abierta para implementación hasta probar recorrido completo y resolver la relación entre el descriptor del directorio validado y el pathname usado por `bind()`. A-THREAT-04 mantiene la limitación TOCTOU; bajo TCB-1 el riesgo de carrera frente a UIDs externos se mitiga por ownership/modo privado, pero no se convierte en una operación atómica. A-THREAT-05 (recuperación stale) continúa bloqueante y sin procedimiento operativo aprobado.
