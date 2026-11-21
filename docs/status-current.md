@@ -407,3 +407,10 @@ El propietario informó que el cambio temporal de `authorized_keys` conservó `f
 ### Candidato técnico para resolver bind/pathname
 
 La investigación encontró un patrón Linux usado por `sockat`: bind mediante `/proc/self/fd/<D-fd>/R/<socket-name>` y connect mediante `/proc/self/fd/<endpoint-dir-fd>/<socket-name>`. No es un `bindat()` ni una garantía automática; `getsockname()` puede devolver la ruta procfs temporal y pueden quedar artefactos D/R ante crash. Se añadió al diseño de rutas como candidato para un probe aislado, con D dentro del directorio privado Atlas, verificación posterior por descriptor canónico y fallo cerrado si procfs no está disponible. No se añadió dependencia ni código.
+
+
+## A-THREAT-05 — recuperación manual de socket residual (2026-11-21)
+
+Se publicó `docs/design/local-authority-admin-private-listener-stale-recovery.md` con un procedimiento de mantenimiento separado: detener servicio, confirmar que no quedan procesos/FDs del listener, inspeccionar las tablas AF_UNIX de los network namespaces visibles (`/proc/<pid>/net/unix)), validar tipo/owner/mode/inode mediante descriptor de directorio, pedir autorización específica y retirar solo el objeto exacto con `unlinkat`. Ante cualquier duda, se conserva el socket. No se conecta para probar si está vivo.
+
+A-THREAT-05 sigue abierto hasta validar la enumeración de namespaces y la retirada exacta en sandbox. Se presupone pathname canónico absoluto como baseline y cliente/servicio en el mismo network namespace; no heredar ni pasar el FD listener. La alternativa procfs queda experimental porque cambia la ruta reportada y complica diagnóstico stale.
