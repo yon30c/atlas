@@ -869,3 +869,28 @@ desde GitHub; el resultado fue ejecutado por el propietario.
 **Conclusión acotada:** A-THREAT-06 queda validada para los escenarios fixture probados. No se creó socket, no se ejecutó bind/connect, no se examinó configuración real de Atlas y no se probaron colisiones ni stale recovery. No fija ruta/ownership productivos ni aprueba listener persistente.
 
 **Siguiente gate:** A-IPC-04, plan en `docs/design/local-authority-admin-private-listener-stale-recovery-probe.md`, para A-THREAT-05. El runner no está implementado. Resolver primero cobertura de procfs/namespaces, carreras de PID y disponibilidad de namespace adicional. Mantener startup fail-closed y prohibido connect como detector de liveness.
+
+
+## A-IPC-04 — primera ejecución y correcciones pendientes (2026-11-21)
+
+El propietario ejecutó el commit `27dd83a34e149901f908356668dc119b4491487f`
+en `Atlas-VM-test`: 8 PASS, 4 FAIL, 0 INCOMPLETE; inventario de 204
+procesos y seis namespaces visibles; cleanup del sandbox confirmado.
+
+- **SR-01/SR-11 FAIL:** los listeners locales activos no aparecieron por
+  pathname en las tablas inspeccionadas. No clasificar como stale. SR-03
+  sí detectó un listener en un namespace adicional.
+- **SR-06 FAIL:** el fixture positivo usaba los caracteres literales
+  `\\n` en lugar de saltos de línea.
+- **SR-07 FAIL:** las filas positivas omitían el `:` obligatorio de `Num`.
+
+Correcciones estáticas en `b2767ff6a64886fb361bbf7f8f36a016f90c3e7f`
+y `48008ff559b8c4f2528e3668d140797266f38844`: fixtures SR-06/SR-07
+corregidos y diagnósticos acotados añadidos a SR-01/SR-11 para incluir
+filas candidatas de procfs. No se relaja matching ni clasificación.
+
+**Siguiente paso:** ejecutar el HEAD actual en `Atlas-VM-test` desechable
+y compartir JSON completo. SR-01/SR-11 siguen sin causa confirmada;
+A-THREAT-05 permanece abierta. No ejecutar en `greed`, no usar
+recuperación real. El asistente no ejecutó pruebas, builds, workflows ni
+probes.
