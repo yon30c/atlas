@@ -1,6 +1,6 @@
 # Estado vigente de Atlas
 
-> **Corte documental:** 21 de noviembre de 2026. A-IPC-01 reportado 16/16 PASS; A-IPC-02 validado por el propietario hasta MA-03 y CP-01/CP-04 en commit `069dbb9`; MA-06 añadido después en `9a8380e`, pendiente de ejecución.
+> **Corte documental:** 21 de noviembre de 2026. A-IPC-01 reportado 16/16 PASS; A-IPC-02 validado por el propietario en commit `b4eda57d36338f065adb2cb4e00d19a8ade58069`: MA-01..MA-06 y CP-01/CP-04 PASS; global INCOMPLETE.
 > **Main:** permanece en HEAD `1bd73d149dbd98e7ee2e5fdc36880883b6b03d16`; PR #29 está integrado. La suite reportada para el HEAD de código de PR #29 fue 1,590 tests, `OK (skipped=1)`; no se ha reportado una nueva ejecución sobre el merge HEAD.
 > **Rama activa de diseño:** `experiment/a-ipc-01-private-unix-listener-probe`. Se mantiene separada de `main`; no tiene PR propio. PR #30 sigue abierto en Draft y corresponde a la rama de diseño original.
 > **Estado IPC:** el handler procesa conexiones ya aceptadas; solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
@@ -467,3 +467,52 @@ Siguiente paso: revisión estática final del diff MA-06 y ejecución en
 `Atlas-VM-test`. No ejecutar en `greed` de producción. El probe sigue
 INCOMPLETE; configuración confiable, transporte/desconexión, backlog exacto,
 deadlines, recuperación de workers y FD accounting siguen pendientes.
+
+
+
+## A-IPC-02 — validación del propietario de MA-06 (2026-11-21)
+
+El propietario ejecutó el runner directamente como root en la VM desechable
+`Atlas-VM-test`, Debian 13, kernel `6.12.117+deb13-amd64`, Python
+`3.13.5`, sobre el commit `b4eda57d36338f065adb2cb4e00d19a8ade58069`,
+con fixtures SERVICE UID/GID `2005/2005` y OTHER UID/GID `2006/2006`.
+
+- **MA-01..MA-06: PASS.** Cliente root autenticó el servidor UID 2005 y
+  completó ping. El cliente rechazó el servidor UID 2006 antes de enviar
+  bytes (`bytes_sent_by_client=0`). El servidor rechazó al peer UID 2006
+  antes de leer (`response_bytes=0`). El cliente no-root EUID 2006 fue
+  rechazado antes de connect (`connect_attempted=false`; el servidor no
+  observó conexión).
+- **MA-06:** el envelope ping incluía claims top-level falsos
+  `uid=0`, `gid=0`, `pid=1`. El decoder respondió
+  `INVALID_REQUEST`; la evidencia de identidad conservó
+  `kernel_peer_uid=0`. Los campos aportados por el cliente no se aceptaron
+  como credenciales.
+- **CP-01/CP-04: PASS.** Máximo observado de workers/conexiones activas: 4;
+  después de liberar carga, `active_after_recovery=0`.
+- Backlog del kernel configurado en 8, **sin saturación exacta**.
+- Duración: 1.431 s. Cleanup confirmado: sandboxes privado y de traversal
+  bajo `/run` eliminados después de finalizar los procesos hijos.
+- Resultado global: **INCOMPLETE**, sin escenarios FAIL.
+
+La evidencia aplica al commit y entorno indicados; no se extiende a commits
+posteriores sin repetir la ejecución. Permanecen sin implementar o validar
+MA-07..MA-10 y CP-02..CP-03/CP-05..CP-12: configuración ausente/duplicada/
+desconocida/alterada y snapshot inmutable; desconexión y variantes de
+transporte; saturación exacta del backlog; adversarios de read/write/deadline;
+recuperación ante excepciones; límites de payload/profundidad JSON y
+contabilidad completa de FDs.
+
+**Siguiente incremento propuesto:** revisar y diseñar MA-07/MA-08 antes de
+codificar. El diseño de configuración confiable exige parser cerrado,
+resolución segura desde descriptor, validación de tipo/owner/mode/tamaño,
+fallo cerrado e inmutabilidad en memoria. La propuesta de
+`/etc/atlas/admin-ipc.conf` sigue siendo solo diseño: no existe archivo
+operativo, parser productivo ni entrypoint IPC revisado. Cualquier fixture
+MA-07/08 debe vivir exclusivamente en sandbox temporal y no leer ni crear
+configuración del host.
+
+No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. El
+propietario ejecutó el probe localmente en la VM indicada. `main` no se
+modificó, no se creó PR y no se aprobó listener persistente, transporte de
+producción ni despliegue.
