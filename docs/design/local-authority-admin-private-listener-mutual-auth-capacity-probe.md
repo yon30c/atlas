@@ -101,8 +101,8 @@ El baseline es el descriptor walk desde / y bind al pathname absoluto canónico 
 | CP-02 | Más clientes llegan mientras slots están ocupados | Medir la cola AF_UNIX real y su límite efectivo para el valor pasado a listen() |
 | CP-03 | Cola AF_UNIX en su límite efectivo | La siguiente conexión no bloqueante recibe EAGAIN; no aparecen accepts/workers adicionales |
 | CP-04 | Se libera un slot | El accept loop recupera capacidad sin reiniciar |
-| CP-05 | Cliente no envía paquete | Conexión termina al alcanzar deadline global de 15 s |
-| CP-06 | Read y write separados | La suma no reinicia ni excede el deadline global |
+| CP-05 | Cliente autorizado no envía paquete | El read timeout independiente cierra la conexión alrededor de 5 s; el deadline global de 15 s no se alcanza |
+| CP-06 | Se consumen 11 s del presupuesto después de accept y antes de iniciar read | El read timeout efectivo se reduce al tiempo restante; la conexión termina alrededor del deadline global de 15 s desde accept |
 | CP-07 | Excepción en worker | Socket se cierra y slot se libera en finally |
 | CP-08 | Request >16 KiB / response >64 KiB | Rechazo conforme al contrato; sin truncamiento silencioso |
 | CP-09 | Profundidad JSON >16 | Rechazo |
@@ -395,3 +395,17 @@ El propietario ejecutó `b5b0128e2646e41e3a2f927251c6fa6dafa897d7` en `Atlas-VM-
 CP-02/03: `listen(8)`; Recv-Q/Send-Q 8/8; conexión novena admitida (9/8); décima rechazada con EAGAIN errno 11; cola final 9/8; `accepted_after_overflow=9`, igual a `accepted_while_full`; workers dentro del límite y recuperación a cero. Overall INCOMPLETE por CP-05..CP-12.
 
 **Gate antes de CP-05:** el escenario documenta que un cliente silencioso termina por deadline global de 15 s, pero el fixture aplica `min(READ_TIMEOUT=5 s, remaining_global)` al primer `recv`. El cliente silencioso vence por read timeout a los 5 s, no a los 15 s. Aclarar si CP-05 debe probar read/idle timeout de 5 s o si se desea otro contrato global antes de implementar. No alterar los límites aprobados por inferencia.
+
+
+## 9.7 CP-05 / CP-06 implementados — validación del propietario pendiente
+
+Commit del runner: `59fafb801a31d7adf51a6598db78440255744321`.
+
+La recomendación aprobada conserva los límites del perfil sin cambios:
+
+- **CP-05 — read timeout:** un peer autorizado conecta y no envía paquete. El fixture observa el inicio de lectura y exige timeout alrededor de 5 s desde accept, cierre del peer y cero bytes de respuesta. Debe quedar demostrado que el deadline global aún no se alcanzó.
+- **CP-06 — deadline global:** un servidor fixture dedicado introduce una espera controlada de 11 s después de accept/autenticación y antes de iniciar la lectura. La lectura recibe únicamente el presupuesto restante (aprox. 4 s); el peer debe cerrarse alrededor de 15 s desde accept. El runner registra el tiempo monotónico, timeout efectivo, presupuesto restante y EOF.
+
+La espera de 11 s es **inyección de tiempo exclusivamente del harness**, no una pausa del handler productivo ni un cambio al contrato. Permite probar que el timeout de una fase posterior se recorta por el deadline contado desde accept. No simula una escritura bloqueada ni demuestra una suma de read/write real: el fixture actual realiza un único `recvmsg` y un único `send`, y cada timeout individual de 5 s no consume por sí solo los 15 s globales. La cobertura de escritura bloqueada/cómputo entre fases queda limitada y deberá revisarse si el handler incorpora más fases I/O.
+
+El runner conserva `overall=INCOMPLETE` porque CP-07..CP-12 siguen pendientes. **CP-05/06 están implementados, no validados** hasta recibir el JSON del propietario en `Atlas-VM-test`. No se ejecutaron pruebas, builds ni workflows desde GitHub; no se modificaron handler productivo, contrato, `main`, host, cuentas, servicios o SQLite.
