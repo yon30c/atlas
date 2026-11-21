@@ -807,3 +807,13 @@ Runner commit: `70ee6a7a77dc671fe4ec26a6ca98a25a2e47e104`. CP-11 performs three 
 
 CP-11 is implemented and statically reviewed, but **not yet owner-validated**. CP-12 remains unimplemented: startup rejection when the child inherits an insufficient `RLIMIT_NOFILE`, without raising the limit. Run the updated probe only on disposable `Atlas-VM-test`, never on production `greed`. The overall result must remain INCOMPLETE until CP-12 is implemented and validated.
 
+### CP-11 — owner validation (2026-11-21)
+
+The owner ran commit `da8c6ea9ed0ce36d2c7b4c2c8c5417dd79975fb7` on disposable `Atlas-VM-test` (Debian 13, kernel `6.12.117+deb13-amd64`, Python 3.13.5). MA-01..MA-10 and CP-01..CP-11 all passed. Three consecutive saturation/recovery cycles each held four workers and nine queued connections; accepted counts were 31→35→44, 44→48→57, and 57→61→70. Each cycle returned to 4 FDs/5 threads, with 8 FDs/5 threads at saturation, zero active workers after recovery, and the server alive. Cleanup succeeded; duration 24.72 s.
+
+This validates CP-11 only on the stated commit and VM. CP-12 remains pending owner execution.
+
+### CP-12 — low inherited RLIMIT_NOFILE startup rejection implemented (owner validation pending)
+
+Runner commit: `0fb5c3989f5ac9e11b14344557b18ad7bd75027b`. The server child now rejects startup if either inherited soft or hard `RLIMIT_NOFILE` is below 64; it reports both values and returns before creating/binding the listener. CP-12 launches a fixture through a small exec wrapper that lowers both inherited limits to 32 before exec, then verifies exit code 3, the exact startup rejection event and limits, and absence of a socket pathname. It does not raise the limit. This is harness-only validation, not production policy. Static review only; the owner must run it on disposable `Atlas-VM-test`. Do not run on production `greed`.
+
