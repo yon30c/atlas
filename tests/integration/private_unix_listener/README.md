@@ -960,7 +960,7 @@ connect to Atlas services, or change host accounts/configuration.
 | SR-07 | Exact pathname matching; prefixes/suffixes do not match |
 | SR-08 | Symlink, regular file, FIFO, directory, wrong owner and wrong mode rejected |
 | SR-09 | Replacement between observation and revalidation detected; replacement preserved |
-| SR-10 | Only exact residual fixture with identity-bound fixture token is unlinked through parent dirfd |
+| SR-10 | Only exact residual fixture with identity-bound token is unlinked through parent dirfd; mismatched inode token is rejected without mutation |
 | SR-11 | Active local listener detected without connect/accept/send/recv |
 | SR-12 | SKIP/FAIL/cleanup uncertainty cannot produce global PASS |
 
