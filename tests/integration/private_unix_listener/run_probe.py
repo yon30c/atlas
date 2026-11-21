@@ -14,7 +14,6 @@ from pathlib import Path
 import platform
 import socket
 import stat
-import struct
 import subprocess
 import sys
 import tempfile
@@ -46,11 +45,15 @@ def _identity(path: Path) -> tuple[int, int, int]:
     return info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode)
 
 
-def _same_identity(path: Path, identity: tuple[int, int, int]) -> bool:
-    try:
-        return _identity(path) == identity
-    except FileNotFoundError:
-        return False
+def _describe(path: Path) -> dict[str, int]:
+    info = path.lstat()
+    return {
+        "device": info.st_dev,
+        "inode": info.st_ino,
+        "file_type": stat.S_IFMT(info.st_mode),
+        "mode": stat.S_IMODE(info.st_mode),
+        "uid": info.st_uid,
+    }
 
 
 class CaseSandbox:
@@ -210,7 +213,7 @@ def _ping_exchange(listener: socket.socket, path: Path) -> dict[str, int]:
     return {"pid": peer.pid, "uid": peer.uid, "gid": peer.gid}
 
 
-def _scenario_a01(root: Path) -> None:
+def _scenario_a01(root: Path) -> dict[str, object]:
     box = CaseSandbox(root, "a01")
     listener = OwnedListener(box.path / "s")
     try:
@@ -222,10 +225,12 @@ def _scenario_a01(root: Path) -> None:
         if stat.S_IMODE(box.path.stat().st_mode) != 0o700:
             raise ProbeFailure("directory mode mismatch")
         listener.socket.settimeout(1.0)
+        observed = {"directory_mode": stat.S_IMODE(box.path.stat().st_mode), "socket": _describe(listener.path)}
         client = _connect(listener.path)
         client.close()
         connection, _ = listener.socket.accept()
         connection.close()
+        return observed
     finally:
         listener.socket.close()
         errors = box.cleanup()
@@ -233,22 +238,25 @@ def _scenario_a01(root: Path) -> None:
             raise ProbeFailure("; ".join(errors))
 
 
-def _scenario_a02(root: Path) -> None:
+def _scenario_a02(root: Path) -> dict[str, object]:
     box = CaseSandbox(root, "a02")
     path = box.path / "s"
     path.write_bytes(b"A-IPC-01-regular-sentinel")
     before = box.track(path)
     content = path.read_bytes()
+    before = _describe(path)
+    collision_errno = None
     contender = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
     try:
         try:
             contender.bind(str(path))
-        except OSError:
-            pass
+        except OSError as exc:
+            collision_errno = exc.errno
         else:
             raise ProbeFailure("bind unexpectedly replaced a regular file")
-        if _identity(path) != before or path.read_bytes() != content:
+        if _identity(path) != (before["device"], before["inode"], before["file_type"]) or path.read_bytes() != content:
             raise ProbeFailure("regular file changed after bind collision")
+        return {"before": before, "after": _describe(path), "bind_errno": collision_errno, "sentinel_unchanged": True}
     finally:
         contender.close()
         errors = box.cleanup()
@@ -256,7 +264,7 @@ def _scenario_a02(root: Path) -> None:
             raise ProbeFailure("; ".join(errors))
 
 
-def _scenario_a03(root: Path) -> None:
+def _scenario_a03(root: Path) -> dict[str, object]:
     box = CaseSandbox(root, "a03")
     target = box.path / "target"
     target.write_bytes(b"A-IPC-01-symlink-target")
@@ -264,18 +272,21 @@ def _scenario_a03(root: Path) -> None:
     path = box.path / "s"
     path.symlink_to(target)
     link_id = box.track(path)
+    before_link, before_target = _describe(path), _describe(target)
+    collision_errno = None
     contender = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
     try:
         try:
             contender.bind(str(path))
-        except OSError:
-            pass
+        except OSError as exc:
+            collision_errno = exc.errno
         else:
             raise ProbeFailure("bind unexpectedly replaced a symlink")
         if _identity(path) != link_id or _identity(target) != target_id:
             raise ProbeFailure("symlink or target identity changed")
         if target.read_bytes() != b"A-IPC-01-symlink-target":
             raise ProbeFailure("symlink target content changed")
+        return {"link_before": before_link, "link_after": _describe(path), "target_before": before_target, "target_after": _describe(target), "bind_errno": collision_errno}
     finally:
         contender.close()
         errors = box.cleanup()
@@ -283,7 +294,7 @@ def _scenario_a03(root: Path) -> None:
             raise ProbeFailure("; ".join(errors))
 
 
-def _scenario_a04(root: Path) -> None:
+def _scenario_a04(root: Path) -> dict[str, object]:
     box = CaseSandbox(root, "a04")
     path = box.path / "s"
     first = OwnedListener(path)
@@ -291,10 +302,12 @@ def _scenario_a04(root: Path) -> None:
     try:
         first.bind_listen()
         first_id = box.track(path)
+        before = _describe(path)
+        collision_errno = None
         try:
             second.bind(str(path))
-        except OSError:
-            pass
+        except OSError as exc:
+            collision_errno = exc.errno
         else:
             raise ProbeFailure("second bind unexpectedly succeeded")
         if _identity(path) != first_id:
@@ -304,6 +317,7 @@ def _scenario_a04(root: Path) -> None:
         client.close()
         connection, _ = first.socket.accept()
         connection.close()
+        return {"before": before, "after": _describe(path), "second_bind_errno": collision_errno, "winner_operational": True}
     finally:
         second.close()
         first.socket.close()
@@ -312,23 +326,26 @@ def _scenario_a04(root: Path) -> None:
             raise ProbeFailure("; ".join(errors))
 
 
-def _scenario_a05(root: Path) -> None:
+def _scenario_a05(root: Path) -> dict[str, object]:
     box = CaseSandbox(root, "a05")
     path = box.path / "s"
     stale = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
     stale.bind(str(path))
     stale.close()
     stale_id = box.track(path)
+    before = _describe(path)
+    collision_errno = None
     contender = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
     try:
         try:
             contender.bind(str(path))
-        except OSError:
-            pass
+        except OSError as exc:
+            collision_errno = exc.errno
         else:
             raise ProbeFailure("bind unexpectedly replaced a stale socket")
         if _identity(path) != stale_id or not stat.S_ISSOCK(path.lstat().st_mode):
             raise ProbeFailure("stale socket pathname changed")
+        return {"before": before, "after": _describe(path), "bind_errno": collision_errno, "stale_path_preserved": True}
     finally:
         contender.close()
         errors = box.cleanup()
@@ -336,7 +353,7 @@ def _scenario_a05(root: Path) -> None:
             raise ProbeFailure("; ".join(errors))
 
 
-def _scenario_a06(root: Path) -> None:
+def _scenario_a06(root: Path) -> dict[str, object]:
     box = CaseSandbox(root, "a06")
     path = box.path / "s"
     listener = OwnedListener(path)
@@ -352,6 +369,7 @@ def _scenario_a06(root: Path) -> None:
             raise ProbeFailure("cleanup claimed ownership of a replacement pathname")
         if _identity(path) != replacement_id or path.read_bytes() != b"replacement-must-survive":
             raise ProbeFailure("cleanup modified the replacement object")
+        return {"original_socket_identity": list(original_id), "replacement_identity": list(replacement_id), "replacement_preserved": True}
     finally:
         listener.socket.close()
         errors = box.cleanup()
@@ -359,7 +377,7 @@ def _scenario_a06(root: Path) -> None:
             raise ProbeFailure("; ".join(errors))
 
 
-def _scenario_a07(root: Path) -> None:
+def _scenario_a07(root: Path) -> dict[str, object]:
     box = CaseSandbox(root, "a07")
     listener = OwnedListener(box.path / "s")
     try:
@@ -369,6 +387,7 @@ def _scenario_a07(root: Path) -> None:
             raise ProbeFailure("cleanup did not remove the owned socket")
         if listener.path.exists() or os.path.lexists(listener.path):
             raise ProbeFailure("owned socket pathname remains after cleanup")
+        return {"owned_socket_identity": list(listener.identity or ()), "owned_path_removed": True}
     finally:
         listener.socket.close()
         errors = box.cleanup()
@@ -412,6 +431,7 @@ def _scenario_a10(root: Path) -> dict[str, int]:
         errors = box.cleanup()
         if errors:
             raise ProbeFailure("; ".join(errors))
+
 
 def _scenario_a11(root: Path) -> None:
     from atlas.platform_admin_ipc import AdminPeerDisconnected
@@ -774,7 +794,7 @@ def _preflight() -> tuple[Path, tuple[int, int, int]]:
         except OSError:
             pass
         raise ProbeSkip("temporary sandbox failed exact owner/type/mode preconditions")
-    socket_probe = root / "x" / "s"
+    socket_probe = root / "a12-ancillary" / "s"
     if len(os.fsencode(socket_probe)) >= 100:
         root.rmdir()
         raise ProbeSkip("temporary path is too long for the AF_UNIX pathname limit")
