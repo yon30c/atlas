@@ -1,6 +1,6 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-21 (A-IPC-02: MA-01..MA-08 y CP-01/04 validados por el propietario; global INCOMPLETE).
+> **Última actualización:** 2026-11-21 (A-IPC-02: MA-01..MA-08 y CP-01/04 validados por el propietario; MA-09/10 implementados y pendientes de ejecución; global INCOMPLETE).
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
@@ -27,7 +27,7 @@
 - **A-THREAT-08:** máquina de estados de readiness/shutdown, drenaje, deadlines y ownership de FDs pendiente.
 - **A-THREAT-09:** A09 usó runner UID 1000 y peer UID 1001; no valida cliente UID 0, servicio `atlas-runtime` ni permisos finales del despliegue.
 - **Próximo paso:** actualizar `Atlas-VM-test` al commit `f41df94d0f87d288bfc7e3df45c66295fa19d570` y ejecutar MA-09/10 exclusivamente en esa VM; después avanzar con CP-02/03 y CP-05..12. Path-walk, colisiones y stale recovery permanecen como fases separadas. Nunca ejecutar en `greed` de producción ni crear cuentas/grupos.
-- **Estado de cambios:** la rama experimental contiene el fixture aislado `probe_config.py` y los escenarios MA-07/08. No se modificó handler, contrato normativo, runtime, SQLite, `main` ni host. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. El propietario validó MA-01..MA-08 y CP-01/04 en `585dd3d`; MA-09/10 están implementados pero pendientes de ejecución. No se creó PR ni se aprobó listener persistente o despliegue.
+- **Estado de cambios:** la rama experimental contiene el fixture aislado `probe_config.py` y los escenarios MA-07/08; el runner incorpora MA-09/10 en `f41df94`. No se modificó handler, contrato normativo, runtime, SQLite, `main` ni host. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. El propietario validó MA-01..MA-08 y CP-01/04 en `585dd3d`; MA-09/10 están implementados pero pendientes de ejecución. No se creó PR ni se aprobó listener persistente o despliegue.
 
 **Límites vigentes:** A-IPC-01 valida únicamente los escenarios experimentales ejecutados en el commit/entorno indicados. No demuestra protección frente a root/capabilities suficientes ni procesos maliciosos del mismo UID; no valida separación de privilegios, system-manager, listener persistente, daemon, integración systemd, acceso/autorización SQLite ni operaciones mutantes. No autoriza cambios del host, usuarios, grupos, permisos, privilegios, servicios, provisioning o despliegue.
 
