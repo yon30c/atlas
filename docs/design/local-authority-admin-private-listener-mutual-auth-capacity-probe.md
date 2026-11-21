@@ -72,8 +72,8 @@ Si no es posible probar un cliente EUID 0 real y un servidor bajo UID distinto s
 | MA-06 | Request contiene UID/PID/GID falsos | La identidad efectiva sigue siendo la entregada por el kernel |
 | MA-07 | Configuración ausente, duplicada, desconocida o alterada | Fallo cerrado antes de conectar/aceptar |
 | MA-08 | Configuración cambia después de cargar | La instancia conserva snapshot inmutable |
-| MA-09 | Socket peer se desconecta durante autenticación | Cierre limpio, sin bytes de protocolo ni operación |
-| MA-10 | Transporte no es AF_UNIX/SOCK_SEQPACKET | Rechazo |
+| MA-09 | Peer autorizado cierra su dirección de escritura después de conectar y antes de la primera petición | El handler devuelve PEER_DISCONNECTED; cero bytes de respuesta y ninguna petición aceptada |
+| MA-10 | Transporte no es AF_UNIX/SOCK_SEQPACKET (AF_UNIX/SOCK_STREAM y AF_INET/SOCK_STREAM) | Rechazo antes de consumir el paquete; cero bytes de respuesta |
 
 La evidencia debe demostrar el orden, no solo el resultado final. El harness debe observar bytes recibidos en el endpoint de fixture y probar que el contador permanece en cero cuando el cliente rechaza el UID del servidor; para MA-05 debe probar que el servidor no invocó recv ni produjo respuesta.
 
@@ -262,3 +262,15 @@ El propietario ejecutó el runner en `Atlas-VM-test`, Debian 13, kernel `6.12.11
 Esta evidencia aplica únicamente al commit indicado. MA-07/08 prueban un parser y loader fixture, no configuración productiva; el loader valida el archivo final relativo a un descriptor de sandbox ya confiable y no sustituye el path-walk PA desde `/`. No se modificó el handler ni el host.
 
 **Siguiente incremento:** inspeccionar el estado actual del runner y del protocolo antes de implementar MA-09 (desconexión durante autenticación) y MA-10 (rechazo de transportes distintos de AF_UNIX/SOCK_SEQPACKET). Mantenerlos como pruebas aisladas y conservar INCOMPLETE hasta completar todos los escenarios obligatorios.
+
+## 9.4 MA-09/MA-10 implementados — validación del propietario pendiente (2026-11-21)
+
+Commit `aff7eb694dbabb6725947e3f2179aef3fa566fbf` amplía el runner:
+
+- **MA-09:** crea un par AF_UNIX/SOCK_SEQPACKET, confirma peer UID 0 mediante SO_PEERCRED, cierra la dirección de escritura del peer sin enviar request y llama al handler real. Exige `AdminPeerDisconnected/PEER_DISCONNECTED`, cero bytes de respuesta y que no se acepte petición. La prueba cubre EOF/half-close antes de la primera petición; no afirma observar una interrupción dentro de la syscall SO_PEERCRED.
+- **MA-10:** entrega al handler real sockets AF_UNIX/SOCK_STREAM y AF_INET/SOCK_STREAM con un ping válido ya encolado. Exige `AdminProtocolRejected/INVALID_REQUEST`; `MSG_PEEK` comprueba que el handler no consumió el paquete y el peer no recibió bytes de respuesta.
+- Ambos escenarios se registran como PASS únicamente si las aserciones del runner se cumplen. El bloque INCOMPLETE restante enumera CP-02..CP-03 y CP-05..CP-12.
+- **Estado actual:** implementación y revisión estática completadas; ejecución del propietario pendiente. No se ejecutaron pruebas, builds ni workflows desde GitHub.
+- Evidencia previa MA-01..MA-08 y CP-01/04 pertenece solo al commit `585dd3d979bc1b800550e4b9c79c382b22cf1f6c`; no atribuirla al commit nuevo sin repetir ejecución.
+
+Siguiente paso: actualizar la VM desechable al commit nuevo y ejecutar el runner completo. Después, revisar el JSON antes de abordar la saturación exacta del backlog (CP-02/03).
