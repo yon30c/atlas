@@ -1340,3 +1340,35 @@ El propietario reprodujo la diferencia de forma aislada en Atlas-VM-test:
 **Cambio en esta rama:** _read_bounded() acumula lecturas de hasta 64 KiB hasta EOF o hasta el límite. Ambas rutas usan buffering normal y el helper acotado, conservando el máximo de 4 MiB + 1 byte para que el llamador detecte exceso. Se añadió tests/unit/test_private_listener_procfs_read.py con pruebas de lecturas cortas sucesivas, límite, EOF y límite negativo.
 
 **Siguiente paso:** el propietario ejecuta la prueba unitaria y después el runner completo en Atlas-VM-test. El asistente no ejecutó pruebas, builds, workflows ni probes. Hasta validar, A-IPC-04 sigue no validado, SR-01/SR-11 no se marcan PASS y A-THREAT-05 permanece abierta. Nunca ejecutar en greed; no inferir stale por ausencia de filas, no ejecutar unlink, no habilitar cleanup automático, listener persistente ni despliegue.
+
+## A-IPC-04 — resultado de validación del probe (2026-11-21)
+
+El propietario ejecutó tests/integration/private_unix_listener/run_stale_recovery_probe.py
+en Atlas-VM-test sobre el commit 375fb00a3fee230a57f89ffa7897a29309ff1dd2:
+Debian 13, kernel 6.12.117+deb13-amd64, Python 3.13.5, EUID 0,
+fixtures SERVICE 2005:2005 / OTHER 2006:2006. Resultado **overall=PASS:
+12/12 escenarios PASS, 0 FAIL, 0 INCOMPLETE**. Inventario: 204 procesos
+visibles, seis network namespaces, 710 registros en el namespace principal,
+cero reintentos. Cleanup del sandbox confirmado tras cerrar procesos y sockets.
+
+La corrección del lector procfs que acumula lecturas parciales permitió
+detectar los listeners locales en SR-01 y SR-11. SR-03 detectó el listener
+en un namespace adicional. SR-04/SR-05 mantuvieron abortos fail-closed ante
+cobertura incompleta; SR-08/SR-09 preservaron objetos no admisibles o
+sustituidos; SR-10 retiró únicamente el fixture con token ligado a identidad;
+SR-12 verificó que omisiones o fallos de cleanup no producen PASS.
+No se llamó connect para probar liveness; SR-11 tampoco llamó accept, recv
+ni send.
+
+**Clasificación:** A-IPC-04 validado para los 12 escenarios del harness,
+en el commit/kernel/VM indicados. La conclusión solo cubre los procesos y
+network namespaces visibles a través del montaje procfs y PID namespace
+utilizados. No es cobertura host-wide ni una enumeración atómica ante
+creación concurrente de procesos; el límite TOCTOU entre revalidación y
+unlink permanece bajo TCB-1.
+
+**No cambia la autorización operativa:** A-THREAT-05 sigue abierta. No
+queda aprobada recuperación de sockets reales, limpieza automática,
+listener persistente, activación systemd ni despliegue. No ejecutar en
+greed producción. El resultado fue ejecutado por el propietario;
+el asistente no ejecutó pruebas, builds, workflows ni probes.
