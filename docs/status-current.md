@@ -393,3 +393,12 @@ Los escenarios restantes A01–A08 y A10–A16 también fueron PASS. A14 report�
 - No asumir que la cuenta temporal `atlas-a09-test`, la clave SSH, el respaldo de `authorized_keys` o los artefactos temporales han sido eliminados. Cualquier limpieza host-side es una operación separada.
 
 El propietario informó que el cambio temporal de `authorized_keys` conservó `from="127.0.0.1",restrict`, clave y modo 0600, y forzó `/usr/bin/python3 -I /tmp/atlas-a09-client.py`. Los archivos de inicio fueron revisados read-only. No se reportaron cambios globales en sshd_config, PAM o firewall.
+
+
+## Actualización de estado — EUID 0 y resolución segura de rutas (2026-11-21)
+
+**Decisión aceptada:** el frontend administrativo debe conectar con EUID 0. La política de diseño del servicio es `client_uids={0}` y no admite consumidores adicionales sin nueva decisión. El cliente debe comprobar EUID 0 antes de conectar; el servidor comprueba `SO_PEERCRED` antes de `recv`; el cliente comprueba UID de `atlas-runtime` antes de enviar. No existe todavía un entrypoint IPC ejecutable revisado, así que la identidad está aceptada como requisito pero no validada en runtime.
+
+**Diseño publicado:** `docs/design/local-authority-admin-private-listener-path-resolution.md` especifica recorrido de todos los componentes desde `/` con descriptores, `openat`/`dir_fd`, `O_DIRECTORY|O_NOFOLLOW`, validación de cada directorio y lectura de configuración desde descriptor. A-THREAT-06 queda especificado pero sigue pendiente de probe y de resolver la limitación de `bind()` pathname sin `dir_fd`. Cleanup con `unlinkat` conserva ventana TOCTOU; bajo TCB-1, los UIDs externos quedan excluidos por el directorio privado y root/procesos del mismo UID pertenecen a la TCB.
+
+**Próximos bloqueos:** (1) resolver y probar el bind respecto del directorio validado; (2) definir recuperación manual y auditada de socket stale (A-THREAT-05); (3) diseñar probe aislado de resolución de ruta y autenticación mutua; (4) identificar/revisar el entrypoint cliente con EUID 0. No se modifica código ni contrato. No se ejecutaron pruebas, compilaciones ni workflows; no hubo cambios en Debian/host, `main` ni PR.
