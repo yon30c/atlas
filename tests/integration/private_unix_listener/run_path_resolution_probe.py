@@ -27,6 +27,22 @@ DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW
 SAFE_COMPONENT = re.compile(r"[A-Za-z0-9_.-]+\Z")
 EXPECTED_SCENARIOS = tuple(f"PR-{number:02d}" for number in range(1, 13))
 
+def _git_commit() -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=Path.cwd(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=2.0,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
 
 class ProbeFailure(RuntimeError):
     """An expected path-resolution invariant was not demonstrated."""
@@ -567,7 +583,7 @@ def main() -> int:
     overall = "PASS" if passed == len(EXPECTED_SCENARIOS) and failed == 0 else "FAIL"
     report = {
         "probe": "A-IPC-03-path-resolution",
-        "commit": os.environ.get("ATLAS_PROBE_COMMIT"),
+        "commit": _git_commit(),
         "platform": platform.platform(),
         "kernel": platform.release(),
         "python": platform.python_version(),
