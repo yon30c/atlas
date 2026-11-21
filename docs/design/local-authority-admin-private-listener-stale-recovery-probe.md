@@ -186,3 +186,17 @@ la regla de detección ni realiza connect/accept/send/recv.
 **Pendiente:** ejecutar el HEAD actual solo en `Atlas-VM-test` y revisar
 el JSON completo. A-THREAT-05 sigue abierta. No usar el procedimiento
 en hosts reales ni permitir limpieza automática.
+
+## Registro de tercera ejecución — 2026-11-21
+
+El propietario ejecutó el runner en commit `f10cda09aec5cb0b9d42ab50f3bb9f6617dc8fda`: 10 PASS / 2 FAIL / 0 INCOMPLETE; 203 procesos visibles; seis namespaces en el inventario inicial; siete durante SR-03; sandbox eliminado.
+
+### SR-01 — observación adicional
+
+El listener fixture seguía abierto y su descriptor tenía inode `39340`. El inspector estaba en `net:[4026531840]`, identidad incluida en el snapshot. No se encontró ninguna fila candidata en el conjunto de tablas ni en la lectura directa de `/proc/self/net/unix`; esta lectura no produjo error. Por tanto, la discrepancia ya no puede atribuirse solamente a la elección del PID representante. El resultado no demuestra que el listener esté inactivo ni permite clasificar el pathname como stale. Mantener SR-01 FAIL y no relajar el criterio de detección.
+
+### SR-11 — defecto del harness
+
+El escenario llamó a `_listener_diagnostics(snapshot, path)` aunque la función requiere también el socket `listener`; terminó con `TypeError` antes de producir diagnóstico. Commit `8a89bc9f66829886164ed4fe93fd7af232a18f01` corrige la llamada. La corrección requiere reejecución del propietario.
+
+SR-02..SR-10 y SR-12 pasaron, incluido SR-03 para namespace adicional, abortos ante cobertura incompleta y token ligado a identidad. No se llamó connect/accept/send/recv como prueba de liveness. A-IPC-04 continúa no validado; A-THREAT-05 abierta. El probe no es herramienta de mantenimiento ni autoriza cleanup automático o despliegue.
