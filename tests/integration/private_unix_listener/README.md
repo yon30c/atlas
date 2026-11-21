@@ -1,7 +1,8 @@
 # A-IPC-01 — private Unix listener probe
 
-**Status:** opt-in experiment, implemented but not executed or validated. This is
-not a production listener and does not select AF_UNIX pathname sockets as the
+**Status:** opt-in experiment, executed locally by the owner on Debian 13 with
+15 scenarios PASS and A09 SKIP; overall result INCOMPLETE. This is not a
+production listener and does not select AF_UNIX pathname sockets as the
 production IPC transport.
 
 ## Scope and safety boundary
@@ -95,3 +96,29 @@ processes, multi-UID authorization, production service lifecycle, systemd
 activation, separation of privileges, SQLite authorization, or suitability
 for deployment. It does not approve a persistent listener or any administrative
 operation beyond the non-mutating ping used as a protocol fixture.
+
+
+## Owner-reported execution — 2026-11-20
+
+The owner ran the command above without sudo on Debian 13 from checkout
+`314e7395fbc972f8b9ab4a10dd800e85c11c7b59`.
+
+- Kernel: `6.12.117+deb13-amd64`; Python: `3.13.5`; effective UID: `1000`.
+- Overall: `INCOMPLETE`; duration: `0.876 s`; cleanup:
+  `empty sandbox root removed`.
+- A01–A08 and A10–A16: PASS (15 scenarios).
+- A09: SKIP; no different-UID peer was tested. The runner intentionally does
+  not change UID/GID, use sudo, or assume another identity.
+- No scenario reported FAIL.
+
+A14 observations: peak active workers 2, six rejected connections, eight
+handled connections, and zero active connections after recovery. A16 observed
+exactly one successful concurrent bind, and the winning listener remained
+operational. A08/A10 observed peer PID 3751, UID 1000 and GID 1000.
+
+This confirms only the experimental cases actually exercised. In particular,
+it does not establish multi-UID rejection, production authorization, privilege
+separation, resistance to root or same-UID malicious processes, persistent
+service lifecycle, systemd integration, SQLite authorization, or production
+suitability. Keep the overall result classified as INCOMPLETE while A09 is
+unverified; do not relabel it PASS.
