@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 import socket
 import sys
 import uuid
@@ -41,8 +42,16 @@ def _read_instruction() -> dict[str, object]:
         raise ValueError("unsupported scenario")
     if not isinstance(path, str) or not path.startswith("/") or "\x00" in path:
         raise ValueError("invalid socket path")
+    path_object = Path(path)
     if len(os.fsencode(path)) >= MAX_SOCKET_PATH_BYTES:
         raise ValueError("socket path exceeds AF_UNIX limit")
+    if ".." in path_object.parts or path_object.name != "s":
+        raise ValueError("socket path shape is invalid")
+    if scenario == "A09a":
+        if path_object.parent.name != "a09a" or not path_object.parent.parent.name.startswith("atlas-aipc01-"):
+            raise ValueError("A09a path is outside the private probe sandbox shape")
+    elif path_object.parent.parent != Path("/tmp") or not path_object.parent.name.startswith("atlas-a09b-"):
+        raise ValueError("A09b path is outside the dedicated /tmp fixture shape")
     if not isinstance(nonce, str) or len(nonce) != 32:
         raise ValueError("invalid nonce")
     try:
