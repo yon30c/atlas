@@ -341,8 +341,7 @@ La secuencia de CP-02/CP-03 es:
 5. Volver a observar que el backlog permanece en 8/8 y que no hubo un accept
    adicional.
 
-**Estado:** implementación publicada en commit
-`1e213b2f7a254cd2718e644e415670dca08435f5`; revisión estática solamente.
+**Estado:** implementación inicial en commit `1e213b2f7a254cd2718e644e415670dca08435f5`, con endurecimiento posterior del preflight de `ss` y su ruta en commit `67526c21a1edc2938b5caefb699aa6c6576c5b73`; revisión estática solamente.
 El propietario debe ejecutar el runner actualizado en `Atlas-VM-test`.
 No se ejecutaron pruebas, builds ni workflows desde GitHub. CP-02/CP-03 no
 se consideran PASS hasta recibir evidencia local. CP-05..CP-12 siguen
