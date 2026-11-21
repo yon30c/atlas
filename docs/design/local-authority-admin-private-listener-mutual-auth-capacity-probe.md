@@ -1,7 +1,7 @@
 # Plan de probe aislado — autenticación mutua y capacidad IPC
 
 **Fecha:** 2026-11-21  
-**Estado (2026-11-21):** el propietario reportó en `Atlas-VM-test` MA-01..MA-10 y CP-01/CP-04 PASS; global INCOMPLETE porque CP-02/CP-03 y CP-05..CP-12 siguen pendientes. Último checkout actualizado a `901c792cb723d920da4970ecce98ea7f871c4f85`; el JSON del runner informó `commit: null`, por lo que el SHA se asocia al fast-forward inmediatamente anterior y no al campo de reporte. El plan completo sigue parcialmente implementado.  
+**Estado (2026-11-21):** el propietario reportó en `Atlas-VM-test` MA-01..MA-10 y CP-01/CP-04 PASS; global INCOMPLETE en la ejecución de `901c792cb723d920da4970ecce98ea7f871c4f85` (JSON `commit: null`). CP-02/CP-03 se implementaron después para observar y llenar exactamente el backlog AF_UNIX con iproute2 `ss`, y comprobar rechazo EAGAIN del intento excedente; esta nueva implementación está pendiente de ejecución local. CP-05..CP-12 siguen pendientes.  
 **Rama:** experiment/a-ipc-01-private-unix-listener-probe  
 **Decisiones:** TCB-1; frontend EUID 0; client_uids={0}; perfil de capacidad inicial aprobado por el propietario.  
 **Dependencias:** contrato atlas-admin/1, handler IPC, configuración confiable, resolución de rutas, stale recovery y lifecycle.
@@ -320,3 +320,31 @@ Esta evidencia es del harness experimental y no valida un listener
 persistente, configuración productiva, resolución de rutas, stale recovery,
 systemd, SQLite, lifecycle ni despliegue. No aprueba un transporte de
 producción. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub.
+
+
+## 9.4 CP-02/CP-03 — implementación de saturación exacta del backlog (2026-11-21)
+
+El runner ahora usa iproute2 `ss -x -l -n -H` para leer las columnas
+`Recv-Q` y `Send-Q` de la fila LISTEN del socket fixture. El preflight
+requiere que el ejecutable `ss` sea un archivo regular root-owned, ejecutable
+y no escribible por grupo/otros. Si falta o la observación falla por una
+precondición, el resultado es INCOMPLETE; no se sustituye la medición por
+suposiciones basadas únicamente en llamadas `connect()`.
+
+La secuencia de CP-02/CP-03 es:
+1. Ocupar los cuatro workers con conexiones sin request.
+2. Abrir ocho conexiones adicionales y comprobar mediante `ss` que
+   `Recv-Q=8` y `Send-Q=8`.
+3. Comprobar que la aplicación no aceptó ninguna conexión adicional mientras
+   los cuatro slots permanecían ocupados.
+4. Intentar una novena conexión no bloqueante y exigir `EAGAIN`/`EWOULDBLOCK`.
+5. Volver a observar que el backlog permanece en 8/8 y que no hubo un accept
+   adicional.
+
+**Estado:** implementación publicada en commit
+`1e213b2f7a254cd2718e644e415670dca08435f5`; revisión estática solamente.
+El propietario debe ejecutar el runner actualizado en `Atlas-VM-test`.
+No se ejecutaron pruebas, builds ni workflows desde GitHub. CP-02/CP-03 no
+se consideran PASS hasta recibir evidencia local. CP-05..CP-12 siguen
+INCOMPLETE. El perfil sigue siendo experimental y no es configuración de
+producción.
