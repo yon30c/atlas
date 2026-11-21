@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import argparse
 import array
+import base64
+import hashlib
 import errno
 import json
 import os
@@ -467,8 +469,8 @@ def _a09_config(args: argparse.Namespace) -> dict[str, object]:
     if account.pw_uid in (0, os.geteuid()):
         raise ProbeSkip("external peer UID must be non-root and different from the runner UID")
 
-    identity_file = args.a09_identity_file.absolute()
-    known_hosts = args.a09_known_hosts.absolute()
+    identity_file = args.a09_identity_file.expanduser().absolute()
+    known_hosts = args.a09_known_hosts.expanduser().absolute()
     key_parent = identity_file.parent.lstat()
     if (
         not stat.S_ISDIR(key_parent.st_mode)
@@ -476,8 +478,10 @@ def _a09_config(args: argparse.Namespace) -> dict[str, object]:
         or stat.S_IMODE(key_parent.st_mode) != 0o700
     ):
         raise ProbeSkip("A09 private-key directory must be owned by the runner with mode 0700")
-    _regular_owned_file(identity_file, mode=0o600, uid=os.geteuid(), label="A09 private key")
-    _regular_owned_file(known_hosts, mode=0o600, uid=os.geteuid(), label="A09 known_hosts")
+    key_info = _regular_owned_file(identity_file, mode=0o600, uid=os.geteuid(), label="A09 private key")
+    hosts_info = _regular_owned_file(known_hosts, mode=0o600, uid=os.geteuid(), label="A09 known_hosts")
+    if key_info.st_nlink != 1 or hosts_info.st_nlink != 1:
+        raise ProbeSkip("A09 key and known_hosts must not be hard-linked files")
 
     tmp_info = Path("/tmp").lstat()
     if (
@@ -491,29 +495,22 @@ def _a09_config(args: argparse.Namespace) -> dict[str, object]:
         known_text = known_hosts.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
         raise ProbeSkip(f"A09 known_hosts cannot be read: {exc}") from exc
-    pinned_entry = any(
-        len(fields := line.split()) >= 3
-        and fields[0] == "[127.0.0.1]:22"
-        and fields[1] == "ssh-ed25519"
-        for line in known_text.splitlines()
-        if line and not line.startswith("#")
-    )
-    if not pinned_entry:
-        raise ProbeSkip("A09 known_hosts lacks the explicit [127.0.0.1]:22 ED25519 entry")
+    pinned_keys: list[str] = []
+    for line in known_text.splitlines():
+        if not line or line.startswith("#"):
+            continue
+        fields = line.split()
+        if len(fields) >= 3 and fields[0] == "[127.0.0.1]:22" and fields[1] == "ssh-ed25519":
+            pinned_keys.append(fields[2])
+    if len(pinned_keys) != 1:
+        raise ProbeSkip("A09 known_hosts must contain exactly one explicit [127.0.0.1]:22 ED25519 entry")
     try:
-        fingerprint = subprocess.run(
-            ["/usr/bin/ssh-keygen", "-lf", str(known_hosts), "-E", "sha256"],
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=2.0,
-            check=False,
-            env={"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C"},
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise ProbeSkip(f"cannot verify A09 known_hosts fingerprint: {exc}") from exc
-    if fingerprint.returncode != 0 or A09_EXPECTED_HOSTKEY not in fingerprint.stdout:
-        raise ProbeSkip("A09 known_hosts does not contain the previously verified ED25519 host key")
+        key_blob = base64.b64decode(pinned_keys[0], validate=True)
+    except ValueError as exc:
+        raise ProbeSkip("A09 known_hosts ED25519 key encoding is invalid") from exc
+    fingerprint = "SHA256:" + base64.b64encode(hashlib.sha256(key_blob).digest()).decode("ascii").rstrip("=")
+    if fingerprint != A09_EXPECTED_HOSTKEY:
+        raise ProbeSkip("A09 known_hosts loopback ED25519 key differs from the previously verified fingerprint")
 
     return {
         "username": A09_ACCOUNT,
@@ -842,8 +839,12 @@ def _scenario_a09b(root: Path, config: dict[str, object] | None, skip_reason: st
 
         with connection:
             peer = read_peer_credentials(connection)
-            if peer.uid != config["peer_uid"] or peer.uid == os.getuid():
-                raise ProbeFailure("A09b kernel SO_PEERCRED UID does not match the external test identity")
+            if (
+                peer.uid != config["peer_uid"]
+                or peer.gid != config["peer_gid"]
+                or peer.uid == os.getuid()
+            ):
+                raise ProbeFailure("A09b kernel SO_PEERCRED UID/GID does not match the external test identity")
             try:
                 _serve_one(connection)
             except AdminPeerRejected as exc:
@@ -859,10 +860,18 @@ def _scenario_a09b(root: Path, config: dict[str, object] | None, skip_reason: st
             report.get("connected") is not True
             or report.get("connect_errno") is not None
             or report.get("peer_closed") is not True
+            or not isinstance(report.get("request_bytes_sent"), int)
+            or report.get("request_bytes_sent", 0) <= 0
             or report.get("bytes_received") != 0
             or report.get("closure") not in {"eof", "reset"}
         ):
             raise ProbeFailure(f"A09b peer received data or did not observe server closure: {report!r}")
+        if _identity(listener.path) != listener.identity:
+            raise ProbeFailure("A09b fixture socket identity changed before cleanup")
+        fixture_mode = stat.S_IMODE(fixture.lstat().st_mode)
+        socket_mode = stat.S_IMODE(listener.path.lstat().st_mode)
+        if fixture_mode != 0o711 or socket_mode != 0o666:
+            raise ProbeFailure("A09b fixture permissions changed during the exchange")
         return {
             "peer_pid": peer.pid,
             "peer_uid": peer.uid,
@@ -870,8 +879,9 @@ def _scenario_a09b(root: Path, config: dict[str, object] | None, skip_reason: st
             "handler_rejection": "UNAUTHORIZED_PEER",
             "response_bytes": report["bytes_received"],
             "client_observed_closure": report["closure"],
-            "fixture_directory_mode": 0o711,
-            "fixture_socket_mode": 0o666,
+            "fixture_directory_mode": fixture_mode,
+            "fixture_socket_mode": socket_mode,
+            "request_bytes_sent": report["request_bytes_sent"],
         }
     finally:
         cleanup_errors: list[str] = []
@@ -920,13 +930,6 @@ def _scenario_a09b(root: Path, config: dict[str, object] | None, skip_reason: st
         if cleanup_errors:
             raise ProbeFailure("; ".join(cleanup_errors))
 
-
-def _scenario_a09a_entry(root: Path, state: dict[str, object]) -> dict[str, object]:
-    return _scenario_a09a(root, state.get("config"), state.get("skip_reason"))
-
-
-def _scenario_a09b_entry(root: Path, state: dict[str, object]) -> dict[str, object]:
-    return _scenario_a09b(root, state.get("config"), state.get("skip_reason"))
 
 def _scenario_a10(root: Path) -> dict[str, int]:
     box = CaseSandbox(root, "a10")
