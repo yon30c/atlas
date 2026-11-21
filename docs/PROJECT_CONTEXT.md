@@ -1,6 +1,6 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-20.
+> **Última actualización:** 2026-11-20 (revisión estática A-IPC-01).
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
@@ -10,12 +10,12 @@
 
 - **Repositorio:** `yon30c/atlas`.
 - **Base estable:** `main` en `1bd73d149dbd98e7ee2e5fdc36880883b6b03d16`; PR #29 está integrado mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`.
-- **Rama activa de este incremento:** `experiment/a-ipc-01-private-unix-listener-probe`, creada desde el HEAD `d7a14302061e1cfc52df5097a42d65bd4ba482bb` de la rama documental `design/isolated-private-unix-listener-probe`. No hay PR abierto y `main` no ha sido modificado; la relación ahead/behind y el HEAD deben consultarse en GitHub al iniciar cada sesión.
+- **Rama activa de este incremento:** `experiment/a-ipc-01-private-unix-listener-probe`, creada desde el HEAD `d7a14302061e1cfc52df5097a42d65bd4ba482bb` de la rama documental `design/isolated-private-unix-listener-probe`. HEAD tras la revisión estática A14: `909d658e5ba177941f46b87a50c891869e5ca6d7`; comparación con la base: 23 commits ahead, 0 behind. No hay PR abierto y `main` no ha sido modificado.
 - **Validación local más reciente comunicada:** sobre el HEAD de código de PR #29 `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, el propietario reportó en Debian 13 el probe user-manager `PASS` y la suite `Ran 1590 tests in 34.753s`, `OK (skipped=1)`. Esa evidencia no corresponde a esta rama documental ni valida el futuro probe A-IPC-01.
 - **Estado IPC:** contrato `atlas-admin/1` y handler para conexiones ya aceptadas; solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
 - **Transporte:** no hay transporte aprobado para producción. A (listener propio en directorio privado) tiene un diseño de probe aceptado para preparar su implementación experimental. B (socket activation sobre filesystem) permanece suspendida por la colisión destructiva observada en Debian systemd 257.13. C (AF_UNIX abstracto) continúa como alternativa experimental separada.
 - **Diseño A-IPC-01:** `docs/design/local-authority-admin-private-unix-listener-probe.md`, aprobado como base experimental. La implementación opt-in está preparada en `tests/integration/private_unix_listener/run_probe.py`, con instrucciones en `tests/integration/private_unix_listener/README.md`. Usa sandbox temporal sin privilegios, directorio `0700`, socket `0600`, colisiones no destructivas, cleanup condicionado por identidad, SO_PEERCRED, límites y carrera de dos binds simultáneos.
-- **Siguiente paso:** el propietario revisa el HEAD exacto y ejecuta el probe opt-in en Debian; después comparte el JSON completo para analizar los resultados. El código fue revisado en GitHub, pero no ha sido validado localmente.
+- **Revisión de código:** revisión estática en GitHub completada. Se corrigió A14 para bloquear workers admitidos hasta observar saturación, exigir los dos slots ocupados y reportar excepciones inesperadas; esto elimina la dependencia de la carrera entre timeout y aceptación. La corrección está en el HEAD `909d658e5ba177941f46b87a50c891869e5ca6d7`. No se ejecutaron pruebas, compilaciones ni workflows.
 - **Validación y método:** no se ejecutaron pruebas, compilaciones ni workflows desde GitHub. El probe A-IPC-01 está pendiente de ejecución por el propietario en Debian. A09 (peer con UID distinto) se marca SKIP deliberado porque el runner no cambia credenciales ni usa sudo; un recorrido sin otros fallos será INCOMPLETE, no PASS.
 
 **Límites vigentes:** la aceptación del diseño no selecciona A como transporte de producción ni autoriza listener persistente, daemon, systemd, unidades de producción, cambios del host, usuarios, grupos, permisos, privilegios, acceso SQLite, provisioning, operaciones administrativas ni despliegue. La colisión destructiva de systemd no debe repetirse. Cualquier decisión posterior de transporte requiere evidencia local y aprobación explícita del propietario.
@@ -585,3 +585,10 @@ PYTHONPATH=src python tests/integration/private_unix_listener/run_probe.py
 **Revisión y validación:** se realizó revisión manual del código y del diff en GitHub. No se han ejecutado pruebas, compilaciones ni workflows desde GitHub y no existe evidencia local aún. El propietario debe ejecutar el comando en Debian; el JSON completo y el commit exacto serán la evidencia. No declarar PASS si A09 permanece omitido.
 
 **No autorizado:** listener persistente, daemon, systemd, cambios de host, usuarios/grupos, permisos, privilegios, acceso SQLite, operaciones administrativas o despliegue. La alternativa A sigue siendo candidata experimental, no transporte aprobado.
+
+
+### Revisión estática A-IPC-01 — 2026-11-20
+
+La inspección de `run_probe.py`, README, diseño y `src/atlas/platform_admin_ipc.py` confirmó que el experimento solo invoca `authority.ping` y no modifica handler, contrato, SQLite, runtime ni servicios. Se detectó una condición potencialmente no determinista en A14 y se corrigió: el harness ahora mantiene los workers admitidos en una compuerta temporal hasta observar la saturación, comprueba que los dos slots estén ocupados y registra excepciones inesperadas. La compuerta tiene un timeout acotado por `MAX_ACCEPT_WAIT_SECONDS` y se libera durante el cierre del harness.
+
+**HEAD revisado:** `909d658e5ba177941f46b87a50c891869e5ca6d7`. **Validación:** pendiente; no se ejecutaron pruebas ni compilaciones. El propietario debe actualizar Debian, inspeccionar el diff y ejecutar el probe manualmente sin sudo. A09 seguirá SKIP deliberado, por lo que el resultado sin otros fallos será INCOMPLETE.
