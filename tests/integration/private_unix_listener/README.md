@@ -266,3 +266,86 @@ protection against root or same-UID malicious processes, validate systemd
 activation, privilege separation, SQLite authorization, or authorize
 deployment. SSH/PAM/firewall global configuration was not changed as part of
 the reported run.
+
+
+## A-IPC-02 — mutual authentication and bounded-capacity probe
+
+**Status:** first implementation increment published; static review only. It has
+not been executed. It is separate from the unprivileged A-IPC-01 runner above:
+A-IPC-01 continues to refuse EUID 0; A-IPC-02 requires direct root execution
+inside a disposable VM because it must prove a real EUID 0 client against
+service and alternate numeric fixture identities.
+
+The runner creates a fresh root-owned mode-0700 sandbox under `/run`, then
+creates only temporary fixture directories and socket pathnames beneath it.
+It does not create NSS users/groups, edit host configuration, invoke sudo/su,
+install systemd units, access SQLite, or connect to any Atlas service. The
+service child clears supplementary groups, sets real/effective/saved GID and
+UID to the supplied numeric fixture values, and caps its own
+`RLIMIT_NOFILE` at 64. No host account provisioning is performed.
+
+The fixture IDs must be dedicated, unused numeric identities in the disposable
+VM. The operator is responsible for selecting them and explicitly confirming
+that the VM and IDs are disposable fixtures. Do not use IDs belonging to
+real host users/groups or run this probe on the production server.
+
+### Invocation
+
+From the repository root, in a disposable Debian/Linux VM, start a root shell
+directly (do not use sudo for this probe), then supply four dedicated numeric
+fixture IDs:
+
+```sh
+PYTHONPATH=src python3 tests/integration/private_unix_listener/run_mutual_auth_capacity_probe.py \
+  --service-uid <unused-service-uid> \
+  --service-gid <unused-service-gid> \
+  --other-uid <unused-alternate-uid> \
+  --other-gid <unused-alternate-gid> \
+  --confirm-disposable-vm \
+  --confirm-fixture-ids
+```
+
+The command is intentionally not part of the default test suite. Do not invent
+or reuse IDs from the host; first reserve four numeric fixture IDs exclusively
+inside the disposable VM. The runner does not create accounts or groups.
+
+### Implemented evidence in this increment
+
+| Scenario | Evidence |
+|---|---|
+| MA-01 | Root client verifies the server's kernel UID before sending a valid ping |
+| MA-02 | Root client rejects a server running under the alternate UID and sends zero bytes |
+| MA-04 | Service receives a real kernel peer UID 0 and processes the ping |
+| MA-05 | Service rejects the alternate-UID client before calling recv and sends no response |
+| CP-01 | Four active workers occupy all slots; a fifth connection remains pending rather than creating a fifth worker |
+| CP-04 | After a slot is released, the queued connection is accepted and the service returns to zero active workers |
+
+The probe also verifies the service child's real/effective/saved UID/GID,
+empty supplementary groups, socket ownership/mode, backlog configuration,
+read/write timeout values, global deadline configuration and
+`RLIMIT_NOFILE=64`.
+
+**Not yet implemented/validated:** exact kernel backlog saturation; full
+open-FD accounting; idle/read/write deadline adversaries; exception-path
+worker recovery; request/response boundary and JSON-depth adversaries;
+client EUID-negative pre-connect; configuration parsing/immutability;
+pathname component-walk, symlink and collision matrix; stale recovery.
+The current runner reports these omitted scenarios as INCOMPLETE, never PASS.
+A complete overall result is therefore expected to be INCOMPLETE at this stage.
+
+### Safety and result codes
+
+- Run only in a disposable VM with root access and four numeric IDs reserved
+  exclusively for the fixture.
+- The process drops credentials only in child processes; no host account,
+  group, permission, service or global configuration is changed.
+- Temporary data is confined to the fresh root-owned `/run/atlas-mutual-auth-*`
+  directory. If a child fails to stop or cleanup identity cannot be verified,
+  the sandbox is preserved and the report is FAIL.
+- 0: PASS (all required scenarios implemented and passed; not expected yet).
+- 1: FAIL (an implemented invariant failed or cleanup could not be verified).
+- 2: INCOMPLETE (preconditions unavailable or scenarios remain unimplemented).
+
+No tests, builds or workflows have been run by the assistant. The owner must
+review and execute this probe manually. A-IPC-02 does not implement or approve
+a persistent listener or production transport.
