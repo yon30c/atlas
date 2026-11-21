@@ -475,18 +475,18 @@ producción ni despliegue.
 
 ### MA-07 / MA-08 — strict config fixture and immutable snapshot (implemented; owner validation pending)
 
-The runner imports \`probe_config.py\`, located beside the runner under
-\`tests/integration/private_unix_listener/\`. It is experimental fixture code,
-not a production configuration parser and not part of \`src/atlas\`.
+The runner imports `probe_config.py`, located beside the runner under
+`tests/integration/private_unix_listener/`. It is experimental fixture code,
+not a production configuration parser and not part of `src/atlas`.
 
-The fixture grammar is strict ASCII \`key=value\` with eight required keys,
+The fixture grammar is strict ASCII `key=value` with eight required keys,
 no defaults, duplicate or unknown keys, and fixed test policy:
-\`client_uids=0\`, \`SOCK_SEQPACKET\`, socket mode 0600 and directory mode
+`client_uids=0`, `SOCK_SEQPACKET`, socket mode 0600 and directory mode
 0700. It is intentionally not a decision about the final production format.
 
 The loader opens the fixture filename relative to an already-open descriptor
-for a root-owned mode-0700 sandbox directory, using \`O_NOFOLLOW\`,
-\`O_NONBLOCK\` and \`O_CLOEXEC\`. It requires a regular root:root file, exact
+for a root-owned mode-0700 sandbox directory, using `O_NOFOLLOW`,
+`O_NONBLOCK` and `O_CLOEXEC`. It requires a regular root:root file, exact
 mode 0644, one hard link and size 1–4096 bytes; reads through that descriptor;
 compares metadata before/after; parses strictly; and compares service UID/GID
 to the numeric fixture identity.
@@ -502,9 +502,9 @@ remain unchanged. There is no watcher or reload path.
 
 **Scope limitation:** this validates the final file relative to a trusted
 temporary directory descriptor. It does not validate all path ancestors from
-\`/\`; the PA pathname-resolution probe remains separate. It does not read or
-create \`/etc/atlas/admin-ipc.conf\`, alter the host, or approve production
+`/`; the PA pathname-resolution probe remains separate. It does not read or
+create `/etc/atlas/admin-ipc.conf`, alter the host, or approve production
 configuration.
 
-The owner must execute the updated runner only in disposable \`Atlas-VM-test\`.
+The owner must execute the updated runner only in disposable `Atlas-VM-test`.
 No tests, builds or workflows have been run by the assistant.
