@@ -10,8 +10,8 @@
 
 - **Repositorio:** `yon30c/atlas`.
 - **Rama de trabajo activa:** `work/systemd-socket-activation-probe-contract-alignment`.
-- **PR activo:** [#29 — Alinear probe systemd con atlas-admin/1 y registrar puertas del listener](https://github.com/yon30c/atlas/pull/29), abierto como draft, base `main`.
-- **HEAD de la rama del PR:** variable por cada commit documental; consultar la cabecera de [PR #29](https://github.com/yon30c/atlas/pull/29) para el SHA vigente. La base de comparación es `main` en `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`.
+- **PR #29:** [Alinear probe systemd con atlas-admin/1 y registrar puertas del listener](https://github.com/yon30c/atlas/pull/29), integrado en `main` mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`.
+- **HEAD de código validado en PR #29:** `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`. Los commits documentales posteriores quedaron incluidos en el merge commit indicado arriba.
 - **Base estable:** `main` en `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`; PR #28 ya integrado.
 - **Validación de la base `main`:** el propietario reportó 1.590 tests: `OK (skipped=1)`, 34.895 s, Python 3.13.5, sobre `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`.
 - **Validación local de PR #29:** confirmada por el propietario en Debian 13 sobre HEAD exacto `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, con árbol limpio y sincronizado con `origin`.
@@ -21,7 +21,7 @@
 - **Estado IPC:** contrato `atlas-admin/1` y handler/prototipo para conexiones ya aceptadas; la única operación funcional sigue siendo `authority.ping`. No existe listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
 - **Endpoint/transporte:** no hay transporte aprobado para producción. Listener propio sobre directorio privado (A) es únicamente candidato al siguiente probe temporal; socket activation systemd sobre filesystem (B) está suspendida por la colisión destructiva observada en Debian systemd 257.13; AF_UNIX abstracto (C) es experimental y conserva riesgos de preclaim/DoS y ausencia de DAC.
 - **Operaciones restantes:** las seis operaciones administrativas restantes continúan bloqueadas/no implementadas funcionalmente.
-- **Siguiente paso:** revisión/decisión del propietario sobre sacar PR #29 de Draft e integrarlo. Los probes A (listener propio) y C (AF_UNIX abstracto) siguen siendo trabajos separados; no se ejecutaron ni quedan aprobados por esta validación.
+- **Siguiente paso:** diseñar y ejecutar probes separados para A (listener propio) y C (AF_UNIX abstracto), sin asumir aprobación de transporte. No se ejecutaron ni quedan aprobados por la validación/merge de PR #29.
 
 **Límites vigentes:** la validación del probe user-manager no autoriza system-manager, listener persistente, despliegue, unidades de producción, cambios del host, usuarios, grupos, permisos, privilegios, apertura de SQLite, provisioning ni operaciones administrativas. Socket activation sobre filesystem continúa suspendida por la colisión observada. Las decisiones de transporte y cualquier cambio de autoridad requieren evidencia y aprobación explícita del propietario.
 
@@ -534,3 +534,10 @@ El propietario confirmó que Debian estaba en `4e84eab1fd03ddd9057525ee18a3c02a1
 - Suite completa: `Ran 1590 tests in 34.753s` y `OK (skipped=1)`.
 
 Esta evidencia cierra la validación local del alcance de PR #29. No demuestra comportamiento del system-manager, separación real de privilegios, seguridad frente a procesos del mismo UID/root, ni aprueba transporte o despliegue. La activación systemd sobre filesystem permanece suspendida por la colisión destructiva observada previamente. Los probes de alternativas A y C siguen pendientes y separados.
+
+
+### 16.10 Integración de PR #29 — 2026-11-21
+
+PR #29 se marcó Ready for review y se integró en `main` mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`. La validación local reportada por el propietario fue ejecutada sobre el HEAD de código `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, con árbol limpio: probe systemd user-manager `PASS` (descriptor, dos activaciones, ownership/mode privados y `RemoveOnStop=no`) y suite completa `Ran 1590 tests in 34.753s`, `OK (skipped=1)`. Los commits posteriores fueron documentales; no se ha reportado una nueva ejecución de la suite sobre el merge commit.
+
+El merge no habilita listener persistente, system-manager, separación de privilegios, acceso SQLite ni operaciones administrativas. Socket activation sobre filesystem permanece suspendida por la colisión destructiva observada. Las alternativas A y C requieren probes independientes y una decisión explícita posterior.
