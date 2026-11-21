@@ -1072,3 +1072,10 @@ sin elevarlo. No se ejecutaron pruebas, builds ni workflows desde GitHub.
 No se modificó handler, contrato, `main`, host, cuentas, servicios ni
 SQLite. Siguiente paso: ejecutar la punta de la rama solo en
 `Atlas-VM-test` desechable; nunca en `greed` producción.
+
+
+### A-IPC-02 — CP-10 procfs diagnostic correction (2026-11-21)
+
+Owner execution on `Atlas-VM-test`, commit `cbfe0e20a79ae3ee8fd901ba43ea6df360962398`: MA-01..MA-10 and CP-01..CP-09 PASS; CP-10 failed before resource snapshots with `ProbeFailure: CP-10 procfs status omitted Max open files`. Sandboxes were cleaned. This was a probe-reader defect, not evidence of an FD/thread limit violation.
+
+Static review found the runner looked for `Max open files` in `/proc/<pid>/status`; Linux exposes it in `/proc/<pid>/limits`. Commit `47b9ed94c21d26b18c415bedd2f1d352894f2620` corrects the procfs source while retaining FD counts from `fd/`, thread counts from `task/`, and the soft/hard 64/64 assertion. **CP-10 is statically corrected and awaits owner re-execution; do not mark PASS yet.** CP-11/12 remain pending. Assistant did not run tests/builds/workflows. Execute only in disposable `Atlas-VM-test`, never on production `greed`.
