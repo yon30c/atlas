@@ -941,3 +941,37 @@ El propietario ejecutó `e46070e6e1824b06af04a3627feb0f658de9c1f8` en `Atlas-VM-
 La fuente del kernel revisada muestra que la interfaz procfs de AF_UNIX enumera sockets y expone inode/path; la discrepancia requiere diagnóstico adicional, no una relajación del matching. Commit `a3e2d3dcb24842c4ae842f1d8082b4a2dbade374` amplía los diagnósticos de SR-01/SR-11 con FD target, `getsockname()`, `SO_TYPE`, `SO_ACCEPTCONN`, recuento y filas completas (acotadas a 64) de la tabla local. Es un cambio de diagnóstico, no ejecutado aún por el propietario.
 
 **Estado:** A-IPC-04 no validado; A-THREAT-05 abierta. La ausencia de filas no clasifica un socket como stale y no autoriza unlink. Repetir solo en `Atlas-VM-test`, nunca en `greed`. Sin limpieza automática, listener persistente ni despliegue.
+
+
+## A-IPC-04 — quinta ejecución del propietario (2026-11-21)
+
+El propietario ejecutó el checkout `6f77960c25fba873be67bd29fb40814619e44ee8`
+en `Atlas-VM-test` (Debian 13, kernel `6.12.117+deb13-amd64`,
+Python 3.13.5, EUID 0; SERVICE 2005:2005, OTHER 2006:2006).
+Resultado: **10 PASS / 2 FAIL / 0 INCOMPLETE**, duración 0.161 s;
+203 procesos visibles, seis network namespaces en el inventario inicial,
+cleanup del sandbox confirmado.
+
+La ampliación diagnóstica confirma en ambos escenarios locales:
+- `getsockname()` devuelve el pathname fixture esperado.
+- `SO_TYPE=5` (`SOCK_SEQPACKET`) y `SO_ACCEPTCONN=true`.
+- El FD apunta a `socket:[41168]` (SR-01) y `socket:[41184]` (SR-11).
+- La lectura directa de `/proc/self/net/unix` fue correcta (58 registros),
+  pero no contiene pathname, inode ni fila candidata del listener. No hubo
+  error de lectura; el namespace del inspector `net:[4026531840]` sí figura
+  en el inventario.
+- SR-03 detectó el listener adicional `net:[4026532290]` (PID 6051)
+  desde el inventario del proceso padre.
+
+SR-01 y SR-11 continúan FAIL por ausencia del listener activo en las tablas
+procfs; ya no es un problema de bind/listen fallido según las propiedades
+observadas del socket. SR-02..SR-10 y SR-12: PASS. No se llamó connect para
+liveness; cleanup eliminó el sandbox.
+
+**Conclusión:** la discrepancia entre un socket local correctamente enlazado
+y escuchando y su ausencia completa en `/proc/self/net/unix` sigue sin
+explicación. No cambiar el matching, no inferir stale, no ejecutar unlink.
+A-IPC-04 no está validado y A-THREAT-05 permanece abierta. Solo investigar y
+repetir en `Atlas-VM-test`; nunca en `greed`. Sin limpieza automática,
+listener persistente ni despliegue. El asistente no ejecutó pruebas, builds,
+workflows ni probes.
