@@ -21,7 +21,7 @@
 - **Estado IPC:** contrato `atlas-admin/1` y handler/prototipo para conexiones ya aceptadas; la única operación funcional sigue siendo `authority.ping`. No existe listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
 - **Endpoint/transporte:** no hay transporte aprobado para producción. Listener propio sobre directorio privado (A) es únicamente candidato al siguiente probe temporal; socket activation systemd sobre filesystem (B) está suspendida por la colisión destructiva observada en Debian systemd 257.13; AF_UNIX abstracto (C) es experimental y conserva riesgos de preclaim/DoS y ausencia de DAC.
 - **Operaciones restantes:** las seis operaciones administrativas restantes continúan bloqueadas/no implementadas funcionalmente.
-- **Siguiente paso:** diseñar y ejecutar probes separados para A (listener propio) y C (AF_UNIX abstracto), sin asumir aprobación de transporte. No se ejecutaron ni quedan aprobados por la validación/merge de PR #29.
+- **Siguiente paso:** revisar y aprobar el diseño A-IPC-01 en `docs/design/local-authority-admin-private-unix-listener-probe.md`. El documento define el probe aislado de la alternativa A; todavía no existe implementación ni ejecución. Después de la aprobación, inspeccionar el árbol de tests y preparar la implementación en una fase separada. El probe C (AF_UNIX abstracto) queda posterior y separado.
 
 **Límites vigentes:** la validación del probe user-manager no autoriza system-manager, listener persistente, despliegue, unidades de producción, cambios del host, usuarios, grupos, permisos, privilegios, apertura de SQLite, provisioning ni operaciones administrativas. Socket activation sobre filesystem continúa suspendida por la colisión observada. Las decisiones de transporte y cualquier cambio de autoridad requieren evidencia y aprobación explícita del propietario.
 
@@ -535,6 +535,18 @@ El propietario confirmó que Debian estaba en `4e84eab1fd03ddd9057525ee18a3c02a1
 
 Esta evidencia cierra la validación local del alcance de PR #29. No demuestra comportamiento del system-manager, separación real de privilegios, seguridad frente a procesos del mismo UID/root, ni aprueba transporte o despliegue. La activación systemd sobre filesystem permanece suspendida por la colisión destructiva observada previamente. Los probes de alternativas A y C siguen pendientes y separados.
 
+
+### 16.11 Diseño del probe A-IPC-01 — 2026-11-21
+
+Se creó en la rama `design/isolated-private-unix-listener-probe` el documento [Diseño del probe A-IPC-01 — listener Unix propio en directorio privado](design/local-authority-admin-private-unix-listener-probe.md).
+
+- Alcance: experimento opt-in, sin privilegios, en directorio temporal privado, usando AF_UNIX/SOCK_SEQPACKET y el contrato existente `atlas-admin/1`.
+- Casos: pathname libre; colisiones con archivo, symlink, socket activo y stale; propiedad/cleanup condicionado por identidad de inode; lifecycle; SO_PEERCRED y autorización separada; desconexión, truncamiento, ancillary, timeout y límites de recursos.
+- Regla de seguridad: nunca hacer unlink preventivo ni stale cleanup automático; ante colisión, fallar sin modificar el objeto. Si la identidad del pathname no coincide durante cleanup, no eliminarlo.
+- Límites: la comprobación inode + unlink conserva una ventana TOCTOU; el directorio privado no protege frente a root ni procesos del mismo UID. La prueba multi-UID queda condicional y no puede requerir sudo ni cambios del host.
+- Exclusiones: no listener persistente, daemon, systemd, SQLite, operaciones administrativas, cambios del host ni despliegue.
+- Estado: diseño propuesto, pendiente de revisión/aprobación; no implementado ni ejecutado. No hay comandos de prueba todavía.
+- La rama de diseño se creó desde `main`; no se modificó `main` ni se abrió/mergeó un PR.
 
 ### 16.10 Integración de PR #29 — 2026-11-21
 
