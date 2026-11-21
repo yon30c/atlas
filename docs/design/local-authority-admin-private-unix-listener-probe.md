@@ -153,18 +153,20 @@ A06 utiliza únicamente un fixture del sandbox para simular sustitución. No int
 
 ## 8. Concurrencia y límites de recursos
 
-El probe debe declarar límites pequeños y fijos para:
+La implementación experimental declara estos límites fijos:
 
-- backlog de `listen()`;
-- número máximo de conexiones aceptadas simultáneamente;
-- tamaño máximo del paquete recibido, alineado con el contrato actual (16 KiB);
-- tamaño máximo de respuesta (64 KiB);
-- timeout de lectura y escritura independiente (default actual 5 s; máximo contractual 60 s);
-- número de solicitudes por conexión (exactamente una);
-- tiempo máximo total del escenario;
-- número máximo de descriptores abiertos por el ejecutor.
+- backlog de `listen()`: 8;
+- máximo de conexiones activas en el harness de aceptación: 2 workers;
+- tamaño máximo de request del handler: 16 KiB;
+- tamaño máximo de respuesta del handler: 64 KiB;
+- timeout de lectura y escritura del handler en el harness: 0.35 s cada uno (menor que el default del handler, 5 s; nunca supera el máximo contractual de 60 s);
+- exactamente una solicitud por llamada al handler y por conexión aceptada en el harness;
+- espera máxima de aceptación en los escenarios de ping: 8 s;
+- saturación: hasta 8 intentos de cliente; workers adicionales se rechazan sin crear threads adicionales.
 
-El test de saturación debe verificar que el servidor no crea tareas/hilos ilimitados, no acumula paquetes ilimitados y recupera capacidad al cerrar clientes. Los valores concretos del límite de concurrencia deben ser parámetros fijos del fixture de prueba y quedar registrados en el resultado. Este diseño no decide todavía los valores de producción.
+A14 verifica que el harness no supera dos workers activos, que al menos una conexión excedente se rechaza y que recupera capacidad después de cerrar los clientes. El harness es código de prueba; no es el listener de producción ni una recomendación de capacidad.
+
+**Límites de evidencia:** no se impone un límite global de descriptores al proceso ni un watchdog global que interrumpa cualquier escenario a los 8 s. Las operaciones bloqueantes del runner tienen timeouts acotados y se registran duraciones, pero el campo de 8 s solo representa la espera máxima de aceptación indicada, no un timeout global por escenario. Estos puntos quedan como límites explícitos del experimento y no deben describirse como verificados.
 
 ## 9. Estructura de implementación
 
