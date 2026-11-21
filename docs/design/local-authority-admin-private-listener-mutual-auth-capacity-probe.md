@@ -1,7 +1,7 @@
 # Plan de probe aislado — autenticación mutua y capacidad IPC
 
 **Fecha:** 2026-11-21  
-**Estado:** plan de validación aprobado a nivel de diseño; no implementado ni ejecutado.  
+**Estado:** primera iteración del harness A-IPC-02 implementada en `tests/integration/private_unix_listener/run_mutual_auth_capacity_probe.py`; revisión estática solamente, no ejecutada. El plan completo sigue parcialmente implementado.  
 **Rama:** experiment/a-ipc-01-private-unix-listener-probe  
 **Decisiones:** TCB-1; frontend EUID 0; client_uids={0}; perfil de capacidad inicial aprobado por el propietario.  
 **Dependencias:** contrato atlas-admin/1, handler IPC, configuración confiable, resolución de rutas, stale recovery y lifecycle.
@@ -131,14 +131,12 @@ INCOMPLETE si el entorno no permite verificar credenciales reales, no se puede m
 
 ## 9. Entregables y secuencia
 
-1. Revisar este plan contra las APIs disponibles del handler y las garantías del kernel.
-2. Diseñar harness temporal con fixtures de procesos separados y métricas explícitas; no implementar todavía listener persistente.
-3. Implementar primero autenticación mutua en cliente/servidor de fixture, sin DB ni operaciones administrativas.
-4. Añadir resolución de rutas y pruebas de colisión/cleanup.
-5. Añadir pool fijo/backpressure/deadline/FD accounting.
-6. Validar manualmente stale recovery en sandbox separado.
-7. Entregar comandos y commit exacto para ejecución por el propietario en Debian/VM.
-8. Revisar resultados y cerrar hallazgos antes de proponer cualquier listener persistente.
+1. **Implementado, pendiente de ejecución:** harness separado A-IPC-02 con procesos reales: cliente EUID 0, servicio bajo UID/GID numéricos de fixture, autenticación mutua `SO_PEERCRED`, prueba de orden antes de send/recv, cuatro workers fijos, backlog configurado 8, deadline global de 15 s, timeouts 5 s y `RLIMIT_NOFILE=64` en el proceso de servicio.
+2. **Validación del propietario pendiente:** ejecutar exclusivamente en VM desechable con cuatro IDs numéricos reservados para fixtures; el harness no crea cuentas/grupos. El runner declara INCOMPLETE para escenarios todavía no implementados.
+3. Completar EUID-negativo, config parser/snapshot, límites de payload/depth, read/write/deadline adversaries, excepción/recovery, saturación exacta del backlog y contabilidad de FDs.
+4. Añadir resolución de rutas, symlinks, colisiones y cleanup por descriptor; mantenerlo separado del listener persistente.
+5. Validar manualmente stale recovery en sandbox separado.
+6. Revisar resultados y cerrar hallazgos antes de proponer cualquier listener persistente.
 
 No combinar esta etapa con implementación del entrypoint administrativo real ni con las operaciones authority.diagnose, migraciones, initialize o provisioning.
 
