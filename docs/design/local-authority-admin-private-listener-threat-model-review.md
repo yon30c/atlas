@@ -90,7 +90,7 @@ El diseño correctamente prohíbe stale cleanup automático y establece que un p
 
 **Diseño candidato publicado:** [Recuperación manual de socket IPC residual](local-authority-admin-private-listener-stale-recovery.md) propone detener el servicio, confirmar que no hay procesos que conserven el descriptor, inspeccionar todas las tablas AF_UNIX de los network namespaces visibles mediante `/proc/<pid>/net/unix`, validar el objeto filesystem por descriptor y exigir autorización humana específica antes de `unlinkat`.
 
-**Estado:** A-THREAT-05 sigue abierto hasta probar la enumeración de namespaces y el flujo de recuperación en un sandbox. El arranque normal continúa fallando cerrado; nunca debe hacer stale cleanup ni usar `connect()` como detector de liveness.
+**Estado:** A-IPC-04 ya fue validado por el propietario: SR-01..SR-12, 12/12 PASS, 0 FAIL/INCOMPLETE, en `375fb00a3fee230a57f89ffa7897a29309ff1dd2` sobre Debian 13/kernel `6.12.117+deb13-amd64` en `Atlas-VM-test`. La prueba unitaria del lector procfs también fue reportada PASS inmediatamente antes del probe, sin SHA exacto confirmado. A-THREAT-05 permanece abierta: el harness solo cubre procesos/namespaces visibles desde el procfs/PID namespace usado, no es host-wide ni snapshot atómico, y no elimina TOCTOU. SR-10 usa un token fixture-only, no una aprobación humana real. El arranque normal continúa fallando cerrado; nunca debe hacer stale cleanup ni usar `connect()` como detector de liveness.
 
 ### A-THREAT-06 — La resolución segura de la ruta necesita especificación completa
 
@@ -151,7 +151,7 @@ Estas garantías son acotadas al código y ejecución identificados. No prueban 
 | Proceso malicioso con UID de servicio | Separación de UID / TCB | No hay aislamiento entre procesos del mismo UID | **Decisión bloqueante** |
 | Root/capabilities suficientes | Fuera de la TCB de este control | No se prueba | Fuera de alcance declarado |
 | Path preexistente / colisión | Bind sin unlink previo | A02–A05 y A16 | Validado experimentalmente |
-| Socket residual tras crash | Fallar cerrado, no stale cleanup | A05 simula stale; recuperación operacional no probada | Parcial |
+| Socket residual tras crash | Fallar cerrado, no stale cleanup; procedimiento manual separado | A-IPC-04 SR-01..SR-12: 12/12 PASS en harness; cobertura procfs/PID namespace limitada y TOCTOU permanece | Harness validado; procedimiento operativo sigue abierto |
 | Sustitución de pathname durante cleanup | Directorio privado TCB-1 + revalidación y unlinkat relativo | A06/A07 y diseño reconoce TOCTOU | Residual aceptado bajo condiciones TCB-1; requiere probe |
 | Saturación / DoS de conexiones | Límites y backpressure | A14 harness 2 workers/backlog 8 | Solo harness |
 | Shutdown bajo carga / restart persistente | Máquina de estados y drenaje | No existe listener persistente | Pendiente |
