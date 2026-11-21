@@ -493,3 +493,48 @@ Siguiente paso: ejecutar el runner actualizado solo en la VM desechable y
 compartir el JSON completo. No usar `greed` de producción. Esta etapa no
 modifica handler/contrato, no crea servicios y no autoriza listener
 persistente, systemd, SQLite, cambios del host ni despliegue.
+
+## A-IPC-02 — CP-08/CP-09 validados; CP-10 implementado (2026-11-21)
+
+El propietario ejecutó el commit `caf7bbb8c83388a3723b66a7f4060a01c97c171d`
+en `Atlas-VM-test`, Debian 13, kernel `6.12.117+deb13-amd64`,
+Python 3.13.5, EUID 0, fixtures SERVICE `2005/2005` y OTHER
+`2006/2006`.
+
+- MA-01..MA-10 y CP-01..CP-09: PASS.
+- CP-08: request exacto 16 KiB alcanzó schema validation; 16 KiB+1 produjo
+  `REQUEST_TOO_LARGE`; paquete mayor que el buffer produjo
+  `MESSAGE_TRUNCATED` y cero bytes de respuesta. Response exacto 64 KiB
+  llegó íntegro; 64 KiB+1 fue rechazado y el peer recibió cero bytes.
+- CP-09: profundidad total 16 llegó a schema validation
+  (`INVALID_REQUEST` por campo extra); profundidad 17 fue rechazada como
+  `INVALID_JSON`.
+- CP-05/06/07 y backlog conservaron PASS en la misma ejecución.
+- Cleanup de sandboxes privado y traversal confirmado; duración 22.678 s.
+- Overall INCOMPLETE solo porque CP-10..CP-12 no estaban incluidos en ese
+  commit.
+
+El runner implementó CP-10 en commits `e02bbbb7e3eacb45fbeab620d00cf0463e1c827e`
+y `bf3c62375fd8a3017b332efe406be9d1fd903568`:
+
+- Lee `/proc/<pid>/fd`, `/proc/<pid>/task` y `/proc/<pid>/status`
+  del proceso fixture de servicio.
+- Toma snapshot base y snapshot con cuatro workers ocupados y nueve
+  conexiones pendientes (cola efectiva AF_UNIX para `listen(8)`).
+- Verifica máximo 64 FDs por `RLIMIT_NOFILE=64`, exactamente cuatro
+  threads worker más el thread principal (máximo 5), y que el servidor
+  vuelve a active=0 después de cerrar los peers y drenar la cola.
+- Comprueba también que el proceso sigue vivo y que el límite soft/hard
+  reportado por procfs es 64/64.
+
+**CP-10 está implementado y revisado estáticamente, pendiente de ejecución
+del propietario.** Esta medida observa el proceso fixture/harness, no
+establece límites productivos de memoria, CPU, TasksMax ni inventario de un
+entrypoint futuro. CP-11/12 siguen pendientes: ciclos repetidos de
+saturación/recuperación y rechazo de startup con RLIMIT_NOFILE insuficiente
+sin elevarlo.
+
+Siguiente paso: actualizar y ejecutar el runner solo en la VM desechable
+`Atlas-VM-test`; nunca en `greed` producción. No se ejecutaron pruebas,
+builds ni workflows desde GitHub. No se modificó handler, contrato,
+`main`, host, cuentas, servicios, permisos ni SQLite.
