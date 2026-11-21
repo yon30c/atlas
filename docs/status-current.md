@@ -782,3 +782,14 @@ permanece INCOMPLETE. Ejecutar el runner solo en `Atlas-VM-test`
 desechable; nunca en `greed` producción. No se ejecutaron pruebas,
 builds ni workflows desde GitHub.
 
+## A-IPC-02 — CP-11 validado y CP-12 implementado (2026-11-21)
+
+El propietario ejecutó `da8c6ea9ed0ce36d2c7b4c2c8c5417dd79975fb7`
+en `Atlas-VM-test` (Debian 13, kernel 6.12.117, Python 3.13.5):
+MA-01..MA-10 y CP-01..CP-11 PASS. CP-11 completó tres ciclos:
+accepted 31→35→44, 44→48→57 y 57→61→70; en cada uno FDs 4→8→4,
+threads 5→5→5, active=0 al recuperar y servidor vivo. Cleanup correcto;
+duración 24.72 s.
+
+CP-12 está implementado en runner commit `0fb5c3989f5ac9e11b14344557b18ad7bd75027b`, pero pendiente de ejecución del propietario. Simula límites heredados soft/hard 32/32 antes de exec y exige rechazo de startup antes de bind, sin elevar límites ni crear socket. **Overall permanece INCOMPLETE hasta validar CP-12.** Ejecutar solo en `Atlas-VM-test` desechable, nunca en `greed` producción. El asistente no ejecutó pruebas, builds ni workflows.
+
