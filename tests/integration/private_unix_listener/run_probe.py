@@ -661,7 +661,12 @@ def _scenario_a14(root: Path) -> dict[str, int]:
             with connection:
                 _peer, request = _serve_one(connection)
             response = json.loads(client.recv(MAX_RESPONSE_BYTES).decode("utf-8"))
-        if response.get("request_id") != request_id or request.request_id != request_id:
+        if (
+            response.get("request_id") != request_id
+            or request.request_id != request_id
+            or response.get("status") != "completed"
+            or response.get("code") != "OK"
+        ):
             raise ProbeFailure("listener did not recover to process a valid ping")
         with harness.lock:
             return {"peak_active": harness.peak, "rejected_connections": harness.rejected, "handled_connections": harness.handled, "active_after_recovery": harness.active}
@@ -746,13 +751,18 @@ def _scenario_a16(root: Path) -> dict[str, object]:
         os.chmod(path, 0o600)
         winner.listen(1)
         winner.settimeout(1.0)
+        request_id, packet = _ping_packet()
         client = _connect(path)
-        client.sendall(_ping_packet()[1])
+        client.sendall(packet)
         connection, _ = winner.accept()
         with client, connection:
             _serve_one(connection)
             response = json.loads(client.recv(MAX_RESPONSE_BYTES).decode("utf-8"))
-        if response.get("status") != "completed" or response.get("code") != "OK":
+        if (
+            response.get("request_id") != request_id
+            or response.get("status") != "completed"
+            or response.get("code") != "OK"
+        ):
             raise ProbeFailure("winning listener did not remain operational")
         if _identity(path) != winner_id:
             raise ProbeFailure("winner pathname identity changed during loser collision")
