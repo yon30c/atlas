@@ -39,7 +39,7 @@ El archivo de configuración fixture se abrirá por nombre simple relativo al de
 
 | ID | Escenario | Resultado requerido |
 |---|---|---|
-| PR-01 | Rutas relativas, `//`, separador final, componentes vacíos, `.`, `..`, NUL y caracteres no permitidos | Rechazo antes de abrir componentes |
+| PR-01 | Rutas relativas, `//`, separador final, componentes vacíos, `.`, `..`, NUL y caracteres no permitidos | Rechazo antes de abrir componentes, incluyendo expansión `~`/variables, globbing y separador alternativo `\\` |
 | PR-02 | Recorrido válido desde `/` por varios directorios root:root | PASS; descriptor final corresponde al inode esperado y metadata de cada componente registrada |
 | PR-03 | Symlink colocado individualmente en cada nivel intermedio | Rechazo; no se abre el destino ni se escapa del sandbox |
 | PR-04 | Componente intermedio que es archivo regular | Rechazo como no-directorio |
