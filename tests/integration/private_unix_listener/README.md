@@ -1,7 +1,9 @@
 # A-IPC-01 — private Unix listener probe
 
 **Status:** opt-in experiment, executed locally by the owner on Debian 13 with
-15 scenarios PASS and A09 SKIP; overall result INCOMPLETE. This is not a
+15 scenarios PASS and the original A09 SKIP; overall result INCOMPLETE. The
+review has since split that missing evidence into A09a (DAC) and A09b
+(SO_PEERCRED); neither is implemented or validated yet. This is not a
 production listener and does not select AF_UNIX pathname sockets as the
 production IPC transport.
 
