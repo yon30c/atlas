@@ -26,11 +26,11 @@ Revisión estática de `src/atlas/platform_admin_ipc.py`:
 
 El handler no impone deadline total desde accept hasta cierre. Los 5 s de lectura y 5 s de escritura tampoco equivalen a un presupuesto global. El caller puede pasar otros valores dentro del máximo.
 
-## 3. Perfil inicial recomendado para revisión
+## 3. Perfil inicial aprobado para probes aislados
 
-Los valores siguientes son una propuesta conservadora para el primer servicio administrativo local de baja frecuencia. No son valores ya implementados ni una aprobación de systemd.
+El propietario aprobó los valores siguientes para la siguiente etapa de experimentación aislada. Son una decisión de capacidad para el probe, no valores implementados ni una aprobación de systemd o producción.
 
-| Recurso | Propuesta inicial | Razón |
+| Recurso | Perfil aprobado para el probe | Razón |
 |---|---:|---|
 | Conexiones procesadas simultáneamente | 4 | Permite una operación interactiva y varias consultas/status breves sin concurrencia ilimitada |
 | Workers | 4 fijos | Un worker por conexión admitida; nunca crear threads ilimitados |
@@ -39,10 +39,10 @@ Los valores siguientes son una propuesta conservadora para el primer servicio ad
 | Request/response/depth | 16 KiB / 64 KiB / 16 | Conservar los límites ya presentes en el handler |
 | Read/write timeout | 5 s / 5 s | Conservar los defaults del handler para IPC de control |
 | Deadline total de conexión | 15 s | Límite absoluto desde accept hasta respuesta/cierre; requiere implementación con reloj monotónico |
-| Descriptores abiertos (`RLIMIT_NOFILE`) | 64, candidato | Presupuesto inicial con margen; validar contra logging, config, listener, workers y conexiones SQLite reales |
+| Descriptores abiertos (`RLIMIT_NOFILE`) | 64, aprobado para el probe | Presupuesto inicial con margen; validar contra logging, config, listener, workers y conexiones SQLite reales |
 | Conexiones por socket | Una solicitud por conexión | El handler ya procesa un único paquete; cerrar después de una respuesta |
 
-**Por qué 4 y no los 2 de A14:** A14 usa 2 para demostrar saturación y recuperación del harness. El perfil propuesto 4 es una decisión de capacidad para permitir varias solicitudes de control/status breves, no una extrapolación de la prueba. Debe confirmarse con el flujo real del frontend y medirse en el entorno aislado.
+**Por qué 4 y no los 2 de A14:** A14 usa 2 para demostrar saturación y recuperación del harness. El perfil aprobado 4 es una decisión de capacidad para permitir varias solicitudes de control/status breves, no una extrapolación de la prueba. Debe medirse en el entorno aislado.
 
 ## 4. Backpressure y admisión
 
