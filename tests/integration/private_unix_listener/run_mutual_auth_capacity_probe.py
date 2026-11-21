@@ -504,7 +504,9 @@ class Server:
             try:
                 item = self._output.get(timeout=max(0.0, deadline - time.monotonic()))
             except queue.Empty:
-                return
+                # Keep the full observation window: the stdout reader thread
+                # may still be transferring already-emitted child events.
+                continue
             self._record(item)
 
     def wait_event(self, name: str, predicate=None, timeout: float = 5.0):
