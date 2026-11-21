@@ -308,7 +308,7 @@ read -r -p "GID numérico reservado para atlas-runtime fixture: " SERVICE_GID
 read -r -p "UID numérico reservado para peer alternativo: " OTHER_UID
 read -r -p "GID numérico reservado para peer alternativo: " OTHER_GID
 
-PYTHONPATH=src python3 tests/integration/private_unix_listener/run_mutual_auth_capacity_probe.py \
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 tests/integration/private_unix_listener/run_mutual_auth_capacity_probe.py \
   --service-uid "$SERVICE_UID" \
   --service-gid "$SERVICE_GID" \
   --other-uid "$OTHER_UID" \
