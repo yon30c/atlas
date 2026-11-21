@@ -985,3 +985,25 @@ Return codes: 0 = all 12 scenarios PASS and cleanup confirmed; 1 = FAIL;
 A-THREAT-05 remains open until the owner shares the complete JSON result.
 This probe does not approve stale cleanup in production, a persistent listener,
 systemd activation, SQLite access, or deployment.
+
+
+## A-IPC-04 — resultado inicial del propietario (2026-11-21)
+
+Primera ejecución sobre `27dd83a34e149901f908356668dc119b4491487f`
+en `Atlas-VM-test`: 8 PASS, 4 FAIL, 0 INCOMPLETE. SR-03 detectó el
+listener en un namespace adicional; el inventario cubrió 204 procesos
+visibles y seis namespaces; cleanup confirmado.
+
+SR-01/SR-11 no encontraron los listeners locales activos por pathname.
+SR-06 falló porque el fixture positivo contenía `\\n` literales y
+SR-07 porque las filas positivas omitían el delimitador `:` de `Num`.
+Los dos fixtures se corrigieron en commits
+`b2767ff6a64886fb361bbf7f8f36a016f90c3e7f` y
+`48008ff559b8c4f2528e3668d140797266f38844`. Se añadieron diagnósticos
+acotados a SR-01/SR-11 para capturar filas candidatas procfs, sin relajar
+el matching.
+
+**No repetir el commit antiguo.** La siguiente ejecución debe usar el HEAD
+actual de la rama y realizarse exclusivamente en `Atlas-VM-test`.
+A-THREAT-05 sigue abierta; no usar el runner para limpiar sockets reales.
+El asistente no ejecutó pruebas, builds, workflows ni probes.
