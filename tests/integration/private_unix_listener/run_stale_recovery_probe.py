@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import platform
 import re
+import select
 import shutil
 import signal
 import socket
@@ -383,7 +384,12 @@ def _scenario_03_other_namespace(sandbox: Path, uid: int, gid: int) -> dict:
         text=True, start_new_session=True,
     )
     try:
-        line = child.stdout.readline() if child.stdout else ""
+        if child.stdout is None:
+            raise ProbeFailure("SR-03 child stdout pipe was not created")
+        ready, _, _ = select.select([child.stdout], [], [], 5.0)
+        if not ready:
+            raise ProbeFailure("SR-03 namespace listener startup timed out")
+        line = child.stdout.readline()
         if not line.strip():
             error = child.stderr.read() if child.stderr else ""
             raise ProbeFailure(f"SR-03 namespace listener failed to start: {error[-500:]}")
@@ -647,7 +653,9 @@ def main() -> int:
     results = []
     started = time.monotonic()
     cleanup = "not-created"
-    namespaces_observed = []
+    namespace_inventory = []
+    processes_seen = 0
+    namespace_scan_retries = 0
     try:
         sandbox = Path(tempfile.mkdtemp(prefix="atlas-aipc04-", dir="/run"))
         info = os.stat(sandbox, follow_symlinks=False)
@@ -655,6 +663,10 @@ def main() -> int:
         if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0:
             raise ProbeFailure("sandbox is not a root-owned directory")
         os.chmod(sandbox, 0o700)
+        baseline = inspect_visible_namespaces(str(sandbox / "namespace-inventory-only.sock"))
+        namespace_inventory = baseline.namespaces
+        processes_seen = baseline.processes_seen
+        namespace_scan_retries = baseline.retries
 
         scenarios = [
             ("SR-01", lambda: _scenario_01_active_local(sandbox, args.service_uid, args.service_gid)),
@@ -719,6 +731,9 @@ def main() -> int:
         "fixture_other_uid": args.other_uid,
         "fixture_other_gid": args.other_gid,
         "procfs": proc_contract,
+        "processes_seen": processes_seen,
+        "namespace_scan_retries": namespace_scan_retries,
+        "namespace_inventory": namespace_inventory,
         "duration_seconds": round(time.monotonic() - started, 3),
         "overall": overall,
         "passed_scenarios": passed,
