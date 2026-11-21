@@ -989,3 +989,10 @@ Commit ejecutado: 0db262802ce30ec38a4ce52a4f5bfaa3081fc2b1. Entorno: Atlas-VM-te
 - El escenario exige EOF y cero bytes de respuesta en el peer fallido, evento worker_error, contador active=0, servidor aún vivo y una segunda petición authority.ping exitosa que vuelve a active=0.
 - La secuencia comprueba el cierre del socket, liberación del slot por finally y continuidad del accept loop. La inyección es test-only; no modifica handler productivo.
 - CP-07 implementado y revisado estáticamente; pendiente de ejecución del propietario. CP-08..CP-12 pendientes; overall INCOMPLETE.
+
+
+### A-IPC-02 — diagnóstico de primera ejecución CP-07
+
+El propietario ejecutó d054f95 en Atlas-VM-test: MA-01..MA-10 y CP-01..CP-06 PASS; CP-07 terminó en FAIL porque Server._record interpretó el worker_error deliberadamente inyectado como error fatal y abortó antes de verificar EOF, active=0/slot release, continuidad del servidor y segunda petición. No considerar CP-07 validado.
+
+Runner corregido en c1fdcc12eb3d7a0fcb6cccccb8eb07b0028dcb40: el colector consume solo un RuntimeError con el texto exacto esperado y únicamente cuando el servidor fue iniciado para CP-07. Los demás errores de worker siguen siendo fatales. Próximo paso: el propietario debe actualizar y repetir el runner en Atlas-VM-test desechable; nunca ejecutar en greed. Sin pruebas/builds/workflows del asistente.
