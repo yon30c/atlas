@@ -4,6 +4,26 @@
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
+## Estado operativo vigente — 2026-11-20
+
+> Esta sección es la referencia operativa prioritaria. Las secciones posteriores conservan decisiones y snapshots históricos; cuando un dato histórico contradiga este bloque, prevalece este bloque para el estado actual. No se elimina la historia de decisiones.
+
+- **Repositorio:** `yon30c/atlas`.
+- **Rama de trabajo activa:** `work/systemd-socket-activation-probe-contract-alignment`.
+- **PR activo:** [#29 — Alinear probe systemd con atlas-admin/1 y registrar puertas del listener](https://github.com/yon30c/atlas/pull/29), abierto como draft, base `main`.
+- **HEAD observado de la rama del PR:** `12bf6b045a1e9286857e043eb5dc43f0dc7393d5` (9 commits sobre la rama al consultar PR #29).
+- **Base estable:** `main` en `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`; PR #28 ya integrado.
+- **Última validación local reportada:** sobre `main` en ese SHA, el propietario ejecutó 1.590 tests: `OK (skipped=1)`, 34.895 s, Python 3.13.5. Esta evidencia valida esa base, **no** los cambios del PR #29.
+- **Validación de PR #29:** pendiente de ejecución local en Debian. No se han ejecutado pruebas, compilaciones ni workflows remotos para este PR en este ciclo documental.
+- **Estado IPC:** contrato `atlas-admin/1` y handler/prototipo para conexiones ya aceptadas; la única operación funcional sigue siendo `authority.ping`. No existe listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
+- **Endpoint/transporte:** no hay transporte aprobado para producción. Listener propio sobre directorio privado (A) es únicamente candidato al siguiente probe temporal; socket activation systemd sobre filesystem (B) está suspendida por la colisión destructiva observada en Debian systemd 257.13; AF_UNIX abstracto (C) es experimental y conserva riesgos de preclaim/DoS y ausencia de DAC.
+- **Operaciones restantes:** las seis operaciones administrativas restantes continúan bloqueadas/no implementadas funcionalmente.
+- **Siguiente paso:** completar la validación local del probe systemd corregido del PR #29 y, por separado, diseñar probes temporales A y C. No ejecutar los probes desde GitHub ni tocar recursos Atlas existentes.
+
+**Límites vigentes:** este estado no autoriza merge del PR, listener persistente, despliegue, unidades systemd, cambios del host, usuarios, grupos, permisos, privilegios, apertura de SQLite, provisioning ni operaciones administrativas. Las decisiones de transporte y cualquier cambio de autoridad requieren evidencia y aprobación explícita del propietario.
+
+---
+
 ## 1. Visión del proyecto
 
 Atlas es un entorno personal de asistencia, coordinación y automatización de proyectos. Debe permitir consultar información, conservar contexto útil y delegar trabajo a componentes, agentes y herramientas sin concederles autoridad ilimitada.
@@ -51,6 +71,8 @@ Estas reglas gobiernan todas las sesiones futuras:
 - Actualización del estado y siguiente paso único.
 
 ## 3. Repositorio y estado GitHub observado
+
+> **Snapshot histórico superado:** la tabla y las referencias de rama/PR de esta sección describen un corte anterior al merge de PR #28 y al PR #29. Se conservan como historial de la evolución; no deben usarse como estado operativo actual. Consultar «Estado operativo vigente» al inicio de este documento.
 
 Repositorio: `yon30c/atlas`; rama predeterminada: `main`.
 
