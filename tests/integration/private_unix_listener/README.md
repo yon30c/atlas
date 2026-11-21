@@ -508,3 +508,15 @@ configuration.
 
 The owner must execute the updated runner only in disposable `Atlas-VM-test`.
 No tests, builds or workflows have been run by the assistant.
+
+### A-IPC-02 — owner validation MA-07/MA-08 (2026-11-21)
+
+Owner execution on commit `585dd3d979bc1b800550e4b9c79c382b22cf1f6c` in disposable `Atlas-VM-test` (Debian 13, kernel `6.12.117+deb13-amd64`, Python 3.13.5, real EUID 0; SERVICE fixture 2005/2005, OTHER fixture 2006/2006):
+
+- MA-01..MA-08: PASS.
+- MA-07: valid fixture accepted with `client_uids=[0]`; all 11 invalid cases rejected (absent, duplicate/unknown/missing key, altered service identity, symlink, FIFO, unsafe mode, wrong owner, oversized file and hardlink).
+- MA-08: atomic pathname replacement did not change the loaded snapshot; frozen fields and tuple collection remained immutable.
+- CP-01/CP-04: PASS; maximum active workers 4, recovered to 0. Kernel backlog 8 was configured but not saturated.
+- Duration 1.497 s; private and traversal `/run` sandboxes removed after child processes exited; no FAIL rows. Overall remains **INCOMPLETE**.
+
+Remaining: MA-09/MA-10 and CP-02/CP-03/CP-05..CP-12. This evidence does not validate production configuration, full ancestor path resolution, a persistent listener, or deployment. The fixture parser remains probe-only.
