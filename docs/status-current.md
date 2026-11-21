@@ -343,3 +343,10 @@ La rama experimental ahora contiene una primera implementación de A09a/A09b:
 **No ejecutar todavía:** la clave instalada sigue forzando `/usr/bin/id -u`. Cambiarla a `/usr/bin/python3 -I /tmp/atlas-a09-client.py` modifica seguridad del host y requiere aprobación explícita específica. No se ha modificado `authorized_keys`, sshd_config, PAM, firewall ni shell startup files. El propietario debe inspeccionar estos últimos de forma read-only antes de considerar el cambio.
 
 **Validación:** el código es implementación en rama experimental, no evidencia de ejecución. No se han ejecutado pruebas, compilaciones ni workflows desde GitHub. La última evidencia local comunicada sigue siendo 15 PASS, A09 SKIP, 0 FAIL, global INCOMPLETE; los nuevos escenarios A09a/A09b no están validados. `main` permanece intacta; no hay PR y ningún transporte está aprobado para producción.
+
+
+### A09 — revisión estática del helper/runner completada (2026-11-21)
+
+Se completó revisión estática directa en GitHub de `a09_ssh_client.py` y `run_probe.py`: helper de acciones cerradas y path-shape restringido; SSH sin configuración/agent/password/PTY/forwarding/proxy; host key ED25519 fijada; stdin/stdout/stderr con límites; A09a y A09b separados; credenciales de kernel comparadas; cleanup condicionado por identidad y preservación de recursos si el hijo no termina.
+
+Esto es revisión de código, no ejecución. No se corrieron pruebas, compilaciones ni workflows. A09a/A09b siguen sin validar. La clave en Debian todavía fuerza `/usr/bin/id -u`; no se modificó `authorized_keys`. Falta inspección read-only del shell startup y aprobación explícita específica del cambio de comando forzado, seguida de autorización independiente para ejecutar A09.
