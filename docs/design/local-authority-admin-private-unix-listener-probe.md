@@ -328,10 +328,11 @@ El runner solo podrá invocar SSH con parámetros fijos y explícitos:
 - configuración de cliente aislada mediante `-F /dev/null`;
 - destino `atlas-a09-test@127.0.0.1`, puerto 22;
 - clave exacta suministrada por argumento y `IdentitiesOnly=yes`;
-- `BatchMode=yes`, `PreferredAuthentications=publickey`, password y keyboard-interactive desactivados;
+- `BatchMode=yes`, `PreferredAuthentications=publickey`, `PubkeyAuthentication=yes`, password, keyboard-interactive, GSSAPI y host-based authentication desactivados;
+- `IdentityAgent=none`, `IdentitiesOnly=yes`, clave explícita y configuración cliente aislada con `-F /dev/null`;
 - `StrictHostKeyChecking=yes`, archivo `UserKnownHostsFile` explícito y previamente verificado;
 - `HostKeyAlgorithms=ssh-ed25519` y `PubkeyAcceptedAlgorithms=ssh-ed25519`;
-- `GlobalKnownHostsFile=/dev/null`, `ClearAllForwardings=yes`, `ForwardAgent=no`, `ForwardX11=no`, `RequestTTY=no`;
+- `GlobalKnownHostsFile=/dev/null`, `ClearAllForwardings=yes`, `ForwardAgent=no`, `ForwardX11=no`, `RequestTTY=no`, sin proxy ni multiplexación;
 - timeout de conexión y timeout total de proceso acotados;
 - ningún comando remoto adicional: el comando forzado de `authorized_keys` es el único ejecutable remoto.
 
@@ -371,18 +372,35 @@ La observación previa de credenciales por el runner es únicamente evidencia; e
 - El helper temporal se crea con identidad de archivo capturada. Solo se elimina si sigue siendo el mismo archivo regular, propietario del runner e inode original.
 - El listener se cierra y su pathname se elimina únicamente si conserva la identidad registrada.
 - El fixture se elimina solo después de cerrar el listener, comprobar identidad del directorio y verificar que está vacío. No usar borrado recursivo.
-- Si el proceso SSH, helper, listener o cleanup excede los límites, se termina únicamente el proceso hijo de prueba iniciado por el runner y se registra el fallo; no se detienen servicios del host.
+- Si el proceso SSH excede el límite, el runner termina únicamente el proceso hijo local iniciado por él. Si no puede confirmar que el hijo terminó, preserva helper, socket pathname, fixture y sandbox pertinentes; no elimina recursos que podrían seguir en uso y registra FAIL para inspección manual. No se detienen servicios del host.
 - El informe expone A09a y A09b como escenarios independientes, con UID esperado/observado, errno, resultado de handler, bytes recibidos y cleanup. Si alguno se omite, el global permanece INCOMPLETE; solo ambos PASS pueden cerrar el requisito multi-UID, y aun así no autorizan producción.
 
 ### 16.8 Puertas pendientes
 
-Este diseño no implementa ni ejecuta A09. Antes de la implementación:
+El helper y la coordinación A09a/A09b están implementados en la rama experimental, pero aún no se han ejecutado ni validado.
 
-1. revisión estática del helper, serialización stdin/stdout, subprocess SSH, validación de archivos, límites y cleanup;
-2. actualizar la clave pública instalada para sustituir el comando forzado actual `/usr/bin/id -u` por `/usr/bin/python3 -I /tmp/atlas-a09-client.py`. Este cambio en `authorized_keys` es una modificación de seguridad del host y requiere autorización explícita específica;
-3. implementar A09a/A09b y el helper en la rama experimental, sin modificar el handler, contrato, runtime, SQLite, systemd ni servicios;
-4. revisión estática completa del diff en GitHub;
-5. autorización explícita independiente para ejecutar A09 en Debian;
-6. validar resultados localmente por el propietario.
+1. **Implementación en GitHub:** completada en `tests/integration/private_unix_listener/a09_ssh_client.py` y `run_probe.py`. A09a/A09b son filas independientes; el runner mantiene A09 deshabilitado por defecto y exige confirmaciones explícitas de preflight.
+2. **Revisión estática:** revisar helper, serialización stdin/stdout, subprocess SSH, validación de archivos, límites, credenciales, cleanup e invariantes de cada escenario antes de considerar el código listo para Debian.
+3. **Preflight del shell remoto:** el propietario debe inspeccionar de forma read-only `.bashrc`, `.bash_profile`, `.profile` y comportamiento de inicio del shell de `atlas-a09-test`. No modificar esos archivos.
+4. **Cambio host pendiente:** sustituir la opción de comando forzado actual `/usr/bin/id -u` por `/usr/bin/python3 -I /tmp/atlas-a09-client.py`. Este cambio en `authorized_keys` es una modificación de seguridad del host y requiere autorización explícita específica. No se ha hecho.
+5. **Ejecución:** requiere aprobación explícita independiente después de la revisión estática y del cambio host aprobado. El runner no usa sudo ni cambia credenciales.
+6. **Validación:** el propietario ejecuta A09 en Debian, conserva JSON y commit exacto, y comparte el resultado para revisión.
+
+El runner exige `--a09-forced-command-confirmed` y `--a09-shell-startup-reviewed` además de `--enable-a09` y rutas explícitas de clave/known_hosts. Estos flags son confirmaciones operativas, no sustituyen la autorización explícita ni prueban por sí mismos que el host esté configurado correctamente.
 
 No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. `main` permanece intacta, no hay PR y A-IPC-01 no está aprobado como transporte de producción.
+
+
+### 16.9 Implementación del helper y runner — 2026-11-21
+
+La implementación de código se publicó en la rama experimental:
+
+- `tests/integration/private_unix_listener/a09_ssh_client.py`: helper fijo, biblioteca estándar, entrada JSON limitada a 4096 bytes, esquema cerrado `scenario/socket_path/nonce`, nonce de 128 bits en hexadecimal, rechazo de `SSH_ORIGINAL_COMMAND` no vacío, una sola conexión AF_UNIX/SOCK_SEQPACKET y salida JSON acotada. A09b envía un único `authority.ping` y lee como máximo un byte para detectar cualquier respuesta.
+- `tests/integration/private_unix_listener/run_probe.py`: A09a/A09b independientes; SSH invocado como proceso local con argumentos fijos, entorno mínimo, agente desactivado, clave/host key explícitas, algoritmo ED25519, sin comando remoto ni forwarding. No se invocan herramientas de cambio de credenciales.
+- El runner exige cuenta externa distinta y no privilegiada, clave privada/known_hosts regulares propiedad del ejecutor y modo 0600, directorio de clave 0700, sin hardlinks, known_hosts con el host exacto `[127.0.0.1]:22` y fingerprint ED25519 previamente verificado.
+- El helper se instala temporalmente en `/tmp/atlas-a09-client.py` mediante creación exclusiva, modo 0644 y cleanup condicionado por identidad. Un archivo preexistente nunca se sobrescribe.
+- A09a valida EACCES desde el cliente remoto, cero accepts y preservación del endpoint candidato. A09b valida PID/UID/GID del kernel contra la identidad del helper, rechazo real `UNAUTHORIZED_PEER`, solicitud enviada y cero bytes de respuesta.
+- El runner requiere `--enable-a09`, rutas explícitas y confirmaciones `--a09-forced-command-confirmed` y `--a09-shell-startup-reviewed`. Sin el opt-in, A09a/A09b permanecen SKIP.
+- Si el proceso SSH local no termina tras kill, los recursos relacionados se preservan y el escenario falla; no se hace cleanup potencialmente concurrente.
+
+**Estado de validación:** revisión estática de implementación en GitHub en curso; no se ejecutaron pruebas, compilaciones ni workflows. La clave instalada todavía fuerza `/usr/bin/id -u`; no se ha cambiado `authorized_keys`. El owner debe inspeccionar shell startup files y solicitar autorización específica antes del cambio host. No ejecutar A09 todavía.
