@@ -749,6 +749,8 @@ def _scenario_a16(root: Path) -> dict[str, object]:
         winner_id = (info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode))
         box.track(path)
         os.chmod(path, 0o600)
+        if stat.S_IMODE(path.lstat().st_mode) != 0o600:
+            raise ProbeFailure("winning socket mode is not exactly 0600")
         winner.listen(1)
         winner.settimeout(1.0)
         request_id, packet = _ping_packet()
