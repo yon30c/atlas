@@ -996,3 +996,10 @@ Commit ejecutado: 0db262802ce30ec38a4ce52a4f5bfaa3081fc2b1. Entorno: Atlas-VM-te
 El propietario ejecutó d054f95 en Atlas-VM-test: MA-01..MA-10 y CP-01..CP-06 PASS; CP-07 terminó en FAIL porque Server._record interpretó el worker_error deliberadamente inyectado como error fatal y abortó antes de verificar EOF, active=0/slot release, continuidad del servidor y segunda petición. No considerar CP-07 validado.
 
 Runner corregido en c1fdcc12eb3d7a0fcb6cccccb8eb07b0028dcb40: el colector consume solo un RuntimeError con el texto exacto esperado y únicamente cuando el servidor fue iniciado para CP-07. Los demás errores de worker siguen siendo fatales. Próximo paso: el propietario debe actualizar y repetir el runner en Atlas-VM-test desechable; nunca ejecutar en greed. Sin pruebas/builds/workflows del asistente.
+
+
+### A-IPC-02 — segunda ejecución CP-07 y corrección
+
+La ejecución de ccfc495e4bcbe0adc9283f75bee1823d5338451b repitió MA-01..MA-10 y CP-01..CP-06 en PASS; CP-07 falló con ConnectionResetError/ECONNRESET. Causa identificada en el fixture: el worker inyectaba RuntimeError sin consumir el paquete SOCK_SEQPACKET que el cliente había enviado; cerrar con datos entrantes pendientes puede producir reset en lugar de EOF. No considerar CP-07 validado.
+
+Runner corregido en 1df8385f3783308636ccd9538d4c1033fd05be33: el worker CP-07 drena el paquete desencadenante antes de inyectar la excepción, registra trigger_request_bytes y mantiene las comprobaciones de EOF, cero respuesta, active=0, servidor vivo y segunda petición válida. Repetir solo en Atlas-VM-test desechable, nunca en greed. No se ejecutaron pruebas/builds/workflows.
