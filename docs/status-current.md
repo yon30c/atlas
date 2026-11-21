@@ -317,3 +317,14 @@ El propietario autorizó la creación de la identidad temporal dedicada atlas-a0
 - Siguiente paso posible: diseñar/revisar el procedimiento exacto para generar e instalar la clave Ed25519 restringida y probar un comando fijo por SSH. Requiere autorización explícita separada antes de modificar authorized_keys o iniciar sesión.
 - La eliminación futura de la cuenta, grupo y HOME también requiere autorización explícita separada.
 - No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. main permanece intacta; no hay PR ni transporte de producción aprobado.
+
+
+## A09 — autenticación SSH de identidad externa confirmada (2026-11-21)
+
+El propietario confirmó la instalación de una clave Ed25519 efímera y una conexión SSH local estrictamente verificada a `atlas-a09-test@127.0.0.1`. La clave en `authorized_keys` conserva `from="127.0.0.1",restrict` y el comando forzado actual `/usr/bin/id -u`; la conexión devolvió UID `1001`. El archivo de clave privada permanece en runtime privado de `greed`; no está en GitHub. El known_hosts temporal es propiedad de `greed`, modo 0600, y fija la host key ED25519 previamente comparada por fingerprint.
+
+**Qué demuestra:** autenticación por clave pública de la cuenta UID 1001 y ejecución del comando forzado. **Qué no demuestra:** acceso DAC al endpoint candidato, rechazo real por SO_PEERCRED, A09a, A09b ni seguridad de producción.
+
+La coordinación A09 se diseñó en [local-authority-admin-private-unix-listener-probe.md](design/local-authority-admin-private-unix-listener-probe.md), sección 16. El modelo propuesto es un helper remoto fijo, sin órdenes genéricas, ejecutado mediante un subprocess SSH con opciones estrictas; el runner permanece UID 1000 y no cambia credenciales. A09a conserva endpoint 0700/0600 y espera EACCES antes de accept. A09b usa fixture hermano independiente bajo /tmp sticky (0711/0666), envía ping y exige que el handler real observe el UID externo y rechace UNAUTHORIZED_PEER antes de leer el request, sin respuesta.
+
+**Pendiente:** helper/runner A09a/A09b no implementados; cambio de comando forzado de authorized_keys no autorizado todavía; ejecución A09 no autorizada todavía. Cambiar authorized_keys requiere aprobación explícita específica. No modificar sshd_config, PAM, firewall, systemd, handler, contrato, runtime, SQLite ni servicios. La evidencia A-IPC-01 sigue en 15 PASS + A09 SKIP + 0 FAIL, global INCOMPLETE. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub.
