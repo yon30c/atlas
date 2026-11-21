@@ -559,3 +559,27 @@ La revisión estática observó que `Server` consume stdout mediante un reader t
 
 
 Ajuste complementario en commit `664c398a5afdafda313eb81379cbb85a5b71007d`: `Server.drain(duration)` ahora mantiene la ventana completa aunque la cola esté temporalmente vacía, permitiendo que el reader thread transfiera eventos stdout que aún estaban en tránsito. Esto hace efectiva la sincronización previa del baseline; la aserción de accepts permanece estricta. Sigue pendiente de ejecución del propietario.
+
+## 9.14 CP-10 — validación del propietario (2026-11-21)
+
+El propietario ejecutó el commit `75929e1f9f3a17e2a19bb9a98d30e7cd86b26a0a`
+como root en la VM desechable `Atlas-VM-test`: Debian 13,
+kernel `6.12.117+deb13-amd64`, Python 3.13.5; fixtures SERVICE
+2005/2005 y OTHER 2006/2006.
+
+**MA-01..MA-10 y CP-01..CP-10: PASS.** Para CP-10 se observaron cuatro
+workers activos y nueve conexiones pendientes; el contador de accepts
+permaneció estable durante saturación (22). Snapshots del proceso:
+baseline 4 FDs/5 threads; saturación 8 FDs/5 threads; recuperación
+4 FDs/5 threads. `RLIMIT_NOFILE` soft/hard permaneció 64/64,
+`active_after_recovery=0` y el servidor siguió vivo. Duración 22.725 s.
+Los sandboxes privado y traversal bajo `/run` fueron eliminados después
+de finalizar los procesos hijos.
+
+La evidencia confirma CP-10 en ese commit y entorno. No establece una
+política de recursos productiva ni autoriza listener persistente o
+despliegue. CP-11 (ciclos repetidos de saturación/recuperación) y CP-12
+(rechazo de startup con `RLIMIT_NOFILE` insuficiente, sin elevarlo)
+continúan pendientes. No se ejecutaron pruebas, builds ni workflows desde
+GitHub.
+
