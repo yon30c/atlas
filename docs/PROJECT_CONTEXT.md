@@ -670,3 +670,19 @@ La clave privada permanece en `/run/user/1000/atlas-a09.IG1QPj/id_ed25519`, dent
 Se documentó una propuesta de coordinación en la sección 16 de [A-IPC-01](design/local-authority-admin-private-unix-listener-probe.md): el runner UID 1000 orquesta un proceso SSH local y un helper remoto fijo ejecutado por sshd como UID 1001; stdin/stdout transportan un esquema JSON acotado, sin shell ni órdenes arbitrarias. A09a conserva 0700/0600 y verifica EACCES antes de accept. A09b usa fixture temporal independiente hermano bajo /tmp sticky, con 0711/0666 solo para el fixture, y exige rechazo del handler real por UNAUTHORIZED_PEER antes de recvmsg y sin bytes de respuesta.
 
 **Estado:** diseño solamente; helper y runner no implementados. La clave todavía fuerza `/usr/bin/id -u`. Sustituirlo por el helper fijo requiere autorización explícita específica para modificar `authorized_keys`; no se hará como parte de la documentación. A09a/A09b requieren implementación, revisión estática y autorización de ejecución separada. El resultado anterior del probe permanece 15 PASS, A09 SKIP, 0 FAIL, global INCOMPLETE. `main` permanece intacta; no hay PR ni transporte de producción aprobado.
+
+
+## A09 — implementación del helper/runner en rama experimental (2026-11-21)
+
+La rama `experiment/a-ipc-01-private-unix-listener-probe` ahora contiene:
+
+- `tests/integration/private_unix_listener/a09_ssh_client.py`: helper remoto fijo, stdlib-only, entrada JSON acotada, escenarios permitidos A09a/A09b, sin shell arbitraria, sin cambio UID/GID y sin acceso al checkout.
+- `tests/integration/private_unix_listener/run_probe.py`: orquestación de SSH local con clave explícita, `IdentityAgent=none`, autenticación pública únicamente, host key ED25519 fijada y estricta, sin PTY/forwarding/proxy/multiplexación; A09a/A09b separados y opt-in deshabilitado por defecto.
+- A09a exige `EACCES` del cliente UID externo, ningún accept y preservación del endpoint candidato 0700/0600.
+- A09b utiliza fixture independiente directamente bajo `/tmp` sticky, directorio 0711/socket 0666, compara SO_PEERCRED PID/UID/GID con el helper remoto, exige rechazo real `UNAUTHORIZED_PEER` y cero bytes de respuesta.
+- Helper temporal `/tmp/atlas-a09-client.py` creado con `O_EXCL`, modo 0644 y cleanup condicionado por inode/owner/mode. Si el archivo ya existe, no se sobrescribe.
+- El opt-in requiere `--enable-a09`, paths de clave/known_hosts y dos confirmaciones explícitas: `--a09-forced-command-confirmed` y `--a09-shell-startup-reviewed`.
+
+**Host todavía no preparado para A09:** la clave instalada en `authorized_keys` sigue forzando `/usr/bin/id -u`; el helper espera `/usr/bin/python3 -I /tmp/atlas-a09-client.py`. No se cambió `authorized_keys`; hacerlo requiere autorización explícita específica. También falta inspección read-only de `.bashrc`, `.bash_profile`, `.profile` y comportamiento del shell de `atlas-a09-test`. No ejecutar A09 antes de completar ambas puertas y recibir autorización independiente de ejecución.
+
+**Estado de validación:** implementación de código no ejecutada; no se ejecutaron pruebas, compilaciones ni workflows desde GitHub. La evidencia previa del runner sigue 15 PASS + A09 SKIP + 0 FAIL, global INCOMPLETE. La implementación nueva no cambia esa clasificación. `main` intacta, sin PR, sin transporte de producción aprobado. No modificar SSH/PAM/firewall, handler, contrato, runtime, SQLite, systemd o servicios.
