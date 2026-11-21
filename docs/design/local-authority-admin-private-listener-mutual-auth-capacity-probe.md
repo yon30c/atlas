@@ -547,3 +547,12 @@ El propietario ejecutó el commit `cbfe0e20a79ae3ee8fd901ba43ea6df360962398` en 
 La revisión estática confirmó que el runner buscaba `Max open files` en `/proc/<pid>/status`, pero Linux publica ese límite en `/proc/<pid>/limits`. Commit `47b9ed94c21d26b18c415bedd2f1d352894f2620` corrige únicamente la fuente procfs y el mensaje de diagnóstico; conserva la validación de soft/hard 64/64 y las mediciones de `fd/` y `task/`. No se ejecutaron pruebas, builds ni workflows desde GitHub.
 
 CP-10 queda **corregido estáticamente, pendiente de nueva ejecución del propietario**. No atribuir PASS hasta recibir una ejecución satisfactoria. CP-11/CP-12 continúan pendientes; overall no puede ser PASS. Ejecutar solo en `Atlas-VM-test` desechable, nunca en `greed` producción.
+
+
+## 9.13 CP-10 — sincronización del contador de accepts (2026-11-21)
+
+El propietario ejecutó el commit `892d934267684fc8d5a179993f71c2b11c614c7e`: MA-01..MA-10 y CP-01..CP-09 PASS; CP-10 falló en la comprobación de accepts durante saturación. El error original no incluyó los valores baseline/observed, por lo que no permite concluir que el servidor haya aceptado realmente conexiones pendientes.
+
+La revisión estática observó que `Server` consume stdout mediante un reader thread asíncrono, mientras CP-10 calculaba `accepted_before` directamente desde `server.events` sin reconciliar eventos todavía en la cola. Esto podía dejar el baseline atrasado y causar una comparación falsa. Commit `7c009dac7fd7c4270ea6edf8bc1a004a8fb8f898`: CP-10 drena eventos previos antes de capturar el baseline y, si la comprobación vuelve a fallar, informa baseline, expected, observed, pending y workers. La comprobación estricta se conserva; no se suprime ni relaja una aceptación real.
+
+**CP-10 sigue pendiente de ejecución**. Esta modificación es una corrección de sincronización/diagnóstico revisada estáticamente, no evidencia de PASS ni de que la causa esté confirmada. No se ejecutaron pruebas, builds ni workflows desde GitHub. Repetir solo en `Atlas-VM-test` desechable.
