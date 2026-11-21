@@ -583,3 +583,20 @@ despliegue. CP-11 (ciclos repetidos de saturación/recuperación) y CP-12
 continúan pendientes. No se ejecutaron pruebas, builds ni workflows desde
 GitHub.
 
+## 9.15 CP-11 — recuperación repetida implementada (2026-11-21)
+
+Runner commit: `70ee6a7a77dc671fe4ec26a6ca98a25a2e47e104`.
+CP-11 ejecuta tres ciclos consecutivos sobre el mismo servidor fixture.
+Cada ciclo ocupa los cuatro workers, encola nueve conexiones AF_UNIX,
+comprueba que el contador accepted no avance durante saturación, cierra
+todos los peers y exige drenar las trece conexiones aceptadas. Toma
+snapshots de FDs/threads antes, durante y después de cada ciclo; los
+contadores deben volver exactamente a su baseline y el servidor debe
+seguir vivo.
+
+CP-11 es instrumentación exclusiva del harness; no modifica código
+productivo. Está implementado y revisado estáticamente, pero **pendiente
+de validación del propietario** en `Atlas-VM-test`. CP-12 sigue sin
+implementarse: rechazo de startup al heredar un `RLIMIT_NOFILE`
+insuficiente, sin elevarlo. Overall permanece INCOMPLETE.
+
