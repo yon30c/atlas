@@ -491,7 +491,7 @@ def _scenario_mutual_auth(
     root: Path, public_root: Path, args: argparse.Namespace, script: Path
 ) -> dict:
     service_dir = public_root / "auth-service"
-    wrong_server_dir = root / "wrong-server"
+    wrong_server_dir = public_root / "wrong-server"
     _create_fixture_dir(service_dir, args.service_uid, args.service_gid, 0o711)
     _create_fixture_dir(wrong_server_dir, args.other_uid, args.other_gid, 0o700)
     service_socket = service_dir / "admin.sock"
@@ -648,7 +648,7 @@ def _main_parent(args: argparse.Namespace) -> int:
     try:
         root, public_root = _preflight(args)
         script = Path(__file__).resolve()
-        service_dir = root / "service"
+        service_dir = public_root / "capacity-service"
         _create_fixture_dir(service_dir, args.service_uid, args.service_gid, 0o711)
         service_socket = service_dir / "capacity.sock"
         server = _start_server(
