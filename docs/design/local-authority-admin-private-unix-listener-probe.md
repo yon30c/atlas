@@ -243,7 +243,7 @@ La privacidad del directorio es una condición de aislamiento del experimento, n
 1. Revisar el diseño contra el árbol de tests y el contrato IPC.
 2. Mantener directorio `0700`, socket `0600`, sin cambios de UID/GID ni privilegios.
 3. Preparar el probe en una rama separada sin cambiar handler, runtime ni listener productivo. **Completado en código; pendiente de revisión local.**
-4. Revisar el diff y las condiciones de cleanup, colisiones, timeout, concurrencia y clasificación.
+4. Revisar el diff y las condiciones de cleanup, colisiones, timeout, concurrencia y clasificación. **Revisión manual en GitHub completada; queda pendiente la validación local.**
 5. El propietario ejecuta el comando opt-in en Debian y conserva el JSON y commit exacto.
 6. Registrar PASS/FAIL/SKIP/INCOMPLETE sin convertir un SKIP esencial en PASS.
 7. Revisar resultados y código. Solo entonces comparar A con C y decidir si merece un prototipo posterior.
@@ -259,7 +259,7 @@ PYTHONPATH=src python tests/integration/private_unix_listener/run_probe.py
 
 No usar sudo. El runner rechaza UID 0, usa exclusivamente un sandbox temporal propio y no toca servicios ni rutas Atlas existentes. Código de salida: 0 = PASS; 1 = FAIL; 2 = INCOMPLETE. A09 está deliberadamente omitido, por lo que el resultado global esperado sin fallos será INCOMPLETE hasta que exista una forma segura de probar otro UID sin que el runner cambie credenciales o el host.
 
-No ejecutar el comando hasta revisar el código y el commit de la rama por el propietario.
+La revisión manual del diff en GitHub está completada; el propietario debe confirmar el HEAD local y ejecutar el comando en Debian. No se han ejecutado pruebas ni compilaciones desde GitHub.
 
 ## 15. Decisión pendiente
 
