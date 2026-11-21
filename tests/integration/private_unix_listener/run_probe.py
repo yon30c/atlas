@@ -557,6 +557,8 @@ class BoundedAcceptHarness:
         self.rejected = 0
         self.handled = 0
         self.threads: list[threading.Thread] = []
+        self.worker_release = threading.Event()
+        self.worker_errors: list[str] = []
         self.accept_thread = threading.Thread(target=self._accept_loop, daemon=True)
 
     def start(self) -> None:
@@ -590,10 +592,26 @@ class BoundedAcceptHarness:
 
     def _worker(self, connection: socket.socket) -> None:
         try:
+            # Hold admitted workers until the test has filled the bounded
+            # capacity. This makes saturation independent of scheduler speed
+            # and the handler's read timeout.
+            if not self.worker_release.wait(timeout=2.0):
+                with self.lock:
+                    self.worker_errors.append("worker release gate timed out")
+                return
             try:
                 _serve_one(connection)
-            except Exception:
-                pass
+            except Exception as exc:
+                from atlas.platform_admin_ipc import AdminIPCError
+
+                if not isinstance(exc, AdminIPCError) or exc.code not in {
+                    "TIMEOUT",
+                    "PEER_DISCONNECTED",
+                }:
+                    with self.lock:
+                        self.worker_errors.append(
+                            f"{type(exc).__name__}: {exc}"
+                        )
         finally:
             try:
                 connection.close()
@@ -613,6 +631,7 @@ class BoundedAcceptHarness:
 
     def close(self) -> None:
         self.stop_event.set()
+        self.worker_release.set()
         self.listener.close()
         self.accept_thread.join(timeout=1.0)
         for thread in self.threads:
@@ -643,15 +662,24 @@ def _scenario_a14(root: Path) -> dict[str, int]:
         with harness.lock:
             if harness.handled != len(clients):
                 raise ProbeFailure("not all connected clients were accepted by the harness")
+            if harness.active != MAX_ACTIVE_CONNECTIONS:
+                raise ProbeFailure("saturation did not occupy the full worker ceiling")
             if harness.peak > MAX_ACTIVE_CONNECTIONS:
                 raise ProbeFailure("active connection count exceeded the fixed worker ceiling")
             if harness.rejected < 1:
                 raise ProbeFailure("saturation did not exercise controlled rejection")
+        harness.worker_release.set()
         for client in clients:
             client.close()
         clients.clear()
         if not harness.wait_idle():
             raise ProbeFailure("worker capacity did not recover after clients closed")
+        with harness.lock:
+            if harness.worker_errors:
+                raise ProbeFailure(
+                    "bounded worker reported unexpected errors: "
+                    + "; ".join(harness.worker_errors)
+                )
         harness.paused.set()
         time.sleep(0.15)
         request_id, packet = _ping_packet()
