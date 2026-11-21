@@ -1079,3 +1079,10 @@ SQLite. Siguiente paso: ejecutar la punta de la rama solo en
 Owner execution on `Atlas-VM-test`, commit `cbfe0e20a79ae3ee8fd901ba43ea6df360962398`: MA-01..MA-10 and CP-01..CP-09 PASS; CP-10 failed before resource snapshots with `ProbeFailure: CP-10 procfs status omitted Max open files`. Sandboxes were cleaned. This was a probe-reader defect, not evidence of an FD/thread limit violation.
 
 Static review found the runner looked for `Max open files` in `/proc/<pid>/status`; Linux exposes it in `/proc/<pid>/limits`. Commit `47b9ed94c21d26b18c415bedd2f1d352894f2620` corrects the procfs source while retaining FD counts from `fd/`, thread counts from `task/`, and the soft/hard 64/64 assertion. **CP-10 is statically corrected and awaits owner re-execution; do not mark PASS yet.** CP-11/12 remain pending. Assistant did not run tests/builds/workflows. Execute only in disposable `Atlas-VM-test`, never on production `greed`.
+
+
+### A-IPC-02 — CP-10 accepted-event baseline synchronization (2026-11-21)
+
+Owner run of `892d934267684fc8d5a179993f71c2b11c614c7e`: MA-01..MA-10 and CP-01..CP-09 PASS; CP-10 failed its accepted-count saturation assertion. The error lacked counts, so actual queued-socket acceptance was not established.
+
+Static review found an asynchronous stdout event-reader queue: CP-10 read `server.events` for `accepted_before` without draining pending events first. Commit `7c009dac7fd7c4270ea6edf8bc1a004a8fb8f898` drains before the baseline and reports baseline/expected/observed/pending/workers if the assertion fails again. The assertion itself remains strict. CP-10 awaits owner re-execution; CP-11/12 remain pending. No tests/builds/workflows run by assistant; execute only on disposable `Atlas-VM-test`.
