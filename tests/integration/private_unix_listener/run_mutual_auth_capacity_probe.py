@@ -1775,15 +1775,20 @@ def _scenario_fd_thread_accounting(
     """CP-10: measure server FDs and threads at maximum active/backlog load."""
     active_clients: list[socket.socket] = []
     queued_clients: list[socket.socket] = []
-    accepted_before = max(
-        (
-            int(item.get("accepted", 0))
-            for item in server.events
-            if item.get("event") == "accepted"
-        ),
-        default=0,
-    )
     try:
+        # Reconcile all previously emitted server events before taking the
+        # monotonic accepted-count baseline. The stdout reader is asynchronous;
+        # otherwise an earlier accepted event still in its queue can make the
+        # baseline stale and produce a false saturation failure.
+        server.drain(0.25)
+        accepted_before = max(
+            (
+                int(item.get("accepted", 0))
+                for item in server.events
+                if item.get("event") == "accepted"
+            ),
+            default=0,
+        )
         baseline = _process_resource_snapshot(server.process.pid)
         for _ in range(WORKERS):
             client = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
@@ -1817,7 +1822,12 @@ def _scenario_fd_thread_accounting(
             default=0,
         )
         if accepted_at_saturation != accepted_before + WORKERS:
-            raise ProbeFailure("CP-10 server accepted queued sockets while all workers were occupied")
+            raise ProbeFailure(
+                "CP-10 accepted-count changed during saturation: "
+                f"baseline={accepted_before}, expected={accepted_before + WORKERS}, "
+                f"observed={accepted_at_saturation}, pending={recv_q}, "
+                f"workers={WORKERS}"
+            )
 
         loaded = _process_resource_snapshot(server.process.pid)
         if loaded["open_fds"] > FD_LIMIT:
