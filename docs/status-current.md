@@ -1,10 +1,10 @@
 # Estado vigente de Atlas
 
 > **Corte documental:** 21 de noviembre de 2026.
-> **Rama de código base validada:** `main` — `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552` (PR #28 integrado).
-> **Rama de trabajo documental/probe:** `work/systemd-socket-activation-probe-contract-alignment`; consultar la cabecera del PR #29 para el HEAD vigente.
-> **PR en curso:** [#29](https://github.com/yon30c/atlas/pull/29), abierto como draft contra `main`; cambios validados localmente por el propietario en Debian 13 sobre el HEAD indicado.
-> **Última suite completa reportada por el propietario:** en Debian, sobre `main` en `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`: **1,590 tests — OK (skipped=1)**, 34.895 s, Python 3.13.5. Esta suite **no valida PR #29**.
+> **Main actual:** PR #29 integrado mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b` (21-11-2026). La suite comunicada fue ejecutada sobre el HEAD de PR `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, antes de los commits documentales y del merge; no se ha reportado una nueva ejecución sobre el merge commit.
+> **PR #29:** cerrado e integrado en `main`; HEAD probado `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`.
+> **PR integrado:** [#29](https://github.com/yon30c/atlas/pull/29), merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`.
+> **Suite completa reportada:** sobre el HEAD de PR #29 `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`: **1,590 tests — OK (skipped=1)**, 34.753 s, Python 3.13.5. La validación precede al merge commit; no afirmar que se ejecutó sobre `main` después del merge.
 > **Validación local de PR #29:** en Debian 13, HEAD `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, árbol limpio y sincronizado con origin. Probe user-manager: `PASS` (descriptor, dos activaciones, ownership/mode privados y `RemoveOnStop=no`). Suite completa: `Ran 1590 tests in 34.753s`, `OK (skipped=1)`. Esta evidencia cubre ese HEAD y no demuestra system-manager, separación de privilegios ni despliegue. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub.
 > **Estado IPC:** handler/prototipo para conexiones ya aceptadas; solo `authority.ping` está implementado. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
 > **Estado de transporte:** ninguno aprobado para producción. Listener propio en filesystem privado: candidato para probe aislado; socket activation systemd sobre filesystem: suspendida por colisión destructiva observada; AF_UNIX abstracto: alternativa experimental con riesgos de preclaim/DoS y sin DAC.
@@ -13,7 +13,7 @@
 ## Autoridad administrativa local e IPC — estado al 2026-11-21
 
 - PR #28 integró el alineamiento del contrato administrativo y `authority.ping` en `main`.
-- PR #29 corrige el probe opt-in para intercambiar `atlas-admin/1` y comprobar `completed/OK`; también registra las puertas de diseño del listener. Su probe y suite completa fueron validados localmente por el propietario en Debian sobre HEAD `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6` (detalles arriba). El PR sigue abierto como draft.
+- PR #29 corrigió el probe opt-in para intercambiar `atlas-admin/1` y comprobar `completed/OK`; también registra las puertas de diseño del listener. Fue integrado en `main` mediante `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`. El propietario validó localmente en Debian el HEAD de código del PR `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6` (detalles arriba).
 - El handler recibe conexiones ya aceptadas; no crea ni gestiona un listener persistente. No existe daemon administrativo ni acceso administrativo real a SQLite.
 - `authority.ping` es la única operación administrativa funcional. Las otras seis operaciones siguen bloqueadas/no implementadas.
 - La observación destructiva de colisión de pathname en Debian systemd 257.13 mantiene suspendida la socket activation sobre filesystem. No repetir el escenario destructivo.
@@ -22,7 +22,7 @@
   - **B — systemd socket activation filesystem:** suspendida; no usar como baseline ni desplegar.
   - **C — AF_UNIX abstracto:** probe separado; no tiene controles DAC de filesystem y requiere evaluar preclaim, exposición local y DoS.
 - Los probes deben ser opt-in, temporales, con recursos únicos bajo directorios temporales privados, sin `sudo`, sin `/run` ni `/var/lib`, y sin tocar recursos o unidades Atlas existentes.
-- Próximo paso: decisión explícita del propietario sobre sacar PR #29 de Draft e integrarlo. Los probes A y C permanecen como experimentos futuros independientes, sin ejecución ni aprobación.
+- Próximo paso: diseñar y ejecutar, por separado, los probes A y C; comparar evidencia antes de seleccionar transporte. Ninguno queda aprobado por el merge de PR #29.
 
 **Límite de esta validación:** el probe user-manager no valida system-manager, separación de privilegios ni despliegue. No autoriza listener persistente, selección de transporte de producción, unidades systemd de producción, cambios del host, usuarios/grupos, permisos/privilegios, acceso SQLite, provisioning o ejecución de operaciones administrativas. Socket activation sobre filesystem permanece suspendida.
 
@@ -192,3 +192,10 @@ El propietario confirmó checkout exacto `4e84eab1fd03ddd9057525ee18a3c02a1d804c
 - Suite completa: `Ran 1590 tests in 34.753s`; `OK (skipped=1)`.
 
 El resultado valida el alcance de ese HEAD. No prueba system-manager, separación real de privilegios, resistencia a root/procesos del mismo UID, ni despliegue. La colisión destructiva previa mantiene suspendida la activación systemd sobre filesystem. Las alternativas A y C requieren probes independientes.
+
+
+## Integración de PR #29 — 2026-11-21
+
+PR [#29](https://github.com/yon30c/atlas/pull/29) fue marcado Ready for review e integrado en `main` mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`. La evidencia local comunicada corresponde al HEAD de código `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`: probe systemd user-manager `PASS` y suite `Ran 1590 tests in 34.753s — OK (skipped=1)`. Los commits posteriores del PR fueron documentales. No se ejecutaron pruebas desde GitHub ni se ha afirmado una nueva suite sobre el merge commit.
+
+La integración no habilita listener persistente, system-manager, separación de privilegios, operaciones administrativas ni transporte de producción. La activación systemd sobre filesystem sigue suspendida por la colisión destructiva observada. Los probes A y C permanecen pendientes como experimentos independientes.
