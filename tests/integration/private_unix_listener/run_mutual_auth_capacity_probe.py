@@ -291,8 +291,16 @@ def _client_child(socket_path: str) -> int:
     client.settimeout(2.0)
     try:
         client.connect(socket_path)
-        client.send(packet)
-        response = client.recv(RESPONSE_LIMIT)
+        try:
+            client.send(packet)
+        except OSError:
+            # A fast pre-recv rejection may close the peer before send reaches
+            # the socket; the server-side evidence remains authoritative.
+            pass
+        try:
+            response = client.recv(RESPONSE_LIMIT)
+        except (ConnectionResetError, BrokenPipeError):
+            response = b""
         emit(event="unprivileged_client_result", request_id=request_id,
              response_bytes=len(response))
         return 0 if not response else 1
@@ -546,6 +554,11 @@ def _scenario_capacity(server: Server, socket_path: Path) -> dict:
             raise ProbeFailure("active workers exceeded the configured fixed pool")
         for client in clients[:WORKERS]:
             client.close()
+        server.wait_event(
+            "accepted",
+            predicate=lambda item: int(item.get("accepted", 0)) >= WORKERS + 1,
+            timeout=5.0,
+        )
         _wait_metrics(server, active=1, timeout=5.0)
         clients[WORKERS].close()
         clients = []
