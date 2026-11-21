@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
-import errno
 import json
 import os
 from pathlib import Path
@@ -299,7 +298,7 @@ def _client_child(socket_path: str) -> int:
             pass
         try:
             response = client.recv(RESPONSE_LIMIT)
-        except (ConnectionResetError, BrokenPipeError):
+        except OSError:
             response = b""
         emit(event="unprivileged_client_result", request_id=request_id,
              response_bytes=len(response))
@@ -374,14 +373,19 @@ def _start_server(script: Path, socket_path: Path, uid: int, gid: int,
         preexec_fn=_drop_identity(uid, gid),
     )
     server = Server(process)
-    ready = server.wait_event("ready", timeout=5.0)
-    if ready.get("uid") != uid or ready.get("gid") != gid:
-        server.stop()
-        raise ProbeFailure("server child did not retain the requested fixture identity")
-    if ready.get("rlimit_nofile") != FD_LIMIT:
-        server.stop()
-        raise ProbeFailure("server RLIMIT_NOFILE is not exactly 64")
-    return server
+    try:
+        ready = server.wait_event("ready", timeout=5.0)
+        if ready.get("uid") != uid or ready.get("gid") != gid:
+            raise ProbeFailure("server child did not retain the requested fixture identity")
+        if ready.get("rlimit_nofile") != FD_LIMIT:
+            raise ProbeFailure("server RLIMIT_NOFILE is not exactly 64")
+        return server
+    except Exception:
+        try:
+            server.stop()
+        except Exception:
+            pass
+        raise
 
 
 def _connect_as_root(path: Path, expected_server_uid: int, *, send_request: bool):
