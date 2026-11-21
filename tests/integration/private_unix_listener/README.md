@@ -693,3 +693,14 @@ CP-06 observó la espera test-only de 11.0 s, inicio de lectura a 11.004 s, time
 CP-02/03 observó Recv-Q 8 y 9, conexión novena admitida, décima rechazada con EAGAIN errno 11, nueve accepts sin accepts adicionales tras overflow y workers dentro del máximo de cuatro.
 
 No se ejecutaron pruebas, builds ni workflows desde GitHub. La evidencia valida los escenarios reportados en el commit y VM indicados; no aprueba transporte productivo, listener persistente ni despliegue.
+
+
+## CP-07 — worker exception recovery (implemented; owner validation pending)
+
+Runner commit: fbd4512d163b31e53b355280e636fb47cf8d66a9.
+
+The scenario starts a dedicated fixture server with a one-shot, test-only worker exception. After the worker owns the accepted socket, the injected RuntimeError is recorded. The worker's exception handler records worker_error; the socket context closes the peer; and finally decrements the active count and releases the bounded-semaphore slot.
+
+The probe requires EOF and zero response bytes on the faulting peer, the expected worker_error event, active=0 after the exception, a still-running server process, and a subsequent valid authority.ping that succeeds and returns active to zero. This checks both slot release and continued accept/worker-pool operation.
+
+The exception injection is harness-only; it is not a production handler change. CP-07 is implemented but not owner-validated. CP-08..CP-12 remain INCOMPLETE. Run only in the disposable Atlas-VM-test as root using the existing invocation; do not run on greed. No tests, builds or workflows were run by the assistant.
