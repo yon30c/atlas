@@ -1741,6 +1741,196 @@ def _scenario_worker_exception(
         server.stop()
 
 
+
+def _scenario_payload_size() -> dict:
+    """CP-08: enforce request and response packet limits without silent truncation."""
+    from atlas.platform_admin_ipc import (
+        MAX_REQUEST_BYTES,
+        MAX_RESPONSE_BYTES,
+        AdminIPCError,
+        AdminProtocolRejected,
+        _send_response,
+        handle_admin_connection,
+    )
+
+    def request_of_size(target_size: int) -> bytes:
+        request_id = str(uuid.uuid4())
+        value = {
+            "protocol": "atlas-admin/1",
+            "request_id": request_id,
+            "operation": "authority.ping",
+            "payload": {},
+            "extra": "",
+        }
+        prefix = json.dumps(value, separators=(",", ":")).encode("ascii")
+        padding_size = target_size - len(prefix)
+        if padding_size < 0:
+            raise ProbeFailure("CP-08 request fixture cannot reach requested boundary")
+        value["extra"] = "x" * padding_size
+        packet = json.dumps(value, separators=(",", ":")).encode("ascii")
+        if len(packet) != target_size:
+            raise ProbeFailure("CP-08 request fixture has an unexpected encoded size")
+        return packet
+
+    def handle_request(packet: bytes, expected_code: str, *, expect_response: bool) -> int:
+        peer, connection = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+        try:
+            if peer.send(packet) != len(packet):
+                raise ProbeFailure("CP-08 request packet was not sent atomically")
+            try:
+                handle_admin_connection(
+                    connection,
+                    allowed_peer_uids=frozenset({0}),
+                    read_timeout_seconds=1.0,
+                    write_timeout_seconds=1.0,
+                )
+            except AdminProtocolRejected as exc:
+                if exc.code != expected_code:
+                    raise ProbeFailure(
+                        f"CP-08 expected {expected_code}, observed {exc.code}"
+                    ) from exc
+            else:
+                raise ProbeFailure(f"CP-08 handler accepted request expected to reject: {expected_code}")
+            if expect_response:
+                response_packet = peer.recv(MAX_RESPONSE_BYTES)
+                response = json.loads(response_packet.decode("utf-8"))
+                if (
+                    response.get("status") != "rejected"
+                    or response.get("code") != expected_code
+                ):
+                    raise ProbeFailure("CP-08 rejection envelope did not preserve the expected code")
+                return len(response_packet)
+            _assert_no_protocol_response(peer, f"CP-08 {expected_code}")
+            return 0
+        finally:
+            peer.close()
+            connection.close()
+
+    at_limit_response_bytes = handle_request(
+        request_of_size(MAX_REQUEST_BYTES),
+        "INVALID_REQUEST",
+        expect_response=True,
+    )
+    over_limit_response_bytes = handle_request(
+        request_of_size(MAX_REQUEST_BYTES + 1),
+        "REQUEST_TOO_LARGE",
+        expect_response=True,
+    )
+    truncated_response_bytes = handle_request(
+        b"x" * (MAX_REQUEST_BYTES + 129),
+        "MESSAGE_TRUNCATED",
+        expect_response=False,
+    )
+
+    exact_peer, exact_connection = socket.socketpair(
+        socket.AF_UNIX, socket.SOCK_SEQPACKET
+    )
+    try:
+        exact_response = {"padding": ""}
+        from atlas.platform_admin_ipc import _encode_response
+        empty_encoded = _encode_response(exact_response)
+        exact_response["padding"] = "x" * (MAX_RESPONSE_BYTES - len(empty_encoded))
+        _send_response(exact_connection, exact_response, timeout_seconds=1.0)
+        received = exact_peer.recv(MAX_RESPONSE_BYTES + 1)
+        if len(received) != MAX_RESPONSE_BYTES:
+            raise ProbeFailure("CP-08 exact-limit response was truncated or had the wrong size")
+    finally:
+        exact_peer.close()
+        exact_connection.close()
+
+    oversized_peer, oversized_connection = socket.socketpair(
+        socket.AF_UNIX, socket.SOCK_SEQPACKET
+    )
+    try:
+        oversized_response = {
+            "padding": "x" * (MAX_RESPONSE_BYTES - len(empty_encoded) + 1)
+        }
+        try:
+            _send_response(oversized_connection, oversized_response, timeout_seconds=1.0)
+        except AdminIPCError as exc:
+            if exc.code != "INTERNAL_ERROR":
+                raise ProbeFailure(
+                    f"CP-08 oversized response returned unexpected code {exc.code}"
+                ) from exc
+        else:
+            raise ProbeFailure("CP-08 encoder accepted a response larger than 64 KiB")
+        _assert_no_protocol_response(oversized_peer, "CP-08 oversized response")
+    finally:
+        oversized_peer.close()
+        oversized_connection.close()
+
+    return {
+        "request_limit_bytes": MAX_REQUEST_BYTES,
+        "request_at_limit_bytes": MAX_REQUEST_BYTES,
+        "request_at_limit_schema_code": "INVALID_REQUEST",
+        "request_over_limit_bytes": MAX_REQUEST_BYTES + 1,
+        "request_over_limit_code": "REQUEST_TOO_LARGE",
+        "request_beyond_receive_buffer_code": "MESSAGE_TRUNCATED",
+        "request_rejection_response_bytes": {
+            "at_limit": at_limit_response_bytes,
+            "over_limit": over_limit_response_bytes,
+            "truncated": truncated_response_bytes,
+        },
+        "response_limit_bytes": MAX_RESPONSE_BYTES,
+        "response_at_limit_bytes": len(received),
+        "response_over_limit_rejected": True,
+        "oversized_response_peer_bytes": 0,
+    }
+
+
+def _scenario_json_depth() -> dict:
+    """CP-09: accept depth 16 at the depth gate and reject depth 17."""
+    from atlas.platform_admin_ipc import (
+        MAX_JSON_DEPTH,
+        AdminProtocolRejected,
+        decode_admin_request,
+    )
+
+    def nested_packet(container_depth: int) -> bytes:
+        value: object = 0
+        for _ in range(container_depth):
+            value = [value]
+        request = {
+            "protocol": "atlas-admin/1",
+            "request_id": str(uuid.uuid4()),
+            "operation": "authority.ping",
+            "payload": {},
+            "extra": value,
+        }
+        return json.dumps(request, separators=(",", ":")).encode("ascii")
+
+    try:
+        decode_admin_request(nested_packet(MAX_JSON_DEPTH - 1))
+    except AdminProtocolRejected as exc:
+        if exc.code != "INVALID_REQUEST":
+            raise ProbeFailure(
+                f"CP-09 depth-16 structure failed before schema validation: {exc.code}"
+            ) from exc
+        at_limit_code = exc.code
+    else:
+        raise ProbeFailure("CP-09 depth-16 fixture unexpectedly passed the closed request schema")
+
+    try:
+        decode_admin_request(nested_packet(MAX_JSON_DEPTH))
+    except AdminProtocolRejected as exc:
+        if exc.code != "INVALID_JSON":
+            raise ProbeFailure(
+                f"CP-09 depth-17 structure returned unexpected code: {exc.code}"
+            ) from exc
+        over_limit_code = exc.code
+    else:
+        raise ProbeFailure("CP-09 decoder accepted JSON deeper than the configured limit")
+
+    return {
+        "maximum_json_depth": MAX_JSON_DEPTH,
+        "container_depth_at_limit": MAX_JSON_DEPTH - 1,
+        "at_limit_depth_gate_passed": True,
+        "at_limit_schema_code": at_limit_code,
+        "container_depth_over_limit": MAX_JSON_DEPTH,
+        "over_limit_rejection_code": over_limit_code,
+    }
+
+
 def _cleanup_root(
     root: Path, public_root: Path, args: argparse.Namespace
 ) -> str:
@@ -1849,10 +2039,14 @@ def _main_parent(args: argparse.Namespace) -> int:
             script, service_dir, args.service_uid, args.service_gid, servers
         )
         results.append({"id": "CP-07", "status": "PASS", "observations": worker_exception})
+        payload_size = _scenario_payload_size()
+        results.append({"id": "CP-08", "status": "PASS", "observations": payload_size})
+        json_depth = _scenario_json_depth()
+        results.append({"id": "CP-09", "status": "PASS", "observations": json_depth})
         results.append({
-            "id": "CP-08..CP-12",
+            "id": "CP-10..CP-12",
             "status": "INCOMPLETE",
-            "detail": "payload/response/depth boundaries and full FD accounting remain unimplemented",
+            "detail": "full FD/thread accounting under load, post-saturation recovery cycles, and low-RLIMIT startup rejection remain unimplemented",
         })
         overall = "INCOMPLETE"
     except ProbeIncomplete as exc:
