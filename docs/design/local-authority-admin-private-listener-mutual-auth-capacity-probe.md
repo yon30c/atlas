@@ -51,11 +51,11 @@ El perfil se aprueba para la siguiente etapa de experimentación aislada. No es 
 
 - Usar una VM desechable Debian/Linux o un sandbox equivalente, sin rutas ni recursos Atlas reales.
 - Todos los sockets, archivos de configuración y directorios se crean bajo un directorio temporal nuevo, privado y verificado por el harness.
-- La prueba de credenciales reales requiere procesos separados con UIDs distintos. Preferir un mecanismo aislado (por ejemplo, user namespace con mapeo explícito) que no cree ni modifique cuentas del host. Si el kernel/entorno no permite demostrar las credenciales reales requeridas, marcar INCOMPLETE; no sustituirlas por mocks y declarar PASS.
+- La prueba del requisito EUID 0 requiere ejecutar el harness como UID 0 real dentro de la VM desechable, no como root simulado dentro de un user namespace. El harness debe iniciar un proceso de servicio hijo bajo un UID/GID numérico de fixture distinto, mediante descenso de credenciales dentro de ese proceso; no necesita crear una cuenta o grupo NSS. El cliente debe conservar EUID 0 real en la VM. Si el entorno no permite demostrar estas credenciales de kernel, marcar INCOMPLETE; no sustituirlas por mocks ni por root de user namespace y declarar PASS.
 - No reutilizar la identidad temporal atlas-a09-test, sus claves, HOME o configuración SSH.
 - No modificar /etc/atlas, usuarios, grupos, sudoers, PAM, SSH, systemd, permisos del host ni servicios.
 - No usar el socket administrativo real, SQLite, DBs existentes ni rutas persistentes.
-- El harness no ejecutará sudo, su, runuser ni cambios globales de credenciales. Cualquier mecanismo de aislamiento debe quedar dentro de la VM desechable y documentado antes de implementarse.
+- El harness no ejecutará sudo, su ni runuser. Se ejecutará directamente desde una sesión root de la VM desechable; el cambio de UID/GID se limitará al proceso hijo de servicio y a los directorios temporales de fixture. No se modificará NSS ni se cambiarán credenciales de la sesión/host.
 - El harness no eliminará rutas fuera de su raíz temporal; no hará stale cleanup sobre objetos no creados por esa ejecución.
 
 Si no es posible probar un cliente EUID 0 real y un servidor bajo UID distinto sin alterar el host, detenerse y presentar el requisito de entorno antes de implementar el probe.
