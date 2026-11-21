@@ -1204,3 +1204,30 @@ para producción, el entrypoint administrativo real, integración systemd,
 acceso a SQLite, operaciones mutantes ni despliegue. El perfil de capacidad
 continúa siendo experimental. No se ejecutaron pruebas, builds ni workflows
 desde GitHub; el resultado fue ejecutado por el propietario. 
+
+
+## A-IPC-04 — primera ejecución del propietario y estado actual (2026-11-21)
+
+Primera ejecución del runner `run_stale_recovery_probe.py`, commit
+`27dd83a34e149901f908356668dc119b4491487f`, en la VM desechable
+`Atlas-VM-test`: 8 PASS / 4 FAIL / 0 INCOMPLETE. El inventario incluyó
+204 procesos visibles y seis network namespaces; SR-03 detectó correctamente
+un listener en un namespace adicional; cleanup del sandbox confirmado.
+
+Fallos:
+- SR-01 y SR-11 no encontraron pathname de listeners locales activos en
+  las tablas procfs inspeccionadas. No implica que estén ausentes ni stale.
+- SR-06 tenía saltos de línea literales mal codificados en su fixture positivo.
+- SR-07 omitía el delimitador `:` de `Num` en las filas positivas.
+
+Correcciones publicadas en `b2767ff6a64886fb361bbf7f8f36a016f90c3e7f`
+y `48008ff559b8c4f2528e3668d140797266f38844`: SR-06/SR-07 fixtures
+corregidos; SR-01/SR-11 incluyen diagnóstico limitado de filas candidatas
+de procfs si no encuentran el pathname. Esto no cambia la política de
+detección y no resuelve todavía SR-01/SR-11.
+
+**Estado:** A-IPC-04 no validado; A-THREAT-05 abierta. Requiere nueva
+ejecución del HEAD en `Atlas-VM-test`. Nunca ejecutar en `greed`.
+No usar el probe como herramienta de mantenimiento ni habilitar limpieza
+automática, listener persistente o despliegue. El asistente no ejecutó
+pruebas, builds, workflows ni probes.
