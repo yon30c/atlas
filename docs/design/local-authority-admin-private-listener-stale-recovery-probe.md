@@ -61,7 +61,7 @@ El parser de procfs debe separarse del enumerador real para permitir pruebas det
 |---|---|---|
 | SR-01 | Listener SOCK_SEQPACKET fixture activo en el namespace actual | Path exacto detectado; abort sin unlink ni connect |
 | SR-02 | Socket fixture cerrado que deja pathname residual y no aparece en tabla completa | Elegibilidad únicamente; no retirar sin token de aprobación específico |
-| SR-03 | Namespace adicional con listener activo para el mismo pathname | Detectarlo y abortar; integración real puede ser SKIP solo si el kernel/VM no permite crear namespace, nunca reportar PASS de cobertura multi-namespace |
+| SR-03 | Namespace adicional con listener activo para el mismo pathname | Detectarlo y abortar; si no se puede crear el namespace, reportar INCOMPLETE y nunca PASS de cobertura multi-namespace |
 | SR-04 | Una tabla de namespace requerida no se puede leer | Abort fail-closed; objeto intacto |
 | SR-05 | Enumeración PID/namespace incompleta o carrera no resuelta | Abort fail-closed |
 | SR-06 | Tabla procfs malformada, truncada o con registro ambiguo | Abort fail-closed |
@@ -80,7 +80,7 @@ JSON debe registrar como mínimo:
 
 - commit exacto del checkout, kernel, Python, EUID, IDs fixture, duración y cleanup;
 - inventario inicial de namespaces descubiertos, identidad device/inode, PID representativo y conteo de registros; SR-03 registra además el namespace adicional real;
-- conteos de procesos vistos, namespaces deduplicados, tablas leídas y errores de enumeración;
+- conteo de procesos vistos, namespaces deduplicados y tablas leídas; los errores de enumeración/lectura/parsing se reflejan como INCOMPLETE o FAIL por escenario;
 - pathname fixture, tipo de socket, resultado de matching y decisión (ACTIVE/ABORT/ELIGIBLE/REMOVED);
 - metadata filesystem observada y metadata revalidada (device, inode, type, UID/GID, mode);
 - si se invocó connect/send/recv (debe ser false en todos los escenarios);
@@ -89,7 +89,7 @@ JSON debe registrar como mínimo:
 
 Reglas globales:
 - cualquier escenario obligatorio omitido, namespace coverage incierta o cleanup no confirmado impide `overall=PASS`;
-- SR-03 real multi-namespace en SKIP limita la conclusión: puede haber PASS de las pruebas deterministas restantes, pero overall debe ser `INCOMPLETE`;
+- SR-03 real multi-namespace en INCOMPLETE limita la conclusión: puede haber PASS de las pruebas deterministas restantes, pero overall debe ser `INCOMPLETE`;
 - el runner nunca realiza operaciones fuera de su sandbox.
 
 ## 7. Resolución de las preguntas previas a la implementación
@@ -103,6 +103,7 @@ Las decisiones siguientes están incorporadas en el runner. Son decisiones del h
 5. **Token de aprobación:** SR-10 usa un dataclass inmutable de fixture ligado al pathname y a st_dev, st_ino, tipo, UID, GID y modo observados. El challenge es una constante exclusiva del escenario. No es aprobación humana real, no es una API reutilizable y no autoriza mantenimiento fuera del sandbox.
 
 El runner está implementado y revisado estáticamente; no se ejecutó desde GitHub. La identidad de cada namespace se obtiene manteniendo abierto brevemente un descriptor O_PATH y leyendo su enlace /proc/self/fd; el PID representativo se comprueba antes y después de leer su tabla para detectar cambios de namespace durante la lectura. SR-10 también demuestra que un token con inode distinto se rechaza sin mutar el residual. Las decisiones anteriores deberán revisarse si la ejecución del propietario descubre diferencias del formato procfs o del comportamiento del kernel.
+
 ## 8. No objetivos
 
 - No implementar recuperación automática al iniciar el servicio.
