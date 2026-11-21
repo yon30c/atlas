@@ -1,7 +1,7 @@
 # Plan de probe aislado — autenticación mutua y capacidad IPC
 
 **Fecha:** 2026-11-21  
-**Estado (2026-11-21):** el propietario reportó en `Atlas-VM-test` MA-01..MA-10 y CP-01/CP-04 PASS; global INCOMPLETE en la ejecución de `901c792cb723d920da4970ecce98ea7f871c4f85` (JSON `commit: null`). CP-02/CP-03 tuvieron una primera ejecución fallida en commit `1ebf930a6559c3d6a81965f0f94c28ed8e6eef56`: el backlog 8/8 se observó, pero la novena conexión devolvió connect_ex=0. La revisión del kernel Linux identificó el límite efectivo AF_UNIX como backlog+1 por la comparación `queue_len > sk_max_ack_backlog`; el runner ahora valida esa conexión de frontera y exige EAGAIN en la siguiente. La corrección está en commit `634e19decce2322e94ca0d1fe410b259f23dcb67`, pendiente de ejecución local. CP-05..CP-12 siguen pendientes.  
+**Estado (2026-11-21):** ejecución del propietario en `Atlas-VM-test`, commit `b5b0128e2646e41e3a2f927251c6fa6dafa897d7`: MA-01..MA-10, CP-01/04 y CP-02/03 PASS; overall INCOMPLETE por CP-05..CP-12. CP-02/03 confirmó cola 8/8, novena conexión admitida (9/8) y décima rechazada con EAGAIN (errno 11), sin accepts ni workers adicionales. Cleanup correcto. Antes de CP-05 hay que aclarar la interacción entre read timeout 5 s y deadline global 15 s.  
 **Rama:** experiment/a-ipc-01-private-unix-listener-probe  
 **Decisiones:** TCB-1; frontend EUID 0; client_uids={0}; perfil de capacidad inicial aprobado por el propietario.  
 **Dependencias:** contrato atlas-admin/1, handler IPC, configuración confiable, resolución de rutas, stale recovery y lifecycle.
@@ -386,3 +386,12 @@ pendientes de validación local. No se ejecutaron pruebas, builds ni workflows
 desde GitHub. No se debe cambiar el backlog aprobado de 8 basándose en esta
 diferencia de una conexión: se registra el parámetro listen(8) y el límite
 efectivo observado del kernel por separado.
+
+
+## 9.6 Validación CP-02/CP-03 y gate CP-05 (2026-11-21)
+
+El propietario ejecutó `b5b0128e2646e41e3a2f927251c6fa6dafa897d7` en `Atlas-VM-test` (Debian 13, kernel `6.12.117+deb13-amd64`, Python 3.13.5, EUID 0; fixtures 2005/2005 y 2006/2006). MA-01..MA-10, CP-01/04 y CP-02/03 PASS. Duración 1.454 s; cleanup de ambos sandboxes `/run` completado.
+
+CP-02/03: `listen(8)`; Recv-Q/Send-Q 8/8; conexión novena admitida (9/8); décima rechazada con EAGAIN errno 11; cola final 9/8; `accepted_after_overflow=9`, igual a `accepted_while_full`; workers dentro del límite y recuperación a cero. Overall INCOMPLETE por CP-05..CP-12.
+
+**Gate antes de CP-05:** el escenario documenta que un cliente silencioso termina por deadline global de 15 s, pero el fixture aplica `min(READ_TIMEOUT=5 s, remaining_global)` al primer `recv`. El cliente silencioso vence por read timeout a los 5 s, no a los 15 s. Aclarar si CP-05 debe probar read/idle timeout de 5 s o si se desea otro contrato global antes de implementar. No alterar los límites aprobados por inferencia.
