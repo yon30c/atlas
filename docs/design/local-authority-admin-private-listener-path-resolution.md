@@ -1,7 +1,7 @@
 # Resolución segura de rutas y ownership — listener privado
 
 **Fecha:** 2026-11-21  
-**Estado:** diseño candidato para alternativa A; A-IPC-03 implementado como harness aislado PR-01..PR-12, pendiente de ejecución y validación del propietario. No autoriza implementación persistente ni cambios del host.  
+**Estado:** A-IPC-03 validado por el propietario: PR-01..PR-12 PASS en commit `b200c292ac0602593c8dbefafb1bd71b79001b06`, dentro del alcance de fixtures. Este diseño sigue siendo candidato; no fija ruta/ownership productivos ni autoriza listener persistente o cambios del host.  
 **Rama:** `experiment/a-ipc-01-private-unix-listener-probe`  
 **Relacionado:** `local-authority-admin-private-listener-identity-config.md`, `local-authority-admin-listener-lifecycle.md`, `local-authority-admin-private-listener-threat-model-review.md`.
 
@@ -135,7 +135,7 @@ No corregir permisos automáticamente, no crear directorios, no cambiar ownershi
 | Servidor con UID distinto del `service_uid` esperado | Cliente cierra antes de enviar bytes |
 | Configuración cambia tras cargar | La instancia conserva snapshot inmutable; cambio requiere reinicio |
 
-Los escenarios PR-01..PR-12 están implementados en el harness A-IPC-03 descrito en `local-authority-admin-private-listener-path-resolution-probe.md`; siguen pendientes de ejecución y validación del propietario en `Atlas-VM-test`.
+Los escenarios PR-01..PR-12 están implementados y validados por el propietario en `Atlas-VM-test`; evidencia y límites en `local-authority-admin-private-listener-path-resolution-probe.md`. La validación cubre fixtures y no ejecuta bind/connect.
 
 ## 9. Decisiones pendientes
 
@@ -155,7 +155,7 @@ Los escenarios PR-01..PR-12 están implementados en el harness A-IPC-03 descrito
 - No se aprobó listener persistente, systemd, acceso SQLite ni despliegue.
 
 
-## 11. Probe A-IPC-03 — implementación del harness (validación pendiente)
+## 11. Probe A-IPC-03 — implementación y validación del harness (2026-11-21)
 
 El plan ejecutable se documenta en
 `local-authority-admin-private-listener-path-resolution-probe.md`.
