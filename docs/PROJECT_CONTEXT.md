@@ -1,6 +1,6 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-21 (A-IPC-02 completo: propietario ejecutó checkout 66b348e en Atlas-VM-test; MA-01..MA-10 y CP-01..CP-12 PASS. A-IPC-03/A-THREAT-06: PR-01..PR-12 PASS por el propietario en commit `b200c292`, Atlas-VM-test; cleanup confirmado).
+> **Última actualización:** 2026-11-21 (A-IPC-02 completo; A-IPC-03/A-THREAT-06 PR-01..PR-12 PASS por el propietario en `b200c292`; A-IPC-04 runner SR-01..SR-12 implementado y revisado estáticamente, ejecución pendiente).
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
