@@ -112,7 +112,7 @@ En un probe desechable, no en Debian productivo:
 10. El número de FDs y threads nunca supera el presupuesto configurado.
 11. Una operación mutante activa no bloquea indefinidamente consultas de estado y no permite un segundo writer concurrente.
 
-Los escenarios son requisitos futuros. No se han implementado ni ejecutado.
+Los escenarios siguen siendo requisitos de validación completa. El harness A-IPC-02 implementa parcialmente CP-01 y CP-04 (cuatro slots, quinta conexión pendiente y recuperación al liberar slot), además de configurar backlog 8, deadlines y RLIMIT. El harness no se ha ejecutado; los demás escenarios permanecen incompletos.
 
 ## 9. Decisión del propietario — perfil de capacidad (2026-11-21)
 
@@ -125,12 +125,12 @@ El propietario aprobó para la siguiente etapa de experimentación aislada el pe
 - Deadline global 15 s desde accept.
 - RLIMIT_NOFILE=64 como límite candidato que el probe debe comprobar.
 
-La aprobación no equivale a implementación ni a configuración de producción/systemd. Memoria, CPU, TasksMax, plazo de drenaje, inventario real de FDs y concurrencia de operaciones SQLite siguen pendientes. El siguiente paso es implementar y ejecutar el probe aislado definido en [plan de autenticación mutua y capacidad](local-authority-admin-private-listener-mutual-auth-capacity-probe.md).
+La aprobación no equivale a configuración de producción/systemd. La primera iteración del harness A-IPC-02 configura y comprueba estáticamente cuatro slots, backlog 8, read/write 5 s, deadline 15 s y RLIMIT_NOFILE=64; solo tiene cobertura de ejecución prevista para CP-01/CP-04 y aún no ha sido ejecutada. La saturación exacta del backlog, deadlines adversariales y full FD accounting siguen pendientes. Memoria, CPU, TasksMax, drenaje e inventario real de FDs también siguen pendientes. Ver [plan de autenticación mutua y capacidad](local-authority-admin-private-listener-mutual-auth-capacity-probe.md) y `tests/integration/private_unix_listener/README.md`.
 
 ## 10. Límites
 
 - Revisión estática y diseño desde GitHub.
 - No se modificó handler, contrato normativo, runtime, SQLite ni host.
 - No se ejecutaron pruebas, compilaciones ni workflows.
-- No se implementó listener, worker pool, scheduler ni configuración de recursos.
+- No se implementó listener persistente, worker pool del servicio de producción, scheduler ni configuración de recursos del host. El harness temporal A-IPC-02 sí contiene un pool fijo experimental, aún no ejecutado.
 - No se aprobaron systemd, límites del host ni despliegue.
