@@ -737,3 +737,6 @@ La revisión estática encontró que `Max open files` se buscaba erróneamente e
 En commit `892d934267684fc8d5a179993f71c2b11c614c7e`, MA-01..MA-10 y CP-01..CP-09 PASS; CP-10 falló al comparar el contador de accepts durante saturación. El mensaje no contenía valores suficientes para distinguir una aceptación real de un baseline incompleto.
 
 Revisión estática: `Server` recibe eventos stdout en una cola alimentada por un reader thread; CP-10 calculaba `accepted_before` sin drenar esa cola. Se corrigió en `7c009dac7fd7c4270ea6edf8bc1a004a8fb8f898`: drenar eventos previos antes del baseline y añadir baseline/expected/observed/pending/workers al error. La aserción estricta permanece. **No marcar CP-10 PASS** hasta una nueva ejecución; no se ha confirmado aún si hubo aceptación real o desincronización del baseline. CP-11/12 pendientes. Sin pruebas/builds/workflows desde GitHub; ejecutar solo en `Atlas-VM-test`.
+
+
+Ajuste adicional `664c398a5afdafda313eb81379cbb85a5b71007d`: `Server.drain(duration)` espera la ventana completa aunque el queue se vacíe temporalmente, para dar tiempo al reader thread a transferir eventos pendientes desde stdout. Refuerza el baseline CP-10 sin relajar la aserción. Pendiente de ejecución; no implica PASS.
