@@ -20,7 +20,7 @@
 - **A-IPC-01:** el propietario reportó A01–A16 = 16 PASS, 0 SKIP, 0 FAIL en el commit indicado en el registro. A09a validó DAC con UID distinto; A09b validó rechazo real del handler mediante SO_PEERCRED. No valida UID 0 ↔ `atlas-runtime` ni despliegue.
 - **A-IPC-02 — validación parcial del propietario:** en `Atlas-VM-test`, commit `b4eda57d36338f065adb2cb4e00d19a8ade58069`, MA-01..MA-06 y CP-01/04 = PASS; global INCOMPLETE, 1.431 s, cleanup de ambos sandboxes `/run` completado. Workers máximos: 4; activos tras recuperación: 0. Backlog 8 configurado, no saturado. MA-07/MA-08 ya están implementados como fixtures aislados en la rama actual y esperan validación del propietario.
 - **TCB-1:** aceptada. Procesos bajo el UID dedicado `atlas-runtime` son parte de la TCB; no se exige aislamiento intra-UID. Su exclusividad operativa aún debe definirse y verificarse.
-- **Identidad cliente:** EUID 0 aceptado como requisito del frontend; `client_uids={0}`. El entrypoint IPC real aún no existe/revisado. El harness A-IPC-02 ha validado autenticación mutua root↔UID de servicio y MA-03 (rechazo pre-connect de EUID no root) en `069dbb9`; MA-06 (rechazo de claims UID/GID/PID suministrados por el cliente) está implementado en `9a8380e`, pendiente de ejecución.
+- **Identidad cliente:** EUID 0 aceptado como requisito del frontend; `client_uids={0}`. El entrypoint IPC real aún no existe/revisado. El harness A-IPC-02 validó MA-01..MA-06 en `b4eda57`, incluida la autenticación mutua root↔UID de servicio, el rechazo pre-connect de EUID no root y el rechazo de claims UID/GID/PID falsificados.
 - **Configuración:** `local-authority-admin-private-listener-identity-config.md` propone fuente root-managed `/etc/atlas/admin-ipc.conf`, root:root 0644 sin secretos, parser estricto y carga inmutable. No se creó el archivo ni se fijaron valores operativos.
 - **Rutas:** `local-authority-admin-private-listener-path-resolution.md` especifica recorrido de todos los componentes desde `/`, validación por descriptor y baseline de bind pathname canónico bajo TCB-1, siempre que UIDs externos no puedan escribir en ningún ancestro. La ruta procfs es opcional, no baseline.
 - **Cleanup TOCTOU (A-THREAT-04):** residual aceptado bajo TCB-1 si el directorio es privado, la instancia es única y cleanup revalida por descriptor; unlink no es atómico.
@@ -429,18 +429,18 @@ A-THREAT-07 sigue abierto hasta validar el perfil en un probe aislado. No se mod
 
 ## A-IPC-02 — primera iteración de autenticación mutua/capacidad (2026-11-21)
 
-Se implementó \`tests/integration/private_unix_listener/run_mutual_auth_capacity_probe.py\` como runner separado de A-IPC-01. Es un harness experimental de procesos reales, no un listener de Atlas:
+Se implementó `tests/integration/private_unix_listener/run_mutual_auth_capacity_probe.py` como runner separado de A-IPC-01. Es un harness experimental de procesos reales, no un listener de Atlas:
 
 - Exige ejecución directa como root dentro de una VM desechable y confirmaciones explícitas; requiere cuatro IDs numéricos de fixture dedicados. No crea cuentas/grupos ni usa sudo/su.
-- El cliente root valida \`SO_PEERCRED.uid\` del servidor antes de enviar el ping; un servidor con UID alternativo debe recibir EOF con cero bytes.
-- El servidor fixture valida \`SO_PEERCRED.uid == 0\` antes de \`recv\`; el cliente con UID alternativo no recibe respuesta protocolaria.
-- El proceso servidor usa UID/GID reales, efectivos y saved del fixture, sin grupos suplementarios; aplica \`RLIMIT_NOFILE=64\`.
-- Pool fijo de cuatro workers y semáforo antes de \`accept()\`; el probe mantiene cuatro conexiones ocupadas, verifica que la quinta no sea aceptada como quinto worker y que se acepte después de liberar un slot.
+- El cliente root valida `SO_PEERCRED.uid` del servidor antes de enviar el ping; un servidor con UID alternativo debe recibir EOF con cero bytes.
+- El servidor fixture valida `SO_PEERCRED.uid == 0` antes de `recv`; el cliente con UID alternativo no recibe respuesta protocolaria.
+- El proceso servidor usa UID/GID reales, efectivos y saved del fixture, sin grupos suplementarios; aplica `RLIMIT_NOFILE=64`.
+- Pool fijo de cuatro workers y semáforo antes de `accept()`; el probe mantiene cuatro conexiones ocupadas, verifica que la quinta no sea aceptada como quinto worker y que se acepte después de liberar un slot.
 - Backlog configurado 8, read/write 5 s y deadline global 15 s. La saturación exacta, adversarios de timeout, full FD accounting, límites de payload/depth y escenarios restantes todavía no están implementados.
 
-El runner crea fixtures temporales bajo \`/run\`, incluyendo una raíz de traversal root-owned 0711 (no escribible por grupo/otros) para que el peer alternativo pueda alcanzar el socket expuesto. Copia el script y el módulo IPC a una ubicación temporal de solo lectura accesible por los procesos con UID reducido. La limpieza valida identidad de cada socket; ante sustitución o fallo de un proceso, preserva el sandbox y reporta FAIL.
+El runner crea fixtures temporales bajo `/run`, incluyendo una raíz de traversal root-owned 0711 (no escribible por grupo/otros) para que el peer alternativo pueda alcanzar el socket expuesto. Copia el script y el módulo IPC a una ubicación temporal de solo lectura accesible por los procesos con UID reducido. La limpieza valida identidad de cada socket; ante sustitución o fallo de un proceso, preserva el sandbox y reporta FAIL.
 
-**Estado:** revisión estática en GitHub solamente. No se ejecutó el runner, pruebas, compilaciones ni workflows. El resultado completo esperado en esta iteración es \`INCOMPLETE\` porque quedan escenarios deliberadamente pendientes. El propietario debe revisar y ejecutar únicamente en VM desechable; no usar el servidor Debian de producción.
+**Estado:** revisión estática en GitHub solamente. No se ejecutó el runner, pruebas, compilaciones ni workflows. El resultado completo esperado en esta iteración es `INCOMPLETE` porque quedan escenarios deliberadamente pendientes. El propietario debe revisar y ejecutar únicamente en VM desechable; no usar el servidor Debian de producción.
 
 **Siguiente paso:** inspeccionar el diff local tras actualizar a este commit y decidir cuatro IDs numéricos reservados para la VM; después ejecutar A-IPC-02 y compartir el JSON completo. A continuación se completarán backlog/deadlines/FD accounting y el probe de resolución de rutas/colisiones. No se modifica handler/contrato ni se autoriza listener persistente, systemd, SQLite o despliegue.
 
@@ -520,15 +520,15 @@ producción ni despliegue.
 
 ## Incremento A-IPC-02 — MA-07/MA-08 implementados (2026-11-21)
 
-Se añadió \`tests/integration/private_unix_listener/probe_config.py\`, un parser/loader **exclusivo del probe**, y se integró al runner:
+Se añadió `tests/integration/private_unix_listener/probe_config.py`, un parser/loader **exclusivo del probe**, y se integró al runner:
 
-- Gramática cerrada ASCII \`clave=valor\`, sin defaults, duplicados, claves desconocidas, secciones, comentarios ni extensiones.
-- Carga relativa a un descriptor de directorio del sandbox privado; \`O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC\`; verificación de archivo regular, root:root, modo exacto 0644 del fixture, un hardlink y tamaño máximo 4096 bytes.
-- Validación de IDs numéricos de servicio frente a los IDs de fixture, allowlist exactamente \`(0,)\`, \`SOCK_SEQPACKET\`, ruta absoluta canónica y modos de fixture 0600/0700.
+- Gramática cerrada ASCII `clave=valor`, sin defaults, duplicados, claves desconocidas, secciones, comentarios ni extensiones.
+- Carga relativa a un descriptor de directorio del sandbox privado; `O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC`; verificación de archivo regular, root:root, modo exacto 0644 del fixture, un hardlink y tamaño máximo 4096 bytes.
+- Validación de IDs numéricos de servicio frente a los IDs de fixture, allowlist exactamente `(0,)`, `SOCK_SEQPACKET`, ruta absoluta canónica y modos de fixture 0600/0700.
 - MA-07 incluye ausencia, clave duplicada/desconocida/ausente, identidad alterada, symlink, FIFO, modo inseguro, owner incorrecto, archivo excesivo y hardlink.
 - MA-08 reemplaza atómicamente el archivo después de cargarlo y comprueba que el snapshot congelado y su colección tuple conservan los valores originales.
-- Los archivos temporales se crean y eliminan dentro del sandbox privado \`/run/atlas-mutual-auth-*\`; no se consulta ni crea \`/etc/atlas/admin-ipc.conf\`.
+- Los archivos temporales se crean y eliminan dentro del sandbox privado `/run/atlas-mutual-auth-*`; no se consulta ni crea `/etc/atlas/admin-ipc.conf`.
 
-**Límite deliberado:** el formato \`clave=valor\` y los valores del fixture no son el formato ni la configuración de producción. El loader valida el archivo final relativo a un descriptor de directorio temporal ya confiable; no implementa el recorrido completo de ancestros desde \`/\`, que permanece en el probe PA separado. El módulo no está en \`src/atlas\` ni integrado al handler.
+**Límite deliberado:** el formato `clave=valor` y los valores del fixture no son el formato ni la configuración de producción. El loader valida el archivo final relativo a un descriptor de directorio temporal ya confiable; no implementa el recorrido completo de ancestros desde `/`, que permanece en el probe PA separado. El módulo no está en `src/atlas` ni integrado al handler.
 
 **Estado:** MA-07/08 implementados y pendientes de ejecución del propietario. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. El resultado global seguirá INCOMPLETE por MA-09/10 y cobertura CP pendiente.
