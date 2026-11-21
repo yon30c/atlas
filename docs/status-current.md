@@ -443,3 +443,27 @@ El runner crea fixtures temporales bajo \`/run\`, incluyendo una raíz de traver
 **Estado:** revisión estática en GitHub solamente. No se ejecutó el runner, pruebas, compilaciones ni workflows. El resultado completo esperado en esta iteración es \`INCOMPLETE\` porque quedan escenarios deliberadamente pendientes. El propietario debe revisar y ejecutar únicamente en VM desechable; no usar el servidor Debian de producción.
 
 **Siguiente paso:** inspeccionar el diff local tras actualizar a este commit y decidir cuatro IDs numéricos reservados para la VM; después ejecutar A-IPC-02 y compartir el JSON completo. A continuación se completarán backlog/deadlines/FD accounting y el probe de resolución de rutas/colisiones. No se modifica handler/contrato ni se autoriza listener persistente, systemd, SQLite o despliegue.
+
+
+## Actualización A-IPC-02 — 2026-11-21 (MA-03 validado; MA-06 implementado)
+
+El propietario ejecutó en `Atlas-VM-test` el commit
+`069dbb9520f9e640955d9122f3a8012b2f55ba1a`: MA-01..MA-05 PASS y
+CP-01/CP-04 PASS; global INCOMPLETE. MA-03 comprobó EUID 2006 rechazado
+antes de connect (`connect_attempted=false`) y ninguna conexión observada
+por el servidor. Capacidad: máximo 4 workers activos, 0 tras recuperación;
+backlog 8 configurado pero no saturado. Duración 1.339 s; cleanup de ambos
+sandboxes `/run` completado. Debian 13, kernel 6.12.117+deb13-amd64,
+Python 3.13.5; fixtures 2005/2005 y 2006/2006.
+
+Posteriormente se implementó MA-06 en commit `9a8380eb4a4051763699b7c07c3ad9dfcf1eeccd`:
+el runner envía un envelope ping con claims top-level `uid`, `gid`, `pid`;
+el decoder debe rechazar campos extra como `INVALID_REQUEST`, mientras la
+identidad del peer se obtiene de SO_PEERCRED. **MA-06 está pendiente de
+ejecución por el propietario.** No extender el PASS de `069dbb9` al commit
+posterior.
+
+Siguiente paso: revisión estática final del diff MA-06 y ejecución en
+`Atlas-VM-test`. No ejecutar en `greed` de producción. El probe sigue
+INCOMPLETE; configuración confiable, transporte/desconexión, backlog exacto,
+deadlines, recuperación de workers y FD accounting siguen pendientes.
