@@ -153,3 +153,36 @@ una nueva ejecución del runner corregido para validar SR-06/SR-07 y obtener
 diagnósticos de SR-01/SR-11. A-THREAT-05 permanece abierta; no usar ni
 adaptar este mecanismo para recuperación real. No se ejecutaron pruebas,
 builds, workflows ni probes desde GitHub.
+
+
+## 10. Segunda ejecución del propietario y siguiente diagnóstico (2026-11-21)
+
+El propietario ejecutó `bd3b0e0a1379c7b034e10a33b9b45b329e6e807a`
+en `Atlas-VM-test`: `overall=FAIL`, 10 PASS, 2 FAIL, 0 INCOMPLETE.
+El inventario vio 201 procesos y seis namespaces; el sandbox se eliminó.
+SR-06 y SR-07 pasan después de las correcciones de fixtures. SR-03
+detectó el listener del namespace adicional. SR-01 y SR-11 siguen
+fallando con `candidate_rows=[]`.
+
+La salida no permite determinar por qué los listeners creados localmente
+no aparecen en las tablas del snapshot. No es evidencia de inactividad,
+no prueba que el pathname sea residual y no permite retirar el objeto.
+
+Commit `a7bf92d07d12012d20822b64a57ee0ab17c953e1` añade, en los errores
+SR-01/SR-11, evidencia diagnóstica acotada y no decisoria:
+
+- PID y network namespace del inspector;
+- inode del descriptor del socket fixture;
+- identidades de namespaces incluidos en el snapshot;
+- filas candidatas del snapshot por pathname o inode del socket;
+- lectura directa de `/proc/self/net/unix` y filas por pathname/inode;
+- error explícito si esa lectura directa no puede completarse.
+
+La comprobación directa sirve para distinguir entre una omisión del
+inventario de namespaces y una diferencia entre la tabla leída vía
+representante y la tabla del proceso que creó el listener. No altera
+la regla de detección ni realiza connect/accept/send/recv.
+
+**Pendiente:** ejecutar el HEAD actual solo en `Atlas-VM-test` y revisar
+el JSON completo. A-THREAT-05 sigue abierta. No usar el procedimiento
+en hosts reales ni permitir limpieza automática.
