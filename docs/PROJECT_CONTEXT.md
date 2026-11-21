@@ -632,3 +632,16 @@ Referencias: [diseño A-IPC-01](design/local-authority-admin-private-unix-listen
 #### A09 fixture topology and execution prerequisite
 
 Static review found an additional DAC constraint: an A09b fixture with mode 0711 cannot be nested beneath the probe's private root 0700, because traversal is denied at the parent. The fixture must be a separate sibling directory directly under a verified shared sticky temporary parent (for example /tmp), with fixture mode 0711 and socket mode 0666. The private sandbox and candidate endpoint retain their original modes. Both A09 checks require a second, already-authenticated ordinary-user session under a distinct pre-existing UID; no sudo/su/runuser/setuid or account creation is allowed. This topology and orchestration are design requirements only; runner implementation and validation remain pending.
+
+
+## A09 — diseño de identidad temporal multi-UID (2026-11-21)
+
+El propietario autorizó diseñar una cuenta temporal dedicada `atlas-a09-test` para proporcionar el peer externo de A09a/A09b. **La autorización actual no permite ejecutar cambios en Debian.**
+
+- Diseño detallado: [a09-temporary-test-identity-provisioning.md](design/a09-temporary-test-identity-provisioning.md).
+- `atlas-sandbox` se excluye: pertenece a la primera infraestructura Atlas Broker/rootless, tiene UID 997, linger activo y procesos `rootlesskit`, `slirp4netns`, `dockerd` y `containerd`. No reutilizar, desbloquear ni detener esa cuenta.
+- La identidad propuesta tendrá UID automático distinto del runner, grupo primario exclusivo, sin grupos suplementarios/privilegios, HOME privado `0700`, contraseña bloqueada, sin linger ni servicios.
+- Autenticación candidata: clave Ed25519 efímera, restringida a loopback y SSH sin PTY/forwarding. No cambiar sshd/PAM ni desbloquear contraseña; si la política actual impide el acceso con clave, detenerse.
+- A09a conserva el endpoint `0700/0600` y mide denegación DAC. A09b usa fixture independiente bajo padre temporal compartido sticky, con directorio `0711` y socket `0666`, y verifica rechazo real `SO_PEERCRED`. Nunca relajar el endpoint candidato.
+- Cuenta, grupo, HOME, claves y sesión SSH: no creados. A09a/A09b: no implementados ni validados. Última ejecución del probe: 15 PASS, A09 SKIP, 0 FAIL; global INCOMPLETE.
+- Antes de modificar Debian se requiere aprobación explícita adicional. La implementación del cliente/runner también requiere revisión y aprobación separadas. No se ejecutaron pruebas ni workflows desde GitHub.
