@@ -347,3 +347,9 @@ No se ejecutaron pruebas, builds ni workflows desde GitHub. CP-02/CP-03 no
 se consideran PASS hasta recibir evidencia local. CP-05..CP-12 siguen
 INCOMPLETE. El perfil sigue siendo experimental y no es configuración de
 producción.
+
+
+La revisión estática posterior detectó y corrigió un detalle de alcance de
+variable al conservar la ruta resuelta de `ss`: `_preflight` declara
+explícitamente `global SS_BIN`. Corrección publicada en
+`4ab6a1b7762f4d45a745ea2c36f7289411a9c848`. Sigue sin validación de ejecución.
