@@ -135,7 +135,7 @@ No corregir permisos automáticamente, no crear directorios, no cambiar ownershi
 | Servidor con UID distinto del `service_uid` esperado | Cliente cierra antes de enviar bytes |
 | Configuración cambia tras cargar | La instancia conserva snapshot inmutable; cambio requiere reinicio |
 
-Los escenarios son requisitos de diseño; no se han implementado ni ejecutado.
+Los escenarios PR-01..PR-12 están implementados en el harness A-IPC-03 descrito en `local-authority-admin-private-listener-path-resolution-probe.md`; siguen pendientes de ejecución y validación del propietario en `Atlas-VM-test`.
 
 ## 9. Decisiones pendientes
 
@@ -144,13 +144,13 @@ Los escenarios son requisitos de diseño; no se han implementado ni ejecutado.
 3. Validar en sandbox el procedimiento manual y auditado para retirar un socket residual descrito en [stale-recovery](local-authority-admin-private-listener-stale-recovery.md).
 4. Definir límites de tamaño/formatos y política definitiva de hardlinks para el archivo de configuración.
 5. Identificar el entrypoint cliente y revisar el lanzamiento real con EUID 0.
-6. Diseñar un probe aislado para el recorrido de ruta, autenticación mutua y cleanup; no usar la cuenta temporal A09 ni modificar el host sin autorización independiente.
+6. El plan y runner A-IPC-03 para el recorrido de ruta están publicados; ejecutar PR-01..PR-12 solo en `Atlas-VM-test` desechable. Los probes de colisión/stale recovery y lifecycle son gates separados.
 
 ## 10. Límites
 
 - Diseño estático/documentación desde GitHub.
-- No se modificó código, contrato normativo ni configuración del host.
-- No se ejecutaron pruebas, compilaciones ni workflows.
+- No se modificó código productivo, contrato normativo ni configuración del host. Se añadió únicamente el runner experimental A-IPC-03 y su plan documental.
+- No se ejecutaron pruebas, compilaciones ni workflows; la implementación solo recibió revisión estática en GitHub.
 - No se crearon rutas, archivos `/etc`, usuarios, grupos, permisos, servicios ni sockets.
 - No se aprobó listener persistente, systemd, acceso SQLite ni despliegue.
 
