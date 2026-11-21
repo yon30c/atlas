@@ -17,7 +17,6 @@ import subprocess
 import sys
 import tempfile
 import time
-import uuid
 from pathlib import Path
 
 from probe_config import ProbeConfigRejected, load_probe_config_at
@@ -362,8 +361,6 @@ def _scenario_09_config_via_parent_fd(
 def _scenario_10_config_final_objects(
     sandbox: Path, service_uid: int, service_gid: int
 ) -> dict:
-    from probe_config import load_probe_config_at
-
     directory = sandbox / "config-final-objects"
     _mkdir(directory)
     valid = directory / "valid.conf"
@@ -482,6 +479,9 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = _parse_args()
+    if not sys.platform.startswith("linux"):
+        print("ERROR: this probe requires Linux", file=sys.stderr)
+        return 2
     if os.geteuid() != 0:
         print("ERROR: run directly as EUID 0 inside disposable Atlas-VM-test", file=sys.stderr)
         return 2
@@ -504,7 +504,6 @@ def main() -> int:
         print("ERROR: /run is writable by group/other; refusing fixture creation", file=sys.stderr)
         return 2
 
-    sandbox_name = None
     sandbox_path: Path | None = None
     sandbox_identity: tuple[int, int] | None = None
     results: list[dict] = []
@@ -512,12 +511,14 @@ def main() -> int:
     cleanup = "not-created"
 
     try:
-        sandbox_name = tempfile.mkdtemp(prefix="atlas-path-resolution-", dir="/run")
-        sandbox_path = Path(sandbox_name)
-        os.chown(sandbox_path, 0, 0, follow_symlinks=False)
-        os.chmod(sandbox_path, 0o700)
+        sandbox_path = Path(tempfile.mkdtemp(prefix="atlas-path-resolution-", dir="/run"))
         sandbox_info = os.stat(sandbox_path, follow_symlinks=False)
         sandbox_identity = (sandbox_info.st_dev, sandbox_info.st_ino)
+        require(
+            stat.S_ISDIR(sandbox_info.st_mode) and sandbox_info.st_uid == 0,
+            "new sandbox is not a root-owned directory",
+        )
+        os.chmod(sandbox_path, 0o700)
 
         fixture_root = sandbox_path / "fixture-root"
         _mkdir(fixture_root)
