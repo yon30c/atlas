@@ -170,6 +170,11 @@ def _parse_unix_table(data: bytes) -> list[dict]:
         fields = line.split(None, 7)
         if len(fields) not in (7, 8):
             raise CoverageError(f"malformed unix table row {number}")
+        # Linux /proc/net/unix renders the first (Num) field with a
+        # trailing colon, unlike the remaining hexadecimal columns.
+        if not fields[0].endswith(":") or fields[0].count(":") != 1:
+            raise CoverageError(f"invalid Num delimiter in unix table row {number}")
+        fields[0] = fields[0][:-1]
         if not all(HEX_RE.fullmatch(value) for value in fields[:6]):
             raise CoverageError(f"invalid hexadecimal field in unix table row {number}")
         if not DEC_RE.fullmatch(fields[6]):
@@ -478,11 +483,28 @@ def _scenario_05_enumeration_incomplete() -> dict:
 
 
 def _scenario_06_parser_rejects_ambiguous() -> dict:
+    valid_realistic = (
+        b"Num RefCount Protocol Flags Type St Inode Path\\n"
+        b"0000000016960ea0: 00000002 00000000 00010000 0005 01 36068 /fixture/active.sock\\n"
+    )
+    parsed = _parse_unix_table(valid_realistic)
+    if len(parsed) != 1 or parsed[0] != {
+        "type": SOCK_SEQPACKET_PROC_TYPE,
+        "state": 0x01,
+        "inode": 36068,
+        "path": "/fixture/active.sock",
+    }:
+        raise ProbeFailure("SR-06 rejected or misparsed realistic Linux procfs row")
+
     bad_tables = [
-        b"not the procfs header\n",
-        b"Num RefCount Protocol Flags Type St Inode Path\nmalformed\n",
-        b"Num RefCount Protocol Flags Type St Inode Path\n"
-        b"000000001 00000002 00000000 00010000 0005 01 nope /x\n",
+        b"not the procfs header\\n",
+        b"Num RefCount Protocol Flags Type St Inode Path\\nmalformed\\n",
+        b"Num RefCount Protocol Flags Type St Inode Path\\n"
+        b"000000001 00000002 00000000 00010000 0005 01 36068 /missing-colon.sock\\n",
+        b"Num RefCount Protocol Flags Type St Inode Path\\n"
+        b"000000001:: 00000002 00000000 00010000 0005 01 36068 /double-colon.sock\\n",
+        b"Num RefCount Protocol Flags Type St Inode Path\\n"
+        b"000000001: 00000002 00000000 00010000 0005 01 nope /bad-inode.sock\\n",
     ]
     rejected = 0
     for raw in bad_tables:
@@ -492,7 +514,11 @@ def _scenario_06_parser_rejects_ambiguous() -> dict:
             rejected += 1
     if rejected != len(bad_tables):
         raise ProbeFailure("SR-06 accepted malformed procfs table")
-    return {"malformed_tables_rejected": rejected}
+    return {
+        "realistic_kernel_row_accepted": True,
+        "realistic_row_path": parsed[0]["path"],
+        "malformed_tables_rejected": rejected,
+    }
 
 
 def _scenario_07_exact_match() -> dict:
@@ -694,9 +720,9 @@ def main() -> int:
     results = []
     started = time.monotonic()
     cleanup = "not-created"
-    namespace_inventory = []
-    processes_seen = 0
-    namespace_scan_retries = 0
+    namespace_inventory = None
+    processes_seen = None
+    namespace_scan_retries = None
     try:
         sandbox = Path(tempfile.mkdtemp(prefix="atlas-aipc04-", dir="/run"))
         info = os.stat(sandbox, follow_symlinks=False)
