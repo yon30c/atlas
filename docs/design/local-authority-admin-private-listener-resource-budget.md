@@ -1,7 +1,7 @@
 # Presupuesto de recursos y backpressure — listener IPC administrativo
 
 **Fecha:** 2026-11-21  
-**Estado:** propuesta de capacidad inicial para revisión; no implementada ni aprobada para producción.  
+**Estado:** perfil de capacidad inicial aprobado por el propietario para probes aislados; no implementado ni aprobado para producción.  
 **Dependencias:** `atlas-admin/1`, handler actual, lifecycle, probe A-IPC-01/A14 y TCB-1.  
 **Relacionado:** `local-authority-admin-private-listener-threat-model-review.md`.
 
@@ -114,14 +114,18 @@ En un probe desechable, no en Debian productivo:
 
 Los escenarios son requisitos futuros. No se han implementado ni ejecutado.
 
-## 9. Decisiones pendientes
+## 9. Decisión del propietario — perfil de capacidad (2026-11-21)
 
-1. Confirmar si el flujo real del frontend necesita cuatro conexiones simultáneas o si basta un límite menor.
-2. Confirmar backlog ocho y deadline total de conexión de 15 s.
-3. Validar `RLIMIT_NOFILE=64` con inventario de FDs del servicio real.
-4. Definir política de concurrencia de lecturas y mutaciones contra el contrato de operaciones/SQLite.
-5. Medir memoria, CPU y threads antes de fijar límites del supervisor.
-6. Definir deadline de shutdown en A-THREAT-08.
+El propietario aprobó para la siguiente etapa de experimentación aislada el perfil exacto de §3:
+
+- 4 conexiones activas y 4 workers fijos.
+- Backlog kernel 8 y cola de aplicación 0.
+- Request/response/depth: 16 KiB / 64 KiB / 16.
+- Read/write timeout 5 s / 5 s.
+- Deadline global 15 s desde accept.
+- RLIMIT_NOFILE=64 como límite candidato que el probe debe comprobar.
+
+La aprobación no equivale a implementación ni a configuración de producción/systemd. Memoria, CPU, TasksMax, plazo de drenaje, inventario real de FDs y concurrencia de operaciones SQLite siguen pendientes. El siguiente paso es implementar y ejecutar el probe aislado definido en [plan de autenticación mutua y capacidad](local-authority-admin-private-listener-mutual-auth-capacity-probe.md).
 
 ## 10. Límites
 
