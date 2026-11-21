@@ -51,15 +51,6 @@ def emit(**event: object) -> None:
         print(json.dumps(event, sort_keys=True), flush=True)
 
 
-def _drop_identity(uid: int, gid: int):
-    """Return a pre-exec hook that drops only the child process credentials."""
-    def apply() -> None:
-        os.setgroups([])
-        os.setresgid(gid, gid, gid)
-        os.setresuid(uid, uid, uid)
-    return apply
-
-
 def _request_packet() -> tuple[str, bytes]:
     request_id = str(uuid.uuid4())
     packet = json.dumps(
@@ -437,7 +428,9 @@ def _start_server(
         stderr=subprocess.PIPE,
         text=True,
         bufsize=1,
-        preexec_fn=_drop_identity(uid, gid),
+        user=uid,
+        group=gid,
+        extra_groups=[],
     )
     server = Server(process, socket_path)
     registry.append(server)
@@ -643,7 +636,9 @@ def _scenario_mutual_auth(
             text=True,
             timeout=5.0,
             check=False,
-            preexec_fn=_drop_identity(args.other_uid, args.other_gid),
+            user=args.other_uid,
+            group=args.other_gid,
+            extra_groups=[],
         )
         if child.returncode != 0:
             raise ProbeFailure(f"unprivileged client fixture failed: {child.stderr}")
