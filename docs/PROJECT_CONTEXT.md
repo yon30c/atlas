@@ -26,7 +26,7 @@
 - **A-THREAT-07:** perfil experimental: 4 workers, `listen(8)`, cola 0, read/write 5 s, deadline global 15 s y `RLIMIT_NOFILE=64`. CP-01..CP-06 validados por el propietario en `0db2628`; AF_UNIX admite 9 pendientes y la décima recibe EAGAIN. CP-07..CP-12 pendientes. No es configuración de producción.
 - **A-THREAT-08:** máquina de estados de readiness/shutdown, drenaje, deadlines y ownership de FDs pendiente.
 - **A-THREAT-09:** A09 usó runner UID 1000 y peer UID 1001; no valida cliente UID 0, servicio `atlas-runtime` ni permisos finales del despliegue.
-- **Próximo paso:** actualizar Atlas-VM-test al commit `c1fdcc12eb3d7a0fcb6cccccb8eb07b0028dcb40` y repetir A-IPC-02 para validar CP-07 tras la corrección del colector; después revisar CP-08..CP-12. Solo en la VM desechable.
+- **Próximo paso:** actualizar Atlas-VM-test al commit `1df8385f3783308636ccd9538d4c1033fd05be33` y repetir A-IPC-02 para validar CP-07 tras drenar el paquete desencadenante antes de la excepción; después revisar CP-08..CP-12. Solo en la VM desechable.
 - **Estado de cambios:** la rama experimental contiene MA-01..MA-10 y CP-01..CP-06 implementados y validados por el propietario en `0db2628`. CP-07..CP-12 siguen pendientes. No se modificó handler productivo, contrato normativo, runtime, SQLite, `main` ni host de producción. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. No se creó PR ni se aprobó listener persistente o despliegue.
 
 **Límites vigentes:** A-IPC-01 valida únicamente los escenarios experimentales ejecutados en el commit/entorno indicados. No demuestra protección frente a root/capabilities suficientes ni procesos maliciosos del mismo UID; no valida separación de privilegios, system-manager, listener persistente, daemon, integración systemd, acceso/autorización SQLite ni operaciones mutantes. No autoriza cambios del host, usuarios, grupos, permisos, privilegios, servicios, provisioning o despliegue.
@@ -995,7 +995,7 @@ Commit ejecutado: 0db262802ce30ec38a4ce52a4f5bfaa3081fc2b1. Entorno: Atlas-VM-te
 
 El propietario ejecutó d054f95 en Atlas-VM-test: MA-01..MA-10 y CP-01..CP-06 PASS; CP-07 terminó en FAIL porque Server._record interpretó el worker_error deliberadamente inyectado como error fatal y abortó antes de verificar EOF, active=0/slot release, continuidad del servidor y segunda petición. No considerar CP-07 validado.
 
-Runner corregido en c1fdcc12eb3d7a0fcb6cccccb8eb07b0028dcb40: el colector consume solo un RuntimeError con el texto exacto esperado y únicamente cuando el servidor fue iniciado para CP-07. Los demás errores de worker siguen siendo fatales. Próximo paso: el propietario debe actualizar y repetir el runner en Atlas-VM-test desechable; nunca ejecutar en greed. Sin pruebas/builds/workflows del asistente.
+Runner corregido en 1df8385f3783308636ccd9538d4c1033fd05be33: el colector consume solo un RuntimeError con el texto exacto esperado y únicamente cuando el servidor fue iniciado para CP-07. Los demás errores de worker siguen siendo fatales. Próximo paso: el propietario debe actualizar y repetir el runner en Atlas-VM-test desechable; nunca ejecutar en greed. Sin pruebas/builds/workflows del asistente.
 
 
 ### A-IPC-02 — segunda ejecución CP-07 y corrección
