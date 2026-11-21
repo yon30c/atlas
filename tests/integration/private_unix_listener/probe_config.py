@@ -157,15 +157,8 @@ def load_probe_config_at(
     expected_service_gid: int,
 ) -> ProbeConfigSnapshot:
     """Load one root-owned file relative to an already trusted directory fd."""
-    if (
-        not isinstance(name, str)
-        or not name
-        or name in {".", ".."}
-        or "/" in name
-        or "\\" in name
-        or "\x00" in name
-    ):
-        raise ProbeConfigRejected("configuration filename must be one path component")
+    if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+", name):
+        raise ProbeConfigRejected("configuration filename must be one safe path component")
     if not hasattr(os, "O_NOFOLLOW"):
         raise ProbeConfigRejected("O_NOFOLLOW is unavailable")
 
@@ -181,8 +174,8 @@ def load_probe_config_at(
             raise ProbeConfigRejected("configuration descriptor is not a regular file")
         if before.st_uid != 0 or before.st_gid != 0:
             raise ProbeConfigRejected("configuration owner must be root:root")
-        if stat.S_IMODE(before.st_mode) & 0o022:
-            raise ProbeConfigRejected("configuration must not be group/other writable")
+        if stat.S_IMODE(before.st_mode) != 0o644:
+            raise ProbeConfigRejected("configuration mode must be exactly 0644 in this probe")
         if before.st_nlink != 1:
             raise ProbeConfigRejected("configuration must have exactly one hard link")
         if before.st_size <= 0 or before.st_size > MAX_CONFIG_BYTES:
