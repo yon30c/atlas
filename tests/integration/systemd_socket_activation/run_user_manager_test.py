@@ -229,7 +229,7 @@ def send_ping(path: str) -> dict:
     request_id = str(uuid.uuid4())
     packet = json.dumps(
         {
-            "version": 1,
+            "protocol": "atlas-admin/1",
             "request_id": request_id,
             "operation": "authority.ping",
             "payload": {},
@@ -244,7 +244,13 @@ def send_ping(path: str) -> dict:
         response = json.loads(client.recv(4096).decode("utf-8"))
     finally:
         client.close()
-    if response.get("request_id") != request_id or response.get("status") != "ok":
+    if (
+        response.get("protocol") != "atlas-admin/1"
+        or response.get("request_id") != request_id
+        or response.get("status") != "completed"
+        or response.get("code") != "OK"
+        or response.get("result", {}).get("handler_status") != "available"
+    ):
         raise AssertionError(f"unexpected activation response: {response!r}")
     return response
 

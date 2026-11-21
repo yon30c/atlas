@@ -1,8 +1,31 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-19.
+> **Última actualización:** 2026-11-21.
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
+
+## Estado operativo vigente — 2026-11-21
+
+> Esta sección es la referencia operativa prioritaria. Las secciones posteriores conservan decisiones y snapshots históricos; cuando un dato histórico contradiga este bloque, prevalece este bloque para el estado actual. No se elimina la historia de decisiones.
+
+- **Repositorio:** `yon30c/atlas`.
+- **Rama de trabajo activa:** `work/systemd-socket-activation-probe-contract-alignment`.
+- **PR activo:** [#29 — Alinear probe systemd con atlas-admin/1 y registrar puertas del listener](https://github.com/yon30c/atlas/pull/29), abierto como draft, base `main`.
+- **HEAD de la rama del PR:** variable por cada commit documental; consultar la cabecera de [PR #29](https://github.com/yon30c/atlas/pull/29) para el SHA vigente. La base de comparación es `main` en `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`.
+- **Base estable:** `main` en `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`; PR #28 ya integrado.
+- **Validación de la base `main`:** el propietario reportó 1.590 tests: `OK (skipped=1)`, 34.895 s, Python 3.13.5, sobre `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`.
+- **Validación local de PR #29:** confirmada por el propietario en Debian 13 sobre HEAD exacto `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, con árbol limpio y sincronizado con `origin`.
+  - Probe `tests/integration/systemd_socket_activation/run_user_manager_test.py`: `PASS` para activación systemd user-manager, validación del descriptor, dos activaciones, ownership/mode privados y limpieza delegada al harness con `RemoveOnStop=no`.
+  - Suite completa: `Ran 1590 tests in 34.753s` / `OK (skipped=1)`.
+  - La evidencia valida ese HEAD de PR #29 en el entorno Debian comunicado; no demuestra system-manager, separación de privilegios, transporte de producción ni despliegue. No se ejecutaron pruebas, compilaciones ni workflows remotos desde GitHub.
+- **Estado IPC:** contrato `atlas-admin/1` y handler/prototipo para conexiones ya aceptadas; la única operación funcional sigue siendo `authority.ping`. No existe listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
+- **Endpoint/transporte:** no hay transporte aprobado para producción. Listener propio sobre directorio privado (A) es únicamente candidato al siguiente probe temporal; socket activation systemd sobre filesystem (B) está suspendida por la colisión destructiva observada en Debian systemd 257.13; AF_UNIX abstracto (C) es experimental y conserva riesgos de preclaim/DoS y ausencia de DAC.
+- **Operaciones restantes:** las seis operaciones administrativas restantes continúan bloqueadas/no implementadas funcionalmente.
+- **Siguiente paso:** revisión/decisión del propietario sobre sacar PR #29 de Draft e integrarlo. Los probes A (listener propio) y C (AF_UNIX abstracto) siguen siendo trabajos separados; no se ejecutaron ni quedan aprobados por esta validación.
+
+**Límites vigentes:** la validación del probe user-manager no autoriza system-manager, listener persistente, despliegue, unidades de producción, cambios del host, usuarios, grupos, permisos, privilegios, apertura de SQLite, provisioning ni operaciones administrativas. Socket activation sobre filesystem continúa suspendida por la colisión observada. Las decisiones de transporte y cualquier cambio de autoridad requieren evidencia y aprobación explícita del propietario.
+
+---
 
 ## 1. Visión del proyecto
 
@@ -51,6 +74,8 @@ Estas reglas gobiernan todas las sesiones futuras:
 - Actualización del estado y siguiente paso único.
 
 ## 3. Repositorio y estado GitHub observado
+
+> **Snapshot histórico superado:** la tabla y las referencias de rama/PR de esta sección describen un corte anterior al merge de PR #28 y al PR #29. Se conservan como historial de la evolución; no deben usarse como estado operativo actual. Consultar «Estado operativo vigente» al inicio de este documento.
 
 Repositorio: `yon30c/atlas`; rama predeterminada: `main`.
 
@@ -468,3 +493,44 @@ La revisión final se realizó directamente en GitHub sobre los nueve archivos d
 **Límites:** PR #28 permanece abierto, Draft y sin merge. La rama sigue 94 commits por delante de su base en la comparación consultada al inicio de esta revisión (la cifra puede cambiar con commits documentales). No se modifica `main`, no se cambia la base del PR y no se autoriza despliegue ni integración. Cualquier merge requiere aprobación explícita del propietario.
 
 **Siguiente paso:** revisión/decisión del propietario sobre si desea marcar PR #28 como Ready for review o mantenerlo Draft. No se realizará ese cambio sin autorización expresa.
+
+### 16.7 Merge de PR #28, baseline de main y auditoría de preparación del listener — 2026-11-19
+
+**Estado confirmado por el propietario en Debian:**
+- PR #28 integrado en `main`; merge commit `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`.
+- Checkout local: rama `main`, `HEAD` igual a `origin/main`, árbol de trabajo limpio.
+- Suite completa: `Ran 1590 tests in 34.895s`, `OK (skipped=1)`.
+- Entorno: Python 3.13.5 en `.venv`.
+- Esta es la línea base local validada posterior al merge. La prueba omitida no es un fallo; su identidad debe localizarse antes de atribuir cobertura a ese caso.
+
+**Auditoría de preparación del listener (revisión estática de GitHub; sin ejecutar pruebas ni workflows):**
+- `src/atlas/platform_admin_ipc.py` sigue siendo un handler de una conexión ya aceptada. No crea/bindea/escucha sockets, no ejecuta `accept()`, no crea daemon ni valida un descriptor heredado de systemd. Solo `authority.ping` está implementada.
+- El diseño lifecycle conserva las invariantes de directorio confiable, no sobrescritura, rechazo de rutas stale, verificación de inode, cleanup limitado, una solicitud por conexión, límites y cierre.
+- La prueba de colisión del user-manager registró en Debian systemd 257.13 que una ruta preexistente con archivo regular perdió su contenido aunque `systemctl start` devolvió éxito. El probe evita repetir ese experimento destructivo y usa una ruta ausente dentro de directorio privado. Socket activation sobre filesystem permanece no aprobada.
+- Hallazgo adicional: `run_user_manager_test.py` construía un request con `version: 1` en vez de `protocol: "atlas-admin/1"` y esperaba `status: "ok"`; el handler real requiere el envelope normativo y responde `completed/OK`. La rama de trabajo `work/systemd-socket-activation-probe-contract-alignment` corrige el probe para usar y validar el contrato real. La corrección aún requiere ejecución local del propietario en Debian.
+- El probe sigue limitado al systemd **user manager** y al UID del usuario que lo ejecuta. No demuestra system-manager, socket root-owned, ejecución bajo `atlas-runtime`, separación real de privilegios ni cliente administrativo privilegiado.
+- No se aprueba listener propio ni socket activation. No se aprueba instalación/configuración de systemd, creación de usuarios, cambios de permisos, acceso SQLite ni mutaciones administrativas.
+- Puertas abiertas: resolver la propiedad segura de la ruta del socket frente a colisiones; decidir listener propio vs activación; definir identidad/UID real del cliente; revisar TOCTOU de cleanup y hardening systemd; validar el probe corregido en Debian; diseñar y probar lifecycle/concurrencia/shutdown antes de implementar el listener.
+
+**Próximo paso:** el propietario ejecutará el probe corregido en Debian desde la rama indicada. El resultado del probe no elimina por sí solo la puerta de colisión ni aprueba despliegue. Los estados históricos de PR/HEAD y validación de las secciones anteriores deben leerse como snapshots de su fecha; esta sección es el estado posterior al merge de PR #28.
+
+### 16.8 Evaluación de propiedad del endpoint IPC — 2026-11-19
+
+La auditoría de preparación separa la propiedad del endpoint del mecanismo de activación. Socket activation sobre filesystem permanece suspendida por la colisión destructiva observada en Debian systemd 257.13.
+
+El diseño lifecycle ahora compara:
+1. Listener creado por el proceso en un directorio privado preaprovisionado de `atlas-runtime`: candidato para el siguiente probe aislado, con fallo cerrado ante cualquier ruta preexistente, sin stale cleanup automático y con límites TOCTOU de cleanup documentados.
+2. Socket activation systemd sobre filesystem: suspendida; no desplegar.
+3. Socket abstracto AF_UNIX/SOCK_SEQPACKET: alternativa experimental; evita pathname/inode y unlink, pero carece de permisos filesystem, permite intentos de conexión local y presenta riesgo de preclaim/DoS.
+
+No se selecciona ni aprueba transporte para producción. Próximo trabajo: diseñar probes temporales independientes para A y C, ejecutar por el propietario en Debian, comparar evidencias y solicitar decisión explícita. No usar sudo, rutas Atlas existentes, system-manager de producción ni bases de autoridad. No implementar listener persistente.
+
+
+### 16.9 Validación local de PR #29 — 2026-11-21
+
+El propietario confirmó que Debian estaba en `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, con árbol limpio y rama sincronizada con `origin/work/systemd-socket-activation-probe-contract-alignment`. Sobre ese HEAD comunicó:
+
+- Probe `tests/integration/systemd_socket_activation/run_user_manager_test.py`: ambos mensajes `PASS`; activación systemd user-manager, validación del descriptor, dos activaciones, ownership/mode privados y `RemoveOnStop=no` dejando cleanup del pathname al harness.
+- Suite completa: `Ran 1590 tests in 34.753s` y `OK (skipped=1)`.
+
+Esta evidencia cierra la validación local del alcance de PR #29. No demuestra comportamiento del system-manager, separación real de privilegios, seguridad frente a procesos del mismo UID/root, ni aprueba transporte o despliegue. La activación systemd sobre filesystem permanece suspendida por la colisión destructiva observada previamente. Los probes de alternativas A y C siguen pendientes y separados.

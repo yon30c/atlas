@@ -66,9 +66,79 @@ La documentación de systemd para Debian Trixie confirma:
 
 Consecuencia de diseño: socket activation elimina del daemon la responsabilidad de bind/listen y del unlink normal del socket. No elimina la necesidad de validar el descriptor recibido, autenticar cada peer con SO_PEERCRED, limitar conexiones, manejar errores y coordinar el ciclo de vida de las unidades. Tampoco justifica habilitar RemoveOnStop sin definir claramente qué unidad detiene a cuál.
 
-**Candidato preferido para el siguiente prototipo:** una unidad .socket con ListenSequentialPacket= y Accept=no, y un servicio atlas-runtime que recibe el listener. Es una preferencia provisional por reducir código privilegiado y evitar que el daemon gestione nombres de filesystem; no es todavía una decisión aprobada ni una configuración para instalar en el host.
+**Estado del candidato systemd:** suspendido; no existe una opción preferida aprobada. Aunque `ListenSequentialPacket=` con `Accept=no` reduce la gestión del socket dentro del daemon, la prueba de integración del usuario-manager observó en Debian systemd 257.13 que una ruta preexistente con archivo regular perdió su contenido durante el intento de activación. El probe dejó de repetir el caso destructivo y ahora usa exclusivamente una ruta ausente dentro de un directorio privado. Por tanto, la activación de sockets sobre filesystem no satisface todavía el invariante de no reemplazar rutas existentes.
 
-Antes de adoptar este candidato, un test aislado debe demostrar: descriptor heredado correcto y tipo SOCK_SEQPACKET, credenciales SO_PEERCRED, permisos reales del socket y directorio, colisión con ruta preexistente sin sobrescritura, reinicio del servicio conservando el listener, parada coordinada de socket y servicio, y comportamiento de RemoveOnStop. La prueba debe ejecutarse en un entorno desechable y no con las unidades Atlas existentes.
+Antes de reconsiderar este candidato deben demostrarse, en un entorno desechable, una estrategia de propiedad de ruta que impida la colisión destructiva, descriptor heredado correcto y tipo SOCK_SEQPACKET, credenciales SO_PEERCRED, permisos reales del socket/directorio, reinicio del servicio conservando el listener, parada coordinada y comportamiento de RemoveOnStop. La evidencia del user-manager no sustituye una prueba separada del system-manager con la identidad y permisos objetivo de `atlas-runtime`. No instalar ni desplegar unidades Atlas.
+
+## Evaluación de propiedad de ruta y alternativas de transporte
+
+La colisión observada con systemd obliga a separar dos decisiones: quién crea/posee el endpoint y si el endpoint tiene una entrada en filesystem. La evidencia disponible no autoriza a conservar la preferencia anterior por socket activation filesystem.
+
+### Alternativa A — Listener creado por el proceso sobre filesystem privado
+
+**Candidato recomendado para el siguiente experimento aislado; no aprobado para producción.**
+
+- Un directorio padre debe ser preaprovisionado por el administrador del host con propietario `atlas-runtime:atlas-runtime` y modo `0700`; el servicio no crea ni cambia la propiedad de ese directorio durante el arranque.
+- El proceso `atlas-runtime` crea el socket `AF_UNIX/SOCK_SEQPACKET` con un nombre fijo configurado, sin aceptar rutas del cliente.
+- No se elimina, renombra ni trunca ningún objeto antes de `bind()`. Una entrada preexistente de cualquier tipo debe causar fallo cerrado; el probe debe demostrar que un archivo regular conserva inode, tipo y contenido ante la colisión.
+- Tras `bind()`, se verifica tipo, UID, modo, dispositivo e inode. El descriptor listener se conserva durante toda la vida del servicio.
+- No se hace recuperación automática de sockets stale. Si un cierre abrupto deja una entrada, el siguiente arranque falla y exige diagnóstico/recuperación operacional explícita.
+- El cleanup ordenado solo puede retirar el socket creado por esa instancia y verificado como el mismo objeto. La secuencia pathname stat-then-unlink no es atómica; su aceptabilidad depende de que el directorio sea privado y de que no existan procesos no confiables bajo el mismo UID. Root permanece fuera del modelo de protección.
+- El servicio debe ser una instancia única, no permitir ejecución arbitraria bajo el UID `atlas-runtime`, y no exponer el directorio a otros usuarios.
+
+**Ventajas:** el kernel hace el bind en el proceso que posee el descriptor; no hay pre-bind de systemd que gestione la ruta; la colisión se puede tratar como fallo cerrado del propio `bind()`.
+
+**Costos/riesgos:** el proceso debe gestionar bind/listen/shutdown; una caída puede dejar un socket stale; cleanup por nombre tiene límite TOCTOU; requiere aprovisionamiento fiable del directorio y prueba real de colisiones.
+
+### Alternativa B — Socket activation systemd sobre filesystem
+
+**Suspendida; no usar como baseline.**
+
+La prueba en Debian systemd 257.13 observó pérdida del contenido de un archivo regular preexistente en la ruta configurada. El probe actual evita repetir el escenario destructivo. No basta con que el directorio sea privado: debe explicarse y probarse el comportamiento de colisión de systemd antes de reconsiderar esta alternativa.
+
+No se debe configurar `RemoveOnStop=` para compensar la colisión ni asumir que ownership/mode del socket resuelve la propiedad de la ruta. El daemon que recibe un descriptor con `Accept=no` no debe eliminar el nodo filesystem.
+
+### Alternativa C — Socket abstracto AF_UNIX/SOCK_SEQPACKET
+
+**Alternativa experimental que merece un probe separado; no aprobada para producción.**
+
+Linux y systemd admiten direcciones abstractas AF_UNIX; en una unidad systemd se representan con prefijo `@`, que se convierte en NUL antes de bind. Esto evita la creación de una entrada filesystem, elimina stale path files y no requiere unlink durante shutdown.
+
+Límites que deben quedar explícitos:
+
+- No hay inode, propietario, modo, ACL ni permisos de directorio que protejan el endpoint. Los permisos filesystem no aplican al nombre abstracto.
+- El endpoint puede ser contactado por procesos locales que conozcan el nombre. Cada conexión debe pasar `SO_PEERCRED` antes de leer cualquier paquete; la autorización de dominio permanece separada.
+- Un proceso local puede intentar reclamar el nombre primero y causar denegación de servicio. Un nombre aleatorio dificulta colisiones accidentales, pero no es una frontera de autorización y complica el descubrimiento por clientes.
+- Deben probarse el ámbito real del namespace en el host objetivo, colisiones de nombre, comportamiento ante restart, exposición a otros UIDs, backlog/conexiones abusivas y activación tanto user-manager como system-manager.
+- No se debe afirmar que el nombre abstracto es secreto ni que reemplaza la allowlist de credenciales.
+
+### Matriz comparativa de alternativas
+
+La comparación siguiente usa los mismos criterios para evitar que las ventajas de una opción se confundan con garantías ya demostradas. «No demostrado» significa que falta evidencia en el host objetivo; no debe interpretarse como seguro por defecto.
+
+| Criterio | A — Listener propio, filesystem privado | B — systemd socket activation, filesystem | C — AF_UNIX abstracto |
+|---|---|---|---|
+| **Colisión / preexistencia** | `bind()` debe fallar si el nombre existe; el probe debe demostrar que archivo, symlink, socket activo y stale permanecen intactos. | **Bloqueante:** se observó pérdida de contenido de un archivo regular preexistente con systemd 257.13; estrategia de propiedad de ruta no resuelta. | No hay pathname filesystem; sí existe colisión/preclaim del nombre abstracto y riesgo de DoS. |
+| **Control de acceso local** | DAC del directorio privado y modo del socket, más `SO_PEERCRED` y autorización de aplicación separada. | DAC mediante `SocketUser=`, `SocketGroup=` y `SocketMode=` más `SO_PEERCRED`; los valores efectivos y el directorio deben verificarse. | Sin DAC, propietario, modo ni ACL del endpoint; dependería de validación de `SO_PEERCRED` y autorización de aplicación. |
+| **DoS / abuso de conexiones** | Requiere límites de backlog/concurrencia, timeouts y control del UID con acceso al directorio; root y procesos del mismo UID quedan dentro de límites de confianza. | systemd administra el listener, pero no elimina abuso de conexiones ni DoS; límites y comportamiento bajo carga no demostrados. | Cualquier proceso local que conozca/descubra el nombre puede intentar conectar o reclamarlo primero; requiere límites y pruebas específicas. |
+| **Caída y recuperación** | Una caída puede dejar socket stale; el arranque debe fallar cerrado y exigir diagnóstico explícito, nunca stale cleanup automático. | systemd conserva/gestiona el listener según el ciclo de las unidades; reinicio, parada coordinada y cleanup deben probarse. | No deja pathname stale; el nombre se libera al desaparecer el último socket, pero restart y carrera de preclaim requieren pruebas. |
+| **Complejidad del ciclo de vida** | El proceso gestiona bind, listen, accept, shutdown y cleanup condicionado por inode; existe límite TOCTOU en stat-then-unlink. | Menos gestión de bind/listen en el daemon; aumenta la complejidad de coordinación de unidades, descriptor heredado y propiedad del pathname. | Sin gestión de archivos ni unlink; el proceso sigue gestionando accept, límites, shutdown y colisiones del namespace. |
+| **Descubrimiento del endpoint** | Ruta fija documentada y configuración allowlisted; requiere directorio preaprovisionado. | Ruta fija declarada por unidad y conocida por clientes autorizados. | Nombre abstracto acordado por cliente/servicio; no hay entrada filesystem para descubrimiento y no debe tratarse como secreto. |
+| **Dependencia de systemd** | No necesaria para crear el endpoint; puede ejecutarse bajo un supervisor, pero el modelo de servicio aún requiere revisión. | Directa: depende de socket unit, service unit y semántica de systemd. | No necesaria para bind propio; si se activa mediante systemd, conserva dependencia de la unidad y sus semánticas. |
+| **Límite de confianza** | El directorio privado protege frente a usuarios no confiables, no frente a root ni necesariamente frente a procesos arbitrarios bajo `atlas-runtime`. | La configuración y el manager systemd forman parte de la TCB; el incidente de colisión impide confiar hoy en esta ruta. | El namespace abstracto no aporta autorización; los procesos locales, las credenciales del peer y el control de disponibilidad forman parte del modelo. |
+| **Estado** | Candidato recomendado solo para el siguiente probe aislado; no aprobado para producción. | Suspendida; no usar como baseline hasta resolver y demostrar la propiedad de ruta. | Alternativa experimental; requiere probe separado y evaluación de preclaim/DoS. |
+
+La matriz es una comparación de propiedades y evidencia disponible, no una puntuación ni una decisión de arquitectura. En particular, A no queda seleccionada para producción por ser el próximo experimento; C no es un fallback automáticamente seguro; y B no se reconsidera por el mero hecho de cambiar permisos o activar `RemoveOnStop=`.
+
+### Recomendación de secuencia
+
+1. Mantener deshabilitada cualquier activación systemd sobre ruta filesystem.
+2. Crear un probe opt-in, puramente temporal, para el listener gestionado por proceso en directorio privado. Debe verificar que archivo regular, symlink, socket activo y socket stale nunca son reemplazados ni eliminados; dos binds concurrentes deben producir un solo ganador.
+3. Crear un segundo probe aislado para socket abstracto y documentar el alcance de visibilidad y la colisión/preclaim.
+4. Comparar evidencia de ambas alternativas, incluidos los límites de cleanup y DoS. No convertir una prueba user-manager en aprobación del system-manager.
+5. Solicitar decisión explícita del propietario antes de seleccionar transporte, crear unidades de producción o implementar listener persistente.
+
+Ninguno de estos probes debe tocar rutas, usuarios, sockets, bases o unidades Atlas existentes. No ejecutar con `sudo`, no usar `/run` ni `/var/lib`, y no modificar el host. La prueba debe usar recursos únicos bajo un directorio temporal privado y cleanup por identidad registrada.
 
 ## Pruebas requeridas antes de implementación
 

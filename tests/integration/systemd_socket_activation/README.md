@@ -9,6 +9,8 @@ the existing Atlas services.
 
 ## What it checks
 
+- The probe sends the exact `atlas-admin/1` request envelope and validates the
+  protocol response (`completed/OK`) produced by the current IPC handler.
 - A filesystem AF_UNIX/SOCK_SEQPACKET listener is created by systemd.
 - The socket is owned by the invoking user and has mode 0600; its private
   parent directory has mode 0700.
