@@ -775,3 +775,10 @@ repeated saturation/recovery cycles and startup rejection under an
 insufficient inherited `RLIMIT_NOFILE` without raising it. Run only in the
 disposable `Atlas-VM-test`, never on `greed` production. No tests, builds
 or workflows were run by the assistant.
+
+
+### CP-10 — procfs reader correction (2026-11-21)
+
+The owner ran commit `cbfe0e20a79ae3ee8fd901ba43ea6df360962398` on the disposable `Atlas-VM-test`. MA-01..MA-10 and CP-01..CP-09 passed; CP-10 stopped with `ProbeFailure: CP-10 procfs status omitted Max open files`. Sandbox cleanup succeeded. This was a probe evidence-reader failure, not an observed FD/thread limit violation.
+
+Static review found that Linux exposes `Max open files` in `/proc/<pid>/limits`, not `/proc/<pid>/status`. Commit `47b9ed94c21d26b18c415bedd2f1d352894f2620` changes the reader to `limits` and retains the 64/64 soft/hard assertion; FD and thread counts continue to come from `fd/` and `task/`. CP-10 is statically corrected but **requires a fresh owner execution** before it can be marked PASS. CP-11/CP-12 remain pending. Run only on the disposable `Atlas-VM-test`, never on production `greed`. No tests, builds or workflows were run by the assistant.
