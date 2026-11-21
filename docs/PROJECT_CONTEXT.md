@@ -1,6 +1,6 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-21 (A-IPC-02: MA-01..MA-10 y CP-01/04 PASS; CP-02/03 primera ejecución FAIL por expectativa EAGAIN prematura; semántica Linux AF_UNIX backlog+1 identificada; runner corregido en 634e19d, pendiente de ejecución; CP-05..12 pendientes).
+> **Última actualización:** 2026-11-21 (A-IPC-02 en b5b0128: MA-01..MA-10, CP-01/04 y CP-02/03 PASS; overall INCOMPLETE por CP-05..12. CP-02/03 confirmó 8/8, 9/8 y EAGAIN errno 11 en la décima conexión. CP-05 requiere aclarar read timeout 5 s frente a deadline global 15 s).
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
@@ -13,7 +13,7 @@
 - **Rama activa:** `experiment/a-ipc-01-private-unix-listener-probe`; separada de `main`, sin PR propio. PR #30 sigue abierto en Draft en su rama original de diseño.
 - **IPC existente:** contrato `atlas-admin/1` y handler para conexiones ya aceptadas. Solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
 - **A-IPC-01:** el propietario reportó en Debian 13, commit `1d5bdb122a8480c36b445be7dd961b93806de74b`, resultado 16 PASS, 0 SKIP, 0 FAIL. Registro: `docs/status-aipc01-validation-2026-11-21.md`. No demuestra despliegue.
-- **A-IPC-02:** MA-01..MA-10 y CP-01/04 PASS. En ejecución del propietario sobre commit `1ebf930a6559c3d6a81965f0f94c28ed8e6eef56`, CP-02/03 terminó FAIL: `ss` observó 8/8 y la conexión novena devolvió 0, no EAGAIN. La revisión del kernel Linux AF_UNIX halló que la comparación es `queue_len > backlog`, por lo que `listen(8)` admite nueve pendientes y la décima debe recibir EAGAIN. Runner corregido en `634e19decce2322e94ca0d1fe410b259f23dcb67`, pendiente de validación local. Cleanup correcto; CP-05..12 pendientes.
+- **A-IPC-02:** ejecución en `b5b0128`: MA-01..MA-10, CP-01/04 y CP-02/03 PASS; overall INCOMPLETE por CP-05..12. Backlog medido 8/8, novena conexión admitida 9/8, décima rechazada EAGAIN errno 11; sin accepts/workers extra; cleanup correcto. CP-05 requiere aclarar read timeout 5 s frente a deadline global 15 s.
 - **Alternativa A:** elegida como línea principal de evaluación, no aprobada para producción. Alternativa B suspendida por colisión destructiva en systemd; C no priorizada.
 - **TCB-1 aceptada:** todos los procesos bajo la cuenta dedicada `atlas-runtime` pertenecen a la TCB; no se exige aislamiento intra-UID. La exclusividad operativa de esa cuenta aún debe definirse/verificarse.
 - **Identidad del cliente aceptada:** el frontend administrativo debe conectar con **EUID 0**; la política de diseño del servicio es exactamente `client_uids={0}`. No se admiten otros consumidores sin nueva decisión. El entrypoint IPC real aún no existe/revisado; la decisión no es evidencia operativa.
@@ -23,10 +23,10 @@
 - **A-THREAT-04:** ventana TOCTOU de unlink aceptada como residual bajo TCB-1 solo con directorio privado, instancia única y revalidación por descriptor; unlink no es atómico.
 - **A-THREAT-05:** procedimiento manual candidato publicado en `local-authority-admin-private-listener-stale-recovery.md`; falta validarlo en sandbox. Startup siempre falla cerrado ante pathname existente y nunca intenta stale cleanup ni usa connect como detector.
 - **A-THREAT-06:** especificación de resolución publicada; falta probe aislado de symlinks, sustitución de ancestros, colisiones y connect canónico.
-- **A-THREAT-07:** perfil de probe aprobado: 4 workers, `listen(8)`, cola de aplicación 0, read/write 5 s, deadline global 15 s y `RLIMIT_NOFILE=64`. En Linux AF_UNIX el límite efectivo es backlog+1; runner verifica 8/8, 9/8 y EAGAIN en la décima. Cambio `634e19d` pendiente de ejecución. CP-05..12 y memoria/CPU/TasksMax/drenaje siguen pendientes. No es configuración de producción.
+- **A-THREAT-07:** perfil experimental: 4 workers, `listen(8)`, cola 0, read/write 5 s, deadline global 15 s y `RLIMIT_NOFILE=64`. CP-01/04 y CP-02/03 PASS en `b5b0128`; AF_UNIX admite 9 pendientes y la décima recibe EAGAIN. CP-05..12 pendientes; aclarar read timeout 5 s frente a deadline global 15 s antes de CP-05. No es configuración de producción.
 - **A-THREAT-08:** máquina de estados de readiness/shutdown, drenaje, deadlines y ownership de FDs pendiente.
 - **A-THREAT-09:** A09 usó runner UID 1000 y peer UID 1001; no valida cliente UID 0, servicio `atlas-runtime` ni permisos finales del despliegue.
-- **Próximo paso:** actualizar `Atlas-VM-test` al commit `634e19decce2322e94ca0d1fe410b259f23dcb67` y validar CP-02/03: ocho conexiones → Recv-Q 8, novena → Recv-Q 9, décima → EAGAIN; sin accepts/workers adicionales. Después CP-05/06. Path-walk, colisiones y stale recovery siguen separados. Solo ejecutar en `Atlas-VM-test`.
+- **Próximo paso:** aclarar CP-05/06: un peer silencioso activa el read timeout de 5 s antes del deadline global de 15 s. Mantener el perfil aprobado hasta decisión explícita; después implementar y validar solo en `Atlas-VM-test`.
 - **Estado de cambios:** la rama experimental contiene MA-01..MA-10 y CP-01/04 validados por el propietario en el harness, con evidencia de la última ejecución descrita arriba. No se modificó handler, contrato normativo, runtime, SQLite, `main` ni host de producción. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. CP-02/03 y CP-05..12 siguen pendientes; no se creó PR ni se aprobó listener persistente o despliegue.
 
 **Límites vigentes:** A-IPC-01 valida únicamente los escenarios experimentales ejecutados en el commit/entorno indicados. No demuestra protección frente a root/capabilities suficientes ni procesos maliciosos del mismo UID; no valida separación de privilegios, system-manager, listener persistente, daemon, integración systemd, acceso/autorización SQLite ni operaciones mutantes. No autoriza cambios del host, usuarios, grupos, permisos, privilegios, servicios, provisioning o despliegue.
@@ -952,3 +952,8 @@ debe ser rechazado. El runner se corrigió en commit
 Esta es semántica de implementación Linux AF_UNIX, no garantía portable.
 La corrección solo fue revisada estáticamente; requiere nueva ejecución del
 propietario. CP-02/CP-03 no se consideran PASS. CP-05..CP-12 pendientes.
+
+
+### Evidencia A-IPC-02 — CP-02/CP-03 (2026-11-21)
+
+El propietario ejecutó `b5b0128e2646e41e3a2f927251c6fa6dafa897d7`: MA-01..MA-10, CP-01/04 y CP-02/03 PASS; overall INCOMPLETE por CP-05..12. Cola 8/8, novena conexión admitida 9/8, décima rechazada EAGAIN errno 11; sin accepts/workers extra y cleanup correcto. CP-05 queda bloqueado por aclaración: read timeout 5 s precede al deadline global 15 s para un peer silencioso.
