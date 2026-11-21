@@ -203,3 +203,10 @@ Se publicó [Frontera de confianza y autenticación mutua — alternativa A](loc
 La allowlist del servidor sigue siendo configuración local confiable, inmutable y aún no conectada al listener. El UID 0 del cliente y el UID/GID de atlas-runtime continúan como candidatos, no valores de despliegue aprobados. La consulta SO_PEERCRED del lado cliente tampoco está implementada ni probada.
 
 **Puerta vigente:** obtener decisión explícita del propietario sobre TCB-1/TCB-2 y la identidad real del cliente; luego especificar la fuente de configuración confiable y el probe de autenticación mutua. No modificar código, host, cuentas, permisos ni servicios en esta fase.
+
+
+## Decisión TCB-1 aceptada — 2026-11-21
+
+El propietario aceptó TCB-1: todos los procesos bajo la cuenta dedicada atlas-runtime son parte del mismo dominio de confianza. El transporte no intentará distinguir procesos con el mismo UID. La cuenta deberá mantenerse exclusiva para el servicio y componentes autorizados; no se autoriza todavía su creación ni cambios en el host.
+
+La especificación candidata de configuración está en [identity-config](local-authority-admin-private-listener-identity-config.md). La ruta /etc/atlas/admin-ipc.conf, permisos y UID/GID son propuestas, no estado operativo. Falta identificar el proceso cliente real y confirmar su UID efectivo antes de fijar client_uids.
