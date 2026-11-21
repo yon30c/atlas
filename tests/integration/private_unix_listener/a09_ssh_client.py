@@ -104,7 +104,7 @@ def _run(instruction: dict[str, object]) -> dict[str, object]:
             raise ValueError("generated request exceeds protocol limit")
         client.sendall(packet)
         try:
-            response = client.recv(MAX_RESPONSE_BYTES + 1)
+            response = client.recv(1)
         except (ConnectionResetError, ConnectionAbortedError):
             response = b""
             result["closure"] = "reset"
