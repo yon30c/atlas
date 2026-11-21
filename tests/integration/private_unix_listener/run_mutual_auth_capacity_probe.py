@@ -36,6 +36,7 @@ GLOBAL_DEADLINE = 15.0
 REQUEST_LIMIT = 16 * 1024
 RESPONSE_LIMIT = 64 * 1024
 FD_LIMIT = 64
+CP12_LOW_FD_LIMIT = 32
 SS_BIN = shutil.which("ss")
 _EMIT_LOCK = threading.Lock()
 
@@ -230,8 +231,14 @@ def _server_child(
         return 3
 
     soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
-    if hard < FD_LIMIT:
-        emit(event="startup_error", reason="hard RLIMIT_NOFILE is below 64", hard=hard)
+    if soft < FD_LIMIT or hard < FD_LIMIT:
+        emit(
+            event="startup_error",
+            reason="inherited RLIMIT_NOFILE is below the required profile",
+            soft=soft,
+            hard=hard,
+            required=FD_LIMIT,
+        )
         return 3
     resource.setrlimit(resource.RLIMIT_NOFILE, (FD_LIMIT, FD_LIMIT))
 
@@ -2286,6 +2293,85 @@ def _git_commit() -> str | None:
     return result.stdout.strip() if result.returncode == 0 else None
 
 
+
+def _apply_cp12_low_nofile_limit() -> None:
+    """Applied in the child between fork and exec to model an inherited limit."""
+    resource.setrlimit(
+        resource.RLIMIT_NOFILE,
+        (CP12_LOW_FD_LIMIT, CP12_LOW_FD_LIMIT),
+    )
+
+
+def _scenario_low_rlimit_startup(
+    script: Path, service_dir: Path, uid: int, gid: int
+) -> dict:
+    """CP-12: reject startup on inherited low soft/hard NOFILE without raising it."""
+    socket_path = service_dir / "low-rlimit.sock"
+    command = [
+        sys.executable, str(script), "--server-child",
+        "--socket", str(socket_path),
+        "--socket-mode", "0o600",
+        "--allowed-uid", "0",
+        "--pre-read-delay-seconds", "0.0",
+        "--inject-worker-exception-once", "0",
+    ]
+    try:
+        completed = subprocess.run(
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=5.0,
+            check=False,
+            user=uid,
+            group=gid,
+            extra_groups=[],
+            preexec_fn=_apply_cp12_low_nofile_limit,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ProbeFailure("CP-12 low-RLIMIT child did not reject startup promptly") from exc
+
+    lines = [line for line in completed.stdout.splitlines() if line.strip()]
+    if len(lines) != 1:
+        raise ProbeFailure(
+            f"CP-12 expected one startup event, observed {len(lines)}; "
+            f"stderr={completed.stderr[-1000:]!r}"
+        )
+    try:
+        event = json.loads(lines[0])
+    except json.JSONDecodeError as exc:
+        raise ProbeFailure("CP-12 child emitted invalid startup evidence") from exc
+    if completed.returncode != 3:
+        raise ProbeFailure(
+            f"CP-12 expected exit 3, observed {completed.returncode}; event={event}"
+        )
+    if event.get("event") != "startup_error":
+        raise ProbeFailure(f"CP-12 expected startup_error, observed {event}")
+    if (
+        event.get("soft") != CP12_LOW_FD_LIMIT
+        or event.get("hard") != CP12_LOW_FD_LIMIT
+        or event.get("required") != FD_LIMIT
+    ):
+        raise ProbeFailure(f"CP-12 inherited limits were not preserved in evidence: {event}")
+    if event.get("reason") != "inherited RLIMIT_NOFILE is below the required profile":
+        raise ProbeFailure(f"CP-12 unexpected startup rejection reason: {event}")
+    if socket_path.exists() or socket_path.is_symlink():
+        raise ProbeFailure("CP-12 created a socket pathname despite startup rejection")
+
+    return {
+        "inherited_soft_limit": event["soft"],
+        "inherited_hard_limit": event["hard"],
+        "required_limit": event["required"],
+        "startup_rejected": True,
+        "exit_code": completed.returncode,
+        "startup_event": event["event"],
+        "socket_created": False,
+        "limit_was_not_raised": True,
+        "stderr": completed.stderr.strip(),
+    }
+
+
 def _main_parent(args: argparse.Namespace) -> int:
     root: Path | None = None
     public_root: Path | None = None
@@ -2344,12 +2430,15 @@ def _main_parent(args: argparse.Namespace) -> int:
             "status": "PASS",
             "observations": repeated_recovery,
         })
+        low_rlimit = _scenario_low_rlimit_startup(
+            script, service_dir, args.service_uid, args.service_gid
+        )
         results.append({
             "id": "CP-12",
-            "status": "INCOMPLETE",
-            "detail": "low-RLIMIT startup rejection remains unimplemented",
+            "status": "PASS",
+            "observations": low_rlimit,
         })
-        overall = "INCOMPLETE"
+        overall = "PASS"
     except ProbeIncomplete as exc:
         results.append({"id": "PREFLIGHT", "status": "INCOMPLETE", "detail": str(exc)})
         overall = "INCOMPLETE"
