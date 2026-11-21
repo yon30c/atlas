@@ -1,6 +1,6 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-21.
+> **Última actualización:** 2026-11-20.
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
@@ -10,13 +10,13 @@
 
 - **Repositorio:** `yon30c/atlas`.
 - **Base estable:** `main` en `1bd73d149dbd98e7ee2e5fdc36880883b6b03d16`; PR #29 está integrado mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`.
-- **Rama activa de este incremento:** `design/isolated-private-unix-listener-probe`, creada desde `main`. No hay PR abierto y `main` no ha sido modificado; la relación ahead/behind y el HEAD deben consultarse en GitHub al iniciar cada sesión, sin congelarlos en este documento.
+- **Rama activa de este incremento:** `experiment/a-ipc-01-private-unix-listener-probe`, creada desde el HEAD `d7a14302061e1cfc52df5097a42d65bd4ba482bb` de la rama documental `design/isolated-private-unix-listener-probe`. No hay PR abierto y `main` no ha sido modificado; la relación ahead/behind y el HEAD deben consultarse en GitHub al iniciar cada sesión.
 - **Validación local más reciente comunicada:** sobre el HEAD de código de PR #29 `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, el propietario reportó en Debian 13 el probe user-manager `PASS` y la suite `Ran 1590 tests in 34.753s`, `OK (skipped=1)`. Esa evidencia no corresponde a esta rama documental ni valida el futuro probe A-IPC-01.
 - **Estado IPC:** contrato `atlas-admin/1` y handler para conexiones ya aceptadas; solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
 - **Transporte:** no hay transporte aprobado para producción. A (listener propio en directorio privado) tiene un diseño de probe aceptado para preparar su implementación experimental. B (socket activation sobre filesystem) permanece suspendida por la colisión destructiva observada en Debian systemd 257.13. C (AF_UNIX abstracto) continúa como alternativa experimental separada.
-- **Diseño A-IPC-01:** `docs/design/local-authority-admin-private-unix-listener-probe.md`. El diseño fija sandbox temporal sin privilegios, directorio `0700`, socket `0600`, colisiones no destructivas, cleanup condicionado por identidad, credenciales peer, límites y carrera de dos binds simultáneos.
-- **Siguiente paso:** preparar la implementación opt-in del probe A-IPC-01 en una rama separada, después revisar el diff y entregar comandos exactos para que el propietario valide en Debian. No existe implementación ni comando de ejecución todavía.
-- **Validación y método:** no se ejecutaron pruebas, compilaciones ni workflows desde GitHub. La validación del probe será realizada por el propietario en Debian.
+- **Diseño A-IPC-01:** `docs/design/local-authority-admin-private-unix-listener-probe.md`, aprobado como base experimental. La implementación opt-in está preparada en `tests/integration/private_unix_listener/run_probe.py`, con instrucciones en `tests/integration/private_unix_listener/README.md`. Usa sandbox temporal sin privilegios, directorio `0700`, socket `0600`, colisiones no destructivas, cleanup condicionado por identidad, SO_PEERCRED, límites y carrera de dos binds simultáneos.
+- **Siguiente paso:** revisión final del diff de la rama de implementación, después entregar commit exacto y comando para que el propietario ejecute el probe en Debian y comparta el JSON. El código existe, pero no ha sido validado.
+- **Validación y método:** no se ejecutaron pruebas, compilaciones ni workflows desde GitHub. El probe A-IPC-01 está pendiente de ejecución por el propietario en Debian. A09 (peer con UID distinto) se marca SKIP deliberado porque el runner no cambia credenciales ni usa sudo; un recorrido sin otros fallos será INCOMPLETE, no PASS.
 
 **Límites vigentes:** la aceptación del diseño no selecciona A como transporte de producción ni autoriza listener persistente, daemon, systemd, unidades de producción, cambios del host, usuarios, grupos, permisos, privilegios, acceso SQLite, provisioning, operaciones administrativas ni despliegue. La colisión destructiva de systemd no debe repetirse. Cualquier decisión posterior de transporte requiere evidencia local y aprobación explícita del propietario.
 
@@ -562,3 +562,26 @@ El propietario aceptó avanzar con el diseño del probe A-IPC-01. El documento `
 - La aceptación del diseño no selecciona A como transporte de producción ni autoriza listener persistente, daemon, systemd, cambios del host, usuarios/grupos, privilegios, acceso SQLite, mutaciones administrativas o despliegue.
 
 **Siguiente paso:** preparar la implementación aislada del probe A-IPC-01 en una rama separada; después revisar el diff y entregar comandos exactos para validación local.
+
+
+### 16.12 Implementación del probe A-IPC-01 — 2026-11-20
+
+Se preparó la implementación experimental en la rama separada `experiment/a-ipc-01-private-unix-listener-probe`, basada en el HEAD documental `d7a14302061e1cfc52df5097a42d65bd4ba482bb` de `design/isolated-private-unix-listener-probe`. La rama no se ha integrado ni se ha abierto PR; `main` permanece intacta.
+
+Archivos añadidos:
+- `tests/integration/private_unix_listener/run_probe.py`: entrypoint opt-in, sandbox por escenario, comprobaciones de propiedad y modos, colisiones, lifecycle, ping, peer credentials, fallos de transporte, límites acotados y carrera concurrente de dos binds. Emite JSON con clasificación por escenario, observaciones de peer y cleanup.
+- `tests/integration/private_unix_listener/README.md`: alcance, comando local, interpretación de resultados y límites.
+
+Escenarios implementados: A01–A08 y A10–A16. A09 (UID distinto) queda SKIP deliberado: el runner no cambia UID/GID, no usa sudo ni crea identidades. Por ello, aunque los demás escenarios pasen, el resultado general será INCOMPLETE. A14 usa un harness de prueba con máximo dos workers y backlog ocho; esos valores no son política de producción.
+
+El runner importa el handler actual y ejecuta únicamente `authority.ping`. No modifica `src/atlas/platform_admin_ipc.py`, el contrato, runtime, autoridad SQLite ni servicios. No instala ni invoca systemd. Usa directorios temporales `0700`, sockets `0600`, no realiza unlink preventivo y limita cleanup a identidades registradas; el límite TOCTOU permanece documentado.
+
+Comando para el propietario desde la raíz del checkout, sin sudo:
+
+```bash
+PYTHONPATH=src python tests/integration/private_unix_listener/run_probe.py
+```
+
+**Validación:** no se han ejecutado pruebas, compilaciones ni workflows desde GitHub. No existe evidencia local aún. El propietario debe revisar el código y ejecutar el comando en Debian; el JSON completo y el commit exacto serán la evidencia. No declarar PASS si A09 permanece omitido.
+
+**No autorizado:** listener persistente, daemon, systemd, cambios de host, usuarios/grupos, permisos, privilegios, acceso SQLite, operaciones administrativas o despliegue. La alternativa A sigue siendo candidata experimental, no transporte aprobado.
