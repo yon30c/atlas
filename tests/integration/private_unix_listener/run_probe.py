@@ -576,6 +576,12 @@ def _install_a09_helper() -> tuple[Path, tuple[int, int, int]]:
         or current.st_uid != os.geteuid()
         or stat.S_IMODE(current.st_mode) != 0o644
     ):
+        try:
+            current_identity = (current.st_dev, current.st_ino, stat.S_IFMT(current.st_mode))
+            if current_identity == identity and stat.S_ISREG(current.st_mode) and current.st_uid == os.geteuid():
+                A09_HELPER_PATH.unlink()
+        except OSError:
+            pass
         raise ProbeFailure("temporary A09 helper identity changed during installation")
     return A09_HELPER_PATH, identity
 
