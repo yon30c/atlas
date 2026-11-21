@@ -870,3 +870,52 @@ para producción, el entrypoint administrativo real, integración systemd,
 acceso a SQLite, operaciones mutantes ni despliegue. El perfil de capacidad
 continúa siendo experimental. No se ejecutaron pruebas, builds ni workflows
 desde GitHub; el resultado fue ejecutado por el propietario. 
+
+
+## A-IPC-03 — isolated path resolution probe (implemented; owner validation pending)
+
+Runner: `run_path_resolution_probe.py`. Design: `docs/design/local-authority-admin-private-listener-path-resolution-probe.md`.
+
+The harness implements PR-01..PR-12 for canonical path parsing, descriptor-relative
+walk from `/`, symlink rejection at each fixture level, non-directory and
+writable/foreign-owned ancestor rejection, endpoint fixture ownership/mode,
+configuration loading through a validated parent descriptor, final symlink/FIFO/
+hardlink rejection, descriptor anchoring after pathname replacement, and DAC
+denial for OTHER UID. It creates one private root-owned sandbox under `/run`,
+uses numeric fixture identities, and removes only that sandbox after child exit.
+It does not create a socket, bind/connect, inspect real `/etc/atlas`, or modify
+production code or host configuration.
+
+**Status:** implemented and statically reviewed on GitHub; **not executed** by
+the assistant and not yet owner-validated. All PR-01..PR-12 must report PASS
+before A-THREAT-06 can be considered validated. This does not establish a
+production path/owner policy or approve bind, stale recovery, lifecycle, or
+deployment.
+
+Run only in the disposable `Atlas-VM-test`, never on `greed`:
+
+```bash
+# As greed, from the VM checkout:
+cd ~/atlas-dev
+git fetch origin
+git pull --ff-only origin experiment/a-ipc-01-private-unix-listener-probe
+git rev-parse HEAD
+
+# Then enter a root shell and wait for the root@Atlas-VM-test prompt:
+sudo -i
+
+# As root, run the isolated harness:
+cd /home/greed/atlas-dev
+PYTHONDONTWRITEBYTECODE=1 python3 tests/integration/private_unix_listener/run_path_resolution_probe.py \
+  --service-uid 2005 \
+  --service-gid 2005 \
+  --other-uid 2006 \
+  --other-gid 2006 \
+  --confirm-disposable-vm \
+  --confirm-fixture-ids
+```
+
+The run should report the exact checkout commit and `overall=PASS`, with
+12 PASS scenarios and successful sandbox cleanup. If any scenario fails or
+cleanup is not confirmed, preserve the complete JSON and do not rerun until
+the failure is reviewed. The assistant does not run tests, builds, or workflows.
