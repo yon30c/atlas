@@ -211,3 +211,41 @@ PYTHONPATH=src python tests/integration/private_unix_listener/run_probe.py \
 The example is documentation only and must not be run until the host change and execution are explicitly approved. A normal invocation without these options leaves A09a/A09b as SKIP and the global result INCOMPLETE.
 
 **Validation status:** static code review of the helper/runner is complete in GitHub; no tests, builds or workflows were run. The implementation has not been executed or validated. The owner must inspect shell startup behavior read-only, authorize any host-side forced-command change separately, and execute the probe locally on Debian. `main` remains untouched; no PR exists and no production transport is approved.
+
+
+## Owner-reported execution — 2026-11-21 (A09 enabled)
+
+The owner executed the opt-in runner on Debian 13 from checkout
+`1d5bdb122a8480c36b445be7dd961b93806de74b`, as unprivileged UID 1000,
+with the pre-provisioned peer account `atlas-a09-test` (UID 1001, GID 984).
+Kernel: `6.12.117+deb13-amd64`; Python: `3.13.5`; duration: `1.72 s`.
+
+**Reported result: `overall=PASS`; all 16 scenarios A01–A16 passed.**
+There were no SKIP or FAIL rows. Cleanup reported
+`empty sandbox root removed`.
+
+A09 evidence:
+
+- **A09a — DAC:** external peer UID 1001/GID 984/PID 5405 received
+  `EACCES` (`errno=13`) connecting to the candidate endpoint. The listener
+  accepted zero connections. Candidate socket remained owned by UID 1000,
+  mode 0600; candidate directory mode remained 0700.
+- **A09b — SO_PEERCRED:** external peer UID 1001/GID 984/PID 5417 connected
+  to the separate fixture (directory mode 0711, socket mode 0666). The real
+  handler rejected it with `UNAUTHORIZED_PEER`. The client observed reset
+  and received zero response bytes after sending a 122-byte ping request.
+- The temporary sandbox root was removed successfully.
+
+The existing A01–A08 and A10–A16 scenarios also reported PASS. A14 observed
+peak_active=2, rejected_connections=6, handled_connections=8 and
+active_after_recovery=0. A16 observed exactly one bind winner and a
+functioning winner listener.
+
+This owner-reported result validates only the experimental probe scenarios
+actually exercised on the recorded commit and host. It does **not** approve
+a persistent listener, select AF_UNIX pathname sockets for production, enable
+any administrative operation beyond the non-mutating ping fixture, prove
+protection against root or same-UID malicious processes, validate systemd
+activation, privilege separation, SQLite authorization, or authorize
+deployment. SSH/PAM/firewall global configuration was not changed as part of
+the reported run.
