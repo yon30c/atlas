@@ -1,9 +1,9 @@
 # Configuración confiable de identidad — alternativa A
 
 **Fecha:** 2026-11-21  
-**Estado:** diseño candidato posterior a aceptación de TCB-1; pendiente de confirmar identidad del cliente y aprobación de valores operativos.  
+**Estado:** diseño candidato posterior a aceptación de TCB-1 y a la decisión explícita de EUID 0; faltan entrypoint ejecutable, valores operativos y validación aislada.  
 **Rama:** experiment/a-ipc-01-private-unix-listener-probe  
-**Relacionado:** trust-boundary, lifecycle y threat-model review.
+**Relacionado:** trust-boundary, lifecycle, threat-model review y [resolución segura de rutas](local-authority-admin-private-listener-path-resolution.md).
 
 ## 1. Decisión aceptada y alcance
 
@@ -77,12 +77,12 @@ No aceptar UID/GID simbólicos en runtime como autoridad. El provisionamiento po
 La propuesta inicial respaldada por el diseño de operaciones existente es:
 
 - Servicio: UID dedicado atlas-runtime, GID primario dedicado atlas-runtime.
-- Cliente previsto: frontend privilegiado con EUID 0. El documento docs/design/local-authority-administrative-operations-design.md §2.2 y §5.1 describe ese modelo.
-- Allowlist candidata del servicio: {0}, siempre que el cliente IPC real sea ese frontend root y no existan otros consumidores previstos.
+- Cliente requerido: frontend administrativo con EUID 0, decisión explícita del propietario.
+- Allowlist requerida del servicio: exactamente {0}; no se admiten consumidores adicionales sin nueva decisión explícita.
 - Servicio sin capabilities adicionales.
 - Sin grupos suplementarios con autoridad sobre el directorio/socket salvo los estrictamente necesarios y documentados.
 
-El modelo documental sí identifica al frontend administrativo previsto como EUID 0; sin embargo, la inspección no encontró un cliente IPC ejecutable/entrypoint implementado que realice connect. Por ello, UID 0 es la identidad de diseño recomendada y el valor candidato de client_uids, pero su confirmación operativa exige identificar el futuro proceso cliente y comprobar su EUID en el modo de lanzamiento real. No se declara validado el par UID 0 ↔ atlas-runtime.
+El diseño de operaciones administrativas y la decisión posterior del propietario fijan EUID 0 como requisito del frontend. La inspección no encontró un cliente IPC ejecutable/entrypoint que realice connect: por ello, la política de diseño queda fijada como client_uids={0}, pero su cumplimiento operativo exige implementar y revisar el entrypoint y comprobar su EUID real. No se declara validado el par UID 0 ↔ atlas-runtime.
 
 La comprobación de UID/GID real, efectivo y saved debe ser consistente con el modo de lanzamiento elegido. No se debe imponer todavía una política de NoNewPrivileges, bounding set, seccomp o systemd sandbox sin revisar primero cómo se inicia el proceso y qué capacidades necesita. La decisión provisional es no conceder capabilities adicionales al servicio; los mecanismos concretos de hardening se diseñarán después.
 
@@ -90,7 +90,7 @@ La comprobación de UID/GID real, efectivo y saved debe ser consistente con el m
 
 Requisitos para futura implementación:
 
-1. Abrir la ruta con resolución segura desde una raíz confiable; no basta con O_NOFOLLOW en el último componente si los ancestros pueden ser symlinks.
+1. Resolver todos los componentes desde el descriptor de /, recorriendo directorios con openat/dir_fd, O_DIRECTORY y O_NOFOLLOW, y validando cada uno con fstat; seguir [la especificación de resolución de rutas](local-authority-admin-private-listener-path-resolution.md). No basta con O_NOFOLLOW en el último componente.
 2. Verificar mediante fstat que el descriptor apunta a archivo regular, propietario esperado, modo no escribible por grupo/otros y tamaño máximo pequeño.
 3. Leer desde el descriptor validado; no hacer stat y luego volver a abrir por pathname.
 4. Rechazar hardlinks si el modelo operativo los considera un vector no aceptable; documentar la política concreta.
@@ -112,12 +112,12 @@ El uso de descriptor y resolución segura protege contra sustituciones de ruta d
 
 ## 8. Decisiones aún abiertas
 
-1. Identificar el entrypoint concreto que implementará el frontend privilegiado y verificar que su EUID al conectar será 0; el diseño de dominio ya prevé EUID 0, pero no existe cliente IPC ejecutable revisado.
+1. Implementar e identificar el entrypoint concreto del frontend y verificar que su EUID al conectar sea 0; el requisito está aceptado, pero no existe cliente IPC ejecutable revisado.
 2. Confirmar que ambos procesos pueden leer el mismo archivo root:root 0644 sin exponer secretos (el esquema no debe contenerlos); si no, diseñar configuración duplicada desde fuente canónica.
 3. Confirmar formato de archivo y ruta definitiva tras revisar convenciones/configuración existentes del repositorio y el modelo de instalación.
 4. Definir valores definitivos de UID/GID, socket path y límites de modo.
 5. Definir política precisa de capabilities y hardening según el entrypoint real.
-6. Definir si el proceso cliente se ejecutará siempre como root o mediante un helper dedicado; no introducir helper ni cambios de privilegios sin diseño y aprobación.
+6. Mantener EUID 0 como requisito del frontend; si se propone un helper, demostrar que el proceso que realmente conecta conserva EUID 0 y someter el diseño a revisión separada.
 
 ## 9. Próximo incremento técnico
 
@@ -139,3 +139,10 @@ No reutilizar ni modificar la identidad temporal atlas-a09-test sin autorizació
 - No se ejecutaron pruebas, compilaciones ni workflows.
 - No se crearon usuarios/grupos, archivos /etc, permisos, servicios ni sockets.
 - No se aprobó listener persistente, systemd, acceso SQLite ni despliegue.
+
+
+## 11. Decisión del propietario — identidad cliente EUID 0 (2026-11-21)
+
+El propietario confirmó que el frontend administrativo debe ejecutarse con EUID 0. La política de diseño del servicio queda fijada en `client_uids={0}`. El cliente debe verificar su propio EUID antes de conectar; el servidor debe verificar UID kernel 0 mediante `SO_PEERCRED` antes de leer; el cliente debe verificar el UID configurado de `atlas-runtime` antes de enviar bytes. Esto identifica dominios UID, no un ejecutable específico.
+
+La decisión no prueba un entrypoint inexistente ni valida el par operativo UID 0 ↔ `atlas-runtime`. No autoriza cambios de host, cuentas, permisos, servicios, listener persistente ni despliegue.
