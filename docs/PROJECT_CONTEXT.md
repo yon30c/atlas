@@ -1,6 +1,6 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-21 (A-IPC-02: propietario validó MA-01..MA-10 y CP-01..CP-07 en 077e01b. CP-07 recuperó worker/slot y completó ping posterior. CP-08/09 implementados en fe7343f, pendientes de ejecución; CP-10..CP-12 pendientes; overall INCOMPLETE).
+> **Última actualización:** 2026-11-21 (A-IPC-02: propietario validó MA-01..MA-10 y CP-01..CP-09 en caf7bbb. CP-08/09 confirmaron límites de payload/profundidad. CP-10 implementado en bf3c623, pendiente de ejecución; CP-11/12 pendientes; overall INCOMPLETE).
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
@@ -13,7 +13,7 @@
 - **Rama activa:** `experiment/a-ipc-01-private-unix-listener-probe`; separada de `main`, sin PR propio. PR #30 sigue abierto en Draft en su rama original de diseño.
 - **IPC existente:** contrato `atlas-admin/1` y handler para conexiones ya aceptadas. Solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
 - **A-IPC-01:** el propietario reportó en Debian 13, commit `1d5bdb122a8480c36b445be7dd961b93806de74b`, resultado 16 PASS, 0 SKIP, 0 FAIL. Registro: `docs/status-aipc01-validation-2026-11-21.md`. No demuestra despliegue.
-- **A-IPC-02:** el propietario validó MA-01..MA-10 y CP-01..CP-07 en `077e01b`. CP-02/03 observó cola 8/9, novena conexión admitida y décima EAGAIN errno 11; CP-05 read timeout 5.008 s; CP-06 deadline 15.012 s. CP-07 confirmó EOF/0 bytes tras excepción, active=0, slot liberado, servidor vivo y ping posterior `OK`. CP-08/09 implementados en `fe7343f` y pendientes de ejecución; CP-10..CP-12 pendientes; overall `INCOMPLETE`.
+- **A-IPC-02:** el propietario validó MA-01..MA-10 y CP-01..CP-09 en `caf7bbb`. CP-02/03 observó cola 8/9 y décima EAGAIN; CP-05 timeout 5.005 s; CP-06 deadline 15.011 s; CP-07 excepción aislada y ping posterior `OK`; CP-08/09 límites 16/64 KiB y profundidad 16/17 confirmados. CP-10 implementado en `bf3c623`, pendiente de ejecución; CP-11/12 pendientes; overall `INCOMPLETE`.
 - **Alternativa A:** elegida como línea principal de evaluación, no aprobada para producción. Alternativa B suspendida por colisión destructiva en systemd; C no priorizada.
 - **TCB-1 aceptada:** todos los procesos bajo la cuenta dedicada `atlas-runtime` pertenecen a la TCB; no se exige aislamiento intra-UID. La exclusividad operativa de esa cuenta aún debe definirse/verificarse.
 - **Identidad del cliente aceptada:** el frontend administrativo debe conectar con **EUID 0**; la política de diseño del servicio es exactamente `client_uids={0}`. No se admiten otros consumidores sin nueva decisión. El entrypoint IPC real aún no existe/revisado; la decisión no es evidencia operativa.
@@ -23,11 +23,11 @@
 - **A-THREAT-04:** ventana TOCTOU de unlink aceptada como residual bajo TCB-1 solo con directorio privado, instancia única y revalidación por descriptor; unlink no es atómico.
 - **A-THREAT-05:** procedimiento manual candidato publicado en `local-authority-admin-private-listener-stale-recovery.md`; falta validarlo en sandbox. Startup siempre falla cerrado ante pathname existente y nunca intenta stale cleanup ni usa connect como detector.
 - **A-THREAT-06:** especificación de resolución publicada; falta probe aislado de symlinks, sustitución de ancestros, colisiones y connect canónico.
-- **A-THREAT-07:** perfil experimental: 4 workers, `listen(8)`, cola 0, read/write 5 s, deadline global 15 s y `RLIMIT_NOFILE=64`. CP-01..CP-07 validados por el propietario en `077e01b`; AF_UNIX admite 9 pendientes y la décima recibe EAGAIN. CP-08/09 implementados, pendientes de validación; CP-10..CP-12 pendientes. No es configuración de producción.
+- **A-THREAT-07:** perfil experimental: 4 workers, `listen(8)`, cola 0, read/write 5 s, deadline global 15 s y `RLIMIT_NOFILE=64`. CP-01..CP-09 validados por el propietario en `caf7bbb`; CP-10 implementado y pendiente de validación; CP-11/12 pendientes. AF_UNIX admite 9 pendientes y la décima recibe EAGAIN. No es configuración de producción.
 - **A-THREAT-08:** máquina de estados de readiness/shutdown, drenaje, deadlines y ownership de FDs pendiente.
 - **A-THREAT-09:** A09 usó runner UID 1000 y peer UID 1001; no valida cliente UID 0, servicio `atlas-runtime` ni permisos finales del despliegue.
-- **Próximo paso:** actualizar Atlas-VM-test a la punta actual de `experiment/a-ipc-01-private-unix-listener-probe` y ejecutar el runner A-IPC-02 para validar CP-08/09. Solo en la VM desechable; nunca en `greed` producción.
-- **Estado de cambios:** MA-01..MA-10 y CP-01..CP-07 están validados por el propietario en `077e01b`; CP-08/09 implementados en `fe7343f`, pendientes de validación; CP-10..CP-12 pendientes. No se modificó handler productivo, contrato, runtime, SQLite, `main` ni host. No se ejecutaron pruebas/builds/workflows desde GitHub. No se creó PR ni se aprobó listener persistente o despliegue.
+- **Próximo paso:** actualizar Atlas-VM-test a la punta actual de `experiment/a-ipc-01-private-unix-listener-probe` y ejecutar el runner A-IPC-02 para validar CP-10 (contabilidad procfs de FDs/threads bajo saturación). Solo en la VM desechable; nunca en `greed` producción.
+- **Estado de cambios:** MA-01..MA-10 y CP-01..CP-09 están validados por el propietario en `caf7bbb`; CP-10 implementado en `bf3c623`, pendiente de validación; CP-11/12 pendientes. No se modificó handler productivo, contrato, runtime, SQLite, `main` ni host. No se ejecutaron pruebas/builds/workflows desde GitHub. No se creó PR ni se aprobó listener persistente o despliegue.
 
 **Límites vigentes:** A-IPC-01 valida únicamente los escenarios experimentales ejecutados en el commit/entorno indicados. No demuestra protección frente a root/capabilities suficientes ni procesos maliciosos del mismo UID; no valida separación de privilegios, system-manager, listener persistente, daemon, integración systemd, acceso/autorización SQLite ni operaciones mutantes. No autoriza cambios del host, usuarios, grupos, permisos, privilegios, servicios, provisioning o despliegue.
 
@@ -1040,3 +1040,35 @@ desde GitHub. Siguiente paso: ejecutar la punta actual de esta rama solo en
 No se modificó handler productivo, contrato, `main`, host, cuentas,
 servicios, permisos ni SQLite. No hay aprobación de listener persistente,
 systemd ni despliegue.
+
+## A-IPC-02 — CP-08/CP-09 validados; CP-10 implementado (2026-11-21)
+
+El propietario ejecutó `caf7bbb8c83388a3723b66a7f4060a01c97c171d`
+en `Atlas-VM-test`, Debian 13, kernel `6.12.117+deb13-amd64`,
+Python 3.13.5, EUID 0, SERVICE 2005/2005 y OTHER 2006/2006:
+
+- MA-01..MA-10 y CP-01..CP-09: PASS.
+- CP-08 confirmó request exacto 16 KiB, rechazo 16 KiB+1, detección
+  `MESSAGE_TRUNCATED`, response exacto 64 KiB y rechazo de 64 KiB+1
+  antes de enviar bytes.
+- CP-09 confirmó profundidad total 16 hasta schema validation y rechazo
+  de profundidad 17 como `INVALID_JSON`.
+- CP-05 5.005 s; CP-06 15.011 s; CP-07 recuperación posterior a excepción
+  y ping OK. Cleanup confirmado; duración 22.678 s.
+- Overall INCOMPLETE porque CP-10..CP-12 no estaban en ese commit.
+
+CP-10 se implementó en commits `e02bbbb7e3eacb45fbeab620d00cf0463e1c827e`
+y `bf3c62375fd8a3017b332efe406be9d1fd903568`. El runner mide
+`/proc/<pid>/fd`, `/proc/<pid>/task` y `/proc/<pid>/status` del
+servicio fixture en baseline, con cuatro workers y nueve conexiones
+pendientes, y después de recuperar. Exige FD count <=64, cuatro threads
+worker más el principal (máximo 5), RLIMIT_NOFILE soft/hard 64/64,
+active=0 y servidor vivo tras recovery.
+
+**CP-10 implementado/revisado estáticamente, pendiente de ejecución del
+propietario.** CP-11/12 siguen pendientes: ciclos repetidos de
+saturación/recuperación y rechazo de startup con RLIMIT_NOFILE insuficiente
+sin elevarlo. No se ejecutaron pruebas, builds ni workflows desde GitHub.
+No se modificó handler, contrato, `main`, host, cuentas, servicios ni
+SQLite. Siguiente paso: ejecutar la punta de la rama solo en
+`Atlas-VM-test` desechable; nunca en `greed` producción.
