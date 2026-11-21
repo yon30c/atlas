@@ -503,22 +503,35 @@ def _preflight(args: argparse.Namespace) -> tuple[Path, Path]:
     ):
         raise ProbeIncomplete("/run must be a real root-owned directory not writable by group/others")
     tempfile = __import__("tempfile")
-    root = Path(tempfile.mkdtemp(prefix="atlas-mutual-auth-", dir="/run"))
-    public_root = Path(tempfile.mkdtemp(prefix="atlas-mutual-auth-public-", dir="/run"))
-    os.chmod(root, 0o700)
-    os.chmod(public_root, 0o711)
-    info = root.lstat()
-    public_info = public_root.lstat()
-    if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o700:
-        raise ProbeFailure("private /run sandbox failed owner/type/mode validation")
-    if (
-        not stat.S_ISDIR(public_info.st_mode)
-        or public_info.st_uid != 0
-        or stat.S_IMODE(public_info.st_mode) != 0o711
-        or public_info.st_mode & 0o022
-    ):
-        raise ProbeFailure("public traversal fixture root failed owner/type/mode validation")
-    return root, public_root
+    root: Path | None = None
+    public_root: Path | None = None
+    try:
+        root = Path(tempfile.mkdtemp(prefix="atlas-mutual-auth-", dir="/run"))
+        public_root = Path(tempfile.mkdtemp(prefix="atlas-mutual-auth-public-", dir="/run"))
+        os.chmod(root, 0o700)
+        os.chmod(public_root, 0o711)
+        info = root.lstat()
+        public_info = public_root.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o700:
+            raise ProbeFailure("private /run sandbox failed owner/type/mode validation")
+        if (
+            not stat.S_ISDIR(public_info.st_mode)
+            or public_info.st_uid != 0
+            or stat.S_IMODE(public_info.st_mode) != 0o711
+            or public_info.st_mode & 0o022
+        ):
+            raise ProbeFailure("public traversal fixture root failed owner/type/mode validation")
+        return root, public_root
+    except Exception:
+        for candidate in (public_root, root):
+            if candidate is not None:
+                try:
+                    info = candidate.lstat()
+                    if stat.S_ISDIR(info.st_mode) and info.st_uid == 0:
+                        shutil.rmtree(candidate)
+                except OSError:
+                    pass
+        raise
 
 
 def _stage_probe_runtime(public_root: Path) -> Path:
