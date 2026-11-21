@@ -1047,3 +1047,31 @@ El propietario ejecutó `e46070e6e1824b06af04a3627feb0f658de9c1f8` en `Atlas-VM-
 La fuente del kernel revisada muestra que la interfaz procfs de AF_UNIX enumera sockets y expone inode/path; la discrepancia requiere diagnóstico adicional, no una relajación del matching. Commit `a3e2d3dcb24842c4ae842f1d8082b4a2dbade374` amplía los diagnósticos de SR-01/SR-11 con FD target, `getsockname()`, `SO_TYPE`, `SO_ACCEPTCONN`, recuento y filas completas (acotadas a 64) de la tabla local. Es un cambio de diagnóstico, no ejecutado aún por el propietario.
 
 **Estado:** A-IPC-04 no validado; A-THREAT-05 abierta. La ausencia de filas no clasifica un socket como stale y no autoriza unlink. Repetir solo en `Atlas-VM-test`, nunca en `greed`. Sin limpieza automática, listener persistente ni despliegue.
+
+
+### A-IPC-04 — quinta ejecución del propietario (2026-11-21)
+
+El propietario ejecutó `6f77960c25fba873be67bd29fb40814619e44ee8`
+en `Atlas-VM-test` (Debian 13, kernel `6.12.117+deb13-amd64`,
+Python 3.13.5, EUID 0; fixtures 2005:2005 y 2006:2006).
+Resultado: **10 PASS / 2 FAIL / 0 INCOMPLETE**, 203 procesos visibles,
+seis namespaces iniciales, 0.161 s y cleanup confirmado.
+
+SR-01/SR-11: los sockets fixture sí estaban enlazados y escuchando:
+`getsockname()` devolvió el pathname esperado, `SO_TYPE=5`,
+`SO_ACCEPTCONN=true`; los FD targets fueron `socket:[41168]` y
+`socket:[41184]`. Aun así, la lectura directa de
+`/proc/self/net/unix` (58 registros, sin error) no mostró pathname,
+inode ni fila candidata de esos listeners. El namespace inspector
+`net:[4026531840]` estaba en el inventario. SR-03 detectó el listener
+adicional `net:[4026532290]` (PID 6051).
+
+SR-01/SR-11 siguen FAIL: el motivo es la ausencia de observabilidad en
+procfs, no una prueba de que el socket esté inactivo o stale. SR-02..SR-10
+y SR-12 pasan. No se llamó connect para liveness y el sandbox fue eliminado.
+
+No relajar el matching, no inferir stale y no ejecutar unlink. A-IPC-04 no
+está validado; A-THREAT-05 sigue abierta. La próxima investigación debe
+explicar por qué esos SOCK_SEQPACKET enlazados/escuchando no aparecen en la
+tabla procfs del mismo namespace, usando el kernel exacto de la VM. Solo
+investigar en `Atlas-VM-test`, nunca en `greed`.
