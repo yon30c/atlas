@@ -233,7 +233,7 @@ La integración no habilita listener persistente, system-manager, separación de
 La rama `experiment/a-ipc-01-private-unix-listener-probe` fue revisada directamente en GitHub contra el diseño A-IPC-01, el README y el handler existente `atlas-admin/1`. Se detectó que A14 podía depender de que los workers no vencieran su timeout antes de completar la aceptación de clientes; además, el harness descartaba cualquier excepción de worker. Se corrigió el harness para mantener los workers admitidos detrás de una compuerta exclusiva del test hasta observar la saturación, exigir que ambos slots estén ocupados, y registrar como fallo las excepciones distintas de timeout/desconexión esperados.
 
 - HEAD de la rama tras la corrección: `909d658e5ba177941f46b87a50c891869e5ca6d7`.
-- Comparación con `design/isolated-private-unix-listener-probe`: 27 commits ahead, 0 behind.
+- La rama está basada en `design/isolated-private-unix-listener-probe` y permanece por delante, sin commits por detrás; consultar la comparación viva al reanudar.
 - No se modificó el handler, el contrato, SQLite, runtime, servicios ni configuración del host.
 - No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. La corrección está pendiente de validación por el propietario en Debian.
 - A09 continúa SKIP deliberado; sin otra identidad preexistente, el resultado global esperado sigue siendo INCOMPLETE aunque los demás escenarios pasen.
