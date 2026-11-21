@@ -639,3 +639,10 @@ CP-06 usa una espera artificial test-only; no representa trabajo productivo ni u
 Runner commit: fbd4512d163b31e53b355280e636fb47cf8d66a9. CP-07 inyecta una RuntimeError de un solo uso en un worker fixture. Requiere EOF y cero respuesta en el peer fallido, evento worker_error, active=0 tras la excepción, servidor todavía vivo y una segunda petición authority.ping exitosa seguida de active=0. La inyección es test-only; el handler productivo no cambia.
 
 **Estado:** CP-07 implementado y revisado estáticamente, pendiente de ejecución del propietario en Atlas-VM-test. CP-08..CP-12 pendientes; overall INCOMPLETE. No se ejecutaron pruebas, builds ni workflows desde GitHub; no se modificó main, host ni servicios.
+
+
+## A-IPC-02 — CP-07 primera ejecución y corrección
+
+El propietario ejecutó el runner d054f95 en Atlas-VM-test: MA-01..MA-10 y CP-01..CP-06 PASS; CP-07 abortó porque el colector Server._record clasificó el evento worker_error deliberadamente inyectado como fatal. No se alcanzaron las comprobaciones de EOF, liberación de slot ni segunda petición; resultado overall=FAIL, CP-07 sigue sin validar.
+
+Corrección del runner en c1fdcc12eb3d7a0fcb6cccccb8eb07b0028dcb40: se permite consumir exactamente el RuntimeError previsto solo en el servidor CP-07; cualquier otro worker_error continúa siendo fatal. Siguiente paso: actualizar Atlas-VM-test a este commit y repetir el runner completo. Solo VM desechable; no usar greed. No se ejecutaron pruebas, builds ni workflows desde GitHub.
