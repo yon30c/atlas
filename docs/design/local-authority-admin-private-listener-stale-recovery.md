@@ -1,7 +1,7 @@
 # Recuperación manual de socket IPC residual — alternativa A
 
 **Fecha:** 2026-11-21  
-**Estado:** procedimiento de diseño candidato; A-IPC-04 runner implementado y revisado estáticamente, ejecución del propietario pendiente en `Atlas-VM-test`. No autorizado para ejecutar en el host.  
+**Estado:** procedimiento de diseño candidato, no autorizado para uso operativo. A-IPC-04 validado por el propietario con 12/12 escenarios PASS en `375fb00a3fee230a57f89ffa7897a29309ff1dd2`; la prueba unitaria del lector procfs también fue reportada PASS antes del probe, sin commit exacto confirmado. A-THREAT-05 sigue abierta: la validación es limitada a la vista procfs/PID namespace del harness y no resuelve carreras de enumeración ni TOCTOU. No ejecutar en el host.
 **Dependencia:** listener pathname canónico, TCB-1, resolución segura de rutas y lifecycle.  
 **Relacionado:** `local-authority-admin-private-listener-path-resolution.md`, `local-authority-admin-listener-lifecycle.md`, `local-authority-admin-private-listener-threat-model-review.md`.
 
@@ -93,7 +93,7 @@ El probe no debe borrar objetos fuera de su sandbox ni ejecutar con sudo. No se 
 
 ## 7. Estado de A-THREAT-05
 
-El procedimiento de diseño queda especificado como candidato, pero A-THREAT-05 **no está cerrado**: falta la ejecución del propietario de SR-01..SR-12 en la VM desechable. El runner tests/integration/private_unix_listener/run_stale_recovery_probe.py inspecciona los namespaces visibles desde procfs, aplica reintentos limitados a carreras de PID, aborta ante errores de cobertura y simula una retirada exclusivamente dentro del sandbox con un token de fixture ligado a la identidad observada. La cobertura no es host-wide ni atómica frente a creación concurrente de procesos. Tampoco existe una herramienta de mantenimiento ni autorización para operar en el host.
+El procedimiento de diseño queda especificado como candidato, pero A-THREAT-05 **no está cerrado**. El propietario validó SR-01..SR-12 (12/12 PASS) en `Atlas-VM-test`, commit `375fb00a3fee230a57f89ffa7897a29309ff1dd2`. La prueba unitaria del lector procfs también fue reportada PASS inmediatamente antes del probe, sin commit exacto confirmado. Esta evidencia valida el harness y no un procedimiento de mantenimiento real.
 
 ## 8. Límites
 
@@ -103,3 +103,27 @@ El procedimiento de diseño queda especificado como candidato, pero A-THREAT-05 
 - No se creó ni eliminó socket, usuario, grupo, directorio, permiso, servicio o unidad.
 - El runner A-IPC-04 solo fue revisado estáticamente; no se ejecutaron pruebas, compilaciones ni workflows desde GitHub.
 - No se aprobó listener persistente, systemd, acceso SQLite ni despliegue.
+
+
+## 9. Revisión posterior a A-IPC-04: límites y requisitos pendientes (2026-11-21)
+
+### Evidencia que sí queda establecida
+
+- El lector acotado de procfs resuelve el defecto reproducido de lectura parcial en los escenarios SR-01/SR-11.
+- El harness detectó listeners activos en el namespace local y en un namespace adicional; abortó ante cobertura incompleta y preservó objetos no admisibles o sustituidos.
+- El escenario SR-10 demuestra una retirada de fixture ligada a la identidad observada y a un token generado dentro del propio runner.
+- La prueba unitaria del lector fue reportada PASS por el propietario antes del probe; su SHA exacto no se confirmó. El probe fue ejecutado sobre `375fb00a3fee230a57f89ffa7897a29309ff1dd2`.
+
+### Lo que A-IPC-04 no demuestra
+
+1. **Cobertura host-wide:** el runner enumera PIDs visibles en el montaje procfs y PID namespace del inspector. Rechaza `hidepid`, resuelve y deduplica los namespaces asociados a esos PIDs y registra el alcance. Esto no prueba que el montaje exponga todos los procesos/network namespaces del host ni descubre necesariamente namespaces retenidos fuera de esa vista.
+2. **Snapshot atómico:** compara dos snapshots PID/netns y vuelve a enumerar después de leer las tablas. Esto detecta cambios observados durante el recorrido y permite reintentos acotados, pero no congela la creación de procesos/namespaces. Un proceso puede aparecer después de la comprobación final; por tanto, la ausencia de coincidencia solo describe la instantánea observada.
+3. **Ausencia de descriptores delegados:** el probe no demuestra por sí mismo que un descriptor listener nunca fue heredado, duplicado o transferido a un proceso fuera de la vista. El diseño de servicio debe prohibir y verificar fork/herencia/paso de FD (`SCM_RIGHTS`) o incorporar una prueba de propiedad/contención equivalente.
+4. **Aprobación humana real:** el token SR-10 es fixture-only, determinista y creado por el runner. No prueba autenticación de operador, consentimiento interactivo ni auditoría de una operación de mantenimiento.
+5. **Atomicidad de retirada:** `fstatat`/consulta por `dir_fd` seguida de `unlinkat` conserva una ventana TOCTOU. El descriptor del directorio evita escapes de pathname, pero no convierte la comparación de inode y la eliminación en una operación atómica.
+
+### Requisito de diseño antes de cualquier procedimiento real
+
+Bajo TCB-1, root y todos los procesos `atlas-runtime` pertenecen al dominio confiable; el aislamiento DAC no separa procesos del mismo UID. La ruta de recuperación debe demostrar que el servicio está detenido, que su dominio de ejecución está vacío y que ningún proceso confiable puede conservar un listener FD. Una posible línea a evaluar —no adoptada ni validada— es un servicio dedicado en un cgroup exclusivo, detenido mediante supervisor con política de terminación del grupo (`KillMode=control-group`) y con `cgroup.events` indicando `populated 0`, junto con invariantes explícitas: UID dedicado, sin procesos externos bajo ese UID, sin fork posterior a bind, `CLOEXEC` y sin transferencia de FD. Debe revisarse si esta prueba de lifecycle/propiedad puede ser una base más fuerte y acotada que prometer una enumeración global de todos los namespaces.
+
+La propuesta de cgroup no es todavía una decisión de arquitectura ni una autorización para crear unidades systemd. Requiere un contrato y un probe aislado propios. Hasta entonces, cualquier incertidumbre sobre procesos, namespace, descriptor o identidad obliga a conservar el pathname y escalar a revisión manual. No usar `connect()` para liveness, no automatizar `unlinkat` y no ejecutar en `greed`.
