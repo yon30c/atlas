@@ -1,7 +1,7 @@
 # Plan de probe aislado A-IPC-04 — socket residual y recuperación fail-closed
 
 **Fecha:** 2026-11-21  
-**Estado:** runner run_stale_recovery_probe.py implementado y revisado estáticamente en esta rama; ejecución del propietario pendiente en Atlas-VM-test. No es herramienta de mantenimiento ni autoriza listener persistente, limpieza automática o cambios del host.  
+**Estado:** primera ejecución del propietario en Atlas-VM-test: 8 PASS / 4 FAIL. Se corrigieron dos fixtures de parser y se añadieron diagnósticos acotados para SR-01/SR-11; requiere nueva ejecución. No es herramienta de mantenimiento ni autoriza listener persistente, limpieza automática o cambios del host.  
 **Rama:** `experiment/a-ipc-01-private-unix-listener-probe`  
 **Dependencias:** A-IPC-03 validado; `local-authority-admin-private-listener-stale-recovery.md`; `local-authority-admin-private-listener-path-resolution.md`; TCB-1.
 
@@ -112,3 +112,44 @@ El runner está implementado y revisado estáticamente; no se ejecutó desde Git
 - No ejecutar cleanup en el host ni en sockets Atlas reales.
 - No resolver lifecycle A-THREAT-08 ni la política de deployment A-THREAT-09.
 - No convertir ausencia de registro en procfs en prueba absoluta de que ningún proceso externo conserva una referencia.
+
+
+## 9. Primera ejecución del propietario y correcciones (2026-11-21)
+
+El propietario ejecutó el commit `27dd83a34e149901f908356668dc119b4491487f`
+en `Atlas-VM-test` (Debian 13, kernel `6.12.117+deb13-amd64`,
+Python 3.13.5, EUID 0; SERVICE 2005:2005, OTHER 2006:2006).
+Resultado: `overall=FAIL`, 8 PASS, 4 FAIL, 0 INCOMPLETE; el inventario
+vio 204 procesos y seis namespaces visibles, y el sandbox se eliminó.
+
+Hallazgos por escenario:
+
+- **SR-01 y SR-11:** no se encontró el pathname de los listeners locales
+  activos en las tablas inspeccionadas. No se debe interpretar como ausencia
+  de listener ni como socket stale. SR-03 sí encontró el listener real en
+  el namespace adicional `net:[4026532290]`.
+- **SR-06:** el fixture positivo contenía separadores `\\n` literales en
+  vez de saltos de línea reales; por eso el parser recibió una sola línea y
+  rechazó la cabecera.
+- **SR-07:** sus tres filas de prueba omitían el delimitador obligatorio
+  `:` del campo `Num`, por lo que el propio fixture no representaba filas
+  válidas del formato Linux.
+
+Correcciones estáticas publicadas en commits `b2767ff6a64886fb361bbf7f8f36a016f90c3e7f`
+y `48008ff559b8c4f2528e3668d140797266f38844`:
+
+1. SR-06 usa saltos de línea reales y conserva casos negativos de delimitador
+   ausente y duplicado.
+2. SR-07 usa el delimitador correcto en sus tres filas positivas; mantiene
+   comparación exacta de pathname.
+3. SR-01/SR-11 ahora incluyen, solo cuando falla la detección, un conjunto
+   acotado de filas candidatas de procfs (namespace, pathname, type e inode)
+   para diagnosticar qué nombres expone el kernel. Este diagnóstico no altera
+   la decisión ni relaja el requisito de detección.
+
+**Pendiente:** los fallos SR-01/SR-11 no están resueltos; la causa no se puede
+determinar con el JSON actual porque no incluía filas candidatas. Se requiere
+una nueva ejecución del runner corregido para validar SR-06/SR-07 y obtener
+diagnósticos de SR-01/SR-11. A-THREAT-05 permanece abierta; no usar ni
+adaptar este mecanismo para recuperación real. No se ejecutaron pruebas,
+builds, workflows ni probes desde GitHub.
