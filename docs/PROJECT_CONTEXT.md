@@ -1,6 +1,6 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-20 (provisioning de identidad temporal A09 y preflight SSH reportados por el propietario).
+> **Última actualización:** 2026-11-21 (A-IPC-01 A09a/A09b ejecutados por el propietario: 16/16 PASS en Debian 13; detalle en `docs/status-aipc01-validation-2026-11-21.md`).
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
@@ -693,3 +693,27 @@ La rama `experiment/a-ipc-01-private-unix-listener-probe` ahora contiene:
 Se completó la revisión estática en GitHub del helper y runner A09a/A09b. Se revisaron las acciones cerradas del helper, validación de path shape, canal JSON acotado, SSH con clave/host key explícitas y agente desactivado, autenticación pública únicamente, límites de salida/tiempo, comparación de PID/UID/GID SO_PEERCRED, rechazo real del handler y cleanup por identidad. La revisión no valida la configuración SSH del host ni reemplaza pruebas Debian.
 
 No se ejecutaron pruebas, compilaciones ni workflows. A09a/A09b permanecen sin validar. La clave instalada aún fuerza `/usr/bin/id -u`; `authorized_keys` no se ha modificado. Falta inspección read-only del shell startup y aprobación explícita específica para el cambio de comando forzado, más autorización independiente para ejecutar A09.
+
+
+## Actualización de estado A-IPC-01 — 2026-11-21
+
+**La evidencia anterior de 15 PASS + A09 SKIP / INCOMPLETE queda supersedida para el commit experimental más reciente** por una ejecución opt-in completa comunicada por el propietario:
+
+- Rama: `experiment/a-ipc-01-private-unix-listener-probe`.
+- Commit probado: `1d5bdb122a8480c36b445be7dd961b93806de74b`.
+- Debian 13; kernel `6.12.117+deb13-amd64`; Python `3.13.5`; runner UID 1000.
+- Peer temporal `atlas-a09-test`: UID 1001, GID 984.
+- Resultado: `overall=PASS`; A01–A16: 16 PASS, 0 SKIP, 0 FAIL; duración 1.72 s.
+- Cleanup: `empty sandbox root removed`.
+- A09a: UID 1001 obtuvo `EACCES` (errno 13) al conectar al endpoint candidato; cero conexiones aceptadas; directorio 0700/socket 0600 preservados.
+- A09b: el handler real rechazó al peer UID 1001 con `UNAUTHORIZED_PEER`; solicitud ping de 122 bytes enviada; cero bytes de respuesta; cierre observado por reset. Fixture independiente 0711/0666.
+- A14: `peak_active=2`, `rejected_connections=6`, `handled_connections=8`, `active_after_recovery=0`.
+- A16: exactamente un ganador en los dos binds simultáneos; listener ganador operativo.
+
+Registro completo y límites: [docs/status-aipc01-validation-2026-11-21.md](status-aipc01-validation-2026-11-21.md). README del runner actualizado en `tests/integration/private_unix_listener/README.md`.
+
+**Interpretación:** A-IPC-01 está validado como probe experimental para el commit y entorno indicados. No selecciona transporte de producción ni autoriza listener persistente, daemon, systemd, cambios operativos adicionales, acceso SQLite, separación de privilegios, operaciones administrativas mutantes o despliegue. No demuestra resistencia frente a root/capabilities ni procesos maliciosos del mismo UID.
+
+El propietario informó que actualizó únicamente la entrada temporal de `authorized_keys` para forzar `/usr/bin/python3 -I /tmp/atlas-a09-client.py`, conservando `from="127.0.0.1",restrict`, la clave y modo 0600; creó respaldo. Los archivos de inicio fueron revisados de forma read-only. No se reportaron cambios en sshd_config, PAM ni firewall. No asumir que la identidad temporal, clave, respaldo o artefactos temporales ya fueron eliminados.
+
+La validación fue ejecutada por el propietario en Debian. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. `main` no se modificó; no se creó PR ni se seleccionó transporte de producción.
