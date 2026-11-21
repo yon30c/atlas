@@ -553,3 +553,17 @@ Se creó en la rama `design/isolated-private-unix-listener-probe` el documento [
 PR #29 se marcó Ready for review y se integró en `main` mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`. La validación local reportada por el propietario fue ejecutada sobre el HEAD de código `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, con árbol limpio: probe systemd user-manager `PASS` (descriptor, dos activaciones, ownership/mode privados y `RemoveOnStop=no`) y suite completa `Ran 1590 tests in 34.753s`, `OK (skipped=1)`. Los commits posteriores fueron documentales; no se ha reportado una nueva ejecución de la suite sobre el merge commit.
 
 El merge no habilita listener persistente, system-manager, separación de privilegios, acceso SQLite ni operaciones administrativas. Socket activation sobre filesystem permanece suspendida por la colisión destructiva observada. Las alternativas A y C requieren probes independientes y una decisión explícita posterior.
+
+
+### Decisión del propietario — A-IPC-01 (2026-11-20)
+
+El propietario aceptó avanzar con el diseño del probe A-IPC-01. El documento `docs/design/local-authority-admin-private-unix-listener-probe.md` fue revisado y queda como base para preparar su implementación experimental en una rama separada.
+
+- El experimento se limita a un directorio temporal privado creado por el ejecutor sin privilegios.
+- Los modos fijados para el experimento son directorio `0700` y socket `0600`; no son una política de producción.
+- La matriz incorpora una carrera de dos binds simultáneos: exactamente un ganador y ninguna alteración del listener ganador.
+- No se modifica `src/atlas/platform_admin_ipc.py`, el handler, el contrato `atlas-admin/1`, el runtime ni la autoridad SQLite.
+- No se ejecutan pruebas, compilaciones ni workflows desde GitHub. La validación será realizada por el propietario en Debian.
+- La aceptación del diseño no selecciona A como transporte de producción ni autoriza listener persistente, daemon, systemd, cambios del host, usuarios/grupos, privilegios, acceso SQLite, mutaciones administrativas o despliegue.
+
+**Siguiente paso:** preparar la implementación aislada del probe A-IPC-01 en una rama separada; después revisar el diff y entregar comandos exactos para validación local.
