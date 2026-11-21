@@ -567,6 +567,7 @@ def _wait_metrics(
 
 
 def _preflight(args: argparse.Namespace) -> tuple[Path, Path]:
+    global SS_BIN
     if sys.platform != "linux" or not hasattr(socket, "SO_PEERCRED"):
         raise ProbeIncomplete("Linux AF_UNIX/SO_PEERCRED is required")
     if os.geteuid() != 0 or os.getresuid() != (0, 0, 0):
