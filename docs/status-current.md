@@ -723,3 +723,10 @@ rechazo de startup con RLIMIT_NOFILE insuficiente sin elevarlo. El runner
 no cambia el handler ni la configuración del host. No se ejecutaron pruebas,
 builds ni workflows desde GitHub. Próximo paso: actualizar y ejecutar solo
 en `Atlas-VM-test` desechable; nunca en `greed` producción.
+
+
+## A-IPC-02 — CP-10 diagnóstico procfs y corrección (2026-11-21)
+
+El propietario ejecutó `cbfe0e20a79ae3ee8fd901ba43ea6df360962398` en `Atlas-VM-test`: MA-01..MA-10 y CP-01..CP-09 PASS; CP-10 terminó en FAIL con `ProbeFailure: CP-10 procfs status omitted Max open files`. El cleanup de ambos sandboxes `/run` fue correcto. Este fallo no contiene una medición de exceso de recursos: el escenario se detuvo al no localizar el campo.
+
+La revisión estática encontró que `Max open files` se buscaba erróneamente en `/proc/<pid>/status`; Linux lo expone en `/proc/<pid>/limits`. Runner corregido en `47b9ed94c21d26b18c415bedd2f1d352894f2620`, manteniendo FD/thread snapshots y la comprobación soft/hard 64/64. **CP-10 corregido estáticamente, pendiente de repetición por el propietario**. CP-11/12 siguen pendientes. No se ejecutaron pruebas, builds ni workflows desde GitHub. Repetir solo en `Atlas-VM-test`, nunca en `greed` producción.
