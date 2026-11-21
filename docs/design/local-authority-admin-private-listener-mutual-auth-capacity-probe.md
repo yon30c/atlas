@@ -1,7 +1,7 @@
 # Plan de probe aislado — autenticación mutua y capacidad IPC
 
 **Fecha:** 2026-11-21  
-**Estado (2026-11-21):** propietario ejecutó commit `0db262802ce30ec38a4ce52a4f5bfaa3081fc2b1` en `Atlas-VM-test`: MA-01..MA-10 y CP-01..CP-06 PASS; CP-05 observó read timeout 5.002 s y CP-06 deadline global 15.006 s con timeout efectivo 3.996 s. CP-02/03 confirmó cola 8/8, novena conexión admitida (9/8) y décima rechazada con EAGAIN (errno 11). Cleanup correcto. Overall INCOMPLETE por CP-07..CP-12.  
+**Estado (2026-11-21):** el propietario ejecutó el runner completo sobre checkout `66b348e1be9a7e614d51c4b3ade9e643c9152106` en `Atlas-VM-test` (Debian 13, kernel 6.12.117, Python 3.13.5, EUID 0; SERVICE 2005/2005, OTHER 2006/2006): MA-01..MA-10 y CP-01..CP-12 PASS; `overall=PASS`; duración 24.991 s; cleanup correcto. CP-12 confirmó rechazo con RLIMIT heredado 32/32, exit 3, evento `startup_error`, sin elevar límites ni crear socket. Evidencia detallada al final de este documento. Es validación experimental, no aprobación de transporte productivo.  
 **Rama:** experiment/a-ipc-01-private-unix-listener-probe  
 **Decisiones:** TCB-1; frontend EUID 0; client_uids={0}; perfil de capacidad inicial aprobado por el propietario.  
 **Dependencias:** contrato atlas-admin/1, handler IPC, configuración confiable, resolución de rutas, stale recovery y lifecycle.
@@ -622,3 +622,59 @@ rechazo, límites observados y ausencia de pathname de socket. No eleva el
 límite. Es validación del harness, no política productiva. Revisión estática
 solamente; falta ejecución del propietario en `Atlas-VM-test` desechable.
 
+
+
+## 9.18 — validación completa de A-IPC-02 por el propietario (2026-11-21)
+
+El propietario ejecutó el runner completo en la VM desechable `Atlas-VM-test`
+sobre el checkout `66b348e1be9a7e614d51c4b3ade9e643c9152106`:
+Debian 13, kernel `6.12.117+deb13-amd64`, Python 3.13.5, EUID efectivo 0,
+fixtures SERVICE UID/GID `2005/2005` y OTHER `2006/2006`.
+Duración: 24.991 s. El JSON reportó **`overall=PASS`**, sin escenarios
+omitidos ni fallidos, y confirmó la eliminación de ambos sandboxes temporales
+bajo `/run` después de salir los procesos hijos.
+
+**Resultado:** MA-01..MA-10 y CP-01..CP-12: PASS.
+
+Observaciones relevantes:
+
+- **Autenticación mutua (MA-01..MA-06):** cliente root autenticó servidor
+  UID 2005 antes de enviar; servidor rechazó peer UID 2006 antes de leer
+  (cero bytes de respuesta); cliente rechazó servidor UID 2006 antes de
+  enviar (cero bytes); cliente EUID 2006 fue rechazado antes de connect.
+  Claims JSON falsos UID 0/GID 0/PID 1 fueron rechazados como
+  `INVALID_REQUEST`; la identidad observada provino de SO_PEERCRED.
+- **Configuración/snapshot (MA-07/08):** 11 variantes inválidas rechazadas;
+  configuración válida aceptada con `client_uids=[0]`; reemplazo del archivo
+  no alteró el snapshot inmutable cargado.
+- **Desconexión y transporte (MA-09/10):** desconexión previa a request produjo
+  `PEER_DISCONNECTED`, cero respuesta; AF_UNIX/SOCK_STREAM y
+  AF_INET/SOCK_STREAM fueron rechazados antes de leer.
+- **Capacidad y backpressure (CP-01..04):** máximo cuatro workers; con
+  `listen(8)`, Linux permitió nueve conexiones pendientes; la décima recibió
+  EAGAIN (errno 11). La cola observada fue 8 y luego 9, sin exceder cuatro
+  workers activos.
+- **Timeouts (CP-05/06):** timeout de lectura observado en 5.009 s; el
+  escenario de deadline global cerró a 15.005 s, con 3.998 s disponibles al
+  comenzar la lectura después de la demora test-only.
+- **Recuperación (CP-07):** excepción `RuntimeError` aislada, peer EOF y
+  cero respuesta; slot liberado, servidor vivo y ping posterior `OK`.
+- **Tamaños y JSON (CP-08/09):** request 16 KiB aceptado hasta schema
+  validation; 16 KiB+1 rechazado; paquete truncado detectado. Response
+  64 KiB enviado íntegro y tamaño superior rechazado antes de enviar.
+  Profundidad JSON 16 llegó a schema validation; profundidad 17 produjo
+  `INVALID_JSON`.
+- **Recursos (CP-10/11):** baseline 4 FDs/5 threads; saturación 8 FDs/5
+  threads; recuperación exacta a 4 FDs/5 threads, active=0 y servidor vivo.
+  Tres ciclos consecutivos repitieron la recuperación sin crecimiento de
+  recursos.
+- **Límite heredado (CP-12):** el child heredó soft/hard
+  `RLIMIT_NOFILE=32/32` frente al requisito 64; rechazó startup con exit
+  code 3 y evento `startup_error`, no elevó el límite y no creó el socket.
+
+Esta evidencia valida los escenarios del harness A-IPC-02 en el commit y VM
+indicados. **No aprueba** un listener persistente, el transporte AF_UNIX
+para producción, el entrypoint administrativo real, integración systemd,
+acceso a SQLite, operaciones mutantes ni despliegue. El perfil de capacidad
+continúa siendo experimental. No se ejecutaron pruebas, builds ni workflows
+desde GitHub; el resultado fue ejecutado por el propietario. 
