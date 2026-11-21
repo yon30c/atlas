@@ -190,6 +190,7 @@ def _connect(path: Path, timeout: float = 1.0) -> socket.socket:
 
 
 def _ping_exchange(listener: socket.socket, path: Path) -> dict[str, int]:
+    listener.settimeout(MAX_SCENARIO_SECONDS)
     request_id, packet = _ping_packet()
     with _connect(path) as client:
         client.sendall(packet)
@@ -584,7 +585,7 @@ class BoundedAcceptHarness:
             thread.join(timeout=1.0)
 
 
-def _scenario_a14(root: Path) -> None:
+def _scenario_a14(root: Path) -> dict[str, int]:
     box = CaseSandbox(root, "a14")
     listener = OwnedListener(box.path / "s")
     harness = None
@@ -626,6 +627,8 @@ def _scenario_a14(root: Path) -> None:
             response = json.loads(client.recv(MAX_RESPONSE_BYTES).decode("utf-8"))
         if response.get("request_id") != request_id or request.request_id != request_id:
             raise ProbeFailure("listener did not recover to process a valid ping")
+        with harness.lock:
+            return {"peak_active": harness.peak, "rejected_connections": harness.rejected, "active_after_recovery": harness.active}
     finally:
         for client in clients:
             client.close()
@@ -665,7 +668,7 @@ def _scenario_a15(root: Path) -> None:
             raise ProbeFailure("; ".join(errors))
 
 
-def _scenario_a16(root: Path) -> None:
+def _scenario_a16(root: Path) -> dict[str, object]:
     box = CaseSandbox(root, "a16")
     path = box.path / "s"
     barrier = threading.Barrier(2)
@@ -717,6 +720,7 @@ def _scenario_a16(root: Path) -> None:
             raise ProbeFailure("winning listener did not remain operational")
         if _identity(path) != winner_id:
             raise ProbeFailure("winner pathname identity changed during loser collision")
+        return {"winner_identity": list(winner_id), "loser_errno": losers[0][2], "winner_operational": True}
     finally:
         for _state, candidate, _error in outcomes:
             candidate.close()
