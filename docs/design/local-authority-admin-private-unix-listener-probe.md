@@ -1,6 +1,6 @@
 # Diseño del probe A-IPC-01 — listener Unix propio en directorio privado
 
-**Estado:** diseño revisado y aprobado por el propietario como base para preparar la implementación experimental. No implementado ni ejecutado; no aprobado como transporte de producción.  
+**Estado:** diseño aprobado e implementación experimental preparada en rama separada; pendiente de revisión local y ejecución por el propietario. No validado; no aprobado como transporte de producción.  
 **Fase:** 2.5 — evaluación experimental de propiedad del endpoint IPC.  
 **Alternativa evaluada:** A — listener creado por el propio proceso sobre un pathname AF_UNIX dentro de un directorio privado.  
 **Contrato de aplicación:** `atlas-admin/1`; este probe no modifica el contrato ni amplía el catálogo de operaciones.
@@ -166,32 +166,22 @@ El probe debe declarar límites pequeños y fijos para:
 
 El test de saturación debe verificar que el servidor no crea tareas/hilos ilimitados, no acumula paquetes ilimitados y recupera capacidad al cerrar clientes. Los valores concretos del límite de concurrencia deben ser parámetros fijos del fixture de prueba y quedar registrados en el resultado. Este diseño no decide todavía los valores de producción.
 
-## 9. Estructura propuesta en el repositorio
+## 9. Estructura de implementación
 
-Ubicación sugerida:
+La implementación opt-in está consolidada en:
 
 ```text
 tests/integration/private_unix_listener/
     README.md
     run_probe.py
-    test_path_ownership.py
-    test_listener_lifecycle.py
-    test_peer_credentials.py
-    test_protocol_boundary.py
-    test_resource_limits.py
 ```
 
-Responsabilidades:
+- `README.md`: alcance, límites, escenarios, clasificación y comando local.
+- `run_probe.py`: preflight, sandbox privado, escenarios A01–A16 aplicables, salida JSON y cleanup limitado por identidad.
 
-- `README.md`: precondiciones, alcance, límites y comando único de ejecución.
-- `run_probe.py`: entrypoint opt-in, prepara sandbox, ejecuta escenarios en orden y emite resumen estructurado.
-- `test_path_ownership.py`: creación, colisiones, symlink, stale y cleanup.
-- `test_listener_lifecycle.py`: bind/listen/accept/cierre y sustitución controlada.
-- `test_peer_credentials.py`: SO_PEERCRED y autorización separada; A09 puede ser SKIP condicionado.
-- `test_protocol_boundary.py`: una solicitud por conexión, ping, truncamiento, ancillary y desconexión.
-- `test_resource_limits.py`: timeout, backlog, concurrencia y recuperación de capacidad.
+Se reutiliza el handler existente desde `src/atlas/platform_admin_ipc.py`; no se modifica ese módulo ni el contrato. Se eligió un único ejecutor para que el probe sea explícito y no se incorpore accidentalmente a la suite unitaria predeterminada. Los escenarios siguen separados por identificador y se detienen al primer FAIL.
 
-La estructura es propuesta; no implica que estos archivos deban crearse todos si la arquitectura de tests existente ofrece una organización más coherente. Antes de implementar se inspeccionará el árbol y se reutilizarán fixtures/helpers existentes sin acoplar el probe a servicios reales.
+La implementación cubre A01–A08, A10–A16. A09 queda SKIP deliberado: el runner no cambia UID/GID, no usa sudo y no crea identidades. Por tanto, un recorrido sin otros fallos termina como INCOMPLETE, no PASS. A14 utiliza un harness de prueba con un máximo fijo de dos workers y backlog ocho; no representa ni fija capacidad de producción.
 
 ## 10. Salida y clasificación
 
@@ -248,18 +238,26 @@ La privacidad del directorio es una condición de aislamiento del experimento, n
 
 ## 13. Secuencia de trabajo posterior a la aprobación
 
-1. Revisar este diseño contra el árbol actual de tests y el contrato IPC.
-2. Mantener los criterios de seguridad fijados en este documento: directorio `0700`, socket `0600`, sin cambios de UID/GID ni privilegios; cualquier desviación requiere nueva aprobación.
-3. Implementar el probe en una rama separada, sin cambiar el listener productivo ni el handler existente.
-4. Añadir pruebas deterministas con fixtures temporales y verificaciones de no modificación.
-5. Publicar comandos exactos para que el propietario los ejecute en Debian.
-6. El propietario ejecuta; se registra la evidencia exacta, incluyendo SKIP/INCOMPLETE.
+1. Revisar el diseño contra el árbol de tests y el contrato IPC.
+2. Mantener directorio `0700`, socket `0600`, sin cambios de UID/GID ni privilegios.
+3. Preparar el probe en una rama separada sin cambiar handler, runtime ni listener productivo. **Completado en código; pendiente de revisión local.**
+4. Revisar el diff y las condiciones de cleanup, colisiones, timeout, concurrencia y clasificación.
+5. El propietario ejecuta el comando opt-in en Debian y conserva el JSON y commit exacto.
+6. Registrar PASS/FAIL/SKIP/INCOMPLETE sin convertir un SKIP esencial en PASS.
 7. Revisar resultados y código. Solo entonces comparar A con C y decidir si merece un prototipo posterior.
-8. Cualquier listener persistente o transporte de producción requiere un diseño y aprobación independientes.
+8. Cualquier listener persistente o transporte de producción requiere diseño y aprobación independientes.
 
 ## 14. Comando de ejecución
 
-No existe todavía un comando ejecutable: el probe no está implementado. Cuando se implemente, deberá ofrecer un único entrypoint opt-in y documentar un comando desde la raíz del checkout. No ejecutar ningún comando de este diseño contra el host hasta que el código y el comando hayan sido revisados y publicados para validación local.
+El entrypoint opt-in está preparado, pero no se ha ejecutado ni validado. Desde la raíz del checkout y como usuario ordinario:
+
+```bash
+PYTHONPATH=src python tests/integration/private_unix_listener/run_probe.py
+```
+
+No usar sudo. El runner rechaza UID 0, usa exclusivamente un sandbox temporal propio y no toca servicios ni rutas Atlas existentes. Código de salida: 0 = PASS; 1 = FAIL; 2 = INCOMPLETE. A09 está deliberadamente omitido, por lo que el resultado global esperado sin fallos será INCOMPLETE hasta que exista una forma segura de probar otro UID sin que el runner cambie credenciales o el host.
+
+No ejecutar el comando hasta revisar el código y el commit de la rama por el propietario.
 
 ## 15. Decisión pendiente
 
