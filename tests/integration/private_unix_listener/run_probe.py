@@ -437,11 +437,30 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--a09-identity-file", type=Path)
     parser.add_argument("--a09-known-hosts", type=Path)
+    parser.add_argument(
+        "--a09-forced-command-confirmed",
+        action="store_true",
+        help="operator confirms the separately approved authorized_keys forced-command update",
+    )
+    parser.add_argument(
+        "--a09-shell-startup-reviewed",
+        action="store_true",
+        help="operator confirms read-only review of the peer account shell startup files",
+    )
     args = parser.parse_args()
     if args.enable_a09 and (args.a09_identity_file is None or args.a09_known_hosts is None):
         parser.error("--enable-a09 requires --a09-identity-file and --a09-known-hosts")
-    if not args.enable_a09 and (args.a09_identity_file is not None or args.a09_known_hosts is not None):
-        parser.error("A09 key paths require --enable-a09")
+    if args.enable_a09 and not args.a09_forced_command_confirmed:
+        parser.error("A09 requires --a09-forced-command-confirmed after the approved host-side key update")
+    if args.enable_a09 and not args.a09_shell_startup_reviewed:
+        parser.error("A09 requires --a09-shell-startup-reviewed after read-only shell startup inspection")
+    if not args.enable_a09 and (
+        args.a09_identity_file is not None
+        or args.a09_known_hosts is not None
+        or args.a09_forced_command_confirmed
+        or args.a09_shell_startup_reviewed
+    ):
+        parser.error("A09 options require --enable-a09")
     return args
 
 
@@ -460,8 +479,8 @@ def _a09_config(args: argparse.Namespace) -> dict[str, object]:
 
     if not args.enable_a09:
         raise ProbeSkip("A09a/A09b disabled; pass --enable-a09 after host-side helper authorization")
-    if os.geteuid() == 0:
-        raise ProbeSkip("A09 requires the ordinary checkout UID")
+    if os.geteuid() == 0 or os.getuid() != os.geteuid():
+        raise ProbeSkip("A09 requires an ordinary process with matching non-root real/effective UIDs")
     try:
         account = pwd.getpwnam(A09_ACCOUNT)
     except KeyError as exc:
@@ -485,6 +504,8 @@ def _a09_config(args: argparse.Namespace) -> dict[str, object]:
     hosts_info = _regular_owned_file(known_hosts, mode=0o600, uid=os.geteuid(), label="A09 known_hosts")
     if key_info.st_nlink != 1 or hosts_info.st_nlink != 1:
         raise ProbeSkip("A09 key and known_hosts must not be hard-linked files")
+    if key_info.st_size > 16 * 1024 or hosts_info.st_size > 16 * 1024:
+        raise ProbeSkip("A09 key or known_hosts file exceeds the 16 KiB preflight limit")
 
     try:
         tmp_info = Path("/tmp").lstat()
