@@ -636,3 +636,12 @@ rechazarse con EAGAIN. Runner corregido en
 `634e19decce2322e94ca0d1fe410b259f23dcb67` para medir los límites 8/8 y
 9/8 y exigir EAGAIN en la décima. Requiere nueva ejecución; CP-02/03 no
 están validados. CP-05..CP-12 siguen pendientes.
+
+
+### Owner-reported validation — CP-02/CP-03 (2026-11-21)
+
+The owner ran commit `b5b0128e2646e41e3a2f927251c6fa6dafa897d7` in `Atlas-VM-test` (Debian 13, kernel `6.12.117+deb13-amd64`, Python 3.13.5, EUID 0, fixtures 2005/2005 and 2006/2006). MA-01..MA-10, CP-01/CP-04 and CP-02/CP-03 PASS. Overall is INCOMPLETE because CP-05..CP-12 remain pending. Cleanup removed both `/run` sandboxes.
+
+CP-02/03 observed listen backlog 8, Recv-Q/Send-Q 8/8, ninth pending connection admitted (connect result 0, queue 9/8), tenth nonblocking connection rejected with EAGAIN (errno 11), queue remained 9/8, accepted count remained 9 after overflow, and worker limit was respected.
+
+**Design gate before CP-05:** the scenario table says a silent client terminates at the 15-second global deadline, but the fixture applies `min(READ_TIMEOUT=5 s, remaining_global)` to its first read. A fully silent client therefore hits the 5-second read timeout first. Clarify whether CP-05 should test the 5-second read/idle timeout or whether global-deadline semantics are intended to differ before implementation.
