@@ -686,3 +686,10 @@ La rama `experiment/a-ipc-01-private-unix-listener-probe` ahora contiene:
 **Host todavía no preparado para A09:** la clave instalada en `authorized_keys` sigue forzando `/usr/bin/id -u`; el helper espera `/usr/bin/python3 -I /tmp/atlas-a09-client.py`. No se cambió `authorized_keys`; hacerlo requiere autorización explícita específica. También falta inspección read-only de `.bashrc`, `.bash_profile`, `.profile` y comportamiento del shell de `atlas-a09-test`. No ejecutar A09 antes de completar ambas puertas y recibir autorización independiente de ejecución.
 
 **Estado de validación:** implementación de código no ejecutada; no se ejecutaron pruebas, compilaciones ni workflows desde GitHub. La evidencia previa del runner sigue 15 PASS + A09 SKIP + 0 FAIL, global INCOMPLETE. La implementación nueva no cambia esa clasificación. `main` intacta, sin PR, sin transporte de producción aprobado. No modificar SSH/PAM/firewall, handler, contrato, runtime, SQLite, systemd o servicios.
+
+
+## A09 — revisión estática completada (2026-11-21)
+
+Se completó la revisión estática en GitHub del helper y runner A09a/A09b. Se revisaron las acciones cerradas del helper, validación de path shape, canal JSON acotado, SSH con clave/host key explícitas y agente desactivado, autenticación pública únicamente, límites de salida/tiempo, comparación de PID/UID/GID SO_PEERCRED, rechazo real del handler y cleanup por identidad. La revisión no valida la configuración SSH del host ni reemplaza pruebas Debian.
+
+No se ejecutaron pruebas, compilaciones ni workflows. A09a/A09b permanecen sin validar. La clave instalada aún fuerza `/usr/bin/id -u`; `authorized_keys` no se ha modificado. Falta inspección read-only del shell startup y aprobación explícita específica para el cambio de comando forzado, más autorización independiente para ejecutar A09.
