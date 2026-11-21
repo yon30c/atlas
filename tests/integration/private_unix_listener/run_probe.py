@@ -142,7 +142,7 @@ class OwnedListener:
 
     def cleanup_path(self) -> bool:
         """Close and unlink only if the current pathname is still ours."""
-        if not self.socket.fileno() == -1:
+        if self.socket.fileno() != -1:
             self.socket.close()
         if self.identity is None:
             return False
@@ -546,6 +546,7 @@ class BoundedAcceptHarness:
         self.active = 0
         self.peak = 0
         self.rejected = 0
+        self.handled = 0
         self.threads: list[threading.Thread] = []
         self.accept_thread = threading.Thread(target=self._accept_loop, daemon=True)
 
@@ -564,6 +565,8 @@ class BoundedAcceptHarness:
                 continue
             except OSError:
                 return
+            with self.lock:
+                self.handled += 1
             if not self.slots.acquire(blocking=False):
                 with self.lock:
                     self.rejected += 1
@@ -620,13 +623,15 @@ def _scenario_a14(root: Path) -> dict[str, int]:
                 clients.append(_connect(listener.path, timeout=0.5))
             except OSError:
                 pass
-        deadline = time.monotonic() + 1.0
+        deadline = time.monotonic() + 1.5
         while time.monotonic() < deadline:
             with harness.lock:
-                if harness.rejected:
+                if harness.handled >= len(clients):
                     break
             time.sleep(0.02)
         with harness.lock:
+            if harness.handled != len(clients):
+                raise ProbeFailure("not all connected clients were accepted by the harness")
             if harness.peak > MAX_ACTIVE_CONNECTIONS:
                 raise ProbeFailure("active connection count exceeded the fixed worker ceiling")
             if harness.rejected < 1:
@@ -648,7 +653,7 @@ def _scenario_a14(root: Path) -> dict[str, int]:
         if response.get("request_id") != request_id or request.request_id != request_id:
             raise ProbeFailure("listener did not recover to process a valid ping")
         with harness.lock:
-            return {"peak_active": harness.peak, "rejected_connections": harness.rejected, "active_after_recovery": harness.active}
+            return {"peak_active": harness.peak, "rejected_connections": harness.rejected, "handled_connections": harness.handled, "active_after_recovery": harness.active}
     finally:
         for client in clients:
             client.close()
