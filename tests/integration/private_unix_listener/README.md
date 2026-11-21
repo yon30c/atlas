@@ -920,3 +920,68 @@ the failure is reviewed. The assistant does not run tests, builds, or workflows.
 
 
 **Next gate:** A-IPC-04 design plan is published at `docs/design/local-authority-admin-private-listener-stale-recovery-probe.md`. It proposes SR-01..SR-12 and explicitly keeps runner implementation pending until namespace-coverage and procfs parsing questions are resolved. It must remain fail-closed, must not connect to test liveness, and must model namespace enumeration failures as aborts. Do not turn the maintenance procedure into automatic startup cleanup.
+
+
+## A-IPC-04 — stale socket recovery probe (2026-11-21)
+
+Runner: `run_stale_recovery_probe.py`. Implemented and statically reviewed on
+`experiment/a-ipc-01-private-unix-listener-probe`; owner execution is pending.
+It is a disposable-VM experiment, not a maintenance command.
+
+Run only inside `Atlas-VM-test`, directly as root, from the repository root
+after pulling the branch tip:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 tests/integration/private_unix_listener/run_stale_recovery_probe.py \
+  --service-uid 2005 \
+  --service-gid 2005 \
+  --other-uid 2006 \
+  --other-gid 2006 \
+  --confirm-disposable-vm \
+  --confirm-fixture-ids
+```
+
+Do not run on production host `greed`. The runner creates one private
+root:root 0700 sandbox under `/run`, uses only socket/filesystem fixtures
+inside it, and removes that sandbox after closing sockets and terminating its
+temporary namespace child. It does not read `/etc/atlas`, inspect systemd,
+connect to Atlas services, or change host accounts/configuration.
+
+### Coverage
+
+| ID | Coverage |
+|---|---|
+| SR-01 | Active local SOCK_SEQPACKET pathname detected; no connect |
+| SR-02 | Closed socket pathname residual is eligible only; no removal without token |
+| SR-03 | Real listener in an additional `unshare --net` namespace detected from parent procfs view |
+| SR-04 | Unreadable namespace table aborts as incomplete coverage |
+| SR-05 | Procfs enumeration error aborts as incomplete coverage |
+| SR-06 | Malformed/truncated/ambiguous procfs table rejected |
+| SR-07 | Exact pathname matching; prefixes/suffixes do not match |
+| SR-08 | Symlink, regular file, FIFO, directory, wrong owner and wrong mode rejected |
+| SR-09 | Replacement between observation and revalidation detected; replacement preserved |
+| SR-10 | Only exact residual fixture with identity-bound fixture token is unlinked through parent dirfd |
+| SR-11 | Active local listener detected without connect/accept/send/recv |
+| SR-12 | SKIP/FAIL/cleanup uncertainty cannot produce global PASS |
+
+The inspector enumerates numeric PIDs visible through the current procfs mount,
+deduplicates network namespaces by namespace device/inode, and reads one
+`/proc/<representative-pid>/net/unix` table per namespace. It requires three
+stable process/namespace snapshots, retries PID disappearance races up to
+three times, and aborts on permission, read, mount or parse errors. It rejects
+procfs `hidepid`. The report explicitly limits its claim to processes and
+network namespaces visible through that procfs mount/PID namespace; it is not
+a host-wide or atomic guarantee against concurrent process creation.
+
+The owner confirmed before implementation that `unshare --net true` succeeds
+in the VM, that the shell and PID 1 share PID namespace `4026531836`, and
+that the displayed procfs mount has no `hidepid` option. A separate manual
+listener experiment showed its AF_UNIX entry in the listener namespace table
+but not the original namespace table. These are prerequisite observations,
+not validation of the new runner.
+
+Return codes: 0 = all 12 scenarios PASS and cleanup confirmed; 1 = FAIL;
+2 = INCOMPLETE (including inability to create the second network namespace).
+A-THREAT-05 remains open until the owner shares the complete JSON result.
+This probe does not approve stale cleanup in production, a persistent listener,
+systemd activation, SQLite access, or deployment.
