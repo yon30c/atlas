@@ -35,6 +35,7 @@ GLOBAL_DEADLINE = 15.0
 REQUEST_LIMIT = 16 * 1024
 RESPONSE_LIMIT = 64 * 1024
 FD_LIMIT = 64
+_EMIT_LOCK = threading.Lock()
 
 
 class ProbeIncomplete(Exception):
@@ -46,7 +47,8 @@ class ProbeFailure(Exception):
 
 
 def emit(**event: object) -> None:
-    print(json.dumps(event, sort_keys=True), flush=True)
+    with _EMIT_LOCK:
+        print(json.dumps(event, sort_keys=True), flush=True)
 
 
 def _drop_identity(uid: int, gid: int):
@@ -412,6 +414,7 @@ class Server:
         ):
             raise ProbeFailure("socket pathname changed; preserving sandbox for inspection")
         self.socket_path.unlink()
+
 
 def _start_server(
     script: Path,
