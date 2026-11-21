@@ -1131,3 +1131,20 @@ continúa INCOMPLETE. El nuevo runner se ejecutará exclusivamente en
 `Atlas-VM-test` desechable, nunca en `greed` producción. No se
 ejecutaron pruebas, builds ni workflows desde GitHub.
 
+## A-IPC-02 — CP-11 validado; CP-12 implementado y pendiente (2026-11-21)
+
+El propietario ejecutó `da8c6ea9ed0ce36d2c7b4c2c8c5417dd79975fb7`
+en `Atlas-VM-test` (Debian 13, kernel 6.12.117, Python 3.13.5):
+MA-01..MA-10 y CP-01..CP-11 PASS. CP-11 completó tres ciclos:
+accepted 31→35→44, 44→48→57 y 57→61→70; cada ciclo regresó a 4 FDs/
+5 threads (8 FDs/5 threads bajo saturación), active=0 tras recovery y
+servidor vivo. Cleanup correcto; duración 24.72 s.
+
+CP-12 se implementó en `0fb5c3989f5ac9e11b14344557b18ad7bd75027b`:
+el child rechaza startup si soft o hard `RLIMIT_NOFILE` heredado es
+menor que 64, antes de bind. El escenario reduce ambos a 32 antes de
+`exec` y comprueba exit 3, evento de rechazo, límites 32/32 y ausencia
+de socket; no eleva límites. Implementado y revisado estáticamente, aún
+no validado por el propietario. Overall INCOMPLETE hasta ejecutar CP-12.
+Solo ejecutar en `Atlas-VM-test` desechable; nunca en `greed` producción.
+
