@@ -712,7 +712,7 @@ def _scenario_11_no_liveness_connect(sandbox: Path, uid: int, gid: int) -> dict:
         if not _matches(snapshot, path):
             raise ProbeFailure(
                 "SR-11 active local listener not found; "
-                f"diagnostics={_listener_diagnostics(snapshot, path)!r}"
+                f"diagnostics={_listener_diagnostics(snapshot, path, listener)!r}"
             )
         return {
             "active_detected": True,
