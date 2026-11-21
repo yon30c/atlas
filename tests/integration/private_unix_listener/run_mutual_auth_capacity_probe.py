@@ -216,6 +216,7 @@ def _server_child(socket_path: str, socket_mode: int, allowed_uid: int) -> int:
             write_timeout=WRITE_TIMEOUT,
             global_deadline=GLOBAL_DEADLINE,
             rlimit_nofile=resource.getrlimit(resource.RLIMIT_NOFILE)[0],
+            socket_identity=list(socket_identity),
         )
 
         def worker(connection: socket.socket) -> None:
@@ -308,8 +309,10 @@ def _client_child(socket_path: str) -> int:
 
 
 class Server:
-    def __init__(self, process: subprocess.Popen[str]) -> None:
+    def __init__(self, process: subprocess.Popen[str], socket_path: Path) -> None:
         self.process = process
+        self.socket_path = socket_path
+        self.socket_identity: tuple[int, int, int] | None = None
         self.events: list[dict[str, object]] = []
 
     def next_event(self, timeout: float = 3.0) -> dict[str, object]:
@@ -327,7 +330,10 @@ class Server:
         except json.JSONDecodeError as exc:
             raise ProbeFailure(f"server emitted invalid JSON: {line!r}") from exc
         self.events.append(event)
-        if event.get("event") in {"startup_error", "server_error", "worker_error", "cleanup_error"}:
+        if event.get("event") in {
+            "startup_error", "server_error", "worker_error",
+            "cleanup_error", "cleanup_preserved",
+        }:
             raise ProbeFailure(f"server reported {event}")
         return event
 
@@ -363,9 +369,31 @@ class Server:
             self.process.kill()
             self.process.wait(timeout=2.0)
             raise ProbeFailure("server did not stop within bounded shutdown wait")
+        if self.process.stdout is not None:
+            remaining = self.process.stdout.read()
+            for line in remaining.splitlines():
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    raise ProbeFailure(f"server emitted invalid shutdown evidence: {line!r}") from exc
+                self.events.append(event)
+                if event.get("event") in {"server_error", "worker_error", "cleanup_error", "cleanup_preserved"}:
+                    raise ProbeFailure(f"server reported shutdown failure {event}")
         if self.process.returncode != 0:
             stderr = self.process.stderr.read() if self.process.stderr else ""
             raise ProbeFailure(f"server exited {self.process.returncode}: {stderr}")
+        try:
+            current = self.socket_path.lstat()
+        except FileNotFoundError:
+            return
+        identity = (current.st_dev, current.st_ino, stat.S_IFMT(current.st_mode))
+        if (
+            self.socket_identity is None
+            or identity != self.socket_identity
+            or not stat.S_ISSOCK(current.st_mode)
+        ):
+            raise ProbeFailure("socket pathname changed; preserving sandbox for inspection")
+        self.socket_path.unlink()
 
 
 def _start_server(script: Path, socket_path: Path, uid: int, gid: int,
@@ -384,9 +412,13 @@ def _start_server(script: Path, socket_path: Path, uid: int, gid: int,
         bufsize=1,
         preexec_fn=_drop_identity(uid, gid),
     )
-    server = Server(process)
+    server = Server(process, socket_path)
     try:
         ready = server.wait_event("ready", timeout=5.0)
+        identity = ready.get("socket_identity")
+        if not isinstance(identity, list) or len(identity) != 3:
+            raise ProbeFailure("server did not report its bound socket identity")
+        server.socket_identity = (int(identity[0]), int(identity[1]), int(identity[2]))
         if ready.get("uid") != uid or ready.get("gid") != gid:
             raise ProbeFailure("server child did not retain the requested fixture identity")
         if ready.get("rlimit_nofile") != FD_LIMIT:
