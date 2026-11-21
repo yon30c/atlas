@@ -276,8 +276,12 @@ A-IPC-01 continues to refuse EUID 0; A-IPC-02 requires direct root execution
 inside a disposable VM because it must prove a real EUID 0 client against
 service and alternate numeric fixture identities.
 
-The runner creates a fresh root-owned mode-0700 sandbox under `/run`, then
-creates only temporary fixture directories and socket pathnames beneath it.
+The runner creates a fresh root-owned mode-0700 private sandbox and a separate
+root-owned mode-0711 traversal fixture root under `/run`. The latter permits the
+alternate-UID client to reach a deliberately exposed fixture socket; it is not
+writable by group/others. It stages read-only copies of the probe and IPC module
+under that traversal root so dropped-UID child processes can execute/import them.
+Only temporary fixture directories and socket pathnames are created.
 It does not create NSS users/groups, edit host configuration, invoke sudo/su,
 install systemd units, access SQLite, or connect to any Atlas service. The
 service child clears supplementary groups, sets real/effective/saved GID and
