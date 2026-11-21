@@ -334,14 +334,46 @@ def _listener_diagnostics(
         own_matches = []
         own_table_error = f"{type(exc).__name__}: {exc}"
 
+    try:
+        listener_fd = listener.fileno()
+        listener_fd_target = os.readlink(f"/proc/self/fd/{listener_fd}")
+        listener_socket_name = listener.getsockname()
+        listener_socket_type = listener.getsockopt(socket.SOL_SOCKET, socket.SO_TYPE)
+        listener_accepting = listener.getsockopt(socket.SOL_SOCKET, socket.SO_ACCEPTCONN)
+    except OSError as exc:
+        listener_fd_target = None
+        listener_socket_name = None
+        listener_socket_type = None
+        listener_accepting = None
+        listener_fd_diagnostic_error = f"{type(exc).__name__}: {exc}"
+    else:
+        listener_fd_diagnostic_error = None
+
     return {
         "expected_path": pathname,
+        "listener_fd": listener.fileno(),
+        "listener_fd_target": listener_fd_target,
         "listener_fd_inode": socket_inode,
+        "listener_getsockname": listener_socket_name,
+        "listener_socket_type": listener_socket_type,
+        "listener_accepting": bool(listener_accepting) if listener_accepting is not None else None,
+        "listener_fd_diagnostic_error": listener_fd_diagnostic_error,
         "inspector_pid": os.getpid(),
         "inspector_network_namespace": own_namespace,
         "snapshot_namespace_identities": [item["identity"] for item in snapshot.namespaces],
         "candidate_rows": candidates,
         "direct_own_namespace_rows": own_matches,
+        "direct_own_namespace_record_count": len(own_rows) if own_table_error is None else None,
+        "direct_own_namespace_all_rows": [
+            {
+                "path": row["path"],
+                "type": row["type"],
+                "state": row["state"],
+                "inode": row["inode"],
+                "listener_inode_match": row["inode"] == socket_inode,
+            }
+            for row in own_rows[:64]
+        ] if own_table_error is None else None,
         "direct_own_namespace_error": own_table_error,
     }
 
