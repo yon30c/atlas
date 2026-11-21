@@ -1256,3 +1256,13 @@ La próxima ejecución debe usar el HEAD actual en `Atlas-VM-test`.
 Nunca ejecutar en `greed`; no usar como herramienta de mantenimiento,
 no habilitar limpieza automática ni despliegue. No se ejecutaron pruebas,
 builds, workflows ni probes desde GitHub.
+
+## A-IPC-04 — tercera ejecución del propietario y corrección SR-11 (2026-11-21)
+
+El propietario ejecutó el commit `f10cda09aec5cb0b9d42ab50f3bb9f6617dc8fda` en `Atlas-VM-test`: 10 PASS / 2 FAIL / 0 INCOMPLETE; 203 procesos visibles; seis namespaces iniciales y siete durante SR-03; cleanup confirmado.
+
+SR-01 sigue fallando: descriptor del listener inode `39340`; namespace del inspector `net:[4026531840]` presente en el snapshot; ninguna fila candidata ni en las tablas del snapshot ni en la lectura directa de `/proc/self/net/unix`, sin error de lectura. No es suficiente para atribuirlo al PID representante y no demuestra inactividad/stale. No cambiar la clasificación ni permitir unlink por ausencia de fila.
+
+SR-11 falló por un defecto del runner: llamada a `_listener_diagnostics` sin el argumento obligatorio `listener`. Corregido estáticamente en commit `8a89bc9f66829886164ed4fe93fd7af232a18f01`; falta reejecución. SR-02..SR-10 y SR-12 pasaron. No se llamó connect para liveness.
+
+**Estado:** A-IPC-04 no validado; A-THREAT-05 permanece abierta. Investigar la discrepancia de visibilidad AF_UNIX/procfs antes de nuevas inferencias. Repetir solo en `Atlas-VM-test`, nunca en `greed`; no usar como mantenimiento ni habilitar cleanup automático, listener persistente o despliegue. El asistente no ejecutó pruebas, builds, workflows ni probes.
