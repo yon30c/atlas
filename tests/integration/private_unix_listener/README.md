@@ -872,7 +872,7 @@ continúa siendo experimental. No se ejecutaron pruebas, builds ni workflows
 desde GitHub; el resultado fue ejecutado por el propietario. 
 
 
-## A-IPC-03 — isolated path resolution probe (implemented; owner validation pending)
+## A-IPC-03 — isolated path resolution probe (owner-validated PASS, 2026-11-21)
 
 Runner: `run_path_resolution_probe.py`. Design: `docs/design/local-authority-admin-private-listener-path-resolution-probe.md`.
 
@@ -886,11 +886,9 @@ uses numeric fixture identities, and removes only that sandbox after child exit.
 It does not create a socket, bind/connect, inspect real `/etc/atlas`, or modify
 production code or host configuration.
 
-**Status:** implemented and statically reviewed on GitHub; **not executed** by
-the assistant and not yet owner-validated. All PR-01..PR-12 must report PASS
-before A-THREAT-06 can be considered validated. This does not establish a
-production path/owner policy or approve bind, stale recovery, lifecycle, or
-deployment.
+**Owner validation:** checkout `b200c292ac0602593c8dbefafb1bd71b79001b06`, Debian 13 / kernel `6.12.117+deb13-amd64`, Python `3.13.5`, EUID 0, SERVICE fixture 2005:2005 and OTHER fixture 2006:2006. Result: `overall=PASS`, 12/12 PASS, 0 failures, duration 0.062 s; sandbox cleanup confirmed. PR-01 rejected 13/13 lexical cases; PR-03 rejected symlinks at alpha/beta/gamma with sentinel unchanged; PR-09 loaded immutable config snapshot through validated parent descriptor; PR-10 rejected symlink/FIFO/hardlink; PR-11 read `anchored-original` after pathname replacement with symlink; PR-12 denied rename/symlink for OTHER UID with errno 13 (`EACCES`).
+
+This validates A-THREAT-06 only within the isolated fixture scope and stated commit/VM. It does not establish a production path/owner policy or approve bind, stale recovery, lifecycle, or deployment. The probe did not create a socket or perform bind/connect.
 
 Run only in the disposable `Atlas-VM-test`, never on `greed`:
 
@@ -919,3 +917,6 @@ The run should report the exact checkout commit and `overall=PASS`, with
 12 PASS scenarios and successful sandbox cleanup. If any scenario fails or
 cleanup is not confirmed, preserve the complete JSON and do not rerun until
 the failure is reviewed. The assistant does not run tests, builds, or workflows.
+
+
+**Next gate:** review and design the separate A-IPC-04 probe for A-THREAT-05 (stale pathname/collision recovery). It must remain fail-closed, must not connect to test liveness, and must model namespace enumeration failures as aborts. Do not turn the maintenance procedure into automatic startup cleanup.
