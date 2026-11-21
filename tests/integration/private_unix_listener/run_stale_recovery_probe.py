@@ -323,8 +323,8 @@ def _scenario_01_active_local(sandbox: Path, uid: int, gid: int) -> dict:
         snapshot = inspect_visible_namespaces(path)
         identity = _identity_at(parent, Path(path).name)
         _check_expected_socket(identity, uid, gid)
-        require = _matches(snapshot, path)
-        if not require:
+        matched = _matches(snapshot, path)
+        if not matched:
             raise ProbeFailure("SR-01 active pathname absent from visible namespace tables")
         return {
             "decision": "ABORT_ACTIVE_OR_POSSIBLY_ACTIVE",
@@ -368,11 +368,11 @@ def _scenario_02_residual_without_approval(sandbox: Path, uid: int, gid: int) ->
 def _scenario_03_other_namespace(sandbox: Path, uid: int, gid: int) -> dict:
     path = str(sandbox / "sr03-other-netns.sock")
     code = (
-        "import os,socket,sys,time\\n"
-        "p=sys.argv[1]; u=int(sys.argv[2]); g=int(sys.argv[3])\\n"
-        "s=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET); s.bind(p)\\n"
-        "os.chmod(p,0o600); os.chown(p,u,g); s.listen(1)\\n"
-        "print(os.getpid(),flush=True); time.sleep(30)\\n"
+        "import os,socket,sys,time\n"
+        "p=sys.argv[1]; u=int(sys.argv[2]); g=int(sys.argv[3])\n"
+        "s=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET); s.bind(p)\n"
+        "os.chmod(p,0o600); os.chown(p,u,g); s.listen(1)\n"
+        "print(os.getpid(),flush=True); time.sleep(30)\n"
     )
     unshare = shutil.which("unshare")
     if not unshare:
@@ -441,10 +441,10 @@ def _scenario_05_enumeration_incomplete() -> dict:
 
 def _scenario_06_parser_rejects_ambiguous() -> dict:
     bad_tables = [
-        b"not the procfs header\\n",
-        b"Num RefCount Protocol Flags Type St Inode Path\\nmalformed\\n",
-        b"Num RefCount Protocol Flags Type St Inode Path\\n"
-        b"000000001 00000002 00000000 00010000 0005 01 nope /x\\n",
+        b"not the procfs header\n",
+        b"Num RefCount Protocol Flags Type St Inode Path\nmalformed\n",
+        b"Num RefCount Protocol Flags Type St Inode Path\n"
+        b"000000001 00000002 00000000 00010000 0005 01 nope /x\n",
     ]
     rejected = 0
     for raw in bad_tables:
@@ -458,11 +458,11 @@ def _scenario_06_parser_rejects_ambiguous() -> dict:
 
 
 def _scenario_07_exact_match() -> dict:
-    header = b"Num RefCount Protocol Flags Type St Inode Path\\n"
+    header = b"Num RefCount Protocol Flags Type St Inode Path\n"
     rows = (
-        b"000000001 00000002 00000000 00010000 0005 01 100 /tmp/target.sock-extra\\n"
-        b"000000002 00000002 00000000 00010000 0005 01 101 /tmp/prefix-target.sock\\n"
-        b"000000003 00000002 00000000 00010000 0005 01 102 /tmp/target.sock\\n"
+        b"000000001 00000002 00000000 00010000 0005 01 100 /tmp/target.sock-extra\n"
+        b"000000002 00000002 00000000 00010000 0005 01 101 /tmp/prefix-target.sock\n"
+        b"000000003 00000002 00000000 00010000 0005 01 102 /tmp/target.sock\n"
     )
     records = _parse_unix_table(header + rows)
     exact = [r for r in records if r["path"] == "/tmp/target.sock" and r["type"] == 5]
@@ -515,16 +515,15 @@ def _scenario_09_replacement(sandbox: Path, uid: int, gid: int) -> dict:
         current = _identity_at(parent, Path(path).name)
         if current == observed:
             raise ProbeFailure("SR-09 replacement retained the original identity")
-        try:
-            if current != observed:
-                raise ProbeFailure("SR-09 revalidation detected replacement")
-        except ProbeFailure as exc:
-            if "detected replacement" not in str(exc):
-                raise
+        # This equality check is the fixture equivalent of the final revalidation gate.
+        if current != observed:
+            decision = "ABORT_IDENTITY_CHANGED"
+        else:
+            raise ProbeFailure("SR-09 replacement was not detected")
         if (sandbox / Path(path).name).read_bytes() != b"replacement-sentinel":
             raise ProbeFailure("SR-09 replacement sentinel changed")
         return {
-            "decision": "ABORT_IDENTITY_CHANGED",
+            "decision": decision,
             "observed": observed.as_dict(),
             "replacement": current.as_dict(),
             "replacement_preserved": True,
