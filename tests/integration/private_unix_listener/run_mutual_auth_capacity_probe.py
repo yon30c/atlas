@@ -1049,7 +1049,16 @@ def _scenario_configuration(root: Path, args: argparse.Namespace) -> tuple[dict,
             expected_service_uid=args.service_uid,
             expected_service_gid=args.service_gid,
         )
-        original_snapshot = snapshot
+        original_snapshot_values = (
+            snapshot.schema_version,
+            snapshot.service_uid,
+            snapshot.service_gid,
+            snapshot.client_uids,
+            snapshot.socket_path,
+            snapshot.socket_type,
+            snapshot.socket_mode,
+            snapshot.socket_dir_mode,
+        )
         replacement_bytes = base_config(socket_path="/run/atlas/changed.sock")
         write_fixture("snapshot.next", replacement_bytes)
         os.replace(
@@ -1082,7 +1091,17 @@ def _scenario_configuration(root: Path, args: argparse.Namespace) -> tuple[dict,
         except (TypeError, AttributeError):
             immutable_collection = True
 
-        unchanged = snapshot == original_snapshot and (
+        current_snapshot_values = (
+            snapshot.schema_version,
+            snapshot.service_uid,
+            snapshot.service_gid,
+            snapshot.client_uids,
+            snapshot.socket_path,
+            snapshot.socket_type,
+            snapshot.socket_mode,
+            snapshot.socket_dir_mode,
+        )
+        unchanged = current_snapshot_values == original_snapshot_values and (
             snapshot.service_uid == args.service_uid
             and snapshot.service_gid == args.service_gid
             and snapshot.socket_path == "/run/atlas/admin.sock"
