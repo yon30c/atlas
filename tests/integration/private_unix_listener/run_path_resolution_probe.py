@@ -201,6 +201,10 @@ def _scenario_01_lexical_rejection() -> dict:
         "/run/atlas\x00/socket",
         "/run/atlas with-space",
         "/run/atlas/ümlaut",
+        "/run/~/atlas",
+        "/run/$HOME/atlas",
+        "/run/*/atlas",
+        "/run/atlas\\\\socket",
     ]
     rejected = 0
     for path in invalid:
