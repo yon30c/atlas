@@ -678,3 +678,18 @@ must still report INCOMPLETE while CP-07..CP-12 remain pending. Run only in
 the disposable `Atlas-VM-test`, directly as root as required by the existing
 runner instructions. The assistant has not run tests, builds or workflows.
 No production handler, host, account, service, SQLite or `main` changes.
+
+
+## A-IPC-02 — ejecución validada de CP-05 / CP-06 (2026-11-21)
+
+El propietario ejecutó el commit 0db262802ce30ec38a4ce52a4f5bfaa3081fc2b1 directamente como EUID 0 en Atlas-VM-test, Debian 13, kernel 6.12.117+deb13-amd64, Python 3.13.5, fixtures SERVICE 2005/2005 y OTHER 2006/2006.
+
+**Resultado reportado:** MA-01..MA-10 y CP-01..CP-06 PASS; CP-07..CP-12 INCOMPLETE; overall INCOMPLETE; duración 22.095 s; cleanup de ambos sandboxes bajo /run completado.
+
+CP-05 observó timeout de lectura de 5.002 s desde accept (configuración 5.0), deadline global no alcanzado, EOF y cero bytes de respuesta.
+
+CP-06 observó la espera test-only de 11.0 s, inicio de lectura a 11.004 s, timeout efectivo/restante de 3.996 s y cierre a 15.006 s desde accept; deadline global alcanzado, EOF y cero bytes de respuesta. Esta instrumentación verifica el recorte del presupuesto global, no simula trabajo productivo ni una escritura bloqueada.
+
+CP-02/03 observó Recv-Q 8 y 9, conexión novena admitida, décima rechazada con EAGAIN errno 11, nueve accepts sin accepts adicionales tras overflow y workers dentro del máximo de cuatro.
+
+No se ejecutaron pruebas, builds ni workflows desde GitHub. La evidencia valida los escenarios reportados en el commit y VM indicados; no aprueba transporte productivo, listener persistente ni despliegue.
