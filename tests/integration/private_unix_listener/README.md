@@ -1034,3 +1034,16 @@ Checkout ejecutado: `f10cda09aec5cb0b9d42ab50f3bb9f6617dc8fda`. Resultado: 10 PA
 - SR-02..SR-10 y SR-12: PASS. No se llamó connect para liveness. Sandbox eliminado.
 
 A-IPC-04 no validado; A-THREAT-05 abierta. Ejecutar cualquier repetición exclusivamente en `Atlas-VM-test`, nunca en `greed`.
+
+## A-IPC-04 — cuarta ejecución del propietario y diagnóstico ampliado (2026-11-21)
+
+El propietario ejecutó `e46070e6e1824b06af04a3627feb0f658de9c1f8` en `Atlas-VM-test`: **10 PASS / 2 FAIL / 0 INCOMPLETE**; 204 procesos visibles; seis namespaces en el inventario inicial y siete durante SR-03; cleanup confirmado.
+
+- SR-01 y SR-11 fallaron ambos porque los listeners locales activos no aparecieron en las tablas visibles. La lectura directa de `/proc/self/net/unix` tampoco encontró filas candidatas ni coincidencias por inode, sin error de lectura. Los inodes de FD fueron `39726` y `40202` respectivamente.
+- SR-11 ya no falla por el `TypeError`; produce el mismo fallo sustantivo de detección que SR-01.
+- SR-02..SR-10 y SR-12: PASS. SR-03 detectó de nuevo el listener en namespace adicional; los abortos por cobertura incompleta y la protección de identidad/token siguen pasando.
+- No se llamó connect para probar liveness. El sandbox privado fue eliminado.
+
+La fuente del kernel revisada muestra que la interfaz procfs de AF_UNIX enumera sockets y expone inode/path; la discrepancia requiere diagnóstico adicional, no una relajación del matching. Commit `a3e2d3dcb24842c4ae842f1d8082b4a2dbade374` amplía los diagnósticos de SR-01/SR-11 con FD target, `getsockname()`, `SO_TYPE`, `SO_ACCEPTCONN`, recuento y filas completas (acotadas a 64) de la tabla local. Es un cambio de diagnóstico, no ejecutado aún por el propietario.
+
+**Estado:** A-IPC-04 no validado; A-THREAT-05 abierta. La ausencia de filas no clasifica un socket como stale y no autoriza unlink. Repetir solo en `Atlas-VM-test`, nunca en `greed`. Sin limpieza automática, listener persistente ni despliegue.
