@@ -10,9 +10,9 @@
 
 - **Repositorio:** `yon30c/atlas`.
 - **Base estable:** `main` en `1bd73d149dbd98e7ee2e5fdc36880883b6b03d16`; PR #29 está integrado mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`.
-- **Rama activa de este incremento:** `design/isolated-private-unix-listener-probe`, creada desde `main`; está 6 commits por delante y 0 por detrás. No hay PR abierto y `main` no ha sido modificado.
-- **HEAD documental de esta rama:** `85b186c0ebc7ce6e9d2c5a0f702e7e70b7e5582f`.
-- **Validación local más reciente comunicada:** sobre el HEAD de código de PR #29 `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6), el propietario reportó en Debian 13 el probe user-manager `PASS` y la suite `Ran 1590 tests in 34.753s`, `OK (skipped=1)`. Esa evidencia no corresponde a esta rama documental ni valida el futuro probe A-IPC-01.
+- **Rama activa de este incremento:** `design/isolated-private-unix-listener-probe`, creada desde `main`; está 7 commits por delante y 0 por detrás. No hay PR abierto y `main` no ha sido modificado.
+- **HEAD documental de esta rama:** `f29d9df34983355b78c51d21fde1faeead8bde31`.
+- **Validación local más reciente comunicada:** sobre el HEAD de código de PR #29 `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, el propietario reportó en Debian 13 el probe user-manager `PASS` y la suite `Ran 1590 tests in 34.753s`, `OK (skipped=1)`. Esa evidencia no corresponde a esta rama documental ni valida el futuro probe A-IPC-01.
 - **Estado IPC:** contrato `atlas-admin/1` y handler para conexiones ya aceptadas; solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
 - **Transporte:** no hay transporte aprobado para producción. A (listener propio en directorio privado) tiene un diseño de probe aceptado para preparar su implementación experimental. B (socket activation sobre filesystem) permanece suspendida por la colisión destructiva observada en Debian systemd 257.13. C (AF_UNIX abstracto) continúa como alternativa experimental separada.
 - **Diseño A-IPC-01:** `docs/design/local-authority-admin-private-unix-listener-probe.md`. El diseño fija sandbox temporal sin privilegios, directorio `0700`, socket `0600`, colisiones no destructivas, cleanup condicionado por identidad, credenciales peer, límites y carrera de dos binds simultáneos.
