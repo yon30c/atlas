@@ -151,3 +151,10 @@ La coordinación propuesta ya tiene una primera implementación de código en la
 **No ejecutar todavía:** `authorized_keys` aún fuerza `/usr/bin/id -u`. El comando previsto para el helper es `/usr/bin/python3 -I /tmp/atlas-a09-client.py`, pero sustituirlo requiere autorización explícita separada y no se ha realizado. Antes de ese cambio, el propietario debe inspeccionar de forma read-only los archivos de inicio del shell de `atlas-a09-test`.
 
 La implementación no se ha ejecutado ni validado. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. La evidencia anterior sigue en 15 PASS + A09 SKIP + 0 FAIL, global INCOMPLETE. La clave privada y known_hosts permanecen fuera del repositorio. No se modificaron sshd_config, PAM, firewall, handler, contrato, runtime, SQLite, systemd ni servicios. La eliminación futura de la cuenta/grupo/HOME requiere autorización separada.
+
+
+## 11. Revisión estática completada — 2026-11-21
+
+Se completó revisión estática en GitHub de `a09_ssh_client.py` y `run_probe.py`. La revisión cubrió helper de acciones/path shapes cerrados, SSH explícito y sin agente, host key ED25519 fijada, autenticación pública únicamente, límites de I/O y tiempo, validación SO_PEERCRED/handler, y cleanup por identidad. No se ejecutaron pruebas, compilaciones ni workflows; el código sigue sin validación local.
+
+La clave instalada continúa forzando `/usr/bin/id -u`. Antes de ejecutar A09, el propietario debe inspeccionar de forma read-only los archivos de inicio del shell y autorizar específicamente el cambio de comando forzado. La ejecución del probe también requiere aprobación independiente. No se han cambiado `authorized_keys`, sshd_config, PAM, firewall, servicios ni cuenta.
