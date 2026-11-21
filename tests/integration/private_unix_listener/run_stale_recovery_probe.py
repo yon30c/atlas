@@ -522,7 +522,7 @@ def _scenario_06_parser_rejects_ambiguous() -> dict:
         b"not the procfs header\n",
         b"Num RefCount Protocol Flags Type St Inode Path\nmalformed\n",
         b"Num RefCount Protocol Flags Type St Inode Path\n"
-        b"000000001: 00000002 00000000 00010000 0005 01 36068 /missing-colon.sock\n",
+        b"000000001 00000002 00000000 00010000 0005 01 36068 /missing-colon.sock\n",
         b"Num RefCount Protocol Flags Type St Inode Path\n"
         b"000000001:: 00000002 00000000 00010000 0005 01 36068 /double-colon.sock\n",
         b"Num RefCount Protocol Flags Type St Inode Path\n"
