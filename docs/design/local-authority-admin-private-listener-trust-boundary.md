@@ -151,6 +151,6 @@ La configuración de identidades y endpoint se desarrolla en [Configuración con
 
 ## Aclaración sobre identidad del cliente — 2026-11-21
 
-La inspección de docs/design/local-authority-admin-administrative-operations-design.md (nombre canónico en el repositorio: local-authority-admin-administrative-operations-design.md) confirma que el modelo de dominio prevé un frontend privilegiado con EUID 0 (§§2.2/5.1). No se encontró una implementación cliente IPC ni un entrypoint ejecutable que realice connect en el estado revisado. Por tanto, UID 0 es el candidato de diseño recomendado para la allowlist, pero todavía no está validado como identidad efectiva del proceso cliente real.
+La inspección de docs/design/local-authority-administrative-operations-design.md (nombre canónico en el repositorio: local-authority-admin-administrative-operations-design.md) confirma que el modelo de dominio prevé un frontend privilegiado con EUID 0 (§§2.2/5.1). No se encontró una implementación cliente IPC ni un entrypoint ejecutable que realice connect en el estado revisado. Por tanto, UID 0 es el candidato de diseño recomendado para la allowlist, pero todavía no está validado como identidad efectiva del proceso cliente real.
 
 La fuente y el esquema candidatos están definidos en local-authority-admin-private-listener-identity-config.md. El siguiente paso es definir el entrypoint del frontend cliente y fijar su contexto de ejecución; no se debe implementar listener persistente antes de eso.
