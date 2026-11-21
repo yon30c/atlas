@@ -1,6 +1,6 @@
 # Estado vigente de Atlas
 
-> **Corte documental:** 21 de noviembre de 2026. A-IPC-01 reportado 16/16 PASS. A-IPC-02 validado por el propietario en commit `585dd3d979bc1b800550e4b9c79c382b22cf1f6c`: MA-01..MA-08 y CP-01/CP-04 PASS; global INCOMPLETE por cobertura pendiente.
+> **Corte documental:** 21 de noviembre de 2026. A-IPC-01 reportado 16/16 PASS. A-IPC-02: el propietario validó MA-01..MA-08 y CP-01/CP-04 en `585dd3d`; MA-09/MA-10 ya están implementados en `aff7eb694dbabb6725947e3f2179aef3fa566fbf` y pendientes de ejecución local; global INCOMPLETE por cobertura CP pendiente.
 > **Main:** permanece en HEAD `1bd73d149dbd98e7ee2e5fdc36880883b6b03d16`; PR #29 está integrado. La suite reportada para el HEAD de código de PR #29 fue 1,590 tests, `OK (skipped=1)`; no se ha reportado una nueva ejecución sobre el merge HEAD.
 > **Rama activa de diseño:** `experiment/a-ipc-01-private-unix-listener-probe`. Se mantiene separada de `main`; no tiene PR propio. PR #30 sigue abierto en Draft y corresponde a la rama de diseño original.
 > **Estado IPC:** el handler procesa conexiones ya aceptadas; solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
@@ -18,7 +18,7 @@
 - **Dirección elegida:** alternativa A, listener AF_UNIX/SOCK_SEQPACKET propio en directorio filesystem privado. Es línea de evaluación, no aprobación productiva.
 - **PR #30:** abierto en Draft sobre `design/isolated-private-unix-listener-probe`; no es la rama experimental actual. No hay PR propio para la rama `experiment/a-ipc-01-private-unix-listener-probe`.
 - **A-IPC-01:** el propietario reportó A01–A16 = 16 PASS, 0 SKIP, 0 FAIL en el commit indicado en el registro. A09a validó DAC con UID distinto; A09b validó rechazo real del handler mediante SO_PEERCRED. No valida UID 0 ↔ `atlas-runtime` ni despliegue.
-- **A-IPC-02 — validación del propietario:** en `Atlas-VM-test`, commit `585dd3d979bc1b800550e4b9c79c382b22cf1f6c`, MA-01..MA-08 y CP-01/04 = PASS; global INCOMPLETE, 1.497 s, cleanup de ambos sandboxes `/run` completado. Workers máximos: 4; activos tras recuperación: 0. Backlog 8 configurado, no saturado. MA-07 rechazó 11 configuraciones inválidas y aceptó la válida; MA-08 confirmó snapshot inmutable ante reemplazo atómico.
+- **A-IPC-02 — validación del propietario:** en `Atlas-VM-test`, commit `585dd3d979bc1b800550e4b9c79c382b22cf1f6c`, MA-01..MA-08 y CP-01/04 = PASS en `585dd3d`; MA-09/MA-10 implementados, pendientes de validación. Global INCOMPLETE; cleanup de sandboxes `/run` completado en la ejecución validada. Workers máximos: 4; activos tras recuperación: 0. Backlog 8 configurado, no saturado. MA-07 rechazó 11 configuraciones inválidas y aceptó la válida; MA-08 confirmó snapshot inmutable ante reemplazo atómico.
 - **TCB-1:** aceptada. Procesos bajo el UID dedicado `atlas-runtime` son parte de la TCB; no se exige aislamiento intra-UID. Su exclusividad operativa aún debe definirse y verificarse.
 - **Identidad cliente:** EUID 0 aceptado como requisito del frontend; `client_uids={0}`. El entrypoint IPC real aún no existe/revisado. El harness A-IPC-02 validó MA-01..MA-08 en `585dd3d`, incluida la autenticación mutua root↔UID de servicio, el rechazo pre-connect de EUID no root, claims UID/GID/PID falsificados, parser fixture estricto y snapshot inmutable.
 - **Configuración:** `local-authority-admin-private-listener-identity-config.md` propone fuente root-managed `/etc/atlas/admin-ipc.conf`, root:root 0644 sin secretos, parser estricto y carga inmutable. No se creó el archivo ni se fijaron valores operativos.
@@ -29,8 +29,8 @@
 - **Recursos (A-THREAT-07):** el propietario aprobó para probes aislados 4 conexiones/workers, backlog 8, cola de aplicación 0, read/write 5 s, deadline global 15 s y `RLIMIT_NOFILE=64`. CP-01/CP-04 se ejecutaron y pasaron en `fbc8c68` (máximo 4 workers, recuperación a 0); backlog exacto, adversarios de timeout y contabilidad completa de FDs siguen pendientes. No es configuración de producción. Plan: `design/local-authority-admin-private-listener-mutual-auth-capacity-probe.md`.
 - **Lifecycle (A-THREAT-08):** máquina de estados, readiness, shutdown/drenaje y cierre de FDs aún no diseñados/validados.
 - **Evidencia de despliegue (A-THREAT-09):** A09 usó runner UID 1000 y peer UID 1001; no probó cliente root, servicio `atlas-runtime` ni permisos/ownership finales.
-- **Siguiente paso:** revisar el runner y el contrato antes de implementar MA-09/MA-10; después avanzar con cobertura CP pendiente. MA-07/MA-08 ya están validados por el propietario en `585dd3d`. Nunca ejecutar en `greed` de producción ni crear cuentas/grupos.
-- No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. El propietario ejecutó MA-01..MA-08 y CP-01/04 en `585dd3d`; `main` y Debian/host no fueron modificados; no se creó PR.
+- **Siguiente paso:** actualizar `Atlas-VM-test` al commit `aff7eb694dbabb6725947e3f2179aef3fa566fbf` y ejecutar MA-09/MA-10. Después avanzar con CP-02/03 y CP-05..12. Nunca ejecutar en `greed` de producción ni crear cuentas/grupos. Nunca ejecutar en `greed` de producción ni crear cuentas/grupos.
+- No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. El propietario ejecutó MA-01..MA-08 y CP-01/04 en `585dd3d`. MA-09/10 se implementaron en GitHub sin ejecutar pruebas; `main` y Debian/host no fueron modificados; no se creó PR.
 
 **Límites de autorización:** el PASS experimental no selecciona por sí solo un transporte productivo ni autoriza listener persistente, daemon, unidades systemd de producción, cambios del host, usuarios/grupos, permisos/privilegios, acceso SQLite, provisioning o despliegue. No habilita operaciones administrativas distintas del ping no mutante usado como fixture.
 
@@ -548,3 +548,13 @@ El propietario ejecutó el runner en `Atlas-VM-test`, Debian 13, kernel `6.12.11
 La evidencia corresponde únicamente al commit y entorno indicados. No demuestra validación de todos los ancestros de la ruta, listener persistente, configuración productiva, lifecycle, límites adversariales completos ni despliegue. El parser sigue siendo fixture exclusivo del probe.
 
 **Siguiente incremento:** revisar el runner y el contrato antes de implementar MA-09/MA-10; mantener separadas las pruebas de desconexión durante autenticación y rechazo de transportes distintos de AF_UNIX/SOCK_SEQPACKET. Después continuar con backlog, deadlines, recuperación, límites de payload/profundidad y contabilidad de FDs.
+
+## A-IPC-02 — MA-09/MA-10 implementados, pendientes de validación (2026-11-21)
+
+En el commit `aff7eb694dbabb6725947e3f2179aef3fa566fbf` se añadieron dos escenarios al runner, ejercitando el handler real `handle_admin_connection` de `src/atlas/platform_admin_ipc.py`:
+
+- **MA-09 — EOF antes de la primera petición:** un peer AF_UNIX/SOCK_SEQPACKET autorizado cierra su dirección de escritura sin enviar bytes. El handler debe lanzar `AdminPeerDisconnected` con `PEER_DISCONNECTED`; se verifica que no envía respuesta y no acepta una petición.
+- **MA-10 — transporte no soportado:** se entregan al handler una conexión AF_UNIX/SOCK_STREAM y una AF_INET/SOCK_STREAM, ambas con un paquete ping válido ya encolado. Se exige `AdminProtocolRejected/INVALID_REQUEST`, que el paquete siga sin consumirse (MSG_PEEK) y cero bytes de respuesta. Esto comprueba rechazo de familia/tipo antes de leer el protocolo.
+- El runner ahora reporta MA-09 y MA-10 individualmente; el bloque INCOMPLETE se limita a CP-02..CP-03 y CP-05..CP-12.
+- **Estado:** implementación revisada estáticamente; MA-09/MA-10 pendientes de ejecución del propietario. No se ejecutaron pruebas, builds ni workflows desde GitHub. MA-01..MA-08 y CP-01/04 conservan únicamente la evidencia previa del commit `585dd3d`; no se extrapola al nuevo commit.
+- **Límite:** MA-09 prueba EOF/half-close antes de enviar la primera petición, no una interrupción en mitad de la llamada kernel SO_PEERCRED. MA-10 valida los dos casos representativos indicados, no todas las combinaciones de socket.
