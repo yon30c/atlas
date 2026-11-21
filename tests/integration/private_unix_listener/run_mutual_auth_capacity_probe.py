@@ -592,7 +592,6 @@ def _create_fixture_dir(path: Path, uid: int, gid: int, mode: int) -> None:
 
 
 def _scenario_mutual_auth(
-    root: Path,
     public_root: Path,
     args: argparse.Namespace,
     script: Path,
@@ -790,7 +789,7 @@ def _main_parent(args: argparse.Namespace) -> int:
         server = _start_server(
             script, service_socket, args.service_uid, args.service_gid, 0o666, 0, servers
         )
-        auth = _scenario_mutual_auth(root, public_root, args, script, servers)
+        auth = _scenario_mutual_auth(public_root, args, script, servers)
         results.append({"id": "MA-01,MA-02,MA-04,MA-05", "status": "PASS", "observations": auth})
         capacity = _scenario_capacity(server, service_socket)
         results.append({"id": "CP-01,CP-04", "status": "PASS", "observations": capacity})
