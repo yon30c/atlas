@@ -1,6 +1,6 @@
 # Estado vigente de Atlas
 
-> **Corte documental:** 21 de noviembre de 2026. A-IPC-01 reportado 16/16 PASS. A-IPC-02: propietario validó MA-01..MA-10 y CP-01..CP-09 en `caf7bbb`; CP-08/09 confirmaron límites de payload/profundidad. CP-10 implementado en `bf3c623`, pendiente de ejecución; CP-11/12 pendientes. Overall INCOMPLETE.
+> **Corte documental:** 21 de noviembre de 2026. A-IPC-01 reportado 16/16 PASS. A-IPC-02: propietario validó MA-01..MA-10 y CP-01..CP-10 en `75929e1`; CP-10 confirmó FDs/threads acotados y recuperación al baseline. CP-11 implementado en `70ee6a7`, pendiente de ejecución; CP-12 pendiente. Overall INCOMPLETE.
 > **Main:** permanece en HEAD `1bd73d149dbd98e7ee2e5fdc36880883b6b03d16`; PR #29 está integrado. La suite reportada para el HEAD de código de PR #29 fue 1,590 tests, `OK (skipped=1)`; no se ha reportado una nueva ejecución sobre el merge HEAD.
 > **Rama activa de diseño:** `experiment/a-ipc-01-private-unix-listener-probe`. Se mantiene separada de `main`; no tiene PR propio. PR #30 sigue abierto en Draft y corresponde a la rama de diseño original.
 > **Estado IPC:** el handler procesa conexiones ya aceptadas; solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
