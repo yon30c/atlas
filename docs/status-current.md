@@ -287,3 +287,8 @@ Se define una separación documental:
 - El runner actual permanece sin cambios y continúa omitiendo A09. La ejecución comunicada (15 PASS, A09 SKIP, 0 FAIL) conserva clasificación **INCOMPLETE**. No existe aún validación multi-UID de DAC ni de autorización SO_PEERCRED.
 
 **Cambio realizado:** diseño, README y documentación de contexto/estado. **No se modificaron** handler, runner, contrato, runtime, SQLite, systemd ni host. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. `main` permanece intacta; no hay PR ni aprobación de transporte de producción.
+
+
+### A09 fixture topology correction
+
+A09b's temporary fixture must not be nested under the private probe root (0700), since DAC on that parent would still block the external UID. It must be a separate sibling directory directly under a verified shared sticky temporary parent (e.g. /tmp), with fixture directory 0711 and test socket 0666. The candidate endpoint remains 0700/0600. A09a/A09b also require a second already-authenticated ordinary-user session with a different pre-existing UID; the runner must not switch credentials or invoke privilege tools. This is a design correction only; neither subscenario is implemented or validated.
