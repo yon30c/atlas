@@ -40,6 +40,11 @@ class ProbeFailure(Exception):
     pass
 
 
+def _require_collision_errno(value: int | None, scenario: str) -> None:
+    if value not in (errno.EADDRINUSE, errno.EEXIST):
+        raise ProbeFailure(f"{scenario}: unexpected bind-collision errno {value}")
+
+
 def _identity(path: Path) -> tuple[int, int, int]:
     info = path.lstat()
     return info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode)
@@ -254,6 +259,7 @@ def _scenario_a02(root: Path) -> dict[str, object]:
             collision_errno = exc.errno
         else:
             raise ProbeFailure("bind unexpectedly replaced a regular file")
+        _require_collision_errno(collision_errno, "A02")
         if _identity(path) != (before["device"], before["inode"], before["file_type"]) or path.read_bytes() != content:
             raise ProbeFailure("regular file changed after bind collision")
         return {"before": before, "after": _describe(path), "bind_errno": collision_errno, "sentinel_unchanged": True}
@@ -282,6 +288,7 @@ def _scenario_a03(root: Path) -> dict[str, object]:
             collision_errno = exc.errno
         else:
             raise ProbeFailure("bind unexpectedly replaced a symlink")
+        _require_collision_errno(collision_errno, "A03")
         if _identity(path) != link_id or _identity(target) != target_id:
             raise ProbeFailure("symlink or target identity changed")
         if target.read_bytes() != b"A-IPC-01-symlink-target":
@@ -310,6 +317,7 @@ def _scenario_a04(root: Path) -> dict[str, object]:
             collision_errno = exc.errno
         else:
             raise ProbeFailure("second bind unexpectedly succeeded")
+        _require_collision_errno(collision_errno, "A04")
         if _identity(path) != first_id:
             raise ProbeFailure("second bind altered the first listener pathname")
         first.socket.settimeout(1.0)
@@ -343,6 +351,7 @@ def _scenario_a05(root: Path) -> dict[str, object]:
             collision_errno = exc.errno
         else:
             raise ProbeFailure("bind unexpectedly replaced a stale socket")
+        _require_collision_errno(collision_errno, "A05")
         if _identity(path) != stale_id or not stat.S_ISSOCK(path.lstat().st_mode):
             raise ProbeFailure("stale socket pathname changed")
         return {"before": before, "after": _describe(path), "bind_errno": collision_errno, "stale_path_preserved": True}
