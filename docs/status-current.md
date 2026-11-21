@@ -740,3 +740,28 @@ Revisión estática: `Server` recibe eventos stdout en una cola alimentada por u
 
 
 Ajuste adicional `664c398a5afdafda313eb81379cbb85a5b71007d`: `Server.drain(duration)` espera la ventana completa aunque el queue se vacíe temporalmente, para dar tiempo al reader thread a transferir eventos pendientes desde stdout. Refuerza el baseline CP-10 sin relajar la aserción. Pendiente de ejecución; no implica PASS.
+
+## A-IPC-02 — CP-10 validado por el propietario (2026-11-21)
+
+El propietario ejecutó el commit `75929e1f9f3a17e2a19bb9a98d30e7cd86b26a0a`
+como root en `Atlas-VM-test`, Debian 13, kernel
+`6.12.117+deb13-amd64`, Python 3.13.5; SERVICE 2005/2005 y OTHER
+2006/2006.
+
+- **MA-01..MA-10 y CP-01..CP-10: PASS.**
+- CP-10: cuatro workers activos, nueve conexiones pendientes y contador
+  accepted estable en 22 durante saturación.
+- Snapshots: baseline 4 FDs/5 threads; saturación 8 FDs/5 threads;
+  recuperación 4 FDs/5 threads.
+- `RLIMIT_NOFILE` soft/hard 64/64; active tras recuperación 0;
+  servidor vivo.
+- Duración 22.725 s; cleanup de sandboxes privado y traversal bajo
+  `/run` completado tras finalizar los procesos hijos.
+- **Overall: INCOMPLETE**, porque CP-11 y CP-12 aún no están implementados.
+
+CP-11 cubrirá ciclos repetidos de saturación/recuperación; CP-12 verificará
+rechazo de startup con `RLIMIT_NOFILE` insuficiente sin elevarlo. La
+evidencia CP-10 aplica únicamente al commit y VM indicados. No autoriza
+transporte productivo, listener persistente ni despliegue. El asistente no
+ejecutó pruebas, builds ni workflows.
+
