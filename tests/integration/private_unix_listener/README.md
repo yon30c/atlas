@@ -789,3 +789,6 @@ Static review found that Linux exposes `Max open files` in `/proc/<pid>/limits`,
 The owner ran `892d934267684fc8d5a179993f71c2b11c614c7e`: MA-01..MA-10 and CP-01..CP-09 passed; CP-10 failed its accepted-count saturation assertion. The original error did not report baseline/observed values, so it does not establish whether a queued connection was actually accepted.
 
 Static review found that `Server` receives stdout through an asynchronous reader thread, while CP-10 calculated `accepted_before` without first draining pending events. This could leave the baseline stale. Commit `7c009dac7fd7c4270ea6edf8bc1a004a8fb8f898` drains prior events before capturing the baseline and adds baseline/expected/observed/pending/workers to any assertion failure. The strict assertion remains unchanged in intent; real acceptance is not ignored. CP-10 still requires owner execution. No tests, builds or workflows were run by the assistant. Run only on disposable `Atlas-VM-test`.
+
+
+Follow-up commit `664c398a5afdafda313eb81379cbb85a5b71007d` makes `Server.drain(duration)` observe for the full requested interval instead of returning at the first temporarily empty queue. This allows the asynchronous stdout reader to transfer already-emitted events before CP-10 captures its accepted-count baseline. The saturation assertion remains strict; CP-10 still requires owner execution.
