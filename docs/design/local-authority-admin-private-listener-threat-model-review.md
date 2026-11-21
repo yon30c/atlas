@@ -182,3 +182,12 @@ Después se puede completar la especificación de lifecycle y convertir cada req
 - No se ejecutaron pruebas, compilaciones, workflows ni comandos locales.
 - No se cambió `main`, no se creó PR ni se aprobó transporte de producción.
 - No se autorizan cambios de host, usuarios/grupos, permisos, systemd, SSH/PAM/firewall, servicios, privilegios, SQLite ni despliegue.
+
+
+## Actualización de seguimiento — diseño de frontera de confianza (2026-11-21)
+
+El siguiente artefacto de diseño ya está publicado: [Frontera de confianza y autenticación mutua — alternativa A](local-authority-admin-private-listener-trust-boundary.md). Propone TCB-1, donde todos los procesos bajo atlas-runtime se consideran parte de la TCB, y autenticación mutua de UID mediante SO_PEERCRED: el servidor verifica el UID del cliente antes de recv; el cliente verifica el UID del servidor antes de send.
+
+Esta propuesta no cierra los hallazgos por sí sola. Requiere decisión del propietario sobre confianza intra-UID, confirmación de identidad/UID del cliente, configuración confiable e inmutable y pruebas aisladas en ambos extremos. El mecanismo no autentica un ejecutable específico ni protege frente a root, kernel o procesos que ya formen parte de la TCB.
+
+El siguiente paso ya no es redactar el diseño inicial: es obtener la decisión de confianza e identidad del propietario. No se implementó ni ejecutó código.
