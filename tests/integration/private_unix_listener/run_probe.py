@@ -10,8 +10,8 @@ import argparse
 import array
 import base64
 import binascii
-import hashlib
 import errno
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -827,7 +827,10 @@ def _scenario_a09a(root: Path, config: dict[str, object] | None, skip_reason: st
         process, worker, outcome = _start_a09_ssh(config, "A09a", listener.path, helper_path)
         worker.join(timeout=A09_SSH_TIMEOUT_SECONDS + 2.0)
         if worker.is_alive():
-            process.kill()
+            try:
+                process.kill()
+            except OSError:
+                pass
             worker.join(timeout=2.0)
         if worker.is_alive():
             raise ProbeFailure("A09a SSH worker did not terminate")
