@@ -239,3 +239,37 @@ La rama `experiment/a-ipc-01-private-unix-listener-probe` fue revisada directame
 - A09 continúa SKIP deliberado; sin otra identidad preexistente, el resultado global esperado sigue siendo INCOMPLETE aunque los demás escenarios pasen.
 
 La revisión no aprueba listener persistente, selección de transporte de producción, systemd, cambios de host, acceso SQLite ni operaciones administrativas. Próximo paso: actualizar Debian a este HEAD, inspeccionar el diff local y solo entonces ejecutar el probe opt-in sin sudo.
+
+
+## Resultado de ejecución local A-IPC-01 — 2026-11-20
+
+El propietario ejecutó el probe experimental en Debian 13, sin sudo, desde el checkout sincronizado en `experiment/a-ipc-01-private-unix-listener-probe`, commit `314e7395fbc972f8b9ab4a10dd800e85c11c7b59`.
+
+**Entorno y clasificación**
+- Kernel: `6.12.117+deb13-amd64`; Python: `3.13.5`; UID efectivo: `1000`.
+- Duración: `0.876 s`.
+- Resultado global: **INCOMPLETE**.
+- Escenarios: **15 PASS**, **A09 SKIP**, **0 FAIL**.
+- Cleanup: `empty sandbox root removed`.
+
+**Evidencia observada**
+- A01: directorio modo `0700` y socket modo `0600`.
+- A02–A05: las colisiones con archivo regular, symlink, listener activo y socket stale no reemplazaron ni alteraron los objetos preexistentes.
+- A06–A07: cleanup preservó el pathname sustituto y eliminó el socket propio cuando su identidad permanecía sin cambios.
+- A08/A10: ping permitido y credenciales kernel del peer observadas: PID 3751, UID 1000, GID 1000.
+- A11–A13: desconexión, truncamiento/ancillary y timeout controlados.
+- A14: `peak_active=2`, `rejected_connections=6`, `handled_connections=8`, `active_after_recovery=0`.
+- A15: listener cerrado no aceptó nuevas conexiones.
+- A16: dos binds concurrentes produjeron exactamente un ganador; el listener ganador permaneció operativo.
+
+**A09 y significado del resultado**
+A09 (rechazo de peer con UID distinto) quedó SKIP deliberadamente. El runner no cambia UID/GID, no usa sudo y no asume una segunda identidad preexistente. Por tanto, no se ha demostrado autorización multi-UID y el resultado correcto es INCOMPLETE, aunque los otros 15 escenarios hayan pasado. No hubo FAIL.
+
+**Alcance de la evidencia**
+El resultado respalda los invariantes del listener pathname privado dentro del sandbox temporal y la concurrencia del harness de prueba para el UID ejecutor. No demuestra resistencia frente a root o procesos maliciosos del mismo UID, autorización completa, separación real de privilegios, lifecycle persistente, integración con systemd/SQLite ni idoneidad para producción. Los límites TOCTOU de cleanup siguen vigentes.
+
+**Estado y siguiente paso**
+- La rama experimental permanece separada; `main` no se modificó y no hay aprobación de transporte de producción.
+- El probe sigue siendo opt-in y no debe ejecutarse con sudo.
+- Siguiente trabajo: evaluar de forma estática una forma segura de cubrir A09 mediante una identidad no privilegiada ya existente, sin cambiar credenciales ni configuración del host desde el runner. No crear usuarios ni alterar grupos/sudoers/PAM/systemd como parte de esta prueba.
+- No se ejecutaron pruebas, compilaciones ni workflows desde GitHub; esta evidencia procede de la ejecución local comunicada por el propietario.
