@@ -1,6 +1,6 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-21 (A-IPC-02: propietario validó MA-01..MA-10 y CP-01..CP-11 en da8c6ea. CP-11 confirmó tres ciclos de saturación/recuperación sin crecimiento de recursos. CP-12 implementado en 0fb5c39, pendiente de ejecución; overall INCOMPLETE).
+> **Última actualización:** 2026-11-21 (A-IPC-02 completo: propietario ejecutó checkout 66b348e en Atlas-VM-test; MA-01..MA-10 y CP-01..CP-12 PASS, overall PASS, 0 SKIP/FAIL. CP-12 confirmó rechazo de RLIMIT heredado 32/32 sin elevarlo ni crear socket).
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
@@ -13,7 +13,7 @@
 - **Rama activa:** `experiment/a-ipc-01-private-unix-listener-probe`; separada de `main`, sin PR propio. PR #30 sigue abierto en Draft en su rama original de diseño.
 - **IPC existente:** contrato `atlas-admin/1` y handler para conexiones ya aceptadas. Solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
 - **A-IPC-01:** el propietario reportó en Debian 13, commit `1d5bdb122a8480c36b445be7dd961b93806de74b`, resultado 16 PASS, 0 SKIP, 0 FAIL. Registro: `docs/status-aipc01-validation-2026-11-21.md`. No demuestra despliegue.
-- **A-IPC-02:** el propietario validó MA-01..MA-10 y CP-01..CP-11 en `da8c6ea`. CP-02/03 observó cola 8/9 y décima EAGAIN; CP-05 timeout 5.009 s; CP-06 deadline 15.006 s; CP-07 excepción aislada y ping posterior `OK`; CP-08/09 límites 16/64 KiB y profundidad 16/17 confirmados; CP-10 midió 4→8→4 FDs y 5→5→5 threads; CP-11 validó tres ciclos consecutivos sin crecimiento de recursos. CP-12 implementado en `0fb5c39`, pendiente de ejecución; overall `INCOMPLETE`.
+- **A-IPC-02:** el propietario ejecutó checkout `66b348e1be9a7e614d51c4b3ade9e643c9152106` en `Atlas-VM-test`; MA-01..MA-10 y CP-01..CP-12 PASS, overall `PASS`, 0 SKIP/FAIL. CP-12 rechazó startup con RLIMIT heredado 32/32, exit 3, `startup_error`, sin elevar límite ni crear socket. Evidencia detallada al final de este documento.
 - **Alternativa A:** elegida como línea principal de evaluación, no aprobada para producción. Alternativa B suspendida por colisión destructiva en systemd; C no priorizada.
 - **TCB-1 aceptada:** todos los procesos bajo la cuenta dedicada `atlas-runtime` pertenecen a la TCB; no se exige aislamiento intra-UID. La exclusividad operativa de esa cuenta aún debe definirse/verificarse.
 - **Identidad del cliente aceptada:** el frontend administrativo debe conectar con **EUID 0**; la política de diseño del servicio es exactamente `client_uids={0}`. No se admiten otros consumidores sin nueva decisión. El entrypoint IPC real aún no existe/revisado; la decisión no es evidencia operativa.
@@ -23,11 +23,11 @@
 - **A-THREAT-04:** ventana TOCTOU de unlink aceptada como residual bajo TCB-1 solo con directorio privado, instancia única y revalidación por descriptor; unlink no es atómico.
 - **A-THREAT-05:** procedimiento manual candidato publicado en `local-authority-admin-private-listener-stale-recovery.md`; falta validarlo en sandbox. Startup siempre falla cerrado ante pathname existente y nunca intenta stale cleanup ni usa connect como detector.
 - **A-THREAT-06:** especificación de resolución publicada; falta probe aislado de symlinks, sustitución de ancestros, colisiones y connect canónico.
-- **A-THREAT-07:** perfil experimental: 4 workers, `listen(8)`, cola 0, read/write 5 s, deadline global 15 s y `RLIMIT_NOFILE=64`. CP-01..CP-09 validados por el propietario en `caf7bbb`; CP-10 implementado y pendiente de validación; CP-11/12 pendientes. AF_UNIX admite 9 pendientes y la décima recibe EAGAIN. No es configuración de producción.
+- **A-THREAT-07:** perfil experimental: 4 workers, `listen(8)`, cola 0, read/write 5 s, deadline global 15 s y `RLIMIT_NOFILE=64`. CP-01..CP-12 validados por el propietario en checkout `66b348e`. AF_UNIX admite 9 pendientes y la décima recibe EAGAIN en el kernel probado. El perfil sigue siendo evidencia del harness, no configuración de producción.
 - **A-THREAT-08:** máquina de estados de readiness/shutdown, drenaje, deadlines y ownership de FDs pendiente.
 - **A-THREAT-09:** A09 usó runner UID 1000 y peer UID 1001; no valida cliente UID 0, servicio `atlas-runtime` ni permisos finales del despliegue.
-- **Próximo paso:** actualizar Atlas-VM-test a la punta actual de `experiment/a-ipc-01-private-unix-listener-probe` y ejecutar el runner A-IPC-02 para validar CP-10 (contabilidad procfs de FDs/threads bajo saturación). Solo en la VM desechable; nunca en `greed` producción.
-- **Estado de cambios:** MA-01..MA-10 y CP-01..CP-09 están validados por el propietario en `caf7bbb`; CP-10 implementado en `bf3c623`, pendiente de validación; CP-11/12 pendientes. No se modificó handler productivo, contrato, runtime, SQLite, `main` ni host. No se ejecutaron pruebas/builds/workflows desde GitHub. No se creó PR ni se aprobó listener persistente o despliegue.
+- **Próximo paso:** A-IPC-02 está completo en el alcance del harness. La siguiente etapa debe ser revisión de resultados y planificación de los probes aún pendientes de resolución segura de rutas, colisiones/stale recovery y lifecycle; no implementar listener productivo por inferencia de este PASS.
+- **Estado de cambios:** MA-01..MA-10 y CP-01..CP-12 validados por el propietario en checkout `66b348e`. No se modificó handler productivo, contrato, runtime, SQLite, `main` ni host. No se ejecutaron pruebas/builds/workflows desde GitHub. No se creó PR ni se aprobó listener persistente o despliegue.
 
 **Límites vigentes:** A-IPC-01 valida únicamente los escenarios experimentales ejecutados en el commit/entorno indicados. No demuestra protección frente a root/capabilities suficientes ni procesos maliciosos del mismo UID; no valida separación de privilegios, system-manager, listener persistente, daemon, integración systemd, acceso/autorización SQLite ni operaciones mutantes. No autoriza cambios del host, usuarios, grupos, permisos, privilegios, servicios, provisioning o despliegue.
 
@@ -1148,3 +1148,59 @@ de socket; no eleva límites. Implementado y revisado estáticamente, aún
 no validado por el propietario. Overall INCOMPLETE hasta ejecutar CP-12.
 Solo ejecutar en `Atlas-VM-test` desechable; nunca en `greed` producción.
 
+
+
+## Registro de validación A-IPC-02 — ejecución completa del propietario (2026-11-21)
+
+El propietario ejecutó el runner completo en la VM desechable `Atlas-VM-test`
+sobre el checkout `66b348e1be9a7e614d51c4b3ade9e643c9152106`:
+Debian 13, kernel `6.12.117+deb13-amd64`, Python 3.13.5, EUID efectivo 0,
+fixtures SERVICE UID/GID `2005/2005` y OTHER `2006/2006`.
+Duración: 24.991 s. El JSON reportó **`overall=PASS`**, sin escenarios
+omitidos ni fallidos, y confirmó la eliminación de ambos sandboxes temporales
+bajo `/run` después de salir los procesos hijos.
+
+**Resultado:** MA-01..MA-10 y CP-01..CP-12: PASS.
+
+Observaciones relevantes:
+
+- **Autenticación mutua (MA-01..MA-06):** cliente root autenticó servidor
+  UID 2005 antes de enviar; servidor rechazó peer UID 2006 antes de leer
+  (cero bytes de respuesta); cliente rechazó servidor UID 2006 antes de
+  enviar (cero bytes); cliente EUID 2006 fue rechazado antes de connect.
+  Claims JSON falsos UID 0/GID 0/PID 1 fueron rechazados como
+  `INVALID_REQUEST`; la identidad observada provino de SO_PEERCRED.
+- **Configuración/snapshot (MA-07/08):** 11 variantes inválidas rechazadas;
+  configuración válida aceptada con `client_uids=[0]`; reemplazo del archivo
+  no alteró el snapshot inmutable cargado.
+- **Desconexión y transporte (MA-09/10):** desconexión previa a request produjo
+  `PEER_DISCONNECTED`, cero respuesta; AF_UNIX/SOCK_STREAM y
+  AF_INET/SOCK_STREAM fueron rechazados antes de leer.
+- **Capacidad y backpressure (CP-01..04):** máximo cuatro workers; con
+  `listen(8)`, Linux permitió nueve conexiones pendientes; la décima recibió
+  EAGAIN (errno 11). La cola observada fue 8 y luego 9, sin exceder cuatro
+  workers activos.
+- **Timeouts (CP-05/06):** timeout de lectura observado en 5.009 s; el
+  escenario de deadline global cerró a 15.005 s, con 3.998 s disponibles al
+  comenzar la lectura después de la demora test-only.
+- **Recuperación (CP-07):** excepción `RuntimeError` aislada, peer EOF y
+  cero respuesta; slot liberado, servidor vivo y ping posterior `OK`.
+- **Tamaños y JSON (CP-08/09):** request 16 KiB aceptado hasta schema
+  validation; 16 KiB+1 rechazado; paquete truncado detectado. Response
+  64 KiB enviado íntegro y tamaño superior rechazado antes de enviar.
+  Profundidad JSON 16 llegó a schema validation; profundidad 17 produjo
+  `INVALID_JSON`.
+- **Recursos (CP-10/11):** baseline 4 FDs/5 threads; saturación 8 FDs/5
+  threads; recuperación exacta a 4 FDs/5 threads, active=0 y servidor vivo.
+  Tres ciclos consecutivos repitieron la recuperación sin crecimiento de
+  recursos.
+- **Límite heredado (CP-12):** el child heredó soft/hard
+  `RLIMIT_NOFILE=32/32` frente al requisito 64; rechazó startup con exit
+  code 3 y evento `startup_error`, no elevó el límite y no creó el socket.
+
+Esta evidencia valida los escenarios del harness A-IPC-02 en el commit y VM
+indicados. **No aprueba** un listener persistente, el transporte AF_UNIX
+para producción, el entrypoint administrativo real, integración systemd,
+acceso a SQLite, operaciones mutantes ni despliegue. El perfil de capacidad
+continúa siendo experimental. No se ejecutaron pruebas, builds ni workflows
+desde GitHub; el resultado fue ejecutado por el propietario. 
