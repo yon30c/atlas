@@ -627,3 +627,8 @@ La revisión estática de A-IPC-01 identificó que el A09 original mezclaba dos 
 - Esta actualización es de diseño/documentación únicamente. No modifica runner, handler, contrato, runtime, SQLite, servicios ni configuración del host. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub.
 
 Referencias: [diseño A-IPC-01](design/local-authority-admin-private-unix-listener-probe.md) y [README del probe](../tests/integration/private_unix_listener/README.md).
+
+
+#### A09 fixture topology and execution prerequisite
+
+Static review found an additional DAC constraint: an A09b fixture with mode 0711 cannot be nested beneath the probe's private root 0700, because traversal is denied at the parent. The fixture must be a separate sibling directory directly under a verified shared sticky temporary parent (for example /tmp), with fixture mode 0711 and socket mode 0666. The private sandbox and candidate endpoint retain their original modes. Both A09 checks require a second, already-authenticated ordinary-user session under a distinct pre-existing UID; no sudo/su/runuser/setuid or account creation is allowed. This topology and orchestration are design requirements only; runner implementation and validation remain pending.
