@@ -273,3 +273,17 @@ El resultado respalda los invariantes del listener pathname privado dentro del s
 - El probe sigue siendo opt-in y no debe ejecutarse con sudo.
 - Siguiente trabajo: evaluar de forma estática una forma segura de cubrir A09 mediante una identidad no privilegiada ya existente, sin cambiar credenciales ni configuración del host desde el runner. No crear usuarios ni alterar grupos/sudoers/PAM/systemd como parte de esta prueba.
 - No se ejecutaron pruebas, compilaciones ni workflows desde GitHub; esta evidencia procede de la ejecución local comunicada por el propietario.
+
+
+## Revisión A09 de A-IPC-01 — separación DAC / SO_PEERCRED (2026-11-21)
+
+La revisión del diseño y del handler confirma que el A09 original no podía atribuir un fallo de conexión a la autorización de aplicación cuando el endpoint candidato conserva directorio 0700 y socket 0600. Un cliente de otro UID queda bloqueado por DAC antes de llegar a accept(); por ello no hay evidencia de que el handler haya leído SO_PEERCRED.
+
+Se define una separación documental:
+
+- **A09a — DAC:** probar la denegación de acceso al endpoint candidato con los modos originales 0700/0600. Registrar el bloqueo filesystem; no atribuirlo a SO_PEERCRED.
+- **A09b — SO_PEERCRED:** probar el rechazo de aplicación con un fixture efímero distinto, deliberadamente accesible a un UID externo (p. ej. directorio 0711/socket 0666). El handler debe observar las credenciales reales y rechazar el UID no permitido antes de leer la solicitud, sin respuesta de protocolo. Este fixture no representa ni sustituye los permisos del endpoint candidato.
+- Ambos requieren una identidad no privilegiada ya existente y cliente externo; no se crean usuarios, no se cambia UID/GID, no se usa sudo ni se modifica el host.
+- El runner actual permanece sin cambios y continúa omitiendo A09. La ejecución comunicada (15 PASS, A09 SKIP, 0 FAIL) conserva clasificación **INCOMPLETE**. No existe aún validación multi-UID de DAC ni de autorización SO_PEERCRED.
+
+**Cambio realizado:** diseño, README y documentación de contexto/estado. **No se modificaron** handler, runner, contrato, runtime, SQLite, systemd ni host. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. `main` permanece intacta; no hay PR ni aprobación de transporte de producción.
