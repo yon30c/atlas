@@ -624,9 +624,14 @@ def _start_a09_ssh(
         "/usr/bin/ssh",
         "-F", "/dev/null",
         "-T",
+        "-o", "RequestTTY=no",
         "-p", "22",
         "-i", str(config["identity_file"]),
         "-o", "IdentitiesOnly=yes",
+        "-o", "IdentityAgent=none",
+        "-o", "PubkeyAuthentication=yes",
+        "-o", "GSSAPIAuthentication=no",
+        "-o", "HostbasedAuthentication=no",
         "-o", "BatchMode=yes",
         "-o", "PreferredAuthentications=publickey",
         "-o", "PasswordAuthentication=no",
@@ -821,7 +826,11 @@ def _scenario_a09b(root: Path, config: dict[str, object] | None, skip_reason: st
         raise ProbeSkip(f"cannot create the isolated A09b fixture under /tmp: {exc}") from exc
     fixture_info = fixture.lstat()
     fixture_identity = (fixture_info.st_dev, fixture_info.st_ino, stat.S_IFMT(fixture_info.st_mode))
-    listener = OwnedListener(fixture / "s")
+    try:
+        listener = OwnedListener(fixture / "s")
+    except OSError as exc:
+        fixture.rmdir()
+        raise ProbeSkip(f"cannot create A09b listener socket: {exc}") from exc
     helper_path = None
     helper_identity = None
     process = None
