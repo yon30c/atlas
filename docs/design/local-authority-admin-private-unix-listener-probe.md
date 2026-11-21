@@ -1,6 +1,6 @@
 # Diseño del probe A-IPC-01 — listener Unix propio en directorio privado
 
-**Estado:** diseño propuesto; pendiente de revisión y aprobación del propietario. No implementado, no ejecutado y no aprobado como transporte de producción.  
+**Estado:** diseño revisado y aprobado por el propietario como base para preparar la implementación experimental. No implementado ni ejecutado; no aprobado como transporte de producción.  
 **Fase:** 2.5 — evaluación experimental de propiedad del endpoint IPC.  
 **Alternativa evaluada:** A — listener creado por el propio proceso sobre un pathname AF_UNIX dentro de un directorio privado.  
 **Contrato de aplicación:** `atlas-admin/1`; este probe no modifica el contrato ni amplía el catálogo de operaciones.
@@ -88,7 +88,7 @@ Cada caso utiliza un subdirectorio o pathname único. Los tests de colisión pre
 8. Aplicar/verificar el modo de socket esperado, si la plataforma lo permite, sin relajar el modo del directorio.
 9. Solo después, invocar `listen()` y comenzar a aceptar conexiones.
 
-El modo esperado se fija como requisito del probe, no como política de producción. La prueba debe registrar el modo observado y fallar si resulta más permisivo que el límite establecido.
+El modo esperado del socket en este experimento es exactamente `0600`; el modo del directorio temporal es exactamente `0700`. Estos valores son requisitos del probe, no una política de producción. La prueba debe registrar los modos observados y fallar si son más permisivos o no coinciden con el valor fijado.
 
 ### 5.2 Colisión
 
@@ -134,6 +134,7 @@ Al crear correctamente el socket, la instancia captura `st_dev`, `st_ino` y tipo
 | A13 | Cliente no envía paquete | Esperar timeout | Recurso liberado al vencer timeout |
 | A14 | Conexiones simultáneas por encima del límite | Saturar listener | Backpressure/rechazo controlado; memoria y tareas acotadas |
 | A15 | Cierre ordenado del listener | Reintentar conexión | Conexión nueva falla; no queda descriptor abierto |
+| A16 | Dos procesos/hilos de prueba intentan `bind()` simultáneamente sobre el mismo pathname libre del sandbox | Ejecutar ambos binds concurrentemente y observar resultados | Exactamente un bind gana; el otro falla por colisión; el listener ganador permanece operativo y ningún objeto se modifica |
 
 A09 es condicional: solo se ejecuta si el entorno ya ofrece una identidad de prueba no privilegiada distinta y puede invocarse sin sudo, cambios de UID/GID ni cambios del host. Si no, se marca `SKIP` con causa y la autorización por UID queda sin evidencia de integración multi-UID. No se sustituye por mocks como prueba de credenciales reales.
 
@@ -248,7 +249,7 @@ La privacidad del directorio es una condición de aislamiento del experimento, n
 ## 13. Secuencia de trabajo posterior a la aprobación
 
 1. Revisar este diseño contra el árbol actual de tests y el contrato IPC.
-2. Acordar explícitamente cualquier criterio que afecte seguridad, especialmente permisos, identidad de prueba y límites de concurrencia.
+2. Mantener los criterios de seguridad fijados en este documento: directorio `0700`, socket `0600`, sin cambios de UID/GID ni privilegios; cualquier desviación requiere nueva aprobación.
 3. Implementar el probe en una rama separada, sin cambiar el listener productivo ni el handler existente.
 4. Añadir pruebas deterministas con fixtures temporales y verificaciones de no modificación.
 5. Publicar comandos exactos para que el propietario los ejecute en Debian.
