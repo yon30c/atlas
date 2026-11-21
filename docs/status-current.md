@@ -7,7 +7,7 @@
 > **Transporte:** alternativa A sigue siendo la línea de evaluación elegida, no un transporte aprobado para producción. B sigue suspendida por la colisión destructiva de systemd; C no está priorizada.
 > **Validación A-IPC-01:** commit probado `1d5bdb122a8480c36b445be7dd961b93806de74b`, Debian 13, 16 PASS, 0 SKIP, 0 FAIL. Esta evidencia valida el probe experimental, no el despliegue.
 > **Decisiones del propietario:** TCB-1 aceptada (todos los procesos `atlas-runtime` pertenecen a la TCB); frontend administrativo requerido con EUID 0; política de diseño del servicio `client_uids={0}`.
-> **Diseños publicados en esta rama:** configuración confiable de identidad; autenticación mutua por `SO_PEERCRED`; resolución segura de rutas; recuperación manual de socket stale; presupuesto de recursos/backpressure. Ver hallazgos y estado debajo.
+> **Diseños publicados en esta rama:** configuración confiable de identidad; autenticación mutua por `SO_PEERCRED`; resolución segura de rutas; recuperación manual de socket stale; presupuesto de recursos/backpressure aprobado para probes; plan de probe de autenticación mutua y capacidad. Ver hallazgos y estado debajo.
 > **Límites:** no se implementó código nuevo de listener/cliente; no se ejecutaron pruebas, compilaciones ni workflows desde GitHub; no hubo cambios en Debian/host, `main`, cuentas, permisos, servicios o SQLite. No se autorizó listener persistente ni despliegue.
 
 ## Autoridad administrativa local e IPC — estado al 2026-11-21
@@ -417,7 +417,7 @@ Se publicó `docs/design/local-authority-admin-private-listener-stale-recovery.m
 A-THREAT-05 sigue abierto hasta validar la enumeración de namespaces y la retirada exacta en sandbox. Se presupone pathname canónico absoluto como baseline y cliente/servicio en el mismo network namespace; no heredar ni pasar el FD listener. La alternativa procfs queda experimental porque cambia la ruta reportada y complica diagnóstico stale.
 
 
-## A-THREAT-07 — presupuesto de recursos propuesto (2026-11-21)
+## A-THREAT-07 — presupuesto de recursos aprobado para probes (2026-11-21)
 
 Se publicó `docs/design/local-authority-admin-private-listener-resource-budget.md`. El handler actual limita request 16 KiB, response 64 KiB y JSON depth 16; read/write defaults 5 s, con máximo individual configurable 60 s, pero no deadline global ni accept loop. A14 (2 workers/backlog 8) es solo harness.
 
