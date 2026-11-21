@@ -426,7 +426,10 @@ def _scenario_a08(root: Path) -> dict[str, int]:
 A09_ACCOUNT = "atlas-a09-test"
 A09_HELPER_PATH = Path("/tmp/atlas-a09-client.py")
 A09_EXPECTED_HOSTKEY = "SHA256:txiDPT+/ldcIwnN6BPotbeL7QsofAieAeqF3GKMa9xI"
+A09_CONNECT_TIMEOUT_SECONDS = 5
 A09_SSH_TIMEOUT_SECONDS = 10.0
+A09_HELPER_CONTROL_BYTES = 4096
+A09_CLIENT_SOCKET_TIMEOUT_SECONDS = 2.0
 
 
 def _parse_args() -> argparse.Namespace:
@@ -680,7 +683,7 @@ def _start_a09_ssh(
         "-o", "GlobalKnownHostsFile=/dev/null",
         "-o", "HostKeyAlgorithms=ssh-ed25519",
         "-o", "PubkeyAcceptedAlgorithms=ssh-ed25519",
-        "-o", "ConnectTimeout=5",
+        "-o", f"ConnectTimeout={A09_CONNECT_TIMEOUT_SECONDS}",
         "-o", "ConnectionAttempts=1",
         "-o", "ControlMaster=no",
         "-o", "ControlPath=none",
@@ -1579,6 +1582,7 @@ def main() -> int:
         "a09_enabled": args.enable_a09,
         "a09_peer_account": A09_ACCOUNT if a09_config is not None else None,
         "a09_peer_uid": a09_config["peer_uid"] if a09_config is not None else None,
+        "a09_peer_gid": a09_config["peer_gid"] if a09_config is not None else None,
         "sandbox_root": str(root),
         "limits": {
             "request_bytes": MAX_REQUEST_BYTES,
@@ -1588,6 +1592,10 @@ def main() -> int:
             "listen_backlog": LISTEN_BACKLOG,
             "max_active_connections": MAX_ACTIVE_CONNECTIONS,
             "max_accept_wait_seconds": MAX_ACCEPT_WAIT_SECONDS,
+            "a09_ssh_connect_timeout_seconds": A09_CONNECT_TIMEOUT_SECONDS,
+            "a09_ssh_total_timeout_seconds": A09_SSH_TIMEOUT_SECONDS,
+            "a09_helper_control_bytes": A09_HELPER_CONTROL_BYTES,
+            "a09_client_socket_timeout_seconds": A09_CLIENT_SOCKET_TIMEOUT_SECONDS,
         },
         "duration_seconds": round(time.monotonic() - started, 3),
         "cleanup": cleanup_detail,
