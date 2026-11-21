@@ -538,3 +538,12 @@ Siguiente paso: actualizar y ejecutar el runner solo en la VM desechable
 `Atlas-VM-test`; nunca en `greed` producción. No se ejecutaron pruebas,
 builds ni workflows desde GitHub. No se modificó handler, contrato,
 `main`, host, cuentas, servicios, permisos ni SQLite.
+
+
+## 9.12 CP-10 — fallo de diagnóstico procfs y corrección (2026-11-21)
+
+El propietario ejecutó el commit `cbfe0e20a79ae3ee8fd901ba43ea6df360962398` en `Atlas-VM-test`. MA-01..MA-10 y CP-01..CP-09 reportaron PASS; CP-10 abortó antes de producir snapshots con `ProbeFailure: CP-10 procfs status omitted Max open files`. Los sandboxes `/run` se eliminaron correctamente. El resultado global fue FAIL por un defecto del lector de evidencia, no por una medición que demostrara exceso de FDs o threads.
+
+La revisión estática confirmó que el runner buscaba `Max open files` en `/proc/<pid>/status`, pero Linux publica ese límite en `/proc/<pid>/limits`. Commit `47b9ed94c21d26b18c415bedd2f1d352894f2620` corrige únicamente la fuente procfs y el mensaje de diagnóstico; conserva la validación de soft/hard 64/64 y las mediciones de `fd/` y `task/`. No se ejecutaron pruebas, builds ni workflows desde GitHub.
+
+CP-10 queda **corregido estáticamente, pendiente de nueva ejecución del propietario**. No atribuir PASS hasta recibir una ejecución satisfactoria. CP-11/CP-12 continúan pendientes; overall no puede ser PASS. Ejecutar solo en `Atlas-VM-test` desechable, nunca en `greed` producción.
