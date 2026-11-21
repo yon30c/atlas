@@ -324,10 +324,10 @@ inside the disposable VM. The runner does not create accounts or groups.
 | CP-01 | Four active workers occupy all slots; a fifth connection remains pending rather than creating a fifth worker |
 | CP-04 | After a slot is released, the queued connection is accepted and the service returns to zero active workers |
 
-The probe also verifies the service child's real/effective/saved UID/GID,
-empty supplementary groups, socket ownership/mode, backlog configuration,
-read/write timeout values, global deadline configuration and
-`RLIMIT_NOFILE=64`.
+The probe verifies the service child's real/effective/saved UID/GID, empty
+supplementary groups, socket ownership/mode and `RLIMIT_NOFILE=64`; it records
+the configured backlog, read/write timeout and global deadline. Behavioral
+tests for timeout expiry and exact backlog saturation remain incomplete.
 
 **Not yet implemented/validated:** exact kernel backlog saturation; full
 open-FD accounting; idle/read/write deadline adversaries; exception-path
@@ -343,9 +343,11 @@ A complete overall result is therefore expected to be INCOMPLETE at this stage.
   exclusively for the fixture.
 - The process drops credentials only in child processes; no host account,
   group, permission, service or global configuration is changed.
-- Temporary data is confined to the fresh root-owned `/run/atlas-mutual-auth-*`
-  directory. If a child fails to stop or cleanup identity cannot be verified,
-  the sandbox is preserved and the report is FAIL.
+- Temporary data is confined to fresh root-owned `/run/atlas-mutual-auth-*`
+  and `/run/atlas-mutual-auth-public-*` directories. The public traversal root
+  is mode 0711 and not writable by group/others. If a child fails to stop or a
+  socket pathname identity cannot be verified, the sandboxes are preserved and
+  the report is FAIL.
 - 0: PASS (all required scenarios implemented and passed; not expected yet).
 - 1: FAIL (an implemented invariant failed or cleanup could not be verified).
 - 2: INCOMPLETE (preconditions unavailable or scenarios remain unimplemented).
