@@ -29,7 +29,7 @@
 - **Recursos (A-THREAT-07):** el propietario aprobó para probes aislados 4 conexiones/workers, backlog 8, cola de aplicación 0, read/write 5 s, deadline global 15 s y `RLIMIT_NOFILE=64`. CP-01/CP-04 pasaron en la última ejecución reportada (máximo 4 workers, recuperación a 0). CP-02/CP-03 están implementados en GitHub pero pendientes de validación local: cuatro workers ocupados, ocho conexiones en cola observadas con `ss`, novena conexión no bloqueante rechazada con EAGAIN. CP-05..CP-12 siguen pendientes. No es configuración de producción. Plan: `design/local-authority-admin-private-listener-mutual-auth-capacity-probe.md`.
 - **Lifecycle (A-THREAT-08):** máquina de estados, readiness, shutdown/drenaje y cierre de FDs aún no diseñados/validados.
 - **Evidencia de despliegue (A-THREAT-09):** A09 usó runner UID 1000 y peer UID 1001; no probó cliente root, servicio `atlas-runtime` ni permisos/ownership finales.
-- **Siguiente paso:** actualizar `Atlas-VM-test` a `1e213b2f7a254cd2718e644e415670dca08435f5` y ejecutar CP-02/CP-03 recién implementados. El runner requiere iproute2 `ss` root-owned y no escribible por grupo/otros para observar la cola real. Si pasan, continuar con CP-05 (deadline global) y CP-06 (timeouts read/write frente al deadline). Nunca ejecutar en `greed` de producción ni crear cuentas/grupos.
+- **Siguiente paso:** actualizar `Atlas-VM-test` a `67526c21a1edc2938b5caefb699aa6c6576c5b73` y ejecutar CP-02/CP-03 recién implementados. El runner requiere iproute2 `ss` root-owned y no escribible por grupo/otros para observar la cola real. Si pasan, continuar con CP-05 (deadline global) y CP-06 (timeouts read/write frente al deadline). Nunca ejecutar en `greed` de producción ni crear cuentas/grupos.
 - No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. El propietario ejecutó el runner localmente en la VM desechable y reportó MA-01..MA-10 y CP-01/04 PASS. El checkout se había actualizado a `901c792`; el campo commit del JSON fue null. `main` y Debian/host de producción no fueron modificados; no se creó PR.
 
 **Límites de autorización:** el PASS experimental no selecciona por sí solo un transporte productivo ni autoriza listener persistente, daemon, unidades systemd de producción, cambios del host, usuarios/grupos, permisos/privilegios, acceso SQLite, provisioning o despliegue. No habilita operaciones administrativas distintas del ping no mutante usado como fixture.
@@ -569,3 +569,10 @@ y CP-01/CP-04; no valida este cambio posterior. CP-02/CP-03 ahora miden
 para la novena conexión sin accept adicional. Estado: pendiente de ejecución
 en `Atlas-VM-test`. CP-05..CP-12 continúan pendientes. No hay cambios en
 `main`, host, cuentas, servicios, SQLite o transporte productivo.
+
+
+El preflight del observador `ss` se endureció en commit
+`67526c21a1edc2938b5caefb699aa6c6576c5b73`: el runner resuelve el
+ejecutable y valida también todos sus directorios ancestros como root-owned
+y no escribibles por grupo/otros. La medición usa la ruta resuelta. Esta
+corrección también está pendiente de validación local.
