@@ -144,7 +144,7 @@ Los escenarios PR-01..PR-12 están implementados y validados por el propietario 
 3. Validar en sandbox el procedimiento manual y auditado para retirar un socket residual descrito en [stale-recovery](local-authority-admin-private-listener-stale-recovery.md).
 4. Definir límites de tamaño/formatos y política definitiva de hardlinks para el archivo de configuración.
 5. Identificar el entrypoint cliente y revisar el lanzamiento real con EUID 0.
-6. El plan y runner A-IPC-03 para el recorrido de ruta están publicados; ejecutar PR-01..PR-12 solo en `Atlas-VM-test` desechable. Los probes de colisión/stale recovery y lifecycle son gates separados.
+6. A-IPC-03 PR-01..PR-12 fue validado por el propietario en `Atlas-VM-test`; no repetirlo sin una razón concreta. El siguiente gate es revisar y completar las preguntas del plan A-IPC-04 para A-THREAT-05 antes de implementar su runner. Lifecycle A-THREAT-08 permanece separado.
 
 ## 10. Límites
 
@@ -171,8 +171,6 @@ directorio endpoint SERVICE 0700, metadata incorrecta, archivo de configuración
 symlink/FIFO/hardlink, reemplazo del pathname del padre después de abrir el
 descriptor y denegación de rename/symlink por OTHER UID.
 
-**Estado:** implementación y revisión estática en GitHub; no ejecutado por el
-asistente ni validado por el propietario. La ruta y los IDs usados son fixtures
-temporales; no se fijan rutas productivas ni una política de instalación.
+**Validación del propietario:** A-IPC-03 PR-01..PR-12 PASS en commit `b200c292ac0602593c8dbefafb1bd71b79001b06`; 12 PASS, 0 FAIL, cleanup confirmado. La ruta y los IDs usados son fixtures temporales; no se fijan rutas productivas ni una política de instalación.
 Ejecutar únicamente en `Atlas-VM-test` desechable. No crea sockets, no hace
 bind/connect y no modifica `/etc/atlas`, host, servicios, cuentas o SQLite.
