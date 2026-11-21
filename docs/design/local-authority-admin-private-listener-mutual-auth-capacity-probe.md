@@ -265,7 +265,7 @@ Esta evidencia aplica únicamente al commit indicado. MA-07/08 prueban un parser
 
 ## 9.4 MA-09/MA-10 implementados — validación del propietario pendiente (2026-11-21)
 
-Commit `aff7eb694dbabb6725947e3f2179aef3fa566fbf` amplía el runner:
+Commit `f41df94d0f87d288bfc7e3df45c66295fa19d570` amplía el runner:
 
 - **MA-09:** crea un par AF_UNIX/SOCK_SEQPACKET, confirma peer UID 0 mediante SO_PEERCRED, cierra la dirección de escritura del peer sin enviar request y llama al handler real. Exige `AdminPeerDisconnected/PEER_DISCONNECTED`, cero bytes de respuesta y que no se acepte petición. La prueba cubre EOF/half-close antes de la primera petición; no afirma observar una interrupción dentro de la syscall SO_PEERCRED.
 - **MA-10:** entrega al handler real sockets AF_UNIX/SOCK_STREAM y AF_INET/SOCK_STREAM con un ping válido ya encolado. Exige `AdminProtocolRejected/INVALID_REQUEST`; `MSG_PEEK` comprueba que el handler no consumió el paquete y el peer no recibió bytes de respuesta.
