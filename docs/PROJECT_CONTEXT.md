@@ -881,3 +881,32 @@ Commit `f41df94d0f87d288bfc7e3df45c66295fa19d570` añade escenarios del handler 
 - La implementación fue revisada estáticamente; el propietario aún debe ejecutar el runner. No se ejecutaron pruebas/builds/workflows desde GitHub.
 - MA-01..MA-08 y CP-01/04 conservan evidencia de propietario únicamente sobre `585dd3d`. No se atribuye PASS al nuevo commit hasta recibir el resultado local.
 - CP-02/03 y CP-05..12 permanecen pendientes; global INCOMPLETE.
+
+
+## Continuación A-IPC-02 — CP-02/CP-03 (2026-11-21)
+
+La última ejecución comunicada por el propietario, sobre el checkout
+`901c792cb723d920da4970ecce98ea7f871c4f85` (el JSON indicó
+`commit: null`), obtuvo MA-01..MA-10 PASS y CP-01/CP-04 PASS en
+`Atlas-VM-test`; global INCOMPLETE por los escenarios de capacidad restantes.
+La evidencia confirma autenticación mutua root↔UID fixture, rechazo previo
+a lectura/escritura cuando corresponde, MA-07/08, desconexión, transportes
+no soportados y cuatro workers con recuperación a cero. No valida el cambio
+posterior de backlog.
+
+Commit actual de implementación CP-02/CP-03:
+`1e213b2f7a254cd2718e644e415670dca08435f5`.
+El runner:
+- exige iproute2 `ss` como ejecutable regular root-owned, ejecutable y no
+  escribible por grupo/otros;
+- ocupa cuatro workers y crea ocho conexiones pendientes;
+- observa `Recv-Q=8` y `Send-Q=8` en la fila LISTEN AF_UNIX;
+- intenta una novena conexión no bloqueante y exige EAGAIN/EWOULDBLOCK;
+- verifica que no aumenten cola ni conexiones aceptadas por la aplicación.
+
+**Validación:** revisión estática del código y documentación; no se ejecutaron
+pruebas, builds ni workflows desde GitHub. CP-02/CP-03 pendientes de
+ejecución por el propietario en `Atlas-VM-test`. CP-05..CP-12 pendientes.
+Siguiente paso único: ejecutar el runner actualizado en la VM desechable,
+nunca en `greed` producción. No se autoriza listener persistente, systemd,
+acceso SQLite, cambios de host ni despliegue.
