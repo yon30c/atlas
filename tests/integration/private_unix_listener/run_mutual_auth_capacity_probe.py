@@ -875,6 +875,7 @@ def _scenario_backlog(server: Server, socket_path: Path) -> dict:
     """Fill all workers and the kernel backlog, then prove overflow is rejected."""
     active_clients: list[socket.socket] = []
     queued_clients: list[socket.socket] = []
+    boundary_client: socket.socket | None = None
     overflow: socket.socket | None = None
     accepted_before = max(
         (
@@ -927,17 +928,36 @@ def _scenario_backlog(server: Server, socket_path: Path) -> dict:
         if active_max > WORKERS:
             raise ProbeFailure("worker count exceeded the fixed capacity during backlog saturation")
 
+        # Linux AF_UNIX checks queue_len > sk_max_ack_backlog, so a
+        # listen(BACKLOG) listener admits BACKLOG+1 pending connections.
+        # Verify that implementation boundary rather than assuming TCP-like
+        # backlog semantics or treating the first extra connect as a failure.
+        boundary_client = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+        boundary_client.setblocking(False)
+        boundary_result = boundary_client.connect_ex(str(socket_path))
+        if boundary_result != 0:
+            raise ProbeFailure(
+                f"Linux AF_UNIX did not admit the documented backlog boundary "
+                f"connection: connect_ex={boundary_result}"
+            )
+        recv_q_boundary, send_q_boundary = _unix_listener_queue(socket_path)
+        if (recv_q_boundary, send_q_boundary) != (BACKLOG + 1, BACKLOG):
+            raise ProbeFailure(
+                f"unexpected AF_UNIX boundary queue: Recv-Q={recv_q_boundary}, "
+                f"Send-Q={send_q_boundary}, expected {BACKLOG + 1}/{BACKLOG}"
+            )
+
         overflow = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
         overflow.setblocking(False)
         overflow_result = overflow.connect_ex(str(socket_path))
         if overflow_result not in {errno.EAGAIN, errno.EWOULDBLOCK}:
             raise ProbeFailure(
-                f"connection beyond full kernel backlog was not rejected with EAGAIN: "
-                f"connect_ex={overflow_result}"
+                f"connection beyond the effective AF_UNIX backlog was not rejected "
+                f"with EAGAIN: connect_ex={overflow_result}"
             )
 
         recv_q_after, send_q_after = _unix_listener_queue(socket_path)
-        if (recv_q_after, send_q_after) != (BACKLOG, BACKLOG):
+        if (recv_q_after, send_q_after) != (BACKLOG + 1, BACKLOG):
             raise ProbeFailure(
                 f"overflow attempt changed the full kernel backlog: "
                 f"Recv-Q={recv_q_after}, Send-Q={send_q_after}"
@@ -959,8 +979,11 @@ def _scenario_backlog(server: Server, socket_path: Path) -> dict:
             "active_workers_at_saturation": WORKERS,
             "accepted_before_saturation": accepted_before,
             "accepted_while_full": accepted_while_full,
-            "kernel_recv_q": recv_q,
+            "kernel_recv_q_at_listen_backlog": recv_q,
             "kernel_send_q": send_q,
+            "listen_backlog_boundary_connect_result": boundary_result,
+            "kernel_recv_q_at_effective_limit": recv_q_boundary,
+            "effective_pending_queue_limit": BACKLOG + 1,
             "overflow_connect_errno": overflow_result,
             "kernel_recv_q_after_overflow": recv_q_after,
             "kernel_send_q_after_overflow": send_q_after,
@@ -970,6 +993,8 @@ def _scenario_backlog(server: Server, socket_path: Path) -> dict:
     finally:
         if overflow is not None:
             overflow.close()
+        if boundary_client is not None:
+            boundary_client.close()
         for client in queued_clients + active_clients:
             try:
                 client.close()
