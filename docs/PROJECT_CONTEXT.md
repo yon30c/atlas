@@ -17,7 +17,7 @@
 - **Alternativa A:** elegida como línea principal de evaluación, no aprobada para producción. Alternativa B suspendida por colisión destructiva en systemd; C no priorizada.
 - **TCB-1 aceptada:** todos los procesos bajo la cuenta dedicada `atlas-runtime` pertenecen a la TCB; no se exige aislamiento intra-UID. La exclusividad operativa de esa cuenta aún debe definirse/verificarse.
 - **Identidad del cliente aceptada:** el frontend administrativo debe conectar con **EUID 0**; la política de diseño del servicio es exactamente `client_uids={0}`. No se admiten otros consumidores sin nueva decisión. El entrypoint IPC real aún no existe/revisado; la decisión no es evidencia operativa.
-- **Autenticación mutua:** A-IPC-02 validó en fixture la comprobación de UID del servidor antes de send y la comprobación del UID cliente antes de recv, con root EUID 0 y servicio fixture 2005. MA-03, guard EUID no-root antes de connect, fue validado en `069dbb9`. MA-06, rechazo de claims UID/GID/PID extra en el envelope, está implementado en `9a8380e` y pendiente de ejecución. El entrypoint cliente/servidor de producción sigue sin existir/revisar.
+- **Autenticación mutua:** A-IPC-02 validó MA-01..MA-06 en `b4eda57`, incluida la comprobación de UID del servidor antes de send, UID cliente antes de recv, rechazo pre-connect de EUID no-root y rechazo de claims UID/GID/PID extra en el envelope. El entrypoint cliente/servidor de producción sigue sin existir/revisar.
 - **Configuración confiable:** `docs/design/local-authority-admin-private-listener-identity-config.md` propone archivo root-managed `/etc/atlas/admin-ipc.conf`, root:root 0644 sin secretos, parser estricto y snapshot inmutable. Ruta candidata, no existente; no crear en host.
 - **Resolución de rutas:** `docs/design/local-authority-admin-private-listener-path-resolution.md` define recorrido desde `/` por descriptores y validación de cada componente. Bajo TCB-1, el baseline es bind al pathname absoluto canónico después de verificar que UIDs externos no pueden escribir en ningún ancestro. El bind no es dirfd-atómico. La técnica procfs queda como alternativa experimental, no baseline.
 - **A-THREAT-04:** ventana TOCTOU de unlink aceptada como residual bajo TCB-1 solo con directorio privado, instancia única y revalidación por descriptor; unlink no es atómico.
@@ -765,12 +765,12 @@ A-THREAT-07 permanece abierto hasta implementar y validar el probe aislado; no s
 
 ## A-IPC-02 — autenticación mutua y capacidad, primera iteración (2026-11-21)
 
-Se añadió \`tests/integration/private_unix_listener/run_mutual_auth_capacity_probe.py\`, runner separado de A-IPC-01. Es un harness temporal, no un servicio ni listener de Atlas.
+Se añadió `tests/integration/private_unix_listener/run_mutual_auth_capacity_probe.py`, runner separado de A-IPC-01. Es un harness temporal, no un servicio ni listener de Atlas.
 
 Cobertura implementada (revisión estática; todavía no ejecutada):
-- Cliente con EUID 0 obtiene \`SO_PEERCRED\` y verifica UID esperado del servidor antes de enviar \`authority.ping\`; frente a un servidor bajo UID alternativo cierra sin enviar bytes.
-- Servidor fixture obtiene credenciales kernel antes de \`recv\`; acepta UID 0 y rechaza peer alternativo sin leer ni responder.
-- Procesos hijos usan credenciales reales/effective/saved numéricas y grupos suplementarios vacíos. El servicio limita \`RLIMIT_NOFILE\` a 64.
+- Cliente con EUID 0 obtiene `SO_PEERCRED` y verifica UID esperado del servidor antes de enviar `authority.ping`; frente a un servidor bajo UID alternativo cierra sin enviar bytes.
+- Servidor fixture obtiene credenciales kernel antes de `recv`; acepta UID 0 y rechaza peer alternativo sin leer ni responder.
+- Procesos hijos usan credenciales reales/effective/saved numéricas y grupos suplementarios vacíos. El servicio limita `RLIMIT_NOFILE` a 64.
 - Pool fijo de cuatro workers con semáforo antes de accept; prueba estructural de cuatro slots ocupados, quinta conexión pendiente y recuperación al liberar un slot.
 - Configura backlog 8, timeouts read/write 5 s y deadline global 15 s. No declara validados sus comportamientos adversariales todavía.
 
@@ -778,7 +778,7 @@ El runner requiere root directo dentro de VM desechable, cuatro IDs numéricos r
 
 Escenarios implementados: MA-01, MA-02, MA-04, MA-05, CP-01 y CP-04. El runner marca explícitamente INCOMPLETE los escenarios no implementados (EUID negativo, configuración, variantes de transporte, saturación exacta de backlog, deadlines adversariales, excepciones, límites JSON/payload y FD accounting). El overall no puede ser PASS todavía.
 
-**Estado actual:** código y documentación actualizados en la rama experimental, revisión estática solamente. No se ejecutaron pruebas, compilaciones ni workflows. El propietario debe revisar el diff y ejecutar el runner únicamente en VM desechable, nunca en el servidor Debian de producción. A-THREAT-01 y A-THREAT-07 siguen abiertos hasta validar y completar cobertura. No se modifica handler, contrato, SQLite, host, \`main\` ni PR; no se aprueba listener persistente ni despliegue.
+**Estado actual:** código y documentación actualizados en la rama experimental, revisión estática solamente. No se ejecutaron pruebas, compilaciones ni workflows. El propietario debe revisar el diff y ejecutar el runner únicamente en VM desechable, nunca en el servidor Debian de producción. A-THREAT-01 y A-THREAT-07 siguen abiertos hasta validar y completar cobertura. No se modifica handler, contrato, SQLite, host, `main` ni PR; no se aprueba listener persistente ni despliegue.
 
 
 ## A-IPC-02 — actualización posterior (2026-11-21)
@@ -856,6 +856,6 @@ producción ni despliegue.
 
 ## A-IPC-02 — implementación MA-07/MA-08 (2026-11-21)
 
-El runner incorpora \`probe_config.py\`, código temporal exclusivo de \`tests/integration/private_unix_listener/\`. Su gramática cerrada \`clave=valor\` es deliberadamente un formato de fixture, no una decisión para producción. La carga usa un descriptor de directorio del sandbox privado y valida archivo regular, root:root, modo 0644, hardlink único y tamaño máximo. MA-07 cubre archivo ausente, duplicados, claves desconocidas/ausentes, identidad alterada, symlink, FIFO, owner/mode inseguros, tamaño excesivo y hardlink. MA-08 comprueba que el reemplazo atómico del archivo no modifica el snapshot congelado en memoria.
+El runner incorpora `probe_config.py`, código temporal exclusivo de `tests/integration/private_unix_listener/`. Su gramática cerrada `clave=valor` es deliberadamente un formato de fixture, no una decisión para producción. La carga usa un descriptor de directorio del sandbox privado y valida archivo regular, root:root, modo 0644, hardlink único y tamaño máximo. MA-07 cubre archivo ausente, duplicados, claves desconocidas/ausentes, identidad alterada, symlink, FIFO, owner/mode inseguros, tamaño excesivo y hardlink. MA-08 comprueba que el reemplazo atómico del archivo no modifica el snapshot congelado en memoria.
 
-La prueba no lee ni crea \`/etc/atlas/admin-ipc.conf\`, no cambia el handler y no implementa el recorrido de ancestros desde \`/\`; ese recorrido sigue siendo una etapa PA separada. MA-07/08 están implementados, pero **pendientes de ejecución del propietario** en \`Atlas-VM-test\`.
+La prueba no lee ni crea `/etc/atlas/admin-ipc.conf`, no cambia el handler y no implementa el recorrido de ancestros desde `/`; ese recorrido sigue siendo una etapa PA separada. MA-07/08 están implementados, pero **pendientes de ejecución del propietario** en `Atlas-VM-test`.
