@@ -286,8 +286,6 @@ def _server_child(socket_path: str, socket_mode: int, allowed_uid: int) -> int:
 
 
 def _client_child(socket_path: str) -> int:
-    from atlas.platform_admin_ipc import read_peer_credentials
-
     request_id, packet = _request_packet()
     client = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
     client.settimeout(2.0)
@@ -458,7 +456,7 @@ def _create_fixture_dir(path: Path, uid: int, gid: int, mode: int) -> None:
 
 
 def _scenario_mutual_auth(root: Path, args: argparse.Namespace, script: Path) -> dict:
-    service_dir = root / "service"
+    service_dir = root / "auth-service"
     wrong_server_dir = root / "wrong-server"
     _create_fixture_dir(service_dir, args.service_uid, args.service_gid, 0o711)
     _create_fixture_dir(wrong_server_dir, args.other_uid, args.other_gid, 0o700)
