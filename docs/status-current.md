@@ -1,6 +1,6 @@
 # Estado vigente de Atlas
 
-> **Corte documental:** 21 de noviembre de 2026. A-IPC-01 reportado 16/16 PASS. A-IPC-02: propietario ejecutó checkout `66b348e` en `Atlas-VM-test`; MA-01..MA-10 y CP-01..CP-12 PASS, overall PASS, 0 SKIP/FAIL. A-IPC-03 (A-THREAT-06): PR-01..PR-12 PASS en `b200c292`, propietario validó en `Atlas-VM-test`; cleanup confirmado. CP-12 rechazó RLIMIT heredado 32/32 sin elevarlo ni crear socket. Evidencia A-IPC-02 al final de este documento.
+> **Corte documental:** 21 de noviembre de 2026. A-IPC-01 reportado 16/16 PASS. A-IPC-02: propietario ejecutó checkout `66b348e` en `Atlas-VM-test`; MA-01..MA-10 y CP-01..CP-12 PASS, overall PASS, 0 SKIP/FAIL. A-IPC-03 (A-THREAT-06): PR-01..PR-12 PASS en `b200c292`, propietario validó en `Atlas-VM-test`; cleanup confirmado. CP-12 rechazó RLIMIT heredado 32/32 sin elevarlo ni crear socket. Evidencias A-IPC-02 y A-IPC-03 al final de este documento.
 > **Main:** permanece en HEAD `1bd73d149dbd98e7ee2e5fdc36880883b6b03d16`; PR #29 está integrado. La suite reportada para el HEAD de código de PR #29 fue 1,590 tests, `OK (skipped=1)`; no se ha reportado una nueva ejecución sobre el merge HEAD.
 > **Rama activa de diseño:** `experiment/a-ipc-01-private-unix-listener-probe`. Se mantiene separada de `main`; no tiene PR propio. PR #30 sigue abierto en Draft y corresponde a la rama de diseño original.
 > **Estado IPC:** el handler procesa conexiones ya aceptadas; solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
@@ -849,3 +849,23 @@ para producción, el entrypoint administrativo real, integración systemd,
 acceso a SQLite, operaciones mutantes ni despliegue. El perfil de capacidad
 continúa siendo experimental. No se ejecutaron pruebas, builds ni workflows
 desde GitHub; el resultado fue ejecutado por el propietario. 
+
+
+## Registro de validación A-IPC-03 — A-THREAT-06 (2026-11-21)
+
+**Ejecución del propietario:** commit `b200c292ac0602593c8dbefafb1bd71b79001b06`, VM desechable `Atlas-VM-test`, Debian 13, kernel `6.12.117+deb13-amd64`, Python 3.13.5, EUID 0. Identidades fixture SERVICE 2005:2005 y OTHER 2006:2006.
+
+- Resultado global `PASS`: 12 escenarios PASS, 0 FAIL, duración 0.062 s; sandbox privado de `/run` eliminado tras finalizar procesos hijos.
+- PR-01: 13/13 rutas léxicamente inválidas rechazadas.
+- PR-02/07: recorrido de seis componentes y endpoint fixture con SERVICE 2005:2005, modo 0700.
+- PR-03: symlinks alpha/beta/gamma rechazados; sentinel intacto.
+- PR-04/05/06: componente no-directorio, ancestros group/other-writable y owner externo rechazados.
+- PR-08: owner y modo incorrectos rechazados.
+- PR-09: snapshot de configuración cargado desde parent dirfd validado.
+- PR-10: symlink, FIFO y hardlink rechazados.
+- PR-11: descriptor conservó acceso al objeto original (`anchored-original`) después de sustituir el pathname por symlink.
+- PR-12: OTHER UID no pudo hacer rename ni symlink; ambos devolvieron errno 13 (`EACCES`).
+
+**Conclusión acotada:** A-THREAT-06 queda validada para los escenarios fixture probados. No se creó socket, no se ejecutó bind/connect, no se examinó configuración real de Atlas y no se probaron colisiones ni stale recovery. No fija ruta/ownership productivos ni aprueba listener persistente.
+
+**Siguiente gate:** A-IPC-04, plan en `docs/design/local-authority-admin-private-listener-stale-recovery-probe.md`, para A-THREAT-05. El runner no está implementado. Resolver primero cobertura de procfs/namespaces, carreras de PID y disponibilidad de namespace adicional. Mantener startup fail-closed y prohibido connect como detector de liveness.
