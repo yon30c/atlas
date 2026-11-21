@@ -1742,6 +1742,136 @@ def _scenario_worker_exception(
 
 
 
+
+def _process_resource_snapshot(pid: int) -> dict[str, int]:
+    """Read live descriptor/thread counts from procfs for the fixture server."""
+    process_root = Path("/proc") / str(pid)
+    try:
+        fd_count = len(list((process_root / "fd").iterdir()))
+        thread_count = len(list((process_root / "task").iterdir()))
+        status = (process_root / "status").read_text(encoding="ascii")
+    except OSError as exc:
+        raise ProbeFailure(f"CP-10 cannot inspect fixture process {pid}: {exc}") from exc
+    nofile_line = next(
+        (line for line in status.splitlines() if line.startswith("Max open files:")),
+        None,
+    )
+    if nofile_line is None:
+        raise ProbeFailure("CP-10 procfs status omitted Max open files")
+    fields = nofile_line.split()
+    if len(fields) < 4 or fields[-1] != "64":
+        raise ProbeFailure(f"CP-10 fixture RLIMIT_NOFILE is not 64: {nofile_line}")
+    return {
+        "open_fds": fd_count,
+        "threads": thread_count,
+        "rlimit_nofile": int(fields[-1]),
+    }
+
+
+def _scenario_fd_thread_accounting(
+    server: Server, socket_path: Path
+) -> dict:
+    """CP-10: measure server FDs and threads at maximum active/backlog load."""
+    active_clients: list[socket.socket] = []
+    queued_clients: list[socket.socket] = []
+    accepted_before = max(
+        (
+            int(item.get("accepted", 0))
+            for item in server.events
+            if item.get("event") == "accepted"
+        ),
+        default=0,
+    )
+    try:
+        baseline = _process_resource_snapshot(server.process.pid)
+        for _ in range(WORKERS):
+            client = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+            client.settimeout(2.0)
+            client.connect(str(socket_path))
+            active_clients.append(client)
+        _wait_metrics(
+            server,
+            active=WORKERS,
+            accepted_at_least=accepted_before + WORKERS,
+        )
+        for _ in range(BACKLOG + 1):
+            client = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+            client.settimeout(2.0)
+            client.connect(str(socket_path))
+            queued_clients.append(client)
+
+        recv_q, send_q = _unix_listener_queue(socket_path)
+        if (recv_q, send_q) != (BACKLOG + 1, BACKLOG):
+            raise ProbeFailure(
+                f"CP-10 expected effective AF_UNIX backlog {BACKLOG + 1}/{BACKLOG}, "
+                f"observed {recv_q}/{send_q}"
+            )
+        server.drain(0.15)
+        accepted_at_saturation = max(
+            (
+                int(item.get("accepted", 0))
+                for item in server.events
+                if item.get("event") == "accepted"
+            ),
+            default=0,
+        )
+        if accepted_at_saturation != accepted_before + WORKERS:
+            raise ProbeFailure("CP-10 server accepted queued sockets while all workers were occupied")
+
+        loaded = _process_resource_snapshot(server.process.pid)
+        if loaded["open_fds"] > FD_LIMIT:
+            raise ProbeFailure(
+                f"CP-10 open FD count {loaded['open_fds']} exceeded RLIMIT_NOFILE={FD_LIMIT}"
+            )
+        if loaded["threads"] > WORKERS + 1:
+            raise ProbeFailure(
+                f"CP-10 thread count {loaded['threads']} exceeded main+{WORKERS} worker threads"
+            )
+        if loaded["threads"] < WORKERS + 1:
+            raise ProbeFailure(
+                f"CP-10 expected main plus {WORKERS} active worker threads, observed {loaded['threads']}"
+            )
+
+        for client in queued_clients + active_clients:
+            client.close()
+        queued_clients.clear()
+        active_clients.clear()
+        recovered = _wait_metrics(
+            server,
+            active=0,
+            accepted_at_least=accepted_before + WORKERS + BACKLOG + 1,
+            timeout=8.0,
+        )
+        after_recovery = _process_resource_snapshot(server.process.pid)
+        if server.process.poll() is not None:
+            raise ProbeFailure("CP-10 fixture server exited during resource recovery")
+        if after_recovery["open_fds"] > FD_LIMIT:
+            raise ProbeFailure("CP-10 FD count exceeded the limit after recovery")
+        if after_recovery["threads"] > WORKERS + 1:
+            raise ProbeFailure("CP-10 thread count exceeded the fixed pool bound after recovery")
+        return {
+            "configured_workers": WORKERS,
+            "configured_backlog": BACKLOG,
+            "effective_pending_queue_limit": BACKLOG + 1,
+            "active_workers_at_sample": WORKERS,
+            "pending_connections_at_sample": recv_q,
+            "accepted_at_saturation": accepted_at_saturation,
+            "baseline": baseline,
+            "at_saturation": loaded,
+            "after_recovery": after_recovery,
+            "max_open_fds_allowed": FD_LIMIT,
+            "max_threads_allowed": WORKERS + 1,
+            "active_after_recovery": recovered.get("active"),
+            "server_alive_after_recovery": True,
+        }
+    finally:
+        for client in queued_clients + active_clients:
+            try:
+                client.close()
+            except OSError:
+                pass
+
+
 def _scenario_payload_size() -> dict:
     """CP-08: enforce request and response packet limits without silent truncation."""
     from atlas.platform_admin_ipc import (
@@ -2043,10 +2173,16 @@ def _main_parent(args: argparse.Namespace) -> int:
         results.append({"id": "CP-08", "status": "PASS", "observations": payload_size})
         json_depth = _scenario_json_depth()
         results.append({"id": "CP-09", "status": "PASS", "observations": json_depth})
+        resource_accounting = _scenario_fd_thread_accounting(server, service_socket)
         results.append({
-            "id": "CP-10..CP-12",
+            "id": "CP-10",
+            "status": "PASS",
+            "observations": resource_accounting,
+        })
+        results.append({
+            "id": "CP-11..CP-12",
             "status": "INCOMPLETE",
-            "detail": "full FD/thread accounting under load, post-saturation recovery cycles, and low-RLIMIT startup rejection remain unimplemented",
+            "detail": "repeated post-saturation recovery cycles and low-RLIMIT startup rejection remain unimplemented",
         })
         overall = "INCOMPLETE"
     except ProbeIncomplete as exc:
