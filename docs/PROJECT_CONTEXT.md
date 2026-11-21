@@ -659,3 +659,14 @@ El propietario autorizó expresamente crear una identidad temporal dedicada para
 - La coordinación cliente/runner de A09a/A09b aún requiere diseño, revisión estática e implementación aprobada. A09a/A09b siguen SKIP/no validados; el último resultado del probe continúa 15 PASS, A09 SKIP, 0 FAIL, global INCOMPLETE.
 - Eliminar cuenta/grupo/HOME al finalizar también requerirá aprobación explícita separada.
 - No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. main permanece intacta, no hay PR abierto y ningún transporte IPC está aprobado para producción.
+
+
+## A09 — SSH restringido confirmado y coordinación diseñada (2026-11-21)
+
+El propietario confirmó que la clave Ed25519 temporal está instalada en `atlas-a09-test` con opciones `from="127.0.0.1",restrict` y comando forzado `/usr/bin/id -u`. La conexión SSH local a `127.0.0.1:22`, con identidad explícita, autenticación solo por clave, verificación estricta de host key ED25519 y sin PTY, devolvió `1001`. Esto confirma autenticación de la cuenta UID 1001; no ejecuta A09a ni A09b.
+
+La clave privada permanece en `/run/user/1000/atlas-a09.IG1QPj/id_ed25519`, dentro del runtime privado del propietario; no se añadió a GitHub. La clave cliente tiene fingerprint `SHA256:aUAfFBWJfzoPUX9eErhAfltPrKPWTt7OtFQCa4m5oE4`. El archivo temporal known_hosts `/tmp/tmp.htQpm2wvEm` es propiedad de greed, modo 0600. La host key ED25519 de loopback coincide con `SHA256:txiDPT+/ldcIwnN6BPotbeL7QsofAieAeqF3GKMa9xI`. No se modificaron sshd_config, PAM ni firewall; sshd sigue escuchando en todas las interfaces según el preflight anterior.
+
+Se documentó una propuesta de coordinación en la sección 16 de [A-IPC-01](design/local-authority-admin-private-unix-listener-probe.md): el runner UID 1000 orquesta un proceso SSH local y un helper remoto fijo ejecutado por sshd como UID 1001; stdin/stdout transportan un esquema JSON acotado, sin shell ni órdenes arbitrarias. A09a conserva 0700/0600 y verifica EACCES antes de accept. A09b usa fixture temporal independiente hermano bajo /tmp sticky, con 0711/0666 solo para el fixture, y exige rechazo del handler real por UNAUTHORIZED_PEER antes de recvmsg y sin bytes de respuesta.
+
+**Estado:** diseño solamente; helper y runner no implementados. La clave todavía fuerza `/usr/bin/id -u`. Sustituirlo por el helper fijo requiere autorización explícita específica para modificar `authorized_keys`; no se hará como parte de la documentación. A09a/A09b requieren implementación, revisión estática y autorización de ejecución separada. El resultado anterior del probe permanece 15 PASS, A09 SKIP, 0 FAIL, global INCOMPLETE. `main` permanece intacta; no hay PR ni transporte de producción aprobado.
