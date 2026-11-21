@@ -270,13 +270,15 @@ the reported run.
 
 ## A-IPC-02 — mutual authentication and bounded-capacity probe
 
-**Current status (2026-11-21):** owner-reported execution in disposable
-`Atlas-VM-test` passed MA-01..MA-10 and CP-01/CP-04. The report remained
-`INCOMPLETE` because CP-02/CP-03 and CP-05..CP-12 are not implemented or
-validated. The latest checkout was fast-forwarded to
-`901c792cb723d920da4970ecce98ea7f871c4f85` before the run; the JSON's
-`commit` field was `null`, so the runner did not independently identify its
-HEAD. See the latest execution record at the end of this README. This is not
+**Current status (2026-11-21):** owner-reported execution on commit
+`1ebf930a6559c3d6a81965f0f94c28ed8e6eef56` passed MA-01..MA-10 and
+CP-01/CP-04, then failed CP-02/CP-03 because the ninth AF_UNIX connection
+returned success after Recv-Q=8. Linux kernel source shows AF_UNIX checks
+`queue_len > backlog`; thus `listen(8)` admits nine pending connections.
+The runner was corrected in commit
+`634e19decce2322e94ca0d1fe410b259f23dcb67` to require the tenth connection
+attempt to return EAGAIN. This correction is pending owner execution. CP-05..CP-12
+remain pending. This is not
 a production listener or transport approval. A-IPC-01 remains a separate
 unprivileged runner that refuses EUID 0; A-IPC-02 requires direct root
 execution inside a disposable VM.
@@ -619,3 +621,18 @@ fue corregido en commit `634e19decce2322e94ca0d1fe410b259f23dcb67` para
 medir 8/8, luego 9/8, y exigir EAGAIN en la décima, sin accepts/workers extra.
 La corrección está pendiente de ejecución local; no atribuir PASS a CP-02/03
 hasta recibir el nuevo JSON.
+
+
+### Ejecución del propietario — CP-02/CP-03 (2026-11-21)
+
+Sobre commit `1ebf930a6559c3d6a81965f0f94c28ed8e6eef56`, el propietario
+reportó MA-01..MA-10 y CP-01/CP-04 PASS. CP-02/CP-03 falló al esperar EAGAIN
+en la conexión novena: connect_ex devolvió 0 después de observar 8/8.
+Cleanup de sandboxes completado.
+
+El kernel Linux AF_UNIX compara longitud de cola con backlog usando `>`.
+Con `listen(8)`, la novena conexión pendiente es admitida; la décima debe
+rechazarse con EAGAIN. Runner corregido en
+`634e19decce2322e94ca0d1fe410b259f23dcb67` para medir los límites 8/8 y
+9/8 y exigir EAGAIN en la décima. Requiere nueva ejecución; CP-02/03 no
+están validados. CP-05..CP-12 siguen pendientes.
