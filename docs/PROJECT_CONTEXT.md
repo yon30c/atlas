@@ -930,3 +930,25 @@ explícitamente `global SS_BIN` dentro de `_preflight`; sin ello, la
 asignación de la ruta resuelta habría sombreado el global y provocado
 `UnboundLocalError`. La corrección fue inspeccionada en GitHub; no se
 ejecutaron pruebas ni el probe. La validación local CP-02/CP-03 sigue pendiente.
+
+
+## A-IPC-02 — resultado CP-02/CP-03 y ajuste (2026-11-21)
+
+El propietario ejecutó `1ebf930a6559c3d6a81965f0f94c28ed8e6eef56`
+como root en `Atlas-VM-test`. MA-01..MA-10 y CP-01/CP-04 PASS; CP-02/CP-03
+falló porque connect_ex devolvió 0 después de observar Recv-Q=8/Send-Q=8.
+Cleanup completado.
+
+La inspección del código AF_UNIX de Linux encontró que el kernel evalúa
+`skb_queue_len(...) > sk_max_ack_backlog`; en consecuencia `listen(8)`
+admite una conexión pendiente adicional y el siguiente intento no bloqueante
+debe ser rechazado. El runner se corrigió en commit
+`634e19decce2322e94ca0d1fe410b259f23dcb67` para comprobar:
+- ocho conexiones pendientes: Recv-Q=8, Send-Q=8;
+- conexión novena admitida: Recv-Q=9, Send-Q=8;
+- conexión décima rechazada con EAGAIN/EWOULDBLOCK;
+- cola sin cambios y sin accepts/workers adicionales.
+
+Esta es semántica de implementación Linux AF_UNIX, no garantía portable.
+La corrección solo fue revisada estáticamente; requiere nueva ejecución del
+propietario. CP-02/CP-03 no se consideran PASS. CP-05..CP-12 pendientes.
