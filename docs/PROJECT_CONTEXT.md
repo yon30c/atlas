@@ -760,3 +760,21 @@ Se publicó `docs/design/local-authority-admin-private-listener-resource-budget.
 Perfil aprobado por el propietario para probes aislados: 4 conexiones/workers fijos, backlog 8, sin cola de aplicación, 5 s read/write, 15 s deadline global y `RLIMIT_NOFILE=64`. No equivale a configuración de producción. Mutaciones SQLite deben serializarse; operaciones largas no deben retener una conexión IPC y necesitan identificador/status. Memoria/CPU/TasksMax/shutdown e inventario real de FDs quedan pendientes.
 
 A-THREAT-07 permanece abierto hasta implementar y validar el probe aislado; no se modificó handler ni se ejecutaron pruebas/workflows.
+
+
+## A-IPC-02 — autenticación mutua y capacidad, primera iteración (2026-11-21)
+
+Se añadió \`tests/integration/private_unix_listener/run_mutual_auth_capacity_probe.py\`, runner separado de A-IPC-01. Es un harness temporal, no un servicio ni listener de Atlas.
+
+Cobertura implementada (revisión estática; todavía no ejecutada):
+- Cliente con EUID 0 obtiene \`SO_PEERCRED\` y verifica UID esperado del servidor antes de enviar \`authority.ping\`; frente a un servidor bajo UID alternativo cierra sin enviar bytes.
+- Servidor fixture obtiene credenciales kernel antes de \`recv\`; acepta UID 0 y rechaza peer alternativo sin leer ni responder.
+- Procesos hijos usan credenciales reales/effective/saved numéricas y grupos suplementarios vacíos. El servicio limita \`RLIMIT_NOFILE\` a 64.
+- Pool fijo de cuatro workers con semáforo antes de accept; prueba estructural de cuatro slots ocupados, quinta conexión pendiente y recuperación al liberar un slot.
+- Configura backlog 8, timeouts read/write 5 s y deadline global 15 s. No declara validados sus comportamientos adversariales todavía.
+
+El runner requiere root directo dentro de VM desechable, cuatro IDs numéricos reservados exclusivamente para fixtures y dos confirmaciones explícitas. No crea usuarios/grupos, no cambia configuración del host y no invoca sudo/su. Usa un sandbox privado 0700 y una raíz de traversal 0711 root-owned/no-writable-by-group-or-other para que el peer de UID alternativo alcance el socket de fixture. Staging temporal de script/módulo con permisos de solo lectura permite ejecución tras reducir UID. La limpieza comprueba identidad del socket; si detecta sustitución o no puede parar un proceso, conserva sandbox y falla.
+
+Escenarios implementados: MA-01, MA-02, MA-04, MA-05, CP-01 y CP-04. El runner marca explícitamente INCOMPLETE los escenarios no implementados (EUID negativo, configuración, variantes de transporte, saturación exacta de backlog, deadlines adversariales, excepciones, límites JSON/payload y FD accounting). El overall no puede ser PASS todavía.
+
+**Estado actual:** código y documentación actualizados en la rama experimental, revisión estática solamente. No se ejecutaron pruebas, compilaciones ni workflows. El propietario debe revisar el diff y ejecutar el runner únicamente en VM desechable, nunca en el servidor Debian de producción. A-THREAT-01 y A-THREAT-07 siguen abiertos hasta validar y completar cobertura. No se modifica handler, contrato, SQLite, host, \`main\` ni PR; no se aprueba listener persistente ni despliegue.
