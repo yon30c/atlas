@@ -282,6 +282,25 @@ def _matches(snapshot: NamespaceSnapshot, pathname: str) -> bool:
     return False
 
 
+def _listener_diagnostics(snapshot: NamespaceSnapshot, pathname: str) -> dict:
+    """Bounded evidence for a failed active-listener lookup; never affects classification."""
+    basename = os.path.basename(pathname)
+    candidates = []
+    for namespace, raw in snapshot.tables:
+        for row in _parse_unix_table(raw):
+            row_path = row["path"]
+            if row_path and (basename in row_path or row_path.startswith("/run/atlas-aipc04-")):
+                candidates.append({
+                    "namespace": namespace,
+                    "path": row_path,
+                    "type": row["type"],
+                    "inode": row["inode"],
+                })
+                if len(candidates) == 12:
+                    return {"expected_path": pathname, "candidate_rows": candidates}
+    return {"expected_path": pathname, "candidate_rows": candidates}
+
+
 def _identity_at(parent_fd: int, name: str) -> FsIdentity:
     try:
         info = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
@@ -340,7 +359,10 @@ def _scenario_01_active_local(sandbox: Path, uid: int, gid: int) -> dict:
         _check_expected_socket(identity, uid, gid)
         matched = _matches(snapshot, path)
         if not matched:
-            raise ProbeFailure("SR-01 active pathname absent from visible namespace tables")
+            raise ProbeFailure(
+                "SR-01 active pathname absent from visible namespace tables; "
+                f"diagnostics={_listener_diagnostics(snapshot, path)!r}"
+            )
         return {
             "decision": "ABORT_ACTIVE_OR_POSSIBLY_ACTIVE",
             "namespace_count": len(snapshot.namespaces),
@@ -484,8 +506,8 @@ def _scenario_05_enumeration_incomplete() -> dict:
 
 def _scenario_06_parser_rejects_ambiguous() -> dict:
     valid_realistic = (
-        b"Num RefCount Protocol Flags Type St Inode Path\\n"
-        b"0000000016960ea0: 00000002 00000000 00010000 0005 01 36068 /fixture/active.sock\\n"
+        b"Num RefCount Protocol Flags Type St Inode Path\n"
+        b"0000000016960ea0: 00000002 00000000 00010000 0005 01 36068 /fixture/active.sock\n"
     )
     parsed = _parse_unix_table(valid_realistic)
     if len(parsed) != 1 or parsed[0] != {
@@ -497,14 +519,14 @@ def _scenario_06_parser_rejects_ambiguous() -> dict:
         raise ProbeFailure("SR-06 rejected or misparsed realistic Linux procfs row")
 
     bad_tables = [
-        b"not the procfs header\\n",
-        b"Num RefCount Protocol Flags Type St Inode Path\\nmalformed\\n",
-        b"Num RefCount Protocol Flags Type St Inode Path\\n"
-        b"000000001 00000002 00000000 00010000 0005 01 36068 /missing-colon.sock\\n",
-        b"Num RefCount Protocol Flags Type St Inode Path\\n"
-        b"000000001:: 00000002 00000000 00010000 0005 01 36068 /double-colon.sock\\n",
-        b"Num RefCount Protocol Flags Type St Inode Path\\n"
-        b"000000001: 00000002 00000000 00010000 0005 01 nope /bad-inode.sock\\n",
+        b"not the procfs header\n",
+        b"Num RefCount Protocol Flags Type St Inode Path\nmalformed\n",
+        b"Num RefCount Protocol Flags Type St Inode Path\n"
+        b"000000001: 00000002 00000000 00010000 0005 01 36068 /missing-colon.sock\n",
+        b"Num RefCount Protocol Flags Type St Inode Path\n"
+        b"000000001:: 00000002 00000000 00010000 0005 01 36068 /double-colon.sock\n",
+        b"Num RefCount Protocol Flags Type St Inode Path\n"
+        b"000000001: 00000002 00000000 00010000 0005 01 nope /bad-inode.sock\n",
     ]
     rejected = 0
     for raw in bad_tables:
@@ -524,9 +546,9 @@ def _scenario_06_parser_rejects_ambiguous() -> dict:
 def _scenario_07_exact_match() -> dict:
     header = b"Num RefCount Protocol Flags Type St Inode Path\n"
     rows = (
-        b"000000001 00000002 00000000 00010000 0005 01 100 /tmp/target.sock-extra\n"
-        b"000000002 00000002 00000000 00010000 0005 01 101 /tmp/prefix-target.sock\n"
-        b"000000003 00000002 00000000 00010000 0005 01 102 /tmp/target.sock\n"
+        b"000000001: 00000002 00000000 00010000 0005 01 100 /tmp/target.sock-extra\n"
+        b"000000002: 00000002 00000000 00010000 0005 01 101 /tmp/prefix-target.sock\n"
+        b"000000003: 00000002 00000000 00010000 0005 01 102 /tmp/target.sock\n"
     )
     records = _parse_unix_table(header + rows)
     exact = [r for r in records if r["path"] == "/tmp/target.sock" and r["type"] == 5]
@@ -643,7 +665,10 @@ def _scenario_11_no_liveness_connect(sandbox: Path, uid: int, gid: int) -> dict:
     try:
         snapshot = inspect_visible_namespaces(path)
         if not _matches(snapshot, path):
-            raise ProbeFailure("SR-11 active local listener not found")
+            raise ProbeFailure(
+                "SR-11 active local listener not found; "
+                f"diagnostics={_listener_diagnostics(snapshot, path)!r}"
+            )
         return {
             "active_detected": True,
             "connect_called": False,
