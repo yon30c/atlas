@@ -146,3 +146,57 @@ No reutilizar ni modificar la identidad temporal atlas-a09-test sin autorizació
 El propietario confirmó que el frontend administrativo debe ejecutarse con EUID 0. La política de diseño del servicio queda fijada en `client_uids={0}`. El cliente debe verificar su propio EUID antes de conectar; el servidor debe verificar UID kernel 0 mediante `SO_PEERCRED` antes de leer; el cliente debe verificar el UID configurado de `atlas-runtime` antes de enviar bytes. Esto identifica dominios UID, no un ejecutable específico.
 
 La decisión no prueba un entrypoint inexistente ni valida el par operativo UID 0 ↔ `atlas-runtime`. No autoriza cambios de host, cuentas, permisos, servicios, listener persistente ni despliegue.
+
+
+## 12. Diseño del probe MA-07/MA-08 — configuración confiable y snapshot (2026-11-21)
+
+El siguiente incremento separa deliberadamente la validación experimental del futuro lector de configuración de producción. La ruta `/etc/atlas/admin-ipc.conf`, el formato definitivo, el entrypoint cliente y los valores operativos siguen sin decidirse. No se deben inferir ni fijar mediante este probe.
+
+### 12.1 Formato exclusivo del fixture
+
+El probe usará una gramática temporal y autocontenida de líneas ASCII `clave=valor`, con newline final obligatorio. Este formato existe solo para probar rechazo estricto y snapshot; **no es una decisión de formato para Atlas en producción**.
+
+Claves requeridas, exactamente una vez:
+
+- `schema_version=1`
+- `service_uid=<decimal>`
+- `service_gid=<decimal>`
+- `client_uids=0`
+- `socket_path=<ruta absoluta canónica de fixture>`
+- `socket_type=SOCK_SEQPACKET`
+- `socket_mode=0600`
+- `socket_dir_mode=0700`
+
+Sin secciones, comentarios, líneas vacías, espacios, interpolación, includes, variables ni claves adicionales. Se rechazan duplicados, ausencias, ASCII/UTF-8 inválido, CR/NUL, valores no canónicos, UID/GID fuera de rango, ruta relativa/ambigua o que exceda el límite Linux de `sun_path`, y modos distintos de los valores de fixture. No hay defaults. `client_uids` se limita al valor aprobado `0`.
+
+### 12.2 Lectura del fixture
+
+- El directorio de configuración vive dentro del sandbox privado root-owned 0700 bajo `/run`; no se abre ni consulta ninguna ruta del host.
+- La apertura del nombre final se hace relativa a un descriptor de directorio ya abierto, con `O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC`.
+- Tras abrir, `fstat` exige archivo regular, UID/GID 0:0, sin escritura de grupo/otros, un solo hardlink y tamaño entre 1 y 4096 bytes.
+- La lectura se realiza desde el descriptor, con límite de bytes; se compara metadata antes/después de leer para detectar cambios concurrentes observables.
+- Se contrasta `service_uid/service_gid` con los IDs numéricos de fixture esperados. Una discrepancia falla cerrado.
+- Este fixture prueba el descriptor del directorio temporal y el archivo final; **no pretende validar el recorrido completo desde `/`**. Ese recorrido pertenece al probe PA-01..PA-09, separado.
+
+### 12.3 Escenarios
+
+| ID | Caso | Resultado requerido |
+|---|---|---|
+| MA-07a | Archivo ausente | Rechazo |
+| MA-07b | Clave duplicada | Rechazo |
+| MA-07c | Clave desconocida | Rechazo |
+| MA-07d | Identidad de servicio alterada respecto a fixture | Rechazo |
+| MA-07e | Symlink, FIFO, hardlink o metadata insegura | Rechazo sin bloquear ni leer contenido no confiable |
+| MA-07f | Configuración válida | Snapshot cargado con valores exactos |
+| MA-08a | Reemplazo atómico del nombre después de cargar | Snapshot existente conserva los valores originales |
+| MA-08b | Intento de mutar campos/colecciones del snapshot | Imposible: dataclass congelada y colecciones inmutables |
+
+La sustitución posterior del archivo no recarga ni altera el objeto ya construido. No se implementará watcher, reload ni actualización dinámica; un cambio operativo requeriría reinicio controlado y nuevo preflight.
+
+### 12.4 Límites de seguridad
+
+El parser/loader se implementa bajo `tests/integration/private_unix_listener/` como código de fixture. No se agrega a `src/atlas`, no es API pública, no se integra al handler, no se usa para abrir el endpoint, no contiene secretos y no crea configuración persistente. El probe se ejecutará únicamente en `Atlas-VM-test` desechable, como root, con los IDs numéricos de fixture ya seleccionados.
+
+El PASS de MA-07/08 solo demostrará los casos enumerados en el sandbox y en el commit ejecutado. No probará resistencia frente a root, cambios por procesos de la misma TCB, carrera de sustitución de ancestros, parser de producción, configuración de instalación, capabilities, ni lifecycle. La resolución segura de todos los componentes de ruta y los ataques de pathname siguen en el plan PA separado.
+
+**Decisión técnica de este incremento:** usar un parser cerrado y pequeño de fixture en lugar de introducir TOML/INI o una dependencia nueva. La selección evita que el formato experimental se convierta accidentalmente en contrato de producción y mantiene compatibilidad con Python 3.10–3.13.
