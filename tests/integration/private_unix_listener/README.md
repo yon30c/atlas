@@ -16,7 +16,10 @@ as the production IPC transport.
 > 0 SKIP, 0 FAIL on commit
 > `1d5bdb122a8480c36b445be7dd961b93806de74b`. Historical sections are retained
 > to preserve the sequence of implementation and preflight decisions; read them
-> as historical snapshots, not as the current validation state. See the
+> as historical snapshots, not as the current validation state. PR #30 remains
+> Draft on the separate design branch `design/isolated-private-unix-listener-probe`;
+> it is not this experimental branch and does not contain the A09-enabled run.
+> See the
 > [canonical validation record](../../../docs/status-aipc01-validation-2026-11-21.md).
 
 ## Scope and safety boundary
