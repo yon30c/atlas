@@ -292,3 +292,47 @@ Esto confirma un defecto de lectura parcial: el código trataba una lectura cort
 **Validación pendiente:** el asistente no ejecutó tests, builds, workflows ni probes. El propietario debe ejecutar primero la nueva prueba unitaria y después el runner completo en Atlas-VM-test. Hasta recibir esos resultados, SR-01/SR-11 no se marcan PASS; A-IPC-04 no está validado y A-THREAT-05 permanece abierta.
 
 La corrección no cambia el parser, el matching por pathname exacto y Type=SOCK_SEQPACKET, la cobertura de namespaces, las reglas fail-closed ni la política de no hacer cleanup automático. La ausencia de coincidencia nunca autoriza unlink. No ejecutar en greed, no usar el runner como herramienta de mantenimiento y no habilitar listener persistente ni despliegue.
+
+## A-IPC-04 — sexta ejecución del propietario: validación completa (2026-11-21)
+
+El propietario ejecutó el runner en Atlas-VM-test sobre el commit
+375fb00a3fee230a57f89ffa7897a29309ff1dd2: Debian 13, kernel
+6.12.117+deb13-amd64, Python 3.13.5, EUID 0, fixtures SERVICE
+2005:2005 / OTHER 2006:2006. Resultado: **overall=PASS, 12/12
+escenarios PASS, 0 FAIL y 0 INCOMPLETE**; 204 procesos visibles, seis
+namespaces inventariados inicialmente, cero reintentos de snapshot y
+cleanup confirmado del sandbox privado bajo /run.
+
+- **SR-01:** listener local activo detectado en net:[4026531840];
+  decisión ABORT_ACTIVE_OR_POSSIBLY_ACTIVE, sin connect.
+- **SR-02:** residual elegible, pero no retirado sin token de aprobación;
+  pathname preservado.
+- **SR-03:** listener activo detectado en namespace adicional
+  net:[4026532290], sin connect.
+- **SR-04/SR-05:** cobertura incompleta produce abort y no muta el objeto.
+- **SR-06/SR-07:** parser y matching exacto PASS; una coincidencia exacta.
+- **SR-08/SR-09:** objetos no admisibles y sustitución de identidad
+  rechazados; reemplazo preservado.
+- **SR-10:** solo se retiró el fixture exacto con token ligado a identidad;
+  token incompatible rechazado sin mutación.
+- **SR-11:** listener local activo detectado; no se llamaron accept, connect,
+  recv ni send.
+- **SR-12:** fallos de escenario/cleanup no pueden convertirse en PASS.
+
+El inventario inicial informó 710 registros para el namespace principal
+y entre 2 y 3 para los namespaces restantes. liveness_connect_called=false;
+cleanup reportó que los procesos y sockets se cerraron antes de eliminar
+el sandbox.
+
+**Conclusión:** la corrección de lectura acotada de procfs resolvió la causa
+confirmada de SR-01/SR-11. A-IPC-04 queda validado para los 12 escenarios
+del harness, en el commit, kernel, VM y vista procfs indicados. La validación
+no demuestra cobertura fuera de los procesos/namespaces visibles desde ese
+montaje procfs/PID namespace, ni elimina carreras ante creación concurrente
+de procesos o el límite TOCTOU entre revalidación y unlink.
+
+**Límites que permanecen:** A-THREAT-05 no queda cerrada por esta prueba;
+no se aprueba recuperación de sockets reales, cleanup automático, listener
+persistente, activación systemd ni despliegue. El mecanismo sigue siendo
+un probe experimental aislado. El asistente no ejecutó pruebas, builds,
+workflows ni probes.
