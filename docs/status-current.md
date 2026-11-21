@@ -26,10 +26,10 @@
 - **Cleanup TOCTOU (A-THREAT-04):** residual aceptado bajo TCB-1 si el directorio es privado, la instancia es única y cleanup revalida por descriptor; unlink no es atómico.
 - **Socket stale (A-THREAT-05):** procedimiento manual candidato publicado; sigue pendiente validarlo en sandbox. Startup nunca hace stale cleanup ni conecta para probar liveness.
 - **Resolución de rutas (A-THREAT-06):** especificación de diseño publicada; falta probe de symlinks, sustitución por UID externo, colisiones y connect canónico.
-- **Recursos (A-THREAT-07):** el propietario aprobó para probes aislados 4 conexiones/workers, backlog 8, cola de aplicación 0, read/write 5 s, deadline global 15 s y `RLIMIT_NOFILE=64`. CP-01/CP-04 pasaron en la última ejecución reportada (máximo 4 workers, recuperación a 0); backlog exacto, adversarios de timeout, recuperación de excepciones, límites de payload/profundidad JSON y contabilidad completa de FDs siguen pendientes. No es configuración de producción. Plan: `design/local-authority-admin-private-listener-mutual-auth-capacity-probe.md`.
+- **Recursos (A-THREAT-07):** el propietario aprobó para probes aislados 4 conexiones/workers, backlog 8, cola de aplicación 0, read/write 5 s, deadline global 15 s y `RLIMIT_NOFILE=64`. CP-01/CP-04 pasaron en la última ejecución reportada (máximo 4 workers, recuperación a 0). CP-02/CP-03 están implementados en GitHub pero pendientes de validación local: cuatro workers ocupados, ocho conexiones en cola observadas con `ss`, novena conexión no bloqueante rechazada con EAGAIN. CP-05..CP-12 siguen pendientes. No es configuración de producción. Plan: `design/local-authority-admin-private-listener-mutual-auth-capacity-probe.md`.
 - **Lifecycle (A-THREAT-08):** máquina de estados, readiness, shutdown/drenaje y cierre de FDs aún no diseñados/validados.
 - **Evidencia de despliegue (A-THREAT-09):** A09 usó runner UID 1000 y peer UID 1001; no probó cliente root, servicio `atlas-runtime` ni permisos/ownership finales.
-- **Siguiente paso:** actualizar `Atlas-VM-test` al commit `f41df94d0f87d288bfc7e3df45c66295fa19d570` y ejecutar MA-09/MA-10. Después avanzar con CP-02/03 y CP-05..12. Nunca ejecutar en `greed` de producción ni crear cuentas/grupos.
+- **Siguiente paso:** actualizar `Atlas-VM-test` a `1e213b2f7a254cd2718e644e415670dca08435f5` y ejecutar CP-02/CP-03 recién implementados. El runner requiere iproute2 `ss` root-owned y no escribible por grupo/otros para observar la cola real. Si pasan, continuar con CP-05 (deadline global) y CP-06 (timeouts read/write frente al deadline). Nunca ejecutar en `greed` de producción ni crear cuentas/grupos.
 - No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. El propietario ejecutó el runner localmente en la VM desechable y reportó MA-01..MA-10 y CP-01/04 PASS. El checkout se había actualizado a `901c792`; el campo commit del JSON fue null. `main` y Debian/host de producción no fueron modificados; no se creó PR.
 
 **Límites de autorización:** el PASS experimental no selecciona por sí solo un transporte productivo ni autoriza listener persistente, daemon, unidades systemd de producción, cambios del host, usuarios/grupos, permisos/privilegios, acceso SQLite, provisioning o despliegue. No habilita operaciones administrativas distintas del ping no mutante usado como fixture.
@@ -558,3 +558,14 @@ En el commit `f41df94d0f87d288bfc7e3df45c66295fa19d570` se añadieron dos escena
 - El runner ahora reporta MA-09 y MA-10 individualmente; el bloque INCOMPLETE se limita a CP-02..CP-03 y CP-05..CP-12.
 - **Estado:** implementación revisada estáticamente; MA-09/MA-10 pendientes de ejecución del propietario. No se ejecutaron pruebas, builds ni workflows desde GitHub. MA-01..MA-08 y CP-01/04 conservan únicamente la evidencia previa del commit `585dd3d`; no se extrapola al nuevo commit.
 - **Límite:** MA-09 prueba EOF/half-close antes de enviar la primera petición, no una interrupción en mitad de la llamada kernel SO_PEERCRED. MA-10 valida los dos casos representativos indicados, no todas las combinaciones de socket.
+
+
+### A-IPC-02 — actualización del runner CP-02/CP-03 (2026-11-21)
+
+Commit de implementación: `1e213b2f7a254cd2718e644e415670dca08435f5`.
+La ejecución anterior del propietario en `901c792` validó MA-01..MA-10
+y CP-01/CP-04; no valida este cambio posterior. CP-02/CP-03 ahora miden
+`Recv-Q/Send-Q` con iproute2 `ss`, saturan backlog 8 y requieren EAGAIN
+para la novena conexión sin accept adicional. Estado: pendiente de ejecución
+en `Atlas-VM-test`. CP-05..CP-12 continúan pendientes. No hay cambios en
+`main`, host, cuentas, servicios, SQLite o transporte productivo.
