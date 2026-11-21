@@ -131,6 +131,6 @@ La aprobación no equivale a configuración de producción/systemd. La primera i
 
 - Revisión estática y diseño desde GitHub.
 - No se modificó handler, contrato normativo, runtime, SQLite ni host.
-- No se ejecutaron pruebas, compilaciones ni workflows.
-- No se implementó listener persistente, worker pool del servicio de producción, scheduler ni configuración de recursos del host. El harness temporal A-IPC-02 sí contiene un pool fijo experimental, aún no ejecutado.
+- No se ejecutaron pruebas, compilaciones ni workflows desde GitHub; el propietario sí ejecutó parcialmente A-IPC-02 en su VM.
+- No se implementó listener persistente, worker pool del servicio de producción, scheduler ni configuración de recursos del host. El harness temporal A-IPC-02 contiene un pool fijo experimental; CP-01/CP-04 fueron ejecutados por el propietario, mientras el resto de la matriz permanece pendiente.
 - No se aprobaron systemd, límites del host ni despliegue.
