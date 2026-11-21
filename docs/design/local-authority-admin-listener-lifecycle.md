@@ -112,6 +112,24 @@ Límites que deben quedar explícitos:
 - Deben probarse el ámbito real del namespace en el host objetivo, colisiones de nombre, comportamiento ante restart, exposición a otros UIDs, backlog/conexiones abusivas y activación tanto user-manager como system-manager.
 - No se debe afirmar que el nombre abstracto es secreto ni que reemplaza la allowlist de credenciales.
 
+### Matriz comparativa de alternativas
+
+La comparación siguiente usa los mismos criterios para evitar que las ventajas de una opción se confundan con garantías ya demostradas. «No demostrado» significa que falta evidencia en el host objetivo; no debe interpretarse como seguro por defecto.
+
+| Criterio | A — Listener propio, filesystem privado | B — systemd socket activation, filesystem | C — AF_UNIX abstracto |
+|---|---|---|---|
+| **Colisión / preexistencia** | `bind()` debe fallar si el nombre existe; el probe debe demostrar que archivo, symlink, socket activo y stale permanecen intactos. | **Bloqueante:** se observó pérdida de contenido de un archivo regular preexistente con systemd 257.13; estrategia de propiedad de ruta no resuelta. | No hay pathname filesystem; sí existe colisión/preclaim del nombre abstracto y riesgo de DoS. |
+| **Control de acceso local** | DAC del directorio privado y modo del socket, más `SO_PEERCRED` y autorización de aplicación separada. | DAC mediante `SocketUser=`, `SocketGroup=` y `SocketMode=` más `SO_PEERCRED`; los valores efectivos y el directorio deben verificarse. | Sin DAC, propietario, modo ni ACL del endpoint; dependería de validación de `SO_PEERCRED` y autorización de aplicación. |
+| **DoS / abuso de conexiones** | Requiere límites de backlog/concurrencia, timeouts y control del UID con acceso al directorio; root y procesos del mismo UID quedan dentro de límites de confianza. | systemd administra el listener, pero no elimina abuso de conexiones ni DoS; límites y comportamiento bajo carga no demostrados. | Cualquier proceso local que conozca/descubra el nombre puede intentar conectar o reclamarlo primero; requiere límites y pruebas específicas. |
+| **Caída y recuperación** | Una caída puede dejar socket stale; el arranque debe fallar cerrado y exigir diagnóstico explícito, nunca stale cleanup automático. | systemd conserva/gestiona el listener según el ciclo de las unidades; reinicio, parada coordinada y cleanup deben probarse. | No deja pathname stale; el nombre se libera al desaparecer el último socket, pero restart y carrera de preclaim requieren pruebas. |
+| **Complejidad del ciclo de vida** | El proceso gestiona bind, listen, accept, shutdown y cleanup condicionado por inode; existe límite TOCTOU en stat-then-unlink. | Menos gestión de bind/listen en el daemon; aumenta la complejidad de coordinación de unidades, descriptor heredado y propiedad del pathname. | Sin gestión de archivos ni unlink; el proceso sigue gestionando accept, límites, shutdown y colisiones del namespace. |
+| **Descubrimiento del endpoint** | Ruta fija documentada y configuración allowlisted; requiere directorio preaprovisionado. | Ruta fija declarada por unidad y conocida por clientes autorizados. | Nombre abstracto acordado por cliente/servicio; no hay entrada filesystem para descubrimiento y no debe tratarse como secreto. |
+| **Dependencia de systemd** | No necesaria para crear el endpoint; puede ejecutarse bajo un supervisor, pero el modelo de servicio aún requiere revisión. | Directa: depende de socket unit, service unit y semántica de systemd. | No necesaria para bind propio; si se activa mediante systemd, conserva dependencia de la unidad y sus semánticas. |
+| **Límite de confianza** | El directorio privado protege frente a usuarios no confiables, no frente a root ni necesariamente frente a procesos arbitrarios bajo `atlas-runtime`. | La configuración y el manager systemd forman parte de la TCB; el incidente de colisión impide confiar hoy en esta ruta. | El namespace abstracto no aporta autorización; los procesos locales, las credenciales del peer y el control de disponibilidad forman parte del modelo. |
+| **Estado** | Candidato recomendado solo para el siguiente probe aislado; no aprobado para producción. | Suspendida; no usar como baseline hasta resolver y demostrar la propiedad de ruta. | Alternativa experimental; requiere probe separado y evaluación de preclaim/DoS. |
+
+La matriz es una comparación de propiedades y evidencia disponible, no una puntuación ni una decisión de arquitectura. En particular, A no queda seleccionada para producción por ser el próximo experimento; C no es un fallback automáticamente seguro; y B no se reconsidera por el mero hecho de cambiar permisos o activar `RemoveOnStop=`.
+
 ### Recomendación de secuencia
 
 1. Mantener deshabilitada cualquier activación systemd sobre ruta filesystem.
