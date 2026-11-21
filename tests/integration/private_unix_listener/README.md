@@ -210,4 +210,4 @@ PYTHONPATH=src python tests/integration/private_unix_listener/run_probe.py \
 
 The example is documentation only and must not be run until the host change and execution are explicitly approved. A normal invocation without these options leaves A09a/A09b as SKIP and the global result INCOMPLETE.
 
-**Validation status:** implementation only; no tests, builds or workflows were run from GitHub. The owner must review the code, authorize any host-side forced-command change separately, and execute the probe locally on Debian. `main` remains untouched; no PR exists and no production transport is approved.
+**Validation status:** static code review of the helper/runner is complete in GitHub; no tests, builds or workflows were run. The implementation has not been executed or validated. The owner must inspect shell startup behavior read-only, authorize any host-side forced-command change separately, and execute the probe locally on Debian. `main` remains untouched; no PR exists and no production transport is approved.
