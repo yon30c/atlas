@@ -292,3 +292,15 @@ Se define una separación documental:
 ### A09 fixture topology correction
 
 A09b's temporary fixture must not be nested under the private probe root (0700), since DAC on that parent would still block the external UID. It must be a separate sibling directory directly under a verified shared sticky temporary parent (e.g. /tmp), with fixture directory 0711 and test socket 0666. The candidate endpoint remains 0700/0600. A09a/A09b also require a second already-authenticated ordinary-user session with a different pre-existing UID; the runner must not switch credentials or invoke privilege tools. This is a design correction only; neither subscenario is implemented or validated.
+
+
+## A09 — diseño de identidad temporal multi-UID (2026-11-21)
+
+El propietario autorizó diseñar un procedimiento para una identidad temporal dedicada `atlas-a09-test`, pero **no autorizó todavía su creación ni cambios en Debian**. Diseño: [identidad temporal para A09](design/a09-temporary-test-identity-provisioning.md).
+
+- La cuenta existente `atlas-sandbox` queda excluida: pertenece al entorno previo de Atlas Broker, tiene linger activo y ejecuta procesos rootless. No se reutiliza ni modifica.
+- La cuenta propuesta tendrá UID asignado automáticamente, grupo primario exclusivo, sin grupos suplementarios ni privilegios, HOME `0700`, contraseña bloqueada, sin linger ni servicios.
+- La autenticación candidata es una clave SSH Ed25519 efímera, restringida a loopback, sin forwarding ni PTY. No se modificará sshd/PAM ni se desbloqueará contraseña. Si la política actual no permite clave pública con la cuenta bloqueada, se detiene el procedimiento.
+- A09a mantiene intacto el endpoint candidato `0700/0600` y comprueba denegación DAC. A09b usa un fixture temporal hermano bajo un padre compartido sticky y comprueba rechazo real mediante `SO_PEERCRED`; no se confunden ambas capas.
+- El diseño de coordinación del cliente externo y la implementación del runner aún requieren revisión. A09a/A09b siguen SKIP y la evidencia local sigue siendo 15 PASS, A09 SKIP, 0 FAIL; global INCOMPLETE.
+- La autorización recibida cubre diseño/documentación únicamente. Crear cuenta/grupo, HOME, claves o sesión SSH requiere aprobación explícita adicional. No se ejecutaron pruebas ni se modificó el host.
