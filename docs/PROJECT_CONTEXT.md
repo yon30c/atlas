@@ -1,6 +1,6 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-21 (diseño candidato de frontera de confianza y autenticación mutua para alternativa A; detalle en `docs/design/local-authority-admin-private-listener-trust-boundary.md`).
+> **Última actualización:** 2026-11-21 (TCB-1 aceptado y diseño de configuración confiable de identidad publicado; detalle en `docs/design/local-authority-admin-private-listener-identity-config.md`).
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
@@ -21,7 +21,8 @@
 - **Alternativa B:** socket activation sobre filesystem permanece suspendida por la colisión destructiva observada en Debian systemd 257.13. No repetir el escenario destructivo.
 - **Alternativa C:** AF_UNIX abstract namespace queda fuera de la línea principal mientras se desarrolla A; puede retomarse si una brecha demostrada de A lo requiere o si el propietario decide reabrir la comparación.
 - **Auditoría estática inicial completada:** `docs/design/local-authority-admin-private-listener-threat-model-review.md`. Identifica nueve hallazgos; son bloqueantes el mecanismo de autenticación del servidor frente al cliente privilegiado, el alcance de confianza del UID `atlas-runtime`, la allowlist fija del cliente y la recuperación tras caída. También quedan por cerrar TOCTOU de cleanup, resolución segura de ruta, límites reales y lifecycle persistente.
-- **Diseño de frontera de confianza publicado:** `docs/design/local-authority-admin-private-listener-trust-boundary.md`. Propone TCB-1 (todos los procesos `atlas-runtime` pertenecen al mismo dominio confiable) y autenticación mutua de UID mediante SO_PEERCRED en ambos extremos. Es una propuesta, no una decisión aprobada: el propietario debe confirmar TCB-1 o exigir aislamiento intra-UID (TCB-2), y confirmar la identidad/UID real del cliente.
+- **TCB-1 aceptado por el propietario (2026-11-21):** todos los procesos ejecutados bajo la cuenta dedicada `atlas-runtime` pertenecen al mismo dominio confiable; no se exige aislamiento intra-UID. Esto no aprueba cambios de host ni despliegue.
+- **Diseño de configuración confiable publicado:** `docs/design/local-authority-admin-private-listener-identity-config.md`. Recomienda una fuente root-managed separada del repositorio (ruta candidata `/etc/atlas/admin-ipc.conf`), parseo estricto, carga única/inmutable y fallo cerrado. La ruta, formato, permisos e identidades numéricas siguen pendientes; UID 0 para el cliente es hipótesis, no decisión.
 
 **Límites vigentes:** A-IPC-01 valida solo los escenarios experimentales ejecutados en el commit/entorno indicados. No demuestra protección frente a root/capabilities suficientes ni procesos maliciosos del mismo UID; no valida separación de privilegios, system-manager, listener persistente, daemon, integración systemd, acceso/autorización SQLite ni operaciones mutantes. No autoriza cambios del host, usuarios, grupos, permisos, privilegios, servicios, provisioning o despliegue. Cualquier transición a implementación persistente o producción requiere diseño, revisión y aprobación explícitos del propietario.
 
