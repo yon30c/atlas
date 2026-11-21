@@ -24,7 +24,7 @@ from probe_config import ProbeConfigRejected, load_probe_config_at
 
 
 DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW
-SAFE_COMPONENT = re.compile(r"[A-Za-z0-9_.-]+\\Z")
+SAFE_COMPONENT = re.compile(r"[A-Za-z0-9_.-]+\Z")
 EXPECTED_SCENARIOS = tuple(f"PR-{number:02d}" for number in range(1, 13))
 
 
@@ -224,6 +224,8 @@ def _scenario_03_symlink_ancestors(sandbox: Path) -> dict:
     for index, level in enumerate(levels):
         case_root = sandbox / f"symlink-case-{index}"
         _mkdir(case_root)
+        for parent_level in levels[:index]:
+            _mkdir(case_root / parent_level)
         link_path = case_root / level
         os.symlink(outside, link_path)
         remaining = levels[index + 1 :]
@@ -409,14 +411,16 @@ def _scenario_12_other_uid_dac(
     destination = sandbox / "dac-destination"
     _mkdir(source)
     command = (
-        "import errno,json,os,sys; "
-        "src,dst=sys.argv[1:]; result=[]; "
-        "try_rename=None; "
-        "try:\n os.rename(src,dst); result.append(['rename',0])\n"
-        "except OSError as e: result.append(['rename',e.errno])\n"
-        "try:\n os.symlink('target',dst); result.append(['symlink',0])\n"
-        "except OSError as e: result.append(['symlink',e.errno])\n"
-        "print(json.dumps(result))"
+        "import json,os,sys\\n"
+        "src,dst=sys.argv[1:]\\n"
+        "def attempt(label, operation):\\n"
+        " try:\\n"
+        "  operation()\\n"
+        "  return [label,0]\\n"
+        " except OSError as exc:\\n"
+        "  return [label,exc.errno]\\n"
+        "print(json.dumps([attempt('rename', lambda: os.rename(src,dst)), "
+        "attempt('symlink', lambda: os.symlink('target',dst))]))"
     )
     completed = subprocess.run(
         [sys.executable, "-c", command, str(source), str(destination)],
