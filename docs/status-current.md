@@ -1,6 +1,6 @@
 # Estado vigente de Atlas
 
-> **Corte documental:** 21 de noviembre de 2026.
+> **Corte documental:** 21 de noviembre de 2026 (actualización posterior: A-IPC-01 A09a/A09b 16/16 PASS, validado por el propietario en Debian; véase `status-aipc01-validation-2026-11-21.md`).
 > **Main actual:** PR #29 integrado mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b` (21-11-2026). La suite comunicada fue ejecutada sobre el HEAD de PR `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, antes de los commits documentales y del merge; no se ha reportado una nueva ejecución sobre el merge commit.
 > **PR #29:** cerrado e integrado en `main`; HEAD probado `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`.
 > **PR integrado:** [#29](https://github.com/yon30c/atlas/pull/29), merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`.
@@ -350,3 +350,41 @@ La rama experimental ahora contiene una primera implementación de A09a/A09b:
 Se completó revisión estática directa en GitHub de `a09_ssh_client.py` y `run_probe.py`: helper de acciones cerradas y path-shape restringido; SSH sin configuración/agent/password/PTY/forwarding/proxy; host key ED25519 fijada; stdin/stdout/stderr con límites; A09a y A09b separados; credenciales de kernel comparadas; cleanup condicionado por identidad y preservación de recursos si el hijo no termina.
 
 Esto es revisión de código, no ejecución. No se corrieron pruebas, compilaciones ni workflows. A09a/A09b siguen sin validar. La clave en Debian todavía fuerza `/usr/bin/id -u`; no se modificó `authorized_keys`. Falta inspección read-only del shell startup y aprobación explícita específica del cambio de comando forzado, seguida de autorización independiente para ejecutar A09.
+
+
+## Actualización de estado A-IPC-01 — ejecución completa 2026-11-21
+
+Esta sección supersede las notas previas de A-IPC-01 en este documento que indicaban A09 SKIP/INCOMPLETE o que el helper/runner no se habían ejecutado. Es una validación de probe experimental, no una selección de transporte productivo.
+
+**Ejecución reportada por el propietario**
+- Rama: `experiment/a-ipc-01-private-unix-listener-probe`.
+- Commit exacto: `1d5bdb122a8480c36b445be7dd961b93806de74b`.
+- Debian 13; kernel `6.12.117+deb13-amd64`; Python `3.13.5`; UID del runner 1000.
+- Identidad externa: `atlas-a09-test`, UID 1001/GID 984.
+- Duración: 1.72 s; cleanup: `empty sandbox root removed`.
+- Resultado global: **PASS — 16 escenarios PASS, 0 SKIP, 0 FAIL**.
+
+**A09a — DAC**
+- Cliente externo PID 5405, UID 1001/GID 984.
+- Conexión denegada con `EACCES` / errno 13.
+- `accepted_connections=0`.
+- Endpoint candidato sin relajación: directorio 0700, socket modo 0600, socket propiedad UID 1000.
+
+**A09b — SO_PEERCRED**
+- Cliente externo PID 5417, UID 1001/GID 984.
+- Fixture separado: directorio 0711, socket 0666; no se aplicaron estos modos al endpoint candidato.
+- Handler real rechazó con `UNAUTHORIZED_PEER`.
+- Se enviaron 122 bytes de solicitud ping; el cliente observó reset y `response_bytes=0`.
+
+Los escenarios restantes A01–A08 y A10–A16 también fueron PASS. A14 reportó `peak_active=2`, seis conexiones rechazadas, ocho manejadas y cero activas tras recuperación. A16 confirmó exactamente un ganador y listener operativo. El reporte completo está en [el registro de validación A-IPC-01](status-aipc01-validation-2026-11-21.md).
+
+**Estado actualizado**
+- A-IPC-01 queda validado como probe experimental en el commit y entorno citados.
+- El helper/runner A09a/A09b ya fueron ejecutados y no están pendientes para esta evidencia.
+- No se ejecutaron pruebas, compilaciones ni workflows desde GitHub; la evidencia fue comunicada por el propietario tras ejecutar Debian localmente.
+- `main` permanece intacta; la rama experimental no se ha integrado y no se crea PR por esta actualización documental.
+- Ningún transporte IPC está aprobado para producción. No se autoriza listener persistente, daemon, systemd, despliegue, acceso SQLite, separación de privilegios ni operaciones administrativas mutantes.
+- La evidencia no demuestra protección frente a root/capabilities suficientes ni procesos maliciosos del mismo UID. La suspensión del socket activation filesystem por la colisión destructiva previa permanece vigente.
+- No asumir que la cuenta temporal `atlas-a09-test`, la clave SSH, el respaldo de `authorized_keys` o los artefactos temporales han sido eliminados. Cualquier limpieza host-side es una operación separada.
+
+El propietario informó que el cambio temporal de `authorized_keys` conservó `from="127.0.0.1",restrict`, clave y modo 0600, y forzó `/usr/bin/python3 -I /tmp/atlas-a09-client.py`. Los archivos de inicio fueron revisados read-only. No se reportaron cambios globales en sshd_config, PAM o firewall.
