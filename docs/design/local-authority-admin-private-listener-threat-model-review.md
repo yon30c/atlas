@@ -88,7 +88,9 @@ El lifecycle reconoce que `lstat/stat` seguido de `unlink` no es una operación 
 
 El diseño correctamente prohíbe stale cleanup automático y establece que un pathname preexistente debe hacer fallar el arranque. Esto evita borrar una ruta que podría pertenecer a otra instancia, pero deja pendiente el procedimiento seguro para recuperar un socket residual después de SIGKILL, crash, reinicio del host o fallo entre bind/listen.
 
-**Requisito antes de implementar:** definir un procedimiento de diagnóstico y recuperación separado del arranque normal. Debe demostrar cómo se verifica la identidad del servicio/objeto y quién autoriza la retirada manual. El listener no debe intentar decidir que un socket es stale conectando a él ni borrarlo preventivamente.
+**Diseño candidato publicado:** [Recuperación manual de socket IPC residual](local-authority-admin-private-listener-stale-recovery.md) propone detener el servicio, confirmar que no hay procesos que conserven el descriptor, inspeccionar todas las tablas AF_UNIX de los network namespaces visibles mediante `/proc/<pid>/net/unix`, validar el objeto filesystem por descriptor y exigir autorización humana específica antes de `unlinkat`.
+
+**Estado:** A-THREAT-05 sigue abierto hasta probar la enumeración de namespaces y el flujo de recuperación en un sandbox. El arranque normal continúa fallando cerrado; nunca debe hacer stale cleanup ni usar `connect()` como detector de liveness.
 
 ### A-THREAT-06 — La resolución segura de la ruta necesita especificación completa
 
