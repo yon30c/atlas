@@ -1,7 +1,7 @@
 # Probe aislado A-IPC-03 — resolución segura de rutas
 
 **Fecha:** 2026-11-21  
-**Estado:** diseño del probe; implementación y ejecución del propietario pendientes. No autoriza listener persistente, cambios del host ni despliegue.  
+**Estado:** plan y runner A-IPC-03 implementados (PR-01..PR-12); revisión estática en GitHub completada. Ejecución y validación del propietario pendientes. No autoriza listener persistente, cambios del host ni despliegue.  
 **Rama:** `experiment/a-ipc-01-private-unix-listener-probe`  
 **Dependencias:** A-IPC-02 completo; `local-authority-admin-private-listener-path-resolution.md`; parser fixture `probe_config.py`.
 
