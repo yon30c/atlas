@@ -1024,3 +1024,13 @@ identidades del snapshot, filas candidatas por pathname/inode y una
 lectura directa de `/proc/self/net/unix`. El diagnóstico no cambia
 decisiones ni hace conexiones. Ejecutar el HEAD actualizado solo en
 `Atlas-VM-test`; A-THREAT-05 permanece abierta.
+
+### A-IPC-04 — tercera ejecución del propietario (2026-11-21)
+
+Checkout ejecutado: `f10cda09aec5cb0b9d42ab50f3bb9f6617dc8fda`. Resultado: 10 PASS / 2 FAIL / 0 INCOMPLETE; 203 procesos visibles; seis namespaces iniciales; siete durante SR-03; cleanup correcto.
+
+- SR-01: FAIL. FD inode del listener `39340`; namespace inspector `net:[4026531840]` presente en el snapshot; cero filas candidatas tanto en el snapshot como en la lectura directa de `/proc/self/net/unix`, sin error de lectura. No inferir inactividad ni stale.
+- SR-11: FAIL por llamada incompleta a `_listener_diagnostics` (faltaba argumento `listener`). Corregido estáticamente en commit `8a89bc9f66829886164ed4fe93fd7af232a18f01`; repetir el runner actualizado.
+- SR-02..SR-10 y SR-12: PASS. No se llamó connect para liveness. Sandbox eliminado.
+
+A-IPC-04 no validado; A-THREAT-05 abierta. Ejecutar cualquier repetición exclusivamente en `Atlas-VM-test`, nunca en `greed`.
