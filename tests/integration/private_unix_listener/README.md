@@ -174,7 +174,7 @@ The orchestration design and implementation details are recorded in [the A-IPC-0
 
 The following code is now present on the experimental branch:
 
-- `a09_ssh_client.py`: fixed standard-library-only remote helper. It accepts one bounded JSON instruction from stdin, allows only A09a/A09b, rejects a non-empty `SSH_ORIGINAL_COMMAND`, never executes shell commands, never changes credentials, and does not access the checkout.
+- `a09_ssh_client.py`: fixed standard-library-only remote helper. It accepts one JSON instruction up to 4096 bytes, allows only A09a/A09b and the corresponding probe socket path shapes, rejects a non-empty `SSH_ORIGINAL_COMMAND`, never executes shell commands, never changes credentials, and does not access the checkout. Its stdout/stderr exchange is capped at 4096 bytes per stream; the helper emits at most 2048 bytes.
 - `run_probe.py`: A09a and A09b are separate report rows. A09 remains disabled by default. Enabling it requires all of:
   - `--enable-a09`;
   - `--a09-identity-file` and `--a09-known-hosts`;
