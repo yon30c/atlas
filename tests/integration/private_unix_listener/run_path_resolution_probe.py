@@ -233,6 +233,9 @@ def _scenario_02_valid_walk(root: Path) -> dict:
 def _scenario_03_symlink_ancestors(sandbox: Path) -> dict:
     outside = sandbox / "outside-target"
     _mkdir(outside)
+    _mkdir(outside / "beta")
+    _mkdir(outside / "beta" / "gamma")
+    _mkdir(outside / "gamma")
     sentinel = outside / "sentinel"
     _write_file(sentinel, b"untouched")
     levels = ("alpha", "beta", "gamma")
@@ -512,7 +515,7 @@ def main() -> int:
         sandbox_name = tempfile.mkdtemp(prefix="atlas-path-resolution-", dir="/run")
         sandbox_path = Path(sandbox_name)
         os.chown(sandbox_path, 0, 0, follow_symlinks=False)
-        os.chmod(sandbox_path, 0o700, follow_symlinks=False)
+        os.chmod(sandbox_path, 0o700)
         sandbox_info = os.stat(sandbox_path, follow_symlinks=False)
         sandbox_identity = (sandbox_info.st_dev, sandbox_info.st_ino)
 
