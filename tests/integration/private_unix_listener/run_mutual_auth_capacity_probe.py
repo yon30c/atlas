@@ -1135,6 +1135,147 @@ def _scenario_configuration(root: Path, args: argparse.Namespace) -> tuple[dict,
         config_dir.rmdir()
 
 
+
+def _assert_no_protocol_response(peer: socket.socket, scenario: str) -> None:
+    try:
+        response = peer.recv(1, socket.MSG_DONTWAIT)
+    except BlockingIOError:
+        return
+    except OSError as exc:
+        raise ProbeFailure(f"{scenario}: peer socket failed while checking response") from exc
+    if response:
+        raise ProbeFailure(f"{scenario}: handler emitted protocol bytes for rejected transport")
+
+
+def _scenario_disconnect() -> dict:
+    """Exercise real handler EOF behavior after an authorized peer closes its send side."""
+    from atlas.platform_admin_ipc import (
+        AdminPeerDisconnected,
+        handle_admin_connection,
+        read_peer_credentials,
+    )
+
+    peer, connection = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+    try:
+        credentials = read_peer_credentials(connection)
+        if credentials.uid != 0:
+            raise ProbeFailure("MA-09 fixture peer did not have kernel UID 0")
+        peer.shutdown(socket.SHUT_WR)
+        try:
+            handle_admin_connection(
+                connection,
+                allowed_peer_uids=frozenset({0}),
+                read_timeout_seconds=1.0,
+                write_timeout_seconds=1.0,
+            )
+        except AdminPeerDisconnected as exc:
+            if exc.code != "PEER_DISCONNECTED":
+                raise ProbeFailure(f"MA-09 returned unexpected disconnect code: {exc.code}")
+        else:
+            raise ProbeFailure("MA-09 handler accepted a peer that sent EOF without a request")
+
+        _assert_no_protocol_response(peer, "MA-09")
+        return {
+            "transport_family": "AF_UNIX",
+            "socket_type": "SOCK_SEQPACKET",
+            "kernel_peer_uid": credentials.uid,
+            "request_bytes_sent": 0,
+            "disconnect_observed": True,
+            "rejection_code": "PEER_DISCONNECTED",
+            "response_bytes": 0,
+            "operation_dispatched": False,
+        }
+    finally:
+        peer.close()
+        connection.close()
+
+
+def _scenario_transport() -> dict:
+    """Prove the real handler rejects wrong family/type before consuming a packet."""
+    from atlas.platform_admin_ipc import AdminProtocolRejected, handle_admin_connection
+
+    request_id, packet = _request_packet()
+    cases: list[dict[str, object]] = []
+    sockets: list[socket.socket] = []
+    listener: socket.socket | None = None
+    try:
+        unix_peer, unix_connection = socket.socketpair(
+            socket.AF_UNIX, socket.SOCK_STREAM
+        )
+        sockets.extend((unix_peer, unix_connection))
+        unix_peer.sendall(packet)
+
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        listener.settimeout(2.0)
+        tcp_peer = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sockets.append(tcp_peer)
+        tcp_peer.settimeout(2.0)
+        tcp_peer.connect(listener.getsockname())
+        tcp_connection, _address = listener.accept()
+        sockets.append(tcp_connection)
+        tcp_peer.sendall(packet)
+
+        for label, peer, connection, expected_family, expected_type in (
+            ("unix-stream", unix_peer, unix_connection, socket.AF_UNIX, socket.SOCK_STREAM),
+            ("inet-stream", tcp_peer, tcp_connection, socket.AF_INET, socket.SOCK_STREAM),
+        ):
+            if connection.family != expected_family:
+                raise ProbeFailure(f"MA-10 {label} fixture family mismatch")
+            actual_type = connection.getsockopt(socket.SOL_SOCKET, socket.SO_TYPE)
+            if actual_type != expected_type:
+                raise ProbeFailure(f"MA-10 {label} fixture socket type mismatch")
+            try:
+                handle_admin_connection(
+                    connection,
+                    allowed_peer_uids=frozenset({0}),
+                    read_timeout_seconds=1.0,
+                    write_timeout_seconds=1.0,
+                )
+            except AdminProtocolRejected as exc:
+                if exc.code != "INVALID_REQUEST":
+                    raise ProbeFailure(
+                        f"MA-10 {label} returned unexpected rejection code: {exc.code}"
+                    )
+            else:
+                raise ProbeFailure(f"MA-10 handler accepted unsupported transport: {label}")
+
+            # The valid request must still be queued: the handler rejected
+            # family/type before reading or decoding any protocol bytes.
+            queued = connection.recv(
+                len(packet), socket.MSG_PEEK | socket.MSG_DONTWAIT
+            )
+            if queued != packet:
+                raise ProbeFailure(
+                    f"MA-10 {label} consumed or changed request bytes before rejection"
+                )
+            _assert_no_protocol_response(peer, f"MA-10 {label}")
+            cases.append({
+                "case": label,
+                "family": "AF_UNIX" if expected_family == socket.AF_UNIX else "AF_INET",
+                "socket_type": "SOCK_STREAM",
+                "rejection_code": "INVALID_REQUEST",
+                "request_bytes_still_queued": len(queued),
+                "response_bytes": 0,
+            })
+
+        return {
+            "request_id": request_id,
+            "rejected_cases": cases,
+            "rejected_count": len(cases),
+            "rejected_before_read": True,
+        }
+    finally:
+        for item in reversed(sockets):
+            try:
+                item.close()
+            except OSError:
+                pass
+        if listener is not None:
+            listener.close()
+
+
 def _cleanup_root(
     root: Path, public_root: Path, args: argparse.Namespace
 ) -> str:
@@ -1223,12 +1364,16 @@ def _main_parent(args: argparse.Namespace) -> int:
         ma07, ma08 = _scenario_configuration(root, args)
         results.append({"id": "MA-07", "status": "PASS", "observations": ma07})
         results.append({"id": "MA-08", "status": "PASS", "observations": ma08})
+        disconnect = _scenario_disconnect()
+        results.append({"id": "MA-09", "status": "PASS", "observations": disconnect})
+        transport = _scenario_transport()
+        results.append({"id": "MA-10", "status": "PASS", "observations": transport})
         capacity = _scenario_capacity(server, service_socket)
         results.append({"id": "CP-01,CP-04", "status": "PASS", "observations": capacity})
         results.append({
-            "id": "MA-09..MA-10,CP-02..CP-03,CP-05..CP-12",
+            "id": "CP-02..CP-03,CP-05..CP-12",
             "status": "INCOMPLETE",
-            "detail": "disconnect/transport variants, exact backlog saturation, read/write/global deadline adversaries, exception recovery, payload/depth boundaries and full FD accounting remain unimplemented",
+            "detail": "exact backlog saturation, read/write/global deadline adversaries, exception recovery, payload/depth boundaries and full FD accounting remain unimplemented",
         })
         overall = "INCOMPLETE"
     except ProbeIncomplete as exc:
