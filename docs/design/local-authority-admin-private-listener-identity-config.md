@@ -38,7 +38,7 @@ Los nombres son ilustrativos; el formato definitivo (TOML, JSON o ini estricto) 
 | schema_version | Versión exacta del esquema de configuración | Requerido |
 | service_uid | UID numérico esperado de atlas-runtime | Requerido, valor pendiente |
 | service_gid | GID primario esperado de atlas-runtime | Requerido, valor pendiente |
-| client_uids | Lista cerrada de UID autorizados | Requerido, identidad por confirmar |
+| client_uids | Lista cerrada de UID autorizados | Requerido, exactamente `{0}` por decisión del propietario |
 | socket_path | Ruta absoluta fija del endpoint AF_UNIX | Requerido, valor pendiente |
 | socket_type | Literal SOCK_SEQPACKET | Fijo |
 | socket_mode | Modo esperado del socket | Candidato 0600 |
