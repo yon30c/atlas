@@ -139,3 +139,17 @@ La fase de preparación de clave y la prueba de autenticación mínima ya fueron
 La clave privada y el archivo known_hosts son artefactos temporales locales; sus contenidos no deben añadirse al repositorio ni a informes. La ruta privada puede desaparecer al cerrar la sesión runtime; antes de una futura ejecución se debe verificar que ambos archivos sigan presentes y con permisos correctos.
 
 La coordinación propuesta queda documentada en la sección 16 de [Diseño A-IPC-01](local-authority-admin-private-unix-listener-probe.md). La implementación del helper/runner, la sustitución del comando forzado y la ejecución A09 siguen pendientes de revisión y autorización específica. La eliminación de la cuenta/grupo/HOME también sigue requiriendo autorización separada.
+
+
+## 10. Actualización — helper/runner A09a/A09b implementados en GitHub (2026-11-21)
+
+La coordinación propuesta ya tiene una primera implementación de código en la rama experimental:
+
+- `tests/integration/private_unix_listener/a09_ssh_client.py`: helper remoto fijo, sin acceso al checkout, sin shell arbitraria ni cambio de credenciales; recibe una instrucción JSON limitada por stdin y solo acepta A09a/A09b.
+- `tests/integration/private_unix_listener/run_probe.py`: orquestación SSH local, A09a y A09b como escenarios separados, verificación del UID/GID/PID externo, host key ED25519 fijada, clave explícita, agente desactivado, sin password/keyboard-interactive, PTY ni forwarding, tiempos límite y cleanup por identidad.
+- El helper temporal se crea exclusivamente en `/tmp/atlas-a09-client.py`, modo 0644; nunca sobrescribe un archivo existente.
+- El runner mantiene A09 deshabilitado por defecto. Para activarlo exige `--enable-a09`, rutas de clave y known_hosts, más `--a09-forced-command-confirmed` y `--a09-shell-startup-reviewed`.
+
+**No ejecutar todavía:** `authorized_keys` aún fuerza `/usr/bin/id -u`. El comando previsto para el helper es `/usr/bin/python3 -I /tmp/atlas-a09-client.py`, pero sustituirlo requiere autorización explícita separada y no se ha realizado. Antes de ese cambio, el propietario debe inspeccionar de forma read-only los archivos de inicio del shell de `atlas-a09-test`.
+
+La implementación no se ha ejecutado ni validado. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. La evidencia anterior sigue en 15 PASS + A09 SKIP + 0 FAIL, global INCOMPLETE. La clave privada y known_hosts permanecen fuera del repositorio. No se modificaron sshd_config, PAM, firewall, handler, contrato, runtime, SQLite, systemd ni servicios. La eliminación futura de la cuenta/grupo/HOME requiere autorización separada.
