@@ -1115,3 +1115,19 @@ insuficiente, sin elevarlo. Esta evidencia solo valida el commit/VM
 indicados; no es política productiva ni aprobación de listener persistente,
 systemd o despliegue. El asistente no ejecutó pruebas, builds ni workflows.
 
+## A-IPC-02 — CP-11 implementado; CP-12 pendiente (2026-11-21)
+
+Runner commit: `70ee6a7a77dc671fe4ec26a6ca98a25a2e47e104`.
+CP-11 implementa tres ciclos consecutivos de saturación/recuperación sobre
+el mismo servidor fixture. Cada ciclo exige cuatro workers ocupados, nueve
+conexiones pendientes, accepted estable durante saturación, cierre de
+peers, drenaje de trece conexiones y retorno exacto de FDs/threads al
+baseline; el servidor debe seguir vivo.
+
+CP-11 está implementado y revisado estáticamente, **no validado por el
+propietario**. CP-12 sigue pendiente: comprobar rechazo de startup con
+`RLIMIT_NOFILE` heredado insuficiente, sin elevar el límite. Overall
+continúa INCOMPLETE. El nuevo runner se ejecutará exclusivamente en
+`Atlas-VM-test` desechable, nunca en `greed` producción. No se
+ejecutaron pruebas, builds ni workflows desde GitHub.
+
