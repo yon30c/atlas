@@ -57,6 +57,33 @@ La ruta del socket sigue pendiente de fijarse. Cuando se seleccione:
 
 El uso de descriptores y ownership impide la sustitución por UIDs ordinarios que no pueden escribir en los directorios. Bajo TCB-1, no se pretende defender frente a root ni frente a procesos maliciosos del propio UID `atlas-runtime`.
 
+### 4.1 Candidato Linux: bind mediante descriptor y procfs
+
+La investigación encontró un patrón Linux utilizado por la biblioteca abierta `sockat`: para bind, crea un directorio temporal privado `D`, conserva su descriptor, crea dentro un symlink `R` hacia el directorio real del socket y entrega al kernel una ruta corta del tipo `/proc/self/fd/<D-fd>/R/<socket-name>`. Para connect, documenta una ruta directa `/proc/self/fd/<endpoint-dir-fd>/<socket-name>`. La documentación advierte que `getsockname()` puede devolver la forma temporal/procfs y no la ruta canónica, y que pueden quedar artefactos si el proceso muere durante la operación.
+
+**Uso como evidencia:** demuestra que existe un patrón Linux concreto para hacer bind/connect mediante una ruta basada en un descriptor sin cambiar el cwd global. No prueba por sí solo que debamos copiar la implementación ni que su comportamiento cubra todos nuestros invariantes.
+
+**Candidato para un probe Atlas, no aprobado:**
+
+1. Abrir el directorio endpoint mediante el recorrido seguro y conservar su descriptor.
+2. Crear un subdirectorio temporal único `D` dentro de un padre privado de Atlas, con modo 0700, sin usar `/tmp`; abrirlo y verificarlo con `fstat`.
+3. Crear en `D` un symlink único `R` hacia el directorio endpoint ya validado. La creación debe ser exclusiva; no sobrescribir ni reutilizar nombres.
+4. Construir `/proc/self/fd/<D-fd>/R/<socket-name>`, comprobar que la ruta codificada cabe en `sun_path` de Linux (108 bytes incluyendo NUL), y usarla solo para `bind()`.
+5. Verificar la entrada creada usando el descriptor endpoint y el nombre canónico: tipo socket, UID, modo, `st_dev` y `st_ino`. No confiar en `getsockname()` para localizar ni limpiar el archivo.
+6. Eliminar `R` y `D` únicamente después de verificar el socket, conservando el descriptor listener y el descriptor endpoint. El cliente abre el mismo directorio por recorrido seguro y conecta mediante `/proc/self/fd/<endpoint-dir-fd>/<socket-name>` o una ruta canónica cuya cadena no pueda ser modificada por UIDs externos.
+7. Tras connect, autenticar el servidor mediante `SO_PEERCRED` antes de enviar bytes. La ruta procfs no autentica al peer.
+
+**Condiciones y límites:**
+
+- Requiere procfs montado y accesible, soporte del kernel para resolución de `/proc/self/fd`, nombres cortos y prueba de que el bind realmente crea el socket en el directorio apuntado por el descriptor.
+- Si falta procfs, el path excede `sun_path`, o la comprobación posterior no coincide, fallar cerrado; no degradar silenciosamente a un bind pathname no anclado.
+- La ruta reportada por `getsockname()` puede no ser canónica ni seguir existiendo después de retirar `D/R`; mantener siempre la ruta configurada y el descriptor endpoint como autoridad de inspección.
+- Un crash entre crear `D/R` y retirarlos puede dejar artefactos temporales. El probe debe verificar su cleanup y definir cómo detectarlos sin borrar objetos ajenos.
+- La técnica de referencia usa un symlink `R` al path real del directorio; la carrera de sustitución de esa ruta debe quedar excluida por el ownership de todos sus ancestros (root/TCB), o el probe debe demostrar una variante anclada directamente al descriptor. No declarar que el symlink convierte por sí solo el bind en una operación dirfd-atómica.
+- No adoptar `sockat` como dependencia ni copiar código de terceros sin una revisión de licencia, alcance y comportamiento. La referencia se usa para identificar un patrón técnico, no para seleccionar una biblioteca.
+
+Referencias técnicas: [Linux unix(7), pathname sockets y límite `sun_path`](https://man7.org/linux/man-pages/man7/unix.7.html); [sockat 0.4.1, rutas Linux procfs para bind/connect](https://docs.rs/sockat/latest/sockat/).
+
 ## 5. Limpieza y TOCTOU
 
 Linux no ofrece en la API habitual una operación pathname de “unlink únicamente si el inode aún es X”. Por tanto, comprobar `st_dev/st_ino` y después llamar `unlinkat` conserva una ventana TOCTOU; el uso de `dir_fd` evita escapes de ruta, pero no vuelve atómica la comparación y eliminación.
@@ -113,7 +140,7 @@ Los escenarios son requisitos de diseño; no se han implementado ni ejecutado.
 ## 9. Decisiones pendientes
 
 1. Fijar la ruta real del socket y los owners/modos exactos de cada componente según el plan de instalación.
-2. Revisar una técnica segura para que el pathname usado por `bind()` corresponda al directorio validado; no asumir que `dir_fd` se propaga a `bind()`.
+2. Probar el candidato Linux procfs de §4.1: descriptor del endpoint, bind mediante `/proc/self/fd`, verificación por descriptor canónico y connect desde otro proceso. No asumir que el patrón de referencia es automáticamente seguro ni adoptar una dependencia sin revisión.
 3. Definir el procedimiento manual y auditado para retirar un socket residual.
 4. Definir límites de tamaño/formatos y política definitiva de hardlinks para el archivo de configuración.
 5. Identificar el entrypoint cliente y revisar el lanzamiento real con EUID 0.
