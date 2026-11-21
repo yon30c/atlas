@@ -405,3 +405,42 @@ La implementación de código se publicó en la rama experimental:
 - Si el proceso SSH local no termina tras kill, los recursos relacionados se preservan y el escenario falla; no se hace cleanup potencialmente concurrente.
 
 **Estado de validación:** revisión estática de implementación en GitHub completada; no se ejecutaron pruebas, compilaciones ni workflows. La clave instalada todavía fuerza `/usr/bin/id -u`; no se ha cambiado `authorized_keys`. El owner debe inspeccionar shell startup files y solicitar autorización específica antes del cambio host. No ejecutar A09 todavía.
+
+
+## 16.10 Resultado de ejecución A09a/A09b — 2026-11-21
+
+El propietario ejecutó el runner opt-in en Debian 13 desde el commit
+`1d5bdb122a8480c36b445be7dd961b93806de74b`, con kernel
+`6.12.117+deb13-amd64`, Python `3.13.5`, UID ejecutor 1000 y cuenta peer
+`atlas-a09-test` UID 1001/GID 984.
+
+**Resultado comunicado:** `overall=PASS`; A01–A16, 16 PASS, 0 SKIP,
+0 FAIL; duración 1.72 s; cleanup `empty sandbox root removed`.
+
+- **A09a:** peer UID 1001 recibió `EACCES` (errno 13) al intentar conectar
+  al endpoint candidato; cero conexiones aceptadas. Directorio candidato
+  modo 0700 y socket propiedad UID 1000 modo 0600.
+- **A09b:** peer UID 1001/GID 984/PID 5417 alcanzó el fixture independiente
+  (directorio 0711/socket 0666). El handler real rechazó con
+  `UNAUTHORIZED_PEER`; se enviaron 122 bytes de ping y el cliente observó
+  reset con cero bytes de respuesta.
+- El fixture A09b no relajó los permisos del endpoint candidato.
+- A14 reportó dos workers máximos, seis conexiones rechazadas, ocho
+  manejadas y cero activas tras recuperación. A16 confirmó un único ganador
+  de bind y listener ganador operativo.
+
+La evidencia detallada se conserva en
+[el registro de validación A-IPC-01](../status-aipc01-validation-2026-11-21.md).
+
+**Conclusión limitada:** el probe A-IPC-01 queda validado en el commit y
+entorno señalados. A09a demuestra la barrera DAC del endpoint; A09b demuestra
+el rechazo del peer externo mediante SO_PEERCRED/handler en el fixture
+separado. Esto no selecciona un transporte de producción ni autoriza listener
+persistente, daemon, systemd, despliegue, acceso SQLite, separación de
+privilegios u operaciones mutantes. La protección frente a root/capabilities
+o procesos maliciosos del mismo UID no queda demostrada. Socket activation
+filesystem permanece suspendida por la colisión destructiva previa.
+
+La ejecución fue realizada por el propietario en Debian. No se ejecutaron
+pruebas, compilaciones ni workflows desde GitHub. La rama experimental
+permanece separada; `main` no se modificó.
