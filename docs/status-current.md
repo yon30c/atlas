@@ -765,3 +765,20 @@ evidencia CP-10 aplica únicamente al commit y VM indicados. No autoriza
 transporte productivo, listener persistente ni despliegue. El asistente no
 ejecutó pruebas, builds ni workflows.
 
+## A-IPC-02 — CP-11 implementado (2026-11-21)
+
+Runner commit: `70ee6a7a77dc671fe4ec26a6ca98a25a2e47e104`.
+CP-11 añade tres ciclos consecutivos de saturación/recuperación en el mismo
+servidor fixture: cuatro workers ocupados, nueve conexiones pendientes,
+contador accepted estable durante saturación, cierre de peers y drenaje de
+las trece conexiones aceptadas. Cada ciclo compara snapshots de FDs/threads
+en baseline, saturación y recuperación; exige retorno exacto al baseline
+y que el servidor permanezca vivo.
+
+**CP-11 implementado y revisado estáticamente; pendiente de ejecución del
+propietario.** CP-12 continúa sin implementar: rechazo de startup cuando
+el proceso hereda un `RLIMIT_NOFILE` insuficiente, sin elevarlo. Overall
+permanece INCOMPLETE. Ejecutar el runner solo en `Atlas-VM-test`
+desechable; nunca en `greed` producción. No se ejecutaron pruebas,
+builds ni workflows desde GitHub.
+
