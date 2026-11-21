@@ -874,6 +874,248 @@ def _scenario_capacity(server: Server, socket_path: Path) -> dict:
                 pass
 
 
+def _scenario_configuration(root: Path, args: argparse.Namespace) -> tuple[dict, dict]:
+    """Exercise strict fixture loading (MA-07) and immutable snapshots (MA-08)."""
+    from probe_config import ProbeConfigRejected, load_probe_config_at, parse_probe_config
+
+    config_dir = root / "config-fixtures"
+    config_dir.mkdir(mode=0o700)
+    os.chmod(config_dir, 0o700)
+    directory_fd = os.open(
+        config_dir,
+        os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW,
+    )
+    created: set[str] = set()
+
+    def write_fixture(
+        name: str,
+        data: bytes,
+        *,
+        mode: int = 0o644,
+        uid: int = 0,
+        gid: int = 0,
+    ) -> None:
+        descriptor = os.open(
+            name,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW,
+            mode,
+            dir_fd=directory_fd,
+        )
+        created.add(name)
+        try:
+            os.fchown(descriptor, uid, gid)
+            os.fchmod(descriptor, mode)
+            view = memoryview(data)
+            while view:
+                written = os.write(descriptor, view)
+                if written <= 0:
+                    raise ProbeFailure("short write while creating config fixture")
+                view = view[written:]
+        finally:
+            os.close(descriptor)
+
+    def base_config(
+        *,
+        service_uid: int | None = None,
+        service_gid: int | None = None,
+        socket_path: str = "/run/atlas/admin.sock",
+    ) -> bytes:
+        uid = args.service_uid if service_uid is None else service_uid
+        gid = args.service_gid if service_gid is None else service_gid
+        return (
+            "schema_version=1\n"
+            f"service_uid={uid}\n"
+            f"service_gid={gid}\n"
+            "client_uids=0\n"
+            f"socket_path={socket_path}\n"
+            "socket_type=SOCK_SEQPACKET\n"
+            "socket_mode=0600\n"
+            "socket_dir_mode=0700\n"
+        ).encode("ascii")
+
+    def expect_rejected(name: str, label: str) -> None:
+        try:
+            load_probe_config_at(
+                directory_fd,
+                name,
+                expected_service_uid=args.service_uid,
+                expected_service_gid=args.service_gid,
+            )
+        except ProbeConfigRejected:
+            rejected.append(label)
+            return
+        raise ProbeFailure(f"MA-07 accepted invalid configuration fixture: {label}")
+
+    rejected: list[str] = []
+    try:
+        directory_info = os.fstat(directory_fd)
+        if (
+            not stat.S_ISDIR(directory_info.st_mode)
+            or directory_info.st_uid != 0
+            or directory_info.st_gid != 0
+            or stat.S_IMODE(directory_info.st_mode) != 0o700
+        ):
+            raise ProbeFailure("MA-07 config fixture directory failed owner/mode validation")
+
+        # Missing file must fail closed.
+        expect_rejected("absent.conf", "absent")
+
+        valid_bytes = base_config()
+        write_fixture("valid.conf", valid_bytes)
+        valid_snapshot = load_probe_config_at(
+            directory_fd,
+            "valid.conf",
+            expected_service_uid=args.service_uid,
+            expected_service_gid=args.service_gid,
+        )
+        if (
+            valid_snapshot.service_uid != args.service_uid
+            or valid_snapshot.service_gid != args.service_gid
+            or valid_snapshot.client_uids != (0,)
+            or not isinstance(valid_snapshot.client_uids, tuple)
+        ):
+            raise ProbeFailure("MA-07 valid configuration did not produce exact snapshot values")
+
+        duplicate = valid_bytes.replace(
+            f"service_uid={args.service_uid}\n".encode("ascii"),
+            (
+                f"service_uid={args.service_uid}\n"
+                f"service_uid={args.service_uid}\n"
+            ).encode("ascii"),
+        )
+        write_fixture("duplicate.conf", duplicate)
+        expect_rejected("duplicate.conf", "duplicate-key")
+
+        write_fixture("unknown.conf", valid_bytes + b"unexpected=1\n")
+        expect_rejected("unknown.conf", "unknown-key")
+
+        write_fixture(
+            "altered.conf",
+            base_config(service_uid=args.other_uid, service_gid=args.other_gid),
+        )
+        expect_rejected("altered.conf", "service-identity-altered")
+
+        write_fixture("missing-key.conf", b"schema_version=1\n")
+        expect_rejected("missing-key.conf", "required-key-absent")
+
+        os.symlink("valid.conf", "symlink.conf", dir_fd=directory_fd)
+        created.add("symlink.conf")
+        expect_rejected("symlink.conf", "symlink")
+
+        os.mkfifo("fifo.conf", 0o600, dir_fd=directory_fd)
+        created.add("fifo.conf")
+        expect_rejected("fifo.conf", "fifo")
+
+        write_fixture("writable.conf", valid_bytes, mode=0o666)
+        expect_rejected("writable.conf", "group-other-writable")
+
+        write_fixture(
+            "wrong-owner.conf",
+            valid_bytes,
+            uid=args.other_uid,
+            gid=args.other_gid,
+        )
+        expect_rejected("wrong-owner.conf", "wrong-owner")
+
+        write_fixture("oversized.conf", valid_bytes + (b"x" * 4097))
+        expect_rejected("oversized.conf", "oversized")
+
+        write_fixture("hardlink-source.conf", valid_bytes)
+        os.link(
+            "hardlink-source.conf",
+            "hardlink.conf",
+            src_dir_fd=directory_fd,
+            dst_dir_fd=directory_fd,
+            follow_symlinks=False,
+        )
+        created.add("hardlink.conf")
+        expect_rejected("hardlink.conf", "hardlink")
+
+        ma07 = {
+            "valid_configuration_accepted": True,
+            "service_uid": valid_snapshot.service_uid,
+            "service_gid": valid_snapshot.service_gid,
+            "client_uids": list(valid_snapshot.client_uids),
+            "rejected_cases": rejected,
+            "rejected_count": len(rejected),
+        }
+
+        # Load once, atomically replace the pathname, and prove the existing
+        # frozen snapshot remains unchanged and contains no mutable collection.
+        write_fixture("snapshot.conf", valid_bytes)
+        snapshot = load_probe_config_at(
+            directory_fd,
+            "snapshot.conf",
+            expected_service_uid=args.service_uid,
+            expected_service_gid=args.service_gid,
+        )
+        original_snapshot = snapshot
+        replacement_bytes = base_config(socket_path="/run/atlas/changed.sock")
+        write_fixture("snapshot.next", replacement_bytes)
+        os.replace(
+            "snapshot.next",
+            "snapshot.conf",
+            src_dir_fd=directory_fd,
+            dst_dir_fd=directory_fd,
+        )
+        created.remove("snapshot.next")
+
+        replacement_fd = os.open(
+            "snapshot.conf",
+            os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW,
+            dir_fd=directory_fd,
+        )
+        try:
+            replacement_data = os.read(replacement_fd, 4097)
+        finally:
+            os.close(replacement_fd)
+        replacement_snapshot = parse_probe_config(replacement_data)
+
+        frozen_fields = False
+        try:
+            setattr(snapshot, "service_uid", args.other_uid)
+        except (AttributeError, TypeError):
+            frozen_fields = True
+        immutable_collection = False
+        try:
+            snapshot.client_uids[0] = args.other_uid  # type: ignore[index]
+        except (TypeError, AttributeError):
+            immutable_collection = True
+
+        unchanged = snapshot == original_snapshot and (
+            snapshot.service_uid == args.service_uid
+            and snapshot.service_gid == args.service_gid
+            and snapshot.socket_path == "/run/atlas/admin.sock"
+        )
+        if not (
+            replacement_snapshot.socket_path == "/run/atlas/changed.sock"
+            and unchanged
+            and frozen_fields
+            and immutable_collection
+        ):
+            raise ProbeFailure("MA-08 snapshot changed or exposed mutable configuration state")
+
+        ma08 = {
+            "loaded_socket_path": snapshot.socket_path,
+            "replacement_socket_path": replacement_snapshot.socket_path,
+            "snapshot_socket_path_after_replacement": snapshot.socket_path,
+            "snapshot_unchanged": unchanged,
+            "frozen_fields": frozen_fields,
+            "immutable_collections": immutable_collection,
+        }
+        return ma07, ma08
+    finally:
+        for name in sorted(created, reverse=True):
+            os.unlink(name, dir_fd=directory_fd)
+        remaining = os.listdir(directory_fd)
+        if remaining:
+            raise ProbeFailure(
+                f"MA-07/MA-08 config fixture contains unexpected entries: {remaining}"
+            )
+        os.close(directory_fd)
+        config_dir.rmdir()
+
+
 def _cleanup_root(
     root: Path, public_root: Path, args: argparse.Namespace
 ) -> str:
@@ -959,12 +1201,15 @@ def _main_parent(args: argparse.Namespace) -> int:
         )
         auth = _scenario_mutual_auth(public_root, args, script, servers)
         results.append({"id": "MA-01,MA-02,MA-03,MA-04,MA-05,MA-06", "status": "PASS", "observations": auth})
+        ma07, ma08 = _scenario_configuration(root, args)
+        results.append({"id": "MA-07", "status": "PASS", "observations": ma07})
+        results.append({"id": "MA-08", "status": "PASS", "observations": ma08})
         capacity = _scenario_capacity(server, service_socket)
         results.append({"id": "CP-01,CP-04", "status": "PASS", "observations": capacity})
         results.append({
-            "id": "MA-07..MA-10,CP-02..CP-03,CP-05..CP-12",
+            "id": "MA-09..MA-10,CP-02..CP-03,CP-05..CP-12",
             "status": "INCOMPLETE",
-            "detail": "config immutability, disconnect/transport variants, exact backlog saturation, read/write/global deadline adversaries, exception recovery, payload/depth boundaries and full FD accounting remain unimplemented",
+            "detail": "disconnect/transport variants, exact backlog saturation, read/write/global deadline adversaries, exception recovery, payload/depth boundaries and full FD accounting remain unimplemented",
         })
         overall = "INCOMPLETE"
     except ProbeIncomplete as exc:
