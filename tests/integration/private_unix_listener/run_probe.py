@@ -668,6 +668,7 @@ def _bounded_a09_communicate(
         selector.register(stream, selectors.EVENT_READ, ("read", name))
     os.set_blocking(input_stream.fileno(), False)
     selector.register(input_stream, selectors.EVENT_WRITE, ("write", None))
+    input_registered = True
 
     remaining = memoryview(instruction)
     deadline = time.monotonic() + A09_SSH_TIMEOUT_SECONDS
@@ -683,6 +684,8 @@ def _bounded_a09_communicate(
                 if action == "write":
                     try:
                         written = os.write(stream.fileno(), remaining)
+                    except BlockingIOError:
+                        continue
                     except BrokenPipeError as exc:
                         raise ProbeFailure("A09 SSH child closed stdin before the instruction was delivered") from exc
                     if written <= 0:
@@ -690,6 +693,7 @@ def _bounded_a09_communicate(
                     remaining = remaining[written:]
                     if not remaining:
                         selector.unregister(stream)
+                        input_registered = False
                         stream.close()
                 else:
                     buffer = output[name]
@@ -702,8 +706,9 @@ def _bounded_a09_communicate(
                         raise ProbeFailure(f"A09 SSH {name} exceeded the {limits[name]}-byte output limit")
                     buffer.extend(chunk)
 
-            if process.poll() is not None and input_stream in selector.get_map():
+            if process.poll() is not None and input_registered:
                 selector.unregister(input_stream)
+                input_registered = False
                 input_stream.close()
 
         process.wait(timeout=max(0.0, deadline - time.monotonic()))
@@ -947,18 +952,23 @@ def _scenario_a09a(root: Path, config: dict[str, object] | None, skip_reason: st
         }
     finally:
         cleanup_errors: list[str] = []
+        child_alive = False
         if process is not None and process.poll() is None:
             try:
                 process.kill()
             except OSError as exc:
                 cleanup_errors.append(f"cannot terminate A09a SSH child: {exc}")
+            try:
+                process.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                child_alive = True
         worker_alive = False
         if worker is not None:
             worker.join(timeout=2.0)
             worker_alive = worker.is_alive()
         listener.socket.close()
-        if worker_alive:
-            cleanup_errors.append("A09a child did not terminate; helper, socket pathname and sandbox were preserved")
+        if worker_alive or child_alive:
+            cleanup_errors.append("A09a child/worker did not terminate; helper, socket pathname and sandbox were preserved")
         else:
             if helper_path is not None and helper_identity is not None:
                 try:
@@ -1084,18 +1094,23 @@ def _scenario_a09b(root: Path, config: dict[str, object] | None, skip_reason: st
         }
     finally:
         cleanup_errors: list[str] = []
+        child_alive = False
         if process is not None and process.poll() is None:
             try:
                 process.kill()
             except OSError as exc:
                 cleanup_errors.append(f"cannot terminate A09b SSH child: {exc}")
+            try:
+                process.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                child_alive = True
         worker_alive = False
         if worker is not None:
             worker.join(timeout=2.0)
             worker_alive = worker.is_alive()
         listener.socket.close()
-        if worker_alive:
-            cleanup_errors.append("A09b child did not terminate; helper, socket pathname and fixture were preserved")
+        if worker_alive or child_alive:
+            cleanup_errors.append(f"A09b child/worker did not terminate; helper, socket pathname and fixture {fixture} were preserved")
         elif listener.identity is not None:
             try:
                 current = _identity(listener.path)
@@ -1111,7 +1126,7 @@ def _scenario_a09b(root: Path, config: dict[str, object] | None, skip_reason: st
                         cleanup_errors.append(f"cannot remove owned A09b fixture socket: {exc}")
                 else:
                     cleanup_errors.append("A09b fixture socket identity changed; preserved")
-        if not worker_alive:
+        if not worker_alive and not child_alive:
             if helper_path is not None and helper_identity is not None:
                 try:
                     _remove_a09_helper(helper_path, helper_identity)
