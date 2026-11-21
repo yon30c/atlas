@@ -331,6 +331,18 @@ class Server:
             raise ProbeFailure(f"server reported {event}")
         return event
 
+    def drain(self, duration: float) -> None:
+        deadline = time.monotonic() + duration
+        while time.monotonic() < deadline:
+            if self.process.stdout is None:
+                raise ProbeFailure("server stdout is unavailable")
+            ready, _write, _error = select.select(
+                [self.process.stdout], [], [], max(0.0, deadline - time.monotonic())
+            )
+            if not ready:
+                return
+            self.next_event(timeout=0.0)
+
     def wait_event(self, name: str, predicate=None, timeout: float = 5.0):
         deadline = time.monotonic() + timeout
         for event in self.events:
@@ -435,7 +447,7 @@ def _wait_metrics(
     )
 
 
-def _preflight(args: argparse.Namespace) -> Path:
+def _preflight(args: argparse.Namespace) -> tuple[Path, Path]:
     if sys.platform != "linux" or not hasattr(socket, "SO_PEERCRED"):
         raise ProbeIncomplete("Linux AF_UNIX/SO_PEERCRED is required")
     if os.geteuid() != 0 or os.getresuid() != (0, 0, 0):
@@ -602,10 +614,20 @@ def _scenario_capacity(server: Server, socket_path: Path) -> dict:
         fifth.settimeout(2.0)
         fifth.connect(str(socket_path))
         clients.append(fifth)
-        time.sleep(0.25)
-        observed_max = int(first.get("max_active", 0))
-        if observed_max > WORKERS:
-            raise ProbeFailure("active workers exceeded the configured fixed pool")
+        server.drain(0.25)
+        accepted_while_full = [
+            int(item.get("accepted", 0))
+            for item in server.events
+            if item.get("event") == "accepted"
+        ]
+        metrics_while_full = [
+            int(item.get("max_active", 0))
+            for item in server.events
+            if item.get("event") == "metrics"
+        ]
+        observed_max = max(metrics_while_full or [int(first.get("max_active", 0))])
+        if observed_max > WORKERS or max(accepted_while_full or [0]) > WORKERS:
+            raise ProbeFailure("a fifth connection was accepted while all worker slots were occupied")
         for client in clients[:WORKERS]:
             client.close()
         server.wait_event(
