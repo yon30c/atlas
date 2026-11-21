@@ -1,30 +1,35 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-21 (TCB-1 aceptado y diseño de configuración confiable de identidad publicado; detalle en `docs/design/local-authority-admin-private-listener-identity-config.md`).
+> **Última actualización:** 2026-11-21 (decisión EUID 0, especificación de rutas, recuperación stale y presupuesto de recursos IPC publicados).
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
 ## Estado operativo vigente — 2026-11-21
 
-> Esta sección es la referencia operativa prioritaria. Las secciones posteriores conservan decisiones y snapshots históricos; cuando un dato histórico contradiga este bloque, prevalece este bloque para el estado actual. No se elimina la historia de decisiones.
+> Esta sección es la referencia operativa prioritaria. Las secciones posteriores conservan decisiones y snapshots históricos; cuando un dato histórico contradiga este bloque, prevalece este bloque para el estado actual.
 
 - **Repositorio:** `yon30c/atlas`.
-- **Base estable:** `main` HEAD `1bd73d149dbd98e7ee2e5fdc36880883b6b03d16`; contiene el merge de PR #29 (`c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`). Este incremento no modifica `main`.
-- **Rama activa:** `experiment/a-ipc-01-private-unix-listener-probe`.
-- **Relación con `main`:** la rama experimental parte del HEAD de `main` `1bd73d149dbd98e7ee2e5fdc36880883b6b03d16` y contiene commits experimentales/documentales adicionales. Consultar el HEAD remoto de la rama directamente en GitHub antes de cualquier operación; no fijar en este documento un SHA que quedaría obsoleto por la propia actualización documental. No hacer merge directo ni asumir que es una rama corta de documentación.
-- **PR relacionado:** PR #30 (`design/isolated-private-unix-listener-probe`) permanece abierto y Draft; es el PR de diseño original, no la rama experimental actual. La rama `experiment/a-ipc-01-private-unix-listener-probe` no es el head de PR #30 y no tiene PR propio identificado. No se ha solicitado merge.
+- **Base estable:** `main` HEAD `1bd73d149dbd98e7ee2e5fdc36880883b6b03d16`; PR #29 integrado. Esta actualización no modifica `main`.
+- **Rama activa:** `experiment/a-ipc-01-private-unix-listener-probe`; separada de `main`, sin PR propio. PR #30 sigue abierto en Draft en su rama original de diseño.
 - **IPC existente:** contrato `atlas-admin/1` y handler para conexiones ya aceptadas. Solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
-- **Decisión de dirección del propietario (2026-11-21):** continuar el desarrollo y la evaluación técnica con la **alternativa A — listener AF_UNIX/SOCK_SEQPACKET creado por el proceso bajo un directorio filesystem privado**. A pasa a ser la línea principal de trabajo; esto **no** constituye selección/aprobación del transporte de producción.
-- **A-IPC-01:** probe experimental implementado y validado por el propietario en Debian 13 sobre el commit `1d5bdb122a8480c36b445be7dd961b93806de74b`: `overall=PASS`, A01–A16 = 16 PASS, 0 SKIP, 0 FAIL; duración 1.72 s. Evidencia: `docs/status-aipc01-validation-2026-11-21.md`.
-- **Evidencia A09:** A09a confirmó DAC (`EACCES` para UID 1001, cero accepts, directorio 0700/socket 0600); A09b alcanzó el handler real desde fixture aislado y obtuvo `UNAUTHORIZED_PEER` mediante SO_PEERCRED, con 0 bytes de respuesta. El fixture 0711/0666 no es configuración del endpoint candidato.
-- **Revisión de código:** revisión estática del runner/helper realizada en GitHub. La ejecución local fue realizada por el propietario; no se ejecutaron pruebas, compilaciones ni workflows desde GitHub en este trabajo.
-- **Alternativa B:** socket activation sobre filesystem permanece suspendida por la colisión destructiva observada en Debian systemd 257.13. No repetir el escenario destructivo.
-- **Alternativa C:** AF_UNIX abstract namespace queda fuera de la línea principal mientras se desarrolla A; puede retomarse si una brecha demostrada de A lo requiere o si el propietario decide reabrir la comparación.
-- **Auditoría estática inicial completada:** `docs/design/local-authority-admin-private-listener-threat-model-review.md`. Identifica nueve hallazgos; son bloqueantes el mecanismo de autenticación del servidor frente al cliente privilegiado, el alcance de confianza del UID `atlas-runtime`, la allowlist fija del cliente y la recuperación tras caída. También quedan por cerrar TOCTOU de cleanup, resolución segura de ruta, límites reales y lifecycle persistente.
-- **TCB-1 aceptado por el propietario (2026-11-21):** todos los procesos ejecutados bajo la cuenta dedicada `atlas-runtime` pertenecen al mismo dominio confiable; no se exige aislamiento intra-UID. Esto no aprueba cambios de host ni despliegue.
-- **Diseño de configuración confiable publicado:** `docs/design/local-authority-admin-private-listener-identity-config.md`. Recomienda una fuente root-managed separada del repositorio (ruta candidata `/etc/atlas/admin-ipc.conf`), propietario root:root y modo candidato 0644 (sin secretos), parseo estricto, carga única/inmutable y fallo cerrado. El diseño de operaciones existente prevé frontend privilegiado EUID 0 (`local-authority-admin-operations-design.md` §§2.2/5.1), pero no se encontró un cliente IPC/entrypoint ejecutable que realice connect; UID 0 es candidato recomendado, pendiente de confirmar al implementar el cliente.
+- **A-IPC-01:** el propietario reportó en Debian 13, commit `1d5bdb122a8480c36b445be7dd961b93806de74b`, resultado 16 PASS, 0 SKIP, 0 FAIL. Registro: `docs/status-aipc01-validation-2026-11-21.md`. No demuestra despliegue.
+- **Alternativa A:** elegida como línea principal de evaluación, no aprobada para producción. Alternativa B suspendida por colisión destructiva en systemd; C no priorizada.
+- **TCB-1 aceptada:** todos los procesos bajo la cuenta dedicada `atlas-runtime` pertenecen a la TCB; no se exige aislamiento intra-UID. La exclusividad operativa de esa cuenta aún debe definirse/verificarse.
+- **Identidad del cliente aceptada:** el frontend administrativo debe conectar con **EUID 0**; la política de diseño del servicio es exactamente `client_uids={0}`. No se admiten otros consumidores sin nueva decisión. El entrypoint IPC real aún no existe/revisado; la decisión no es evidencia operativa.
+- **Autenticación mutua:** diseño por `SO_PEERCRED`: servidor valida UID 0 antes de leer; cliente valida UID de `atlas-runtime` antes de enviar bytes. El lado cliente aún no está implementado ni probado.
+- **Configuración confiable:** `docs/design/local-authority-admin-private-listener-identity-config.md` propone archivo root-managed `/etc/atlas/admin-ipc.conf`, root:root 0644 sin secretos, parser estricto y snapshot inmutable. Ruta candidata, no existente; no crear en host.
+- **Resolución de rutas:** `docs/design/local-authority-admin-private-listener-path-resolution.md` define recorrido desde `/` por descriptores y validación de cada componente. Bajo TCB-1, el baseline es bind al pathname absoluto canónico después de verificar que UIDs externos no pueden escribir en ningún ancestro. El bind no es dirfd-atómico. La técnica procfs queda como alternativa experimental, no baseline.
+- **A-THREAT-04:** ventana TOCTOU de unlink aceptada como residual bajo TCB-1 solo con directorio privado, instancia única y revalidación por descriptor; unlink no es atómico.
+- **A-THREAT-05:** procedimiento manual candidato publicado en `local-authority-admin-private-listener-stale-recovery.md`; falta validarlo en sandbox. Startup siempre falla cerrado ante pathname existente y nunca intenta stale cleanup ni usa connect como detector.
+- **A-THREAT-06:** especificación de resolución publicada; falta probe aislado de symlinks, sustitución de ancestros, colisiones y connect canónico.
+- **A-THREAT-07:** perfil de capacidad propuesto en `local-authority-admin-private-listener-resource-budget.md`, aún no aprobado: 4 conexiones/workers, backlog 8, cola de aplicación 0, read/write 5 s, deadline global 15 s y `RLIMIT_NOFILE=64` candidato. Memoria/CPU y shutdown no están fijados.
+- **A-THREAT-08:** máquina de estados de readiness/shutdown, drenaje, deadlines y ownership de FDs pendiente.
+- **A-THREAT-09:** A09 usó runner UID 1000 y peer UID 1001; no valida cliente UID 0, servicio `atlas-runtime` ni permisos finales del despliegue.
+- **Próximo paso:** el propietario revisa/decide el perfil de recursos; después preparar probes aislados para rutas, autenticación mutua, recuperación stale y límites. Identificar e implementar/revisar el entrypoint cliente con EUID 0 antes de integrar el IPC.
+- **Estado de cambios:** en este ciclo solo se actualizaron documentos de diseño/contexto en la rama experimental. No se modificó handler, contrato, runtime, SQLite, `main` ni host. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. No se creó PR ni se aprobó listener persistente o despliegue.
 
-**Límites vigentes:** A-IPC-01 valida solo los escenarios experimentales ejecutados en el commit/entorno indicados. No demuestra protección frente a root/capabilities suficientes ni procesos maliciosos del mismo UID; no valida separación de privilegios, system-manager, listener persistente, daemon, integración systemd, acceso/autorización SQLite ni operaciones mutantes. No autoriza cambios del host, usuarios, grupos, permisos, privilegios, servicios, provisioning o despliegue. Cualquier transición a implementación persistente o producción requiere diseño, revisión y aprobación explícitos del propietario.
+**Límites vigentes:** A-IPC-01 valida únicamente los escenarios experimentales ejecutados en el commit/entorno indicados. No demuestra protección frente a root/capabilities suficientes ni procesos maliciosos del mismo UID; no valida separación de privilegios, system-manager, listener persistente, daemon, integración systemd, acceso/autorización SQLite ni operaciones mutantes. No autoriza cambios del host, usuarios, grupos, permisos, privilegios, servicios, provisioning o despliegue.
+
 
 ------
 
