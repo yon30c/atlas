@@ -303,7 +303,7 @@ El propietario autorizó la creación de la identidad temporal dedicada atlas-a0
 - Grupo dedicado: atlas-a09-test:x:984:; id muestra solo el grupo primario dedicado, sin grupos suplementarios adicionales.
 - passwd -S informa estado L (contraseña bloqueada).
 - HOME /var/lib/atlas-a09-test: directory, owner/group atlas-a09-test, permisos 0700.
-- El UID es automático y distinto del runner (UID 1000). La salida no demuestra todavía ausencia de procesos, sesiones, linger o servicios; comprobarlo antes de usar la cuenta.
+- El UID es automático y distinto del runner (UID 1000). Preflight posterior comunicado por el propietario: `ps -u atlas-a09-test` sin procesos; `loginctl show-user` indica que UID 1001 no está conectado ni tiene linger; `user@1001.service` `inactive`; no existe archivo `/var/lib/systemd/linger/atlas-a09-test`; `sudo -l -U atlas-a09-test` confirma que no puede usar sudo. Esta observación no excluye por sí sola unidades de sistema ajenas que pudieran referenciar la cuenta.
 
 **Preflight SSH comunicado**
 - sshd -T: pubkeyauthentication yes, passwordauthentication yes, kbdinteractiveauthentication no, usepam yes, strictmodes yes, permituserenvironment no, pero x11forwarding yes, allowtcpforwarding yes, allowagentforwarding yes, permitopen any y permitlisten any.
