@@ -1,7 +1,7 @@
 # Plan de probe aislado — autenticación mutua y capacidad IPC
 
 **Fecha:** 2026-11-21  
-**Estado (2026-11-21):** ejecución del propietario en `Atlas-VM-test`, commit `b5b0128e2646e41e3a2f927251c6fa6dafa897d7`: MA-01..MA-10, CP-01/04 y CP-02/03 PASS; overall INCOMPLETE por CP-05..CP-12. CP-02/03 confirmó cola 8/8, novena conexión admitida (9/8) y décima rechazada con EAGAIN (errno 11), sin accepts ni workers adicionales. Cleanup correcto. Antes de CP-05 hay que aclarar la interacción entre read timeout 5 s y deadline global 15 s.  
+**Estado (2026-11-21):** propietario ejecutó commit `0db262802ce30ec38a4ce52a4f5bfaa3081fc2b1` en `Atlas-VM-test`: MA-01..MA-10 y CP-01..CP-06 PASS; CP-05 observó read timeout 5.002 s y CP-06 deadline global 15.006 s con timeout efectivo 3.996 s. CP-02/03 confirmó cola 8/8, novena conexión admitida (9/8) y décima rechazada con EAGAIN (errno 11). Cleanup correcto. Overall INCOMPLETE por CP-07..CP-12.  
 **Rama:** experiment/a-ipc-01-private-unix-listener-probe  
 **Decisiones:** TCB-1; frontend EUID 0; client_uids={0}; perfil de capacidad inicial aprobado por el propietario.  
 **Dependencias:** contrato atlas-admin/1, handler IPC, configuración confiable, resolución de rutas, stale recovery y lifecycle.
@@ -409,3 +409,22 @@ La recomendación aprobada conserva los límites del perfil sin cambios:
 La espera de 11 s es **inyección de tiempo exclusivamente del harness**, no una pausa del handler productivo ni un cambio al contrato. Permite probar que el timeout de una fase posterior se recorta por el deadline contado desde accept. No simula una escritura bloqueada ni demuestra una suma de read/write real: el fixture actual realiza un único `recvmsg` y un único `send`, y cada timeout individual de 5 s no consume por sí solo los 15 s globales. La cobertura de escritura bloqueada/cómputo entre fases queda limitada y deberá revisarse si el handler incorpora más fases I/O.
 
 El runner conserva `overall=INCOMPLETE` porque CP-07..CP-12 siguen pendientes. **CP-05/06 están implementados, no validados** hasta recibir el JSON del propietario en `Atlas-VM-test`. No se ejecutaron pruebas, builds ni workflows desde GitHub; no se modificaron handler productivo, contrato, `main`, host, cuentas, servicios o SQLite.
+
+
+## 9.8 Validación del propietario — CP-05 / CP-06 (2026-11-21)
+
+El propietario ejecutó el runner en Atlas-VM-test, Debian 13, kernel 6.12.117+deb13-amd64, Python 3.13.5, EUID 0 real, fixtures SERVICE UID/GID 2005/2005 y OTHER 2006/2006, commit 0db262802ce30ec38a4ce52a4f5bfaa3081fc2b1.
+
+- MA-01..MA-06: PASS. Autenticación mutua, rechazo pre-connect de cliente no-root, rechazo antes de recv/send para identidades incorrectas y rechazo de claims UID/GID/PID falsos.
+- MA-07: PASS. Once variantes inválidas de configuración rechazadas; configuración fixture válida aceptada.
+- MA-08: PASS. Snapshot congelado/inmutable conservó el pathname original tras reemplazar la configuración.
+- MA-09: PASS. Desconexión antes de request detectada como PEER_DISCONNECTED, cero bytes enviados/recibidos.
+- MA-10: PASS. AF_UNIX/SOCK_STREAM y AF_INET/SOCK_STREAM rechazados antes de leer; primer byte permaneció encolado y cero respuesta.
+- CP-01/04: PASS. Máximo 4 workers/activos y recuperación a 0.
+- CP-02/03: PASS. Backlog listen(8): Recv-Q 8 y después 9; novena conexión admitida, décima rechazada con EAGAIN errno 11; accepts permanecieron en 9 y workers dentro del límite.
+- CP-05: PASS. Peer autorizado silencioso; timeout configurado 5.0 s, observado 5.002 s desde accept, EOF del peer y cero bytes de respuesta. Deadline global no alcanzado.
+- CP-06: PASS. Espera test-only 11.0 s después de accept; lectura inició a 11.004 s con timeout efectivo/restante 3.996 s; cierre a 15.006 s desde accept, EOF y cero bytes de respuesta. Deadline global alcanzado.
+- Duración total 22.095 s; cleanup confirmó eliminación de sandboxes privados y de traversal después de finalizar los procesos hijos.
+- Resultado global INCOMPLETE, sin filas FAIL. CP-07..CP-12 permanecen pendientes.
+
+La espera de CP-06 sigue siendo instrumentación del harness; no representa trabajo del handler productivo ni una escritura bloqueada. La evidencia demuestra que la fase de lectura recibe el presupuesto restante del deadline accept-based. No amplía el alcance a listener productivo, lifecycle persistente, resolución de rutas, systemd, SQLite o despliegue.
