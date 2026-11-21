@@ -140,3 +140,10 @@ La frontera queda lista para implementación solo cuando TCB-1/TCB-2 y las ident
 - No se ejecutaron pruebas, compilaciones ni workflows.
 - No se realizaron cambios en Debian ni en el host.
 - No se modificó main, no se creó PR ni se aprobó transporte de producción.
+
+
+## Decisión del propietario y seguimiento — 2026-11-21
+
+El propietario aceptó explícitamente TCB-1: todos los procesos ejecutados bajo la cuenta dedicada atlas-runtime pertenecen al mismo dominio confiable. No se exige aislamiento intra-UID para esta alternativa. Esta decisión no autoriza crear/modificar cuentas, grupos, permisos, servicios ni desplegar.
+
+La configuración de identidades y endpoint se desarrolla en [Configuración confiable de identidad — alternativa A](local-authority-admin-private-listener-identity-config.md). UID 0 continúa siendo candidato para el cliente, no una identidad confirmada. El siguiente paso es identificar el proceso cliente real y revisar su entrypoint/privilegios antes de fijar allowlist y valores operativos.
