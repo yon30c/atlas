@@ -522,9 +522,9 @@ Remaining: MA-09/MA-10 and CP-02/CP-03/CP-05..CP-12. This evidence does not vali
 
 ### MA-09 / MA-10 — disconnect and unsupported transport (implemented; owner validation pending)
 
-Commit `aff7eb694dbabb6725947e3f2179aef3fa566fbf` adds two scenarios that call the actual `handle_admin_connection` implementation in `src/atlas/platform_admin_ipc.py`:
+Commit `f41df94d0f87d288bfc7e3df45c66295fa19d570` adds two scenarios that call the actual `handle_admin_connection` implementation in `src/atlas/platform_admin_ipc.py`:
 
 - **MA-09:** an authorized AF_UNIX/SOCK_SEQPACKET peer shuts down its write side before sending a request. The handler must raise `AdminPeerDisconnected` with `PEER_DISCONNECTED`; the probe checks that no response bytes are emitted and no request is accepted. This is an EOF/half-close before the first request, not an interruption inside the kernel SO_PEERCRED syscall.
-- **MA-10:** the handler receives AF_UNIX/SOCK_STREAM and AF_INET/SOCK_STREAM connections with a valid ping packet already queued. It must reject both with `AdminProtocolRejected/INVALID_REQUEST` before reading; `MSG_PEEK` proves the packet remains queued and the peer receives no protocol bytes.
+- **MA-10:** the handler receives AF_UNIX/SOCK_STREAM and AF_INET/SOCK_STREAM connections with a valid ping packet already queued. It must reject both with `AdminProtocolRejected/INVALID_REQUEST` before reading; a non-consuming `MSG_PEEK` confirms the first request byte remains queued and the peer receives no protocol bytes.
 - The runner reports MA-09 and MA-10 independently. The remaining INCOMPLETE scenarios are CP-02/CP-03 and CP-05..CP-12.
 - **Owner action:** pull the branch and run the probe only in disposable `Atlas-VM-test`. No test/build/workflow was run by the assistant. MA-09/10 are implemented, not yet validated.
