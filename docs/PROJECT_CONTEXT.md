@@ -1,6 +1,6 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-21 (auditoría estática inicial del modelo de amenazas de alternativa A; detalle en `docs/design/local-authority-admin-private-listener-threat-model-review.md`).
+> **Última actualización:** 2026-11-21 (diseño candidato de frontera de confianza y autenticación mutua para alternativa A; detalle en `docs/design/local-authority-admin-private-listener-trust-boundary.md`).
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
@@ -21,7 +21,7 @@
 - **Alternativa B:** socket activation sobre filesystem permanece suspendida por la colisión destructiva observada en Debian systemd 257.13. No repetir el escenario destructivo.
 - **Alternativa C:** AF_UNIX abstract namespace queda fuera de la línea principal mientras se desarrolla A; puede retomarse si una brecha demostrada de A lo requiere o si el propietario decide reabrir la comparación.
 - **Auditoría estática inicial completada:** `docs/design/local-authority-admin-private-listener-threat-model-review.md`. Identifica nueve hallazgos; son bloqueantes el mecanismo de autenticación del servidor frente al cliente privilegiado, el alcance de confianza del UID `atlas-runtime`, la allowlist fija del cliente y la recuperación tras caída. También quedan por cerrar TOCTOU de cleanup, resolución segura de ruta, límites reales y lifecycle persistente.
-- **Siguiente etapa:** diseñar la frontera de confianza y autenticación mutua de A, sin código; decidir si todos los procesos bajo `atlas-runtime` pertenecen a la TCB y cómo el cliente verifica que el endpoint corresponde al servicio legítimo.
+- **Diseño de frontera de confianza publicado:** `docs/design/local-authority-admin-private-listener-trust-boundary.md`. Propone TCB-1 (todos los procesos `atlas-runtime` pertenecen al mismo dominio confiable) y autenticación mutua de UID mediante SO_PEERCRED en ambos extremos. Es una propuesta, no una decisión aprobada: el propietario debe confirmar TCB-1 o exigir aislamiento intra-UID (TCB-2), y confirmar la identidad/UID real del cliente.
 
 **Límites vigentes:** A-IPC-01 valida solo los escenarios experimentales ejecutados en el commit/entorno indicados. No demuestra protección frente a root/capabilities suficientes ni procesos maliciosos del mismo UID; no valida separación de privilegios, system-manager, listener persistente, daemon, integración systemd, acceso/autorización SQLite ni operaciones mutantes. No autoriza cambios del host, usuarios, grupos, permisos, privilegios, servicios, provisioning o despliegue. Cualquier transición a implementación persistente o producción requiere diseño, revisión y aprobación explícitos del propietario.
 
