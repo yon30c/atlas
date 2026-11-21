@@ -1279,3 +1279,34 @@ El propietario ejecutó `e46070e6e1824b06af04a3627feb0f658de9c1f8` en `Atlas-VM-
 La fuente del kernel revisada muestra que la interfaz procfs de AF_UNIX enumera sockets y expone inode/path; la discrepancia requiere diagnóstico adicional, no una relajación del matching. Commit `a3e2d3dcb24842c4ae842f1d8082b4a2dbade374` amplía los diagnósticos de SR-01/SR-11 con FD target, `getsockname()`, `SO_TYPE`, `SO_ACCEPTCONN`, recuento y filas completas (acotadas a 64) de la tabla local. Es un cambio de diagnóstico, no ejecutado aún por el propietario.
 
 **Estado:** A-IPC-04 no validado; A-THREAT-05 abierta. La ausencia de filas no clasifica un socket como stale y no autoriza unlink. Repetir solo en `Atlas-VM-test`, nunca en `greed`. Sin limpieza automática, listener persistente ni despliegue.
+
+
+### A-IPC-04 — quinta ejecución del propietario (2026-11-21)
+
+Owner execution on disposable `Atlas-VM-test`, checkout
+`6f77960c25fba873be67bd29fb40814619e44ee8`: Debian 13,
+kernel `6.12.117+deb13-amd64`, Python 3.13.5, EUID 0,
+fixture identities SERVICE 2005:2005 / OTHER 2006:2006.
+Result: **10 PASS / 2 FAIL / 0 INCOMPLETE**, 203 visible processes,
+six initial network namespaces, 0.161 s, sandbox cleanup confirmed.
+
+The expanded SR-01/SR-11 diagnostics establish that both local fixtures
+were successfully bound and listening: expected `getsockname()`,
+`SO_TYPE=5`, `SO_ACCEPTCONN=true`, FD targets
+`socket:[41168]` and `socket:[41184]`. Nevertheless, a successful
+direct read of `/proc/self/net/unix` returned 58 rows with no matching
+pathname, inode, or candidate row. Inspector namespace
+`net:[4026531840]` was present in the inventory. SR-03 again detected
+the separate-namespace listener `net:[4026532290]` (PID 6051).
+
+SR-01/SR-11 remain substantive procfs-observability failures; they do not
+show that the listeners are inactive or stale. SR-02..SR-10 and SR-12
+passed. No liveness connect was attempted; sandbox cleanup succeeded.
+
+**Current gate:** A-IPC-04 remains unvalidated and A-THREAT-05 remains open.
+Investigate why these successfully bound/listening local SOCK_SEQPACKET
+fixtures are absent from the same-namespace procfs table on the exact
+Debian 6.12.117 kernel. Do not weaken pathname matching, infer stale from
+missing rows, or unlink. No production cleanup, persistent listener,
+systemd activation, or deployment is approved. Assistant did not run tests,
+builds, workflows, or probes.
