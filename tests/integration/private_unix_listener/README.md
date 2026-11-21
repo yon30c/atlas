@@ -704,3 +704,10 @@ The scenario starts a dedicated fixture server with a one-shot, test-only worker
 The probe requires EOF and zero response bytes on the faulting peer, the expected worker_error event, active=0 after the exception, a still-running server process, and a subsequent valid authority.ping that succeeds and returns active to zero. This checks both slot release and continued accept/worker-pool operation.
 
 The exception injection is harness-only; it is not a production handler change. CP-07 is implemented but not owner-validated. CP-08..CP-12 remain INCOMPLETE. Run only in the disposable Atlas-VM-test as root using the existing invocation; do not run on greed. No tests, builds or workflows were run by the assistant.
+
+
+### CP-07 — corrección tras primera ejecución
+
+El propietario ejecutó el runner en d054f95f4cce9e33fe55bf61080dcd3f493ed3ce. MA-01..MA-10 y CP-01..CP-06 pasaron de nuevo. CP-07 falló antes de sus aserciones de recuperación porque Server._record trató el evento worker_error deliberadamente inyectado como un error inesperado. No se demostró aún EOF/slot release/segunda petición y CP-07 no está validado.
+
+Runner corregido en c1fdcc12eb3d7a0fcb6cccccb8eb07b0028dcb40: solo el servidor CP-07 permite consumir exactamente un evento con el mensaje de excepción previsto; todos los demás errores de worker siguen siendo fatales. Repetir el runner completo únicamente en Atlas-VM-test desechable, como root, usando el comando de ejecución ya documentado. No ejecutar en greed. No se ejecutaron pruebas, builds ni workflows desde GitHub.
