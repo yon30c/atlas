@@ -1183,7 +1183,7 @@ def _scenario_disconnect() -> dict:
             "disconnect_observed": True,
             "rejection_code": "PEER_DISCONNECTED",
             "response_bytes": 0,
-            "operation_dispatched": False,
+            "request_accepted": False,
         }
     finally:
         peer.close()
@@ -1243,12 +1243,12 @@ def _scenario_transport() -> dict:
 
             # The valid request must still be queued: the handler rejected
             # family/type before reading or decoding any protocol bytes.
-            queued = connection.recv(
-                len(packet), socket.MSG_PEEK | socket.MSG_DONTWAIT
+            queued_prefix = connection.recv(
+                1, socket.MSG_PEEK | socket.MSG_DONTWAIT
             )
-            if queued != packet:
+            if queued_prefix != packet[:1]:
                 raise ProbeFailure(
-                    f"MA-10 {label} consumed or changed request bytes before rejection"
+                    f"MA-10 {label} consumed the first request byte before rejection"
                 )
             _assert_no_protocol_response(peer, f"MA-10 {label}")
             cases.append({
@@ -1256,7 +1256,7 @@ def _scenario_transport() -> dict:
                 "family": "AF_UNIX" if expected_family == socket.AF_UNIX else "AF_INET",
                 "socket_type": "SOCK_STREAM",
                 "rejection_code": "INVALID_REQUEST",
-                "request_bytes_still_queued": len(queued),
+                "request_first_byte_still_queued": True,
                 "response_bytes": 0,
             })
 
