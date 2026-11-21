@@ -73,8 +73,11 @@ owner can provide a separately running, pre-existing unprivileged peer without
 changing host state or credentials from this probe.
 
 A14 tests the resource ceiling of this temporary probe harness, not a production
-listener implementation. Its fixed experimental limits are included in the
-JSON report. It does not establish production capacity values.
+listener implementation. Admitted workers are held behind a test-only release
+gate until saturation has been observed, so the rejection check does not depend
+on the handler read timeout or thread scheduling. Unexpected worker exceptions
+are reported as failures. Its fixed experimental limits are included in the
+JSON report; they do not establish production capacity values.
 
 ## Interpreting the report
 
