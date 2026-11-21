@@ -29,7 +29,7 @@ READ_TIMEOUT = 0.35
 WRITE_TIMEOUT = 0.35
 MAX_ACTIVE_CONNECTIONS = 2
 LISTEN_BACKLOG = 8
-MAX_SCENARIO_SECONDS = 8.0
+MAX_ACCEPT_WAIT_SECONDS = 8.0
 
 
 class ProbeSkip(Exception):
@@ -193,7 +193,7 @@ def _connect(path: Path, timeout: float = 1.0) -> socket.socket:
 
 
 def _ping_exchange(listener: socket.socket, path: Path) -> dict[str, int]:
-    listener.settimeout(MAX_SCENARIO_SECONDS)
+    listener.settimeout(MAX_ACCEPT_WAIT_SECONDS)
     request_id, packet = _ping_packet()
     with _connect(path) as client:
         client.sendall(packet)
@@ -242,7 +242,7 @@ def _scenario_a02(root: Path) -> dict[str, object]:
     box = CaseSandbox(root, "a02")
     path = box.path / "s"
     path.write_bytes(b"A-IPC-01-regular-sentinel")
-    before = box.track(path)
+    box.track(path)
     content = path.read_bytes()
     before = _describe(path)
     collision_errno = None
@@ -525,7 +525,7 @@ def _scenario_a13(root: Path) -> None:
                     raise ProbeFailure(f"expected TIMEOUT, got {exc.code}")
             else:
                 raise ProbeFailure("idle peer did not time out")
-            if time.monotonic() - started > MAX_SCENARIO_SECONDS:
+            if time.monotonic() - started > MAX_ACCEPT_WAIT_SECONDS:
                 raise ProbeFailure("read timeout exceeded scenario bound")
     finally:
         listener.socket.close()
@@ -888,7 +888,7 @@ def main() -> int:
             "write_timeout_seconds": WRITE_TIMEOUT,
             "listen_backlog": LISTEN_BACKLOG,
             "max_active_connections": MAX_ACTIVE_CONNECTIONS,
-            "scenario_timeout_seconds": MAX_SCENARIO_SECONDS,
+            "max_accept_wait_seconds": MAX_ACCEPT_WAIT_SECONDS,
         },
         "duration_seconds": round(time.monotonic() - started, 3),
         "cleanup": cleanup_detail,
