@@ -1,6 +1,6 @@
 # Estado vigente de Atlas
 
-> **Corte documental:** 21 de noviembre de 2026. A-IPC-01 reportado 16/16 PASS. A-IPC-02: propietario validó hasta CP-02/03 en `b5b0128`; runner actualizado en `59fafb8` implementa CP-05 (read timeout 5 s) y CP-06 (deadline global 15 s con espera controlada test-only de 11 s). CP-05/06 pendientes de ejecución del propietario; CP-07..CP-12 pendientes; overall permanece INCOMPLETE. CP-02/03 midió 8/8, novena admitida 9/8 y décima rechazada con EAGAIN errno 11.
+> **Corte documental:** 21 de noviembre de 2026. A-IPC-01 reportado 16/16 PASS. A-IPC-02: propietario validó MA-01..MA-10 y CP-01..CP-06 en `0db2628`; CP-05 observó 5.002 s y CP-06 15.006 s desde accept, con EOF y cero respuesta. CP-02/03 confirmó cola efectiva 9 y EAGAIN en décima conexión. CP-07..CP-12 pendientes; overall INCOMPLETE.
 > **Main:** permanece en HEAD `1bd73d149dbd98e7ee2e5fdc36880883b6b03d16`; PR #29 está integrado. La suite reportada para el HEAD de código de PR #29 fue 1,590 tests, `OK (skipped=1)`; no se ha reportado una nueva ejecución sobre el merge HEAD.
 > **Rama activa de diseño:** `experiment/a-ipc-01-private-unix-listener-probe`. Se mantiene separada de `main`; no tiene PR propio. PR #30 sigue abierto en Draft y corresponde a la rama de diseño original.
 > **Estado IPC:** el handler procesa conexiones ya aceptadas; solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
@@ -18,7 +18,7 @@
 - **Dirección elegida:** alternativa A, listener AF_UNIX/SOCK_SEQPACKET propio en directorio filesystem privado. Es línea de evaluación, no aprobación productiva.
 - **PR #30:** abierto en Draft sobre `design/isolated-private-unix-listener-probe`; no es la rama experimental actual. No hay PR propio para la rama `experiment/a-ipc-01-private-unix-listener-probe`.
 - **A-IPC-01:** el propietario reportó A01–A16 = 16 PASS, 0 SKIP, 0 FAIL en el commit indicado en el registro. A09a validó DAC con UID distinto; A09b validó rechazo real del handler mediante SO_PEERCRED. No valida UID 0 ↔ `atlas-runtime` ni despliegue.
-- **A-IPC-02 — evidencia del propietario:** en `b5b0128`, MA-01..MA-10, CP-01/04 y CP-02/03 PASS; backlog 8/8, novena admitida 9/8 y décima rechazada EAGAIN errno 11. En `59fafb8` se implementaron CP-05 (read timeout de 5 s para peer silencioso) y CP-06 (deadline global de 15 s desde accept, con 11 s de espera controlada test-only antes de read). CP-05/06 no están validados hasta nueva ejecución; CP-07..CP-12 siguen pendientes. Overall INCOMPLETE.
+- **A-IPC-02 — evidencia del propietario:** ejecución de `0db2628` validó MA-01..MA-10 y CP-01..CP-06. CP-05: timeout 5.002 s, deadline global no alcanzado, EOF y cero respuesta. CP-06: lectura inicia a 11.004 s con 3.996 s restantes; cierre a 15.006 s, EOF y cero respuesta. CP-02/03: Recv-Q 8/9, novena conexión admitida, décima EAGAIN errno 11; workers limitados a 4. CP-07..CP-12 pendientes; overall INCOMPLETE.
 - **TCB-1:** aceptada. Procesos bajo el UID dedicado `atlas-runtime` son parte de la TCB; no se exige aislamiento intra-UID. Su exclusividad operativa aún debe definirse y verificarse.
 - **Identidad cliente:** EUID 0 aceptado como requisito del frontend; `client_uids={0}`. El entrypoint IPC real aún no existe/revisado. El harness A-IPC-02 validó MA-01..MA-10 en la última ejecución reportada, incluida la autenticación mutua root↔UID de servicio, rechazo pre-connect de EUID no root, claims UID/GID/PID falsificados, parser fixture estricto, snapshot inmutable, desconexión previa a request y rechazo de transportes no soportados antes de leer.
 - **Configuración:** `local-authority-admin-private-listener-identity-config.md` propone fuente root-managed `/etc/atlas/admin-ipc.conf`, root:root 0644 sin secretos, parser estricto y carga inmutable. No se creó el archivo ni se fijaron valores operativos.
@@ -26,10 +26,10 @@
 - **Cleanup TOCTOU (A-THREAT-04):** residual aceptado bajo TCB-1 si el directorio es privado, la instancia es única y cleanup revalida por descriptor; unlink no es atómico.
 - **Socket stale (A-THREAT-05):** procedimiento manual candidato publicado; sigue pendiente validarlo en sandbox. Startup nunca hace stale cleanup ni conecta para probar liveness.
 - **Resolución de rutas (A-THREAT-06):** especificación de diseño publicada; falta probe de symlinks, sustitución por UID externo, colisiones y connect canónico.
-- **Recursos (A-THREAT-07):** el propietario aprobó para probes aislados 4 conexiones/workers, parámetro `listen(8)`, cola de aplicación 0, read/write 5 s, deadline global 15 s y `RLIMIT_NOFILE=64`. En Linux AF_UNIX, el límite efectivo observado es 9 conexiones pendientes para `listen(8)`: la novena conecta y la décima recibe EAGAIN. CP-01/04 y CP-02/03 fueron validados en `b5b0128`. CP-05/06 están implementados en `59fafb8` y pendientes de ejecución; CP-07..CP-12 siguen pendientes. No es configuración de producción. Plan: `design/local-authority-admin-private-listener-mutual-auth-capacity-probe.md`.
+- **Recursos (A-THREAT-07):** perfil experimental aprobado: 4 workers, `listen(8)`, cola de aplicación 0, read/write 5 s, deadline global 15 s y `RLIMIT_NOFILE=64`. En Linux AF_UNIX se observaron 9 conexiones pendientes efectivas: la novena conecta y la décima recibe EAGAIN. El propietario validó CP-01..CP-06 en `0db2628`; CP-07..CP-12 pendientes. No es configuración de producción. Plan: `design/local-authority-admin-private-listener-mutual-auth-capacity-probe.md`.
 - **Lifecycle (A-THREAT-08):** máquina de estados, readiness, shutdown/drenaje y cierre de FDs aún no diseñados/validados.
 - **Evidencia de despliegue (A-THREAT-09):** A09 usó runner UID 1000 y peer UID 1001; no probó cliente root, servicio `atlas-runtime` ni permisos/ownership finales.
-- **Siguiente paso:** actualizar `Atlas-VM-test` a `59fafb801a31d7adf51a6598db78440255744321` y ejecutar el runner A-IPC-02 como root directamente en la VM desechable. Revisar JSON de CP-05/06 y cleanup; no ejecutar en `greed` de producción.
+- **Siguiente paso:** diseñar e implementar CP-07 (excepción de worker, cierre de socket y liberación del slot en `finally`) en el harness experimental; revisión estática en GitHub y validación posterior solo en `Atlas-VM-test`.
 - No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. El propietario ejecutó el runner localmente en la VM desechable y reportó MA-01..MA-10 y CP-01/04 PASS. El checkout se había actualizado a `901c792`; el campo commit del JSON fue null. `main` y Debian/host de producción no fueron modificados; no se creó PR.
 
 **Límites de autorización:** el PASS experimental no selecciona por sí solo un transporte productivo ni autoriza listener persistente, daemon, unidades systemd de producción, cambios del host, usuarios/grupos, permisos/privilegios, acceso SQLite, provisioning o despliegue. No habilita operaciones administrativas distintas del ping no mutante usado como fixture.
@@ -618,3 +618,17 @@ La decisión del propietario conserva read/write timeout de 5 s y deadline globa
 La espera controlada no es comportamiento productivo ni simula una escritura bloqueada. Con el fixture actual de un recv y un send, los timeouts I/O individuales de 5 s no consumen por sí solos el deadline de 15 s. CP-06 demuestra el recorte del timeout de una fase posterior por el deadline accept-based, no una carga read+write acumulada real.
 
 **Estado:** CP-05/06 implementados y pendientes de validación del propietario en Atlas-VM-test. CP-07..CP-12 siguen pendientes; overall INCOMPLETE. No se ejecutaron pruebas, builds ni workflows desde GitHub. No se modificaron handler productivo, contrato, main, host, cuentas, servicios ni SQLite.
+
+
+## A-IPC-02 — validación CP-05/CP-06 (2026-11-21)
+
+El propietario ejecutó commit 0db262802ce30ec38a4ce52a4f5bfaa3081fc2b1 en Atlas-VM-test, Debian 13, kernel 6.12.117+deb13-amd64, Python 3.13.5, EUID 0, fixtures SERVICE 2005/2005 y OTHER 2006/2006. Duración 22.095 s; cleanup de sandboxes /run correcto.
+
+- MA-01..MA-10: PASS.
+- CP-01/04: PASS; máximo 4 workers, activos tras recuperación 0.
+- CP-02/03: PASS; cola observada 8 y 9; novena conexión admitida, décima EAGAIN errno 11; sin accepts extra.
+- CP-05: PASS; read timeout 5.002 s desde accept, deadline global no alcanzado, EOF y 0 bytes de respuesta.
+- CP-06: PASS; fase read comienza a 11.004 s con 3.996 s de presupuesto restante; cierre a 15.006 s desde accept, deadline global alcanzado, EOF y 0 bytes de respuesta.
+- CP-07..CP-12: INCOMPLETE; sin FAIL en escenarios reportados. Overall permanece INCOMPLETE.
+
+CP-06 usa una espera artificial test-only; no representa trabajo productivo ni una escritura bloqueada. No se ejecutaron pruebas/builds/workflows desde GitHub; no se modificó handler productivo, contrato, main ni host. No hay aprobación de transporte productivo ni despliegue.
