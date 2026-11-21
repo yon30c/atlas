@@ -58,6 +58,7 @@ The runner prints one JSON report and returns:
 | A07 | Cleanup removes the unchanged socket created by this instance |
 | A08 | Allowed peer completes one authority.ping request |
 | A09 | Different-UID peer rejection; deliberately SKIP unless a safe external identity mechanism is added |
+| A10 | Allowed peer UID/PID/GID are read from kernel credentials and match the current authorized UID |
 | A11 | Disconnect before request is handled without a fabricated response |
 | A12 | Truncated packet and ancillary data are rejected without an error response |
 | A13 | Idle peer is released by the bounded read timeout |
@@ -79,7 +80,7 @@ JSON report. It does not establish production capacity values.
 
 The JSON includes the checkout commit, kernel, Python version, effective UID,
 temporary sandbox path, fixed limits, per-scenario status/duration, overall
-classification, and cleanup result.
+classification, cleanup result, and observed peer PID/UID/GID for the successful ping cases.
 
 Any FAIL involving a changed pre-existing object, an unexpected unlink, a
 peer receiving a response when the contract requires silence, an unbounded
