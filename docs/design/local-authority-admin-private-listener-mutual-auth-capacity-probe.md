@@ -600,3 +600,25 @@ de validación del propietario** en `Atlas-VM-test`. CP-12 sigue sin
 implementarse: rechazo de startup al heredar un `RLIMIT_NOFILE`
 insuficiente, sin elevarlo. Overall permanece INCOMPLETE.
 
+## 9.16 CP-11 — validación del propietario (2026-11-21)
+
+El propietario ejecutó `da8c6ea9ed0ce36d2c7b4c2c8c5417dd79975fb7`
+en `Atlas-VM-test` desechable (Debian 13, kernel
+`6.12.117+deb13-amd64`, Python 3.13.5). MA-01..MA-10 y CP-01..CP-11:
+**PASS**. Los tres ciclos mantuvieron cuatro workers y nueve conexiones
+pendientes; accepted: 31→35→44, 44→48→57 y 57→61→70. Cada ciclo
+volvió a 4 FDs/5 threads, con 8 FDs/5 threads durante saturación,
+active=0 tras recuperación y servidor vivo. Cleanup correcto; duración
+24.72 s.
+
+## 9.17 CP-12 — rechazo de startup con RLIMIT heredado bajo (2026-11-21)
+
+Runner commit: `0fb5c3989f5ac9e11b14344557b18ad7bd75027b`. El proceso
+fixture rechaza startup si el soft o hard `RLIMIT_NOFILE` heredado es
+menor que 64; informa ambos valores y termina antes de crear/bindear el
+listener. CP-12 inicia el child mediante un wrapper que baja ambos límites
+heredados a 32 antes de `exec`, y verifica exit code 3, evento exacto de
+rechazo, límites observados y ausencia de pathname de socket. No eleva el
+límite. Es validación del harness, no política productiva. Revisión estática
+solamente; falta ejecución del propietario en `Atlas-VM-test` desechable.
+
