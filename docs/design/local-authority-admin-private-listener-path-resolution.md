@@ -49,8 +49,8 @@ La ruta del socket sigue pendiente de fijarse. Cuando se seleccione:
 - Todos los componentes de directorio deben validarse desde `/`; el directorio final será preaprovisionado, propiedad de `atlas-runtime:atlas-runtime`, modo candidato `0700`, sin ACL/grupos adicionales.
 - El servicio conservará un descriptor del directorio final y lo usará para inspección y cleanup relativo.
 - La cuenta `atlas-runtime` es TCB-1 aceptada: procesos de ese UID se consideran confiables entre sí. Los usuarios ordinarios externos no pueden modificar el directorio; root también pertenece a la autoridad superior confiable del host.
-- El nombre del socket será fijo, no derivado de parámetros del cliente. `bind()` de AF_UNIX pathname recibe una ruta, no un `dir_fd` en la API Python estándar. Por ello, la validación del directorio por descriptor no debe presentarse falsamente como un bind atómico relativo al descriptor.
-- El diseño inicial puede usar el pathname absoluto solo después de verificar la cadena y establecer que ningún actor fuera de la TCB puede modificar los directorios. Debe evaluarse si una técnica basada en `/proc/self/fd/<n>/...` realmente conserva la semántica/identidad esperada antes de adoptarla; no asumirlo.
+- El nombre del socket será fijo, no derivado de parámetros del cliente. `bind()` de AF_UNIX pathname recibe una ruta, no un `dir_fd` en la API Python estándar. Bajo TCB-1, el bind al pathname absoluto canónico puede ser aceptable después de recorrer y validar todos los componentes y demostrar que ningún UID externo puede escribir en ningún ancestro; la carrera residual solo quedaría en manos de root o de `atlas-runtime`, ambos dentro de la TCB. No se afirma que el bind sea atómico relativo al descriptor.
+- El baseline recomendado para TCB-1 es usar el pathname absoluto canónico después de validar todos sus componentes y verificar ownership/modos que excluyan escrituras de UIDs externos. El descriptor walk es una comprobación previa; no convierte `bind()` en una operación dirfd-atómica. Root y el UID de servicio pueden alterar la ruta, pero ambos son TCB y están fuera de la amenaza que este canal promete resistir. La alternativa procfs de §4.1 queda como opción experimental, no como requisito.
 - Antes de `bind()`, no hacer unlink, rename ni truncamiento. Si el nombre ya existe, fallar cerrado.
 - Después de bind, inspeccionar la entrada relativa al descriptor, sin seguir symlinks, y comprobar socket, UID, modo, `st_dev` y `st_ino`. Mantener descriptor listener y descriptor de directorio.
 - El cliente usa la ruta fija de configuración, conecta y valida `SO_PEERCRED` del servidor antes de enviar bytes. Una comprobación pathname previa puede servir para diagnóstico, pero no autentica al servidor y no elimina carreras; la autenticación de servidor se basa en UID kernel.
@@ -63,7 +63,7 @@ La investigación encontró un patrón Linux utilizado por la biblioteca abierta
 
 **Uso como evidencia:** demuestra que existe un patrón Linux concreto para hacer bind/connect mediante una ruta basada en un descriptor sin cambiar el cwd global. No prueba por sí solo que debamos copiar la implementación ni que su comportamiento cubra todos nuestros invariantes.
 
-**Candidato para un probe Atlas, no aprobado:**
+**Alternativa experimental para un probe Atlas, no aprobada ni necesaria para el baseline TCB-1:**
 
 1. Abrir el directorio endpoint mediante el recorrido seguro y conservar su descriptor.
 2. Crear un subdirectorio temporal único `D` dentro de un padre privado de Atlas, con modo 0700, sin usar `/tmp`; abrirlo y verificarlo con `fstat`.
@@ -97,7 +97,7 @@ Bajo TCB-1, la estrategia candidata es:
 5. Si algo no coincide o la consulta falla, no eliminar; registrar y dejar el objeto para diagnóstico administrativo separado.
 6. No hacer stale cleanup automático en un arranque posterior.
 
-La carrera residual no se declara resuelta por una primitiva atómica: se considera no explotable por UIDs externos porque no pueden modificar el directorio; root y los procesos del mismo UID pertenecen a la TCB. Si esa exclusividad no puede demostrarse en el entorno de instalación, alternativa A no satisface el modelo y debe detenerse antes de implementar.
+La carrera residual no se declara resuelta por una primitiva atómica: bajo TCB-1 se considera fuera del alcance de adversarios externos porque no pueden modificar el directorio; root y los procesos del mismo UID pertenecen a la TCB. Si la cadena de directorios no excluye escrituras de UIDs externos, alternativa A no satisface el modelo y debe detenerse antes de implementar.
 
 ## 6. Identidad del cliente privilegiado
 
