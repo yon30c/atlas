@@ -127,7 +127,8 @@ Al crear correctamente el socket, la instancia captura `st_dev`, `st_ino` y tipo
 | A06 | Listener propio con pathname sustituido por fixture controlado | Ejecutar cleanup | No elimina el objeto sustituto; reporta mismatch |
 | A07 | Listener propio sin sustitución | Ejecutar cleanup | Elimina solo el socket propio y deja directorio vacío |
 | A08 | Conexión válida | Enviar un único paquete válido de ping | Una respuesta conforme a `atlas-admin/1`; cierre de conexión |
-| A09 | Peer con UID distinto y no permitido | Conectar y enviar | Sin respuesta y conexión cerrada |
+| A09a | Listener candidato: directorio 0700, socket 0600; cliente con UID distinto | Intentar acceder y conectar | DAC bloquea antes de accept(); no afirmar que SO_PEERCRED fue consultado |
+| A09b | Fixture temporal separado y accesible a otro UID | Cliente externo conecta y envía | SO_PEERCRED observa UID real; handler rechaza con UNAUTHORIZED_PEER sin respuesta |
 | A10 | Peer permitido | Conectar y enviar | Se procesa conforme al handler actual |
 | A11 | Peer desconecta antes/durante envío | Procesar | No crash; no se informa éxito ficticio |
 | A12 | Paquete truncado o ancillary prohibido | Procesar | Cierre sin respuesta según contrato |
@@ -136,7 +137,12 @@ Al crear correctamente el socket, la instancia captura `st_dev`, `st_ino` y tipo
 | A15 | Cierre ordenado del listener | Reintentar conexión | Conexión nueva falla; no queda descriptor abierto |
 | A16 | Dos procesos/hilos de prueba intentan `bind()` simultáneamente sobre el mismo pathname libre del sandbox | Ejecutar ambos binds concurrentemente y observar resultados | Exactamente un bind gana; el otro falla por colisión; el listener ganador permanece operativo y ningún objeto se modifica |
 
-A09 es condicional: solo se ejecuta si el entorno ya ofrece una identidad de prueba no privilegiada distinta y puede invocarse sin sudo, cambios de UID/GID ni cambios del host. Si no, se marca `SKIP` con causa y la autorización por UID queda sin evidencia de integración multi-UID. No se sustituye por mocks como prueba de credenciales reales.
+A09 se divide en dos evidencias independientes porque DAC del pathname y autorización de aplicación son capas distintas:
+
+- **A09a — aislamiento DAC:** utiliza el endpoint candidato sin alterar directorio 0700 ni socket 0600. Un proceso externo con UID distinto intenta acceder; el kernel debe denegar el acceso antes de accept(). Esto demuestra aislamiento filesystem, no que SO_PEERCRED haya sido leído ni que la allowlist haya rechazado al peer.
+- **A09b — autorización SO_PEERCRED:** utiliza un fixture temporal separado, no el endpoint candidato. Para permitir que un UID distinto llegue al listener, el fixture puede usar un directorio atravesable pero no escribible por otros UIDs (por ejemplo 0711) y un socket de prueba conectable (por ejemplo 0666). Estos permisos son exclusivos del fixture efímero; nunca se aplican al listener candidato ni se presentan como configuración de producción. El handler debe leer las credenciales del kernel y rechazar al UID externo antes de procesar la solicitud, sin respuesta de protocolo.
+- Ambos escenarios requieren una identidad no privilegiada distinta ya disponible y un cliente lanzado externamente bajo esa identidad. El runner no crea cuentas, no cambia UID/GID, no usa sudo y no modifica el host. Si falta esa identidad o no puede orquestarse el cliente externo de forma segura, cada subescenario no demostrado se marca `SKIP` con causa y el resultado global permanece `INCOMPLETE`.
+- A09b no debe simular credenciales ni sustituir el intercambio real de SO_PEERCRED por mocks. El fixture permisivo no reduce ni altera los modos exigidos para el endpoint candidato.
 
 A06 utiliza únicamente un fixture del sandbox para simular sustitución. No intenta reproducir ni volver a ejecutar la colisión destructiva histórica de systemd.
 
@@ -147,6 +153,8 @@ A06 utiliza únicamente un fixture del sandbox para simular sustitución. No int
 - La política de autorización se mantiene separada de la identificación del peer.
 - El probe usa una allowlist de prueba explícita, inmutable durante la ejecución y no derivada de datos enviados por el cliente.
 - Un UID identificado pero no permitido no recibe respuesta.
+- **DAC y autorización no son la misma prueba:** A09a verifica que el filesystem impide alcanzar el endpoint privado; A09b verifica que el handler rechaza un peer distinto después de que la conexión llegó al listener.
+- A09b utiliza un fixture temporal con permisos distintos a los del endpoint candidato. No se deben relajar los modos `0700/0600` de A01 para forzar una conexión multi-UID.
 - No se interpreta `SO_PEERCRED` como identidad Atlas, identidad humana ni autorización de dominio.
 - La evidencia de un único UID no demuestra aislamiento entre cuentas Linux.
 - El probe no cambia UID/GID, no usa `setuid()`, no ejecuta `sudo` y no crea cuentas.
@@ -183,7 +191,7 @@ tests/integration/private_unix_listener/
 
 Se reutiliza el handler existente desde `src/atlas/platform_admin_ipc.py`; no se modifica ese módulo ni el contrato. Se eligió un único ejecutor para que el probe sea explícito y no se incorpore accidentalmente a la suite unitaria predeterminada. Los escenarios siguen separados por identificador y se detienen al primer FAIL.
 
-La implementación cubre A01–A08, A10–A16. A09 queda SKIP deliberado: el runner no cambia UID/GID, no usa sudo y no crea identidades. Por tanto, un recorrido sin otros fallos termina como INCOMPLETE, no PASS. A14 utiliza un harness de prueba con un máximo fijo de dos workers y backlog ocho; no representa ni fija capacidad de producción.
+La implementación cubre A01–A08, A10–A16. A09a/A09b quedan SKIP deliberado: el runner no cambia UID/GID, no usa sudo y no crea identidades. Por tanto, un recorrido sin otros fallos termina como INCOMPLETE, no PASS. A14 utiliza un harness de prueba con un máximo fijo de dos workers y backlog ocho; no representa ni fija capacidad de producción.
 
 ## 10. Salida y clasificación
 
