@@ -252,7 +252,12 @@ def _server_child(socket_path: str, socket_mode: int, allowed_uid: int) -> int:
                     accepted += 1
                     current_accepted = accepted
                 emit(event="accepted", accepted=current_accepted)
-                pool.submit(worker, connection)
+                try:
+                    pool.submit(worker, connection)
+                except Exception:
+                    connection.close()
+                    slots.release()
+                    raise
     except Exception as exc:
         emit(event="server_error", error=f"{type(exc).__name__}: {exc}")
         return 1
