@@ -634,7 +634,7 @@ Referencias: [diseño A-IPC-01](design/local-authority-admin-private-unix-listen
 Static review found an additional DAC constraint: an A09b fixture with mode 0711 cannot be nested beneath the probe's private root 0700, because traversal is denied at the parent. The fixture must be a separate sibling directory directly under a verified shared sticky temporary parent (for example /tmp), with fixture mode 0711 and socket mode 0666. The private sandbox and candidate endpoint retain their original modes. Both A09 checks require a second, already-authenticated ordinary-user session under a distinct pre-existing UID; no sudo/su/runuser/setuid or account creation is allowed. This topology and orchestration are design requirements only; runner implementation and validation remain pending.
 
 
-## A09 — diseño de identidad temporal multi-UID (2026-11-21)
+## A09 — diseño de identidad temporal multi-UID (2026-11-20)
 
 El propietario autorizó diseñar una cuenta temporal dedicada `atlas-a09-test` para proporcionar el peer externo de A09a/A09b. **La autorización actual no permite ejecutar cambios en Debian.**
 
