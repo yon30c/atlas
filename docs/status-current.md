@@ -294,7 +294,7 @@ Se define una separación documental:
 A09b's temporary fixture must not be nested under the private probe root (0700), since DAC on that parent would still block the external UID. It must be a separate sibling directory directly under a verified shared sticky temporary parent (e.g. /tmp), with fixture directory 0711 and test socket 0666. The candidate endpoint remains 0700/0600. A09a/A09b also require a second already-authenticated ordinary-user session with a different pre-existing UID; the runner must not switch credentials or invoke privilege tools. This is a design correction only; neither subscenario is implemented or validated.
 
 
-## A09 — diseño de identidad temporal multi-UID (2026-11-21)
+## A09 — diseño de identidad temporal multi-UID (2026-11-20)
 
 El propietario autorizó diseñar un procedimiento para una identidad temporal dedicada `atlas-a09-test`, pero **no autorizó todavía su creación ni cambios en Debian**. Diseño: [identidad temporal para A09](design/a09-temporary-test-identity-provisioning.md).
 
