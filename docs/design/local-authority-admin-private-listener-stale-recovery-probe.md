@@ -213,3 +213,44 @@ El propietario ejecutó `e46070e6e1824b06af04a3627feb0f658de9c1f8` en `Atlas-VM-
 La fuente del kernel revisada muestra que la interfaz procfs de AF_UNIX enumera sockets y expone inode/path; la discrepancia requiere diagnóstico adicional, no una relajación del matching. Commit `a3e2d3dcb24842c4ae842f1d8082b4a2dbade374` amplía los diagnósticos de SR-01/SR-11 con FD target, `getsockname()`, `SO_TYPE`, `SO_ACCEPTCONN`, recuento y filas completas (acotadas a 64) de la tabla local. Es un cambio de diagnóstico, no ejecutado aún por el propietario.
 
 **Estado:** A-IPC-04 no validado; A-THREAT-05 abierta. La ausencia de filas no clasifica un socket como stale y no autoriza unlink. Repetir solo en `Atlas-VM-test`, nunca en `greed`. Sin limpieza automática, listener persistente ni despliegue.
+
+
+## Quinta ejecución del propietario — diagnóstico de listener local (2026-11-21)
+
+Checkout: `6f77960c25fba873be67bd29fb40814619e44ee8`, VM desechable
+`Atlas-VM-test`, Debian 13, kernel `6.12.117+deb13-amd64`,
+Python 3.13.5, EUID 0. Resultado: **10 PASS / 2 FAIL / 0 INCOMPLETE**;
+203 procesos visibles; seis namespaces en inventario inicial; duración
+0.161 s; cleanup confirmado.
+
+La nueva evidencia de SR-01 y SR-11 descarta que el fixture simplemente
+haya fallado al enlazar o entrar en listen:
+- `getsockname()` devolvió la ruta esperada en cada escenario.
+- `SO_TYPE=5` y `SO_ACCEPTCONN=true`.
+- `/proc/self/fd/3` apuntó a `socket:[41168]` (SR-01) y
+  `socket:[41184]` (SR-11).
+- La lectura directa de `/proc/self/net/unix` se completó sin error y
+  devolvió 58 registros, pero no incluyó el pathname, los inodes ni filas
+  candidatas de ninguno de los listeners. El namespace del inspector
+  `net:[4026531840]` estaba incluido en el snapshot.
+- SR-03 volvió a detectar desde el proceso padre el listener del namespace
+  adicional `net:[4026532290]`, PID 6051.
+
+Por tanto SR-01/SR-11 siguen siendo fallos sustantivos de observabilidad
+procfs, no fallos de creación/listen ni una demostración de inactividad.
+SR-02..SR-10 y SR-12 pasaron. No se usó connect/accept/send/recv para
+comprobar liveness y el sandbox se eliminó.
+
+**Próxima investigación:** aislar por qué el kernel expone otros sockets
+AF_UNIX en la tabla local, pero no estos sockets SOCK_SEQPACKET que el mismo
+proceso confirma como enlazados y escuchando. Revisar el camino de creación/
+registro y la semántica de enumeración procfs para la versión exacta del
+kernel Debian 6.12.117; añadir, si procede, una prueba diagnóstica mínima
+que registre el comportamiento sin debilitar el matching ni la clasificación.
+No cambiar a comparación solo por inode, no tratar una tabla sin coincidencia
+como prueba de stale y no ejecutar unlink.
+
+**Estado:** A-IPC-04 no validado; A-THREAT-05 abierta. No usar en sockets
+reales ni en `greed`; no habilitar cleanup automático, listener persistente
+o despliegue. Resultado aportado y ejecutado por el propietario; el asistente
+no ejecutó pruebas, builds, workflows ni probes.
