@@ -1885,6 +1885,152 @@ def _scenario_fd_thread_accounting(
                 pass
 
 
+
+def _scenario_repeated_recovery(
+    server: Server, socket_path: Path, *, cycles: int = 3
+) -> dict:
+    """CP-11: repeat full worker/backlog saturation and prove bounded recovery."""
+    cycle_results: list[dict[str, object]] = []
+    for cycle in range(1, cycles + 1):
+        active_clients: list[socket.socket] = []
+        queued_clients: list[socket.socket] = []
+        try:
+            server.drain(0.25)
+            accepted_before = max(
+                (
+                    int(item.get("accepted", 0))
+                    for item in server.events
+                    if item.get("event") == "accepted"
+                ),
+                default=0,
+            )
+            baseline = _process_resource_snapshot(server.process.pid)
+
+            for _ in range(WORKERS):
+                client = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+                client.settimeout(2.0)
+                client.connect(str(socket_path))
+                active_clients.append(client)
+            _wait_metrics(
+                server,
+                active=WORKERS,
+                accepted_at_least=accepted_before + WORKERS,
+            )
+
+            for _ in range(BACKLOG + 1):
+                client = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+                client.settimeout(2.0)
+                client.connect(str(socket_path))
+                queued_clients.append(client)
+
+            recv_q, send_q = _unix_listener_queue(socket_path)
+            if (recv_q, send_q) != (BACKLOG + 1, BACKLOG):
+                raise ProbeFailure(
+                    f"CP-11 cycle {cycle}: expected pending queue "
+                    f"{BACKLOG + 1}/{BACKLOG}, observed {recv_q}/{send_q}"
+                )
+            server.drain(0.15)
+            accepted_at_saturation = max(
+                (
+                    int(item.get("accepted", 0))
+                    for item in server.events
+                    if item.get("event") == "accepted"
+                ),
+                default=0,
+            )
+            expected_at_saturation = accepted_before + WORKERS
+            if accepted_at_saturation != expected_at_saturation:
+                raise ProbeFailure(
+                    f"CP-11 cycle {cycle}: accepts changed during saturation; "
+                    f"baseline={accepted_before}, expected={expected_at_saturation}, "
+                    f"observed={accepted_at_saturation}, pending={recv_q}, "
+                    f"workers={WORKERS}"
+                )
+
+            saturated = _process_resource_snapshot(server.process.pid)
+            if saturated["open_fds"] > FD_LIMIT:
+                raise ProbeFailure(
+                    f"CP-11 cycle {cycle}: FD count {saturated['open_fds']} "
+                    f"exceeded {FD_LIMIT}"
+                )
+            if saturated["threads"] != WORKERS + 1:
+                raise ProbeFailure(
+                    f"CP-11 cycle {cycle}: expected {WORKERS + 1} threads, "
+                    f"observed {saturated['threads']}"
+                )
+
+            for client in queued_clients + active_clients:
+                client.close()
+            queued_clients.clear()
+            active_clients.clear()
+
+            recovered = _wait_metrics(
+                server,
+                active=0,
+                accepted_at_least=accepted_before + WORKERS + BACKLOG + 1,
+                timeout=8.0,
+            )
+            server.drain(0.15)
+            accepted_after = max(
+                (
+                    int(item.get("accepted", 0))
+                    for item in server.events
+                    if item.get("event") == "accepted"
+                ),
+                default=0,
+            )
+            expected_after = accepted_before + WORKERS + BACKLOG + 1
+            if accepted_after != expected_after:
+                raise ProbeFailure(
+                    f"CP-11 cycle {cycle}: accepted count after recovery "
+                    f"expected {expected_after}, observed {accepted_after}"
+                )
+            after_recovery = _process_resource_snapshot(server.process.pid)
+            if after_recovery["open_fds"] != baseline["open_fds"]:
+                raise ProbeFailure(
+                    f"CP-11 cycle {cycle}: FD count did not return to baseline "
+                    f"({baseline['open_fds']} -> {after_recovery['open_fds']})"
+                )
+            if after_recovery["threads"] != baseline["threads"]:
+                raise ProbeFailure(
+                    f"CP-11 cycle {cycle}: thread count did not return to baseline "
+                    f"({baseline['threads']} -> {after_recovery['threads']})"
+                )
+            if server.process.poll() is not None:
+                raise ProbeFailure(
+                    f"CP-11 cycle {cycle}: fixture server exited during recovery"
+                )
+            cycle_results.append({
+                "cycle": cycle,
+                "accepted_before": accepted_before,
+                "accepted_at_saturation": accepted_at_saturation,
+                "accepted_after_recovery": accepted_after,
+                "pending_connections": recv_q,
+                "active_after_recovery": recovered.get("active"),
+                "baseline": baseline,
+                "at_saturation": saturated,
+                "after_recovery": after_recovery,
+                "server_alive_after_recovery": True,
+            })
+        finally:
+            for client in queued_clients + active_clients:
+                try:
+                    client.close()
+                except OSError:
+                    pass
+
+    return {
+        "cycles": cycles,
+        "workers": WORKERS,
+        "backlog": BACKLOG,
+        "effective_pending_queue_limit": BACKLOG + 1,
+        "all_cycles_recovered": True,
+        "resource_counts_returned_to_baseline_each_cycle": True,
+        "server_alive_after_all_cycles": server.process.poll() is None,
+        "cycle_results": cycle_results,
+    }
+
+
 def _scenario_payload_size() -> dict:
     """CP-08: enforce request and response packet limits without silent truncation."""
     from atlas.platform_admin_ipc import (
@@ -2192,10 +2338,16 @@ def _main_parent(args: argparse.Namespace) -> int:
             "status": "PASS",
             "observations": resource_accounting,
         })
+        repeated_recovery = _scenario_repeated_recovery(server, service_socket)
         results.append({
-            "id": "CP-11..CP-12",
+            "id": "CP-11",
+            "status": "PASS",
+            "observations": repeated_recovery,
+        })
+        results.append({
+            "id": "CP-12",
             "status": "INCOMPLETE",
-            "detail": "repeated post-saturation recovery cycles and low-RLIMIT startup rejection remain unimplemented",
+            "detail": "low-RLIMIT startup rejection remains unimplemented",
         })
         overall = "INCOMPLETE"
     except ProbeIncomplete as exc:
