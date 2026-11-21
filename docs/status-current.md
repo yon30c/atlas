@@ -1,6 +1,6 @@
 # Estado vigente de Atlas
 
-> **Corte documental:** 21 de noviembre de 2026. A-IPC-01 reportado 16/16 PASS. A-IPC-02: MA-01..MA-10 y CP-01/CP-04 PASS. La ejecución de CP-02/CP-03 sobre `1ebf930a6559c3d6a81965f0f94c28ed8e6eef56` falló porque se esperaba EAGAIN en la novena conexión; revisión del kernel explica el límite AF_UNIX efectivo de backlog+1. Runner corregido en `634e19decce2322e94ca0d1fe410b259f23dcb67`, pendiente de validar. CP-05..CP-12 pendientes.
+> **Corte documental:** 21 de noviembre de 2026. A-IPC-01 reportado 16/16 PASS. A-IPC-02 en `b5b0128`: MA-01..MA-10, CP-01/04 y CP-02/03 PASS; overall INCOMPLETE por CP-05..CP-12. CP-02/03 midió 8/8, novena admitida 9/8 y décima rechazada con EAGAIN errno 11; sin accepts/workers extra. Cleanup correcto. CP-05 requiere aclarar read timeout 5 s frente a deadline global 15 s.
 > **Main:** permanece en HEAD `1bd73d149dbd98e7ee2e5fdc36880883b6b03d16`; PR #29 está integrado. La suite reportada para el HEAD de código de PR #29 fue 1,590 tests, `OK (skipped=1)`; no se ha reportado una nueva ejecución sobre el merge HEAD.
 > **Rama activa de diseño:** `experiment/a-ipc-01-private-unix-listener-probe`. Se mantiene separada de `main`; no tiene PR propio. PR #30 sigue abierto en Draft y corresponde a la rama de diseño original.
 > **Estado IPC:** el handler procesa conexiones ya aceptadas; solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
@@ -18,7 +18,7 @@
 - **Dirección elegida:** alternativa A, listener AF_UNIX/SOCK_SEQPACKET propio en directorio filesystem privado. Es línea de evaluación, no aprobación productiva.
 - **PR #30:** abierto en Draft sobre `design/isolated-private-unix-listener-probe`; no es la rama experimental actual. No hay PR propio para la rama `experiment/a-ipc-01-private-unix-listener-probe`.
 - **A-IPC-01:** el propietario reportó A01–A16 = 16 PASS, 0 SKIP, 0 FAIL en el commit indicado en el registro. A09a validó DAC con UID distinto; A09b validó rechazo real del handler mediante SO_PEERCRED. No valida UID 0 ↔ `atlas-runtime` ni despliegue.
-- **A-IPC-02 — evidencia más reciente:** MA-01..MA-10 y CP-01/CP-04 PASS en la ejecución de `901c792` (JSON `commit: null`), confirmada en la ejecución posterior de `1ebf930a6559c3d6a81965f0f94c28ed8e6eef56`. Esta última terminó FAIL solo al intentar CP-02/CP-03: el backlog mostró 8/8, pero la novena conexión no bloqueante devolvió 0, no EAGAIN. La revisión del kernel identifica la semántica AF_UNIX backlog+1; runner corregido en `634e19decce2322e94ca0d1fe410b259f23dcb67`, aún sin ejecución. Cleanup correcto. CP-05..CP-12 pendientes.
+- **A-IPC-02 — evidencia más reciente:** ejecución en `b5b0128`: MA-01..MA-10, CP-01/04 y CP-02/03 PASS; overall INCOMPLETE por CP-05..CP-12. Backlog medido 8/8, novena conexión admitida 9/8, décima rechazada EAGAIN errno 11; sin accepts/workers adicionales; cleanup correcto. Antes de CP-05 aclarar la interacción entre read timeout 5 s y deadline global 15 s.
 - **TCB-1:** aceptada. Procesos bajo el UID dedicado `atlas-runtime` son parte de la TCB; no se exige aislamiento intra-UID. Su exclusividad operativa aún debe definirse y verificarse.
 - **Identidad cliente:** EUID 0 aceptado como requisito del frontend; `client_uids={0}`. El entrypoint IPC real aún no existe/revisado. El harness A-IPC-02 validó MA-01..MA-10 en la última ejecución reportada, incluida la autenticación mutua root↔UID de servicio, rechazo pre-connect de EUID no root, claims UID/GID/PID falsificados, parser fixture estricto, snapshot inmutable, desconexión previa a request y rechazo de transportes no soportados antes de leer.
 - **Configuración:** `local-authority-admin-private-listener-identity-config.md` propone fuente root-managed `/etc/atlas/admin-ipc.conf`, root:root 0644 sin secretos, parser estricto y carga inmutable. No se creó el archivo ni se fijaron valores operativos.
@@ -597,3 +597,10 @@ la siguiente. El runner ahora comprueba la novena conexión exitosa, mide
 Recv-Q=9/Send-Q=8, y exige EAGAIN en la décima. Corrección commit
 `634e19decce2322e94ca0d1fe410b259f23dcb67`. Pendiente de ejecución local;
 no se ejecutaron pruebas desde GitHub.
+
+
+### A-IPC-02 — CP-02/CP-03 validados (2026-11-21)
+
+El propietario reportó ejecución sobre `b5b0128e2646e41e3a2f927251c6fa6dafa897d7`: MA-01..MA-10, CP-01/04 y CP-02/03 PASS; overall INCOMPLETE por CP-05..CP-12. Recv-Q/Send-Q 8/8, novena conexión admitida 9/8, décima rechazada EAGAIN errno 11; accepts permanecieron en 9, workers dentro del límite y cleanup correcto.
+
+**Gate CP-05:** un cliente silencioso vence al read timeout de 5 s, ya que el fixture aplica `min(READ_TIMEOUT, remaining_global)`, antes del deadline global de 15 s. Aclarar el comportamiento deseado antes de implementar el escenario.
