@@ -424,3 +424,21 @@ Se publicó `docs/design/local-authority-admin-private-listener-resource-budget.
 Perfil aprobado por el propietario para probes aislados: 4 conexiones/workers fijos, backlog 8, cola de aplicación 0, read/write 5 s, deadline total 15 s y `RLIMIT_NOFILE=64`. No equivale a configuración de producción. Mutaciones serializadas; operaciones largas con ID/status sin retener conexión. Memoria, CPU, TasksMax, shutdown e inventario real de FDs no están fijados.
 
 A-THREAT-07 sigue abierto hasta validar el perfil en un probe aislado. No se modificó código ni host.
+
+
+## A-IPC-02 — primera iteración de autenticación mutua/capacidad (2026-11-21)
+
+Se implementó \`tests/integration/private_unix_listener/run_mutual_auth_capacity_probe.py\` como runner separado de A-IPC-01. Es un harness experimental de procesos reales, no un listener de Atlas:
+
+- Exige ejecución directa como root dentro de una VM desechable y confirmaciones explícitas; requiere cuatro IDs numéricos de fixture dedicados. No crea cuentas/grupos ni usa sudo/su.
+- El cliente root valida \`SO_PEERCRED.uid\` del servidor antes de enviar el ping; un servidor con UID alternativo debe recibir EOF con cero bytes.
+- El servidor fixture valida \`SO_PEERCRED.uid == 0\` antes de \`recv\`; el cliente con UID alternativo no recibe respuesta protocolaria.
+- El proceso servidor usa UID/GID reales, efectivos y saved del fixture, sin grupos suplementarios; aplica \`RLIMIT_NOFILE=64\`.
+- Pool fijo de cuatro workers y semáforo antes de \`accept()\`; el probe mantiene cuatro conexiones ocupadas, verifica que la quinta no sea aceptada como quinto worker y que se acepte después de liberar un slot.
+- Backlog configurado 8, read/write 5 s y deadline global 15 s. La saturación exacta, adversarios de timeout, full FD accounting, límites de payload/depth y escenarios restantes todavía no están implementados.
+
+El runner crea fixtures temporales bajo \`/run\`, incluyendo una raíz de traversal root-owned 0711 (no escribible por grupo/otros) para que el peer alternativo pueda alcanzar el socket expuesto. Copia el script y el módulo IPC a una ubicación temporal de solo lectura accesible por los procesos con UID reducido. La limpieza valida identidad de cada socket; ante sustitución o fallo de un proceso, preserva el sandbox y reporta FAIL.
+
+**Estado:** revisión estática en GitHub solamente. No se ejecutó el runner, pruebas, compilaciones ni workflows. El resultado completo esperado en esta iteración es \`INCOMPLETE\` porque quedan escenarios deliberadamente pendientes. El propietario debe revisar y ejecutar únicamente en VM desechable; no usar el servidor Debian de producción.
+
+**Siguiente paso:** inspeccionar el diff local tras actualizar a este commit y decidir cuatro IDs numéricos reservados para la VM; después ejecutar A-IPC-02 y compartir el JSON completo. A continuación se completarán backlog/deadlines/FD accounting y el probe de resolución de rutas/colisiones. No se modifica handler/contrato ni se autoriza listener persistente, systemd, SQLite o despliegue.
