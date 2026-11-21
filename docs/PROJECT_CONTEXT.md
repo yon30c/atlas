@@ -1,10 +1,10 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-20.
+> **Última actualización:** 2026-11-21.
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
-## Estado operativo vigente — 2026-11-20
+## Estado operativo vigente — 2026-11-21
 
 > Esta sección es la referencia operativa prioritaria. Las secciones posteriores conservan decisiones y snapshots históricos; cuando un dato histórico contradiga este bloque, prevalece este bloque para el estado actual. No se elimina la historia de decisiones.
 
@@ -13,14 +13,17 @@
 - **PR activo:** [#29 — Alinear probe systemd con atlas-admin/1 y registrar puertas del listener](https://github.com/yon30c/atlas/pull/29), abierto como draft, base `main`.
 - **HEAD de la rama del PR:** variable por cada commit documental; consultar la cabecera de [PR #29](https://github.com/yon30c/atlas/pull/29) para el SHA vigente. La base de comparación es `main` en `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`.
 - **Base estable:** `main` en `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`; PR #28 ya integrado.
-- **Última validación local reportada:** sobre `main` en ese SHA, el propietario ejecutó 1.590 tests: `OK (skipped=1)`, 34.895 s, Python 3.13.5. Esta evidencia valida esa base, **no** los cambios del PR #29.
-- **Validación de PR #29:** pendiente de ejecución local en Debian. No se han ejecutado pruebas, compilaciones ni workflows remotos para este PR en este ciclo documental.
+- **Validación de la base `main`:** el propietario reportó 1.590 tests: `OK (skipped=1)`, 34.895 s, Python 3.13.5, sobre `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`.
+- **Validación local de PR #29:** confirmada por el propietario en Debian 13 sobre HEAD exacto `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, con árbol limpio y sincronizado con `origin`.
+  - Probe `tests/integration/systemd_socket_activation/run_user_manager_test.py`: `PASS` para activación systemd user-manager, validación del descriptor, dos activaciones, ownership/mode privados y limpieza delegada al harness con `RemoveOnStop=no`.
+  - Suite completa: `Ran 1590 tests in 34.753s` / `OK (skipped=1)`.
+  - La evidencia valida ese HEAD de PR #29 en el entorno Debian comunicado; no demuestra system-manager, separación de privilegios, transporte de producción ni despliegue. No se ejecutaron pruebas, compilaciones ni workflows remotos desde GitHub.
 - **Estado IPC:** contrato `atlas-admin/1` y handler/prototipo para conexiones ya aceptadas; la única operación funcional sigue siendo `authority.ping`. No existe listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
 - **Endpoint/transporte:** no hay transporte aprobado para producción. Listener propio sobre directorio privado (A) es únicamente candidato al siguiente probe temporal; socket activation systemd sobre filesystem (B) está suspendida por la colisión destructiva observada en Debian systemd 257.13; AF_UNIX abstracto (C) es experimental y conserva riesgos de preclaim/DoS y ausencia de DAC.
 - **Operaciones restantes:** las seis operaciones administrativas restantes continúan bloqueadas/no implementadas funcionalmente.
-- **Siguiente paso:** completar la validación local del probe systemd corregido del PR #29 y, por separado, diseñar probes temporales A y C. No ejecutar los probes desde GitHub ni tocar recursos Atlas existentes.
+- **Siguiente paso:** revisión/decisión del propietario sobre sacar PR #29 de Draft e integrarlo. Los probes A (listener propio) y C (AF_UNIX abstracto) siguen siendo trabajos separados; no se ejecutaron ni quedan aprobados por esta validación.
 
-**Límites vigentes:** este estado no autoriza merge del PR, listener persistente, despliegue, unidades systemd, cambios del host, usuarios, grupos, permisos, privilegios, apertura de SQLite, provisioning ni operaciones administrativas. Las decisiones de transporte y cualquier cambio de autoridad requieren evidencia y aprobación explícita del propietario.
+**Límites vigentes:** la validación del probe user-manager no autoriza system-manager, listener persistente, despliegue, unidades de producción, cambios del host, usuarios, grupos, permisos, privilegios, apertura de SQLite, provisioning ni operaciones administrativas. Socket activation sobre filesystem continúa suspendida por la colisión observada. Las decisiones de transporte y cualquier cambio de autoridad requieren evidencia y aprobación explícita del propietario.
 
 ---
 
@@ -521,3 +524,13 @@ El diseño lifecycle ahora compara:
 3. Socket abstracto AF_UNIX/SOCK_SEQPACKET: alternativa experimental; evita pathname/inode y unlink, pero carece de permisos filesystem, permite intentos de conexión local y presenta riesgo de preclaim/DoS.
 
 No se selecciona ni aprueba transporte para producción. Próximo trabajo: diseñar probes temporales independientes para A y C, ejecutar por el propietario en Debian, comparar evidencias y solicitar decisión explícita. No usar sudo, rutas Atlas existentes, system-manager de producción ni bases de autoridad. No implementar listener persistente.
+
+
+### 16.9 Validación local de PR #29 — 2026-11-21
+
+El propietario confirmó que Debian estaba en `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, con árbol limpio y rama sincronizada con `origin/work/systemd-socket-activation-probe-contract-alignment`. Sobre ese HEAD comunicó:
+
+- Probe `tests/integration/systemd_socket_activation/run_user_manager_test.py`: ambos mensajes `PASS`; activación systemd user-manager, validación del descriptor, dos activaciones, ownership/mode privados y `RemoveOnStop=no` dejando cleanup del pathname al harness.
+- Suite completa: `Ran 1590 tests in 34.753s` y `OK (skipped=1)`.
+
+Esta evidencia cierra la validación local del alcance de PR #29. No demuestra comportamiento del system-manager, separación real de privilegios, seguridad frente a procesos del mismo UID/root, ni aprueba transporte o despliegue. La activación systemd sobre filesystem permanece suspendida por la colisión destructiva observada previamente. Los probes de alternativas A y C siguen pendientes y separados.
