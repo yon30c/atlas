@@ -779,3 +779,27 @@ El runner requiere root directo dentro de VM desechable, cuatro IDs numéricos r
 Escenarios implementados: MA-01, MA-02, MA-04, MA-05, CP-01 y CP-04. El runner marca explícitamente INCOMPLETE los escenarios no implementados (EUID negativo, configuración, variantes de transporte, saturación exacta de backlog, deadlines adversariales, excepciones, límites JSON/payload y FD accounting). El overall no puede ser PASS todavía.
 
 **Estado actual:** código y documentación actualizados en la rama experimental, revisión estática solamente. No se ejecutaron pruebas, compilaciones ni workflows. El propietario debe revisar el diff y ejecutar el runner únicamente en VM desechable, nunca en el servidor Debian de producción. A-THREAT-01 y A-THREAT-07 siguen abiertos hasta validar y completar cobertura. No se modifica handler, contrato, SQLite, host, \`main\` ni PR; no se aprueba listener persistente ni despliegue.
+
+
+## A-IPC-02 — actualización posterior (2026-11-21)
+
+Validación del propietario en `Atlas-VM-test`, commit
+`069dbb9520f9e640955d9122f3a8012b2f55ba1a`, Debian 13, kernel
+`6.12.117+deb13-amd64`, Python 3.13.5, EUID 0, fixtures 2005/2005 y
+2006/2006:
+- MA-01..MA-05 PASS; MA-03 rechazó EUID 2006 antes de connect y el servidor
+  no observó conexión.
+- CP-01/CP-04 PASS; máximo 4 workers y 0 activos tras recuperación.
+- Backlog 8 configurado, no saturado.
+- Overall INCOMPLETE; 1.339 s; cleanup de sandboxes `/run` completado.
+
+MA-06 se añadió después en `9a8380eb4a4051763699b7c07c3ad9dfcf1eeccd`:
+el probe envía claims de identidad `uid/gid/pid` como campos adicionales
+del envelope y exige que el decoder los rechace como `INVALID_REQUEST`;
+SO_PEERCRED sigue siendo la fuente de identidad. MA-06 está implementado,
+pendiente de ejecución local. No atribuirle PASS basándose en el commit
+anterior.
+
+Próximo paso: ejecutar el nuevo commit solo en `Atlas-VM-test`; nunca en
+`greed` de producción. El probe permanece INCOMPLETE y no autoriza
+transporte persistente ni despliegue.
