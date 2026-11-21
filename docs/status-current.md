@@ -1,6 +1,6 @@
 # Estado vigente de Atlas
 
-> **Corte documental:** 21 de noviembre de 2026. A-IPC-01 reportado 16/16 PASS. A-IPC-02: el propietario reportó MA-01..MA-10 y CP-01/CP-04 PASS en `Atlas-VM-test`; global INCOMPLETE por CP-02/CP-03 y CP-05..CP-12 pendientes. El checkout se actualizó a `901c792cb723d920da4970ecce98ea7f871c4f85`; el JSON reportó `commit: null`.
+> **Corte documental:** 21 de noviembre de 2026. A-IPC-01 reportado 16/16 PASS. A-IPC-02: MA-01..MA-10 y CP-01/CP-04 PASS. La ejecución de CP-02/CP-03 sobre `1ebf930a6559c3d6a81965f0f94c28ed8e6eef56` falló porque se esperaba EAGAIN en la novena conexión; revisión del kernel explica el límite AF_UNIX efectivo de backlog+1. Runner corregido en `634e19decce2322e94ca0d1fe410b259f23dcb67`, pendiente de validar. CP-05..CP-12 pendientes.
 > **Main:** permanece en HEAD `1bd73d149dbd98e7ee2e5fdc36880883b6b03d16`; PR #29 está integrado. La suite reportada para el HEAD de código de PR #29 fue 1,590 tests, `OK (skipped=1)`; no se ha reportado una nueva ejecución sobre el merge HEAD.
 > **Rama activa de diseño:** `experiment/a-ipc-01-private-unix-listener-probe`. Se mantiene separada de `main`; no tiene PR propio. PR #30 sigue abierto en Draft y corresponde a la rama de diseño original.
 > **Estado IPC:** el handler procesa conexiones ya aceptadas; solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
@@ -18,7 +18,7 @@
 - **Dirección elegida:** alternativa A, listener AF_UNIX/SOCK_SEQPACKET propio en directorio filesystem privado. Es línea de evaluación, no aprobación productiva.
 - **PR #30:** abierto en Draft sobre `design/isolated-private-unix-listener-probe`; no es la rama experimental actual. No hay PR propio para la rama `experiment/a-ipc-01-private-unix-listener-probe`.
 - **A-IPC-01:** el propietario reportó A01–A16 = 16 PASS, 0 SKIP, 0 FAIL en el commit indicado en el registro. A09a validó DAC con UID distinto; A09b validó rechazo real del handler mediante SO_PEERCRED. No valida UID 0 ↔ `atlas-runtime` ni despliegue.
-- **A-IPC-02 — última validación del propietario:** en `Atlas-VM-test`, Debian 13, kernel `6.12.117+deb13-amd64`, Python 3.13.5, EUID 0, fixtures SERVICE 2005/2005 y OTHER 2006/2006. MA-01..MA-10 y CP-01/CP-04 = PASS; duración 1.687 s; cleanup de ambos sandboxes `/run` completado; cero filas FAIL. MA-10 confirmó rechazo previo a lectura de AF_UNIX/SOCK_STREAM y AF_INET/SOCK_STREAM, con primer byte aún encolado y cero respuesta. Cuatro workers máximos y recuperación a cero. Backlog 8 configurado, no saturado. Global INCOMPLETE por CP-02/CP-03 y CP-05..CP-12 pendientes. El fast-forward previo dejó checkout en `901c792cb723d920da4970ecce98ea7f871c4f85`, pero el JSON reportó `commit: null`.
+- **A-IPC-02 — evidencia más reciente:** MA-01..MA-10 y CP-01/CP-04 PASS en la ejecución de `901c792` (JSON `commit: null`), confirmada en la ejecución posterior de `1ebf930a6559c3d6a81965f0f94c28ed8e6eef56`. Esta última terminó FAIL solo al intentar CP-02/CP-03: el backlog mostró 8/8, pero la novena conexión no bloqueante devolvió 0, no EAGAIN. La revisión del kernel identifica la semántica AF_UNIX backlog+1; runner corregido en `634e19decce2322e94ca0d1fe410b259f23dcb67`, aún sin ejecución. Cleanup correcto. CP-05..CP-12 pendientes.
 - **TCB-1:** aceptada. Procesos bajo el UID dedicado `atlas-runtime` son parte de la TCB; no se exige aislamiento intra-UID. Su exclusividad operativa aún debe definirse y verificarse.
 - **Identidad cliente:** EUID 0 aceptado como requisito del frontend; `client_uids={0}`. El entrypoint IPC real aún no existe/revisado. El harness A-IPC-02 validó MA-01..MA-10 en la última ejecución reportada, incluida la autenticación mutua root↔UID de servicio, rechazo pre-connect de EUID no root, claims UID/GID/PID falsificados, parser fixture estricto, snapshot inmutable, desconexión previa a request y rechazo de transportes no soportados antes de leer.
 - **Configuración:** `local-authority-admin-private-listener-identity-config.md` propone fuente root-managed `/etc/atlas/admin-ipc.conf`, root:root 0644 sin secretos, parser estricto y carga inmutable. No se creó el archivo ni se fijaron valores operativos.
@@ -26,10 +26,10 @@
 - **Cleanup TOCTOU (A-THREAT-04):** residual aceptado bajo TCB-1 si el directorio es privado, la instancia es única y cleanup revalida por descriptor; unlink no es atómico.
 - **Socket stale (A-THREAT-05):** procedimiento manual candidato publicado; sigue pendiente validarlo en sandbox. Startup nunca hace stale cleanup ni conecta para probar liveness.
 - **Resolución de rutas (A-THREAT-06):** especificación de diseño publicada; falta probe de symlinks, sustitución por UID externo, colisiones y connect canónico.
-- **Recursos (A-THREAT-07):** el propietario aprobó para probes aislados 4 conexiones/workers, backlog 8, cola de aplicación 0, read/write 5 s, deadline global 15 s y `RLIMIT_NOFILE=64`. CP-01/CP-04 pasaron en la última ejecución reportada (máximo 4 workers, recuperación a 0). CP-02/CP-03 están implementados en GitHub pero pendientes de validación local: cuatro workers ocupados, ocho conexiones en cola observadas con `ss`, novena conexión no bloqueante rechazada con EAGAIN. CP-05..CP-12 siguen pendientes. No es configuración de producción. Plan: `design/local-authority-admin-private-listener-mutual-auth-capacity-probe.md`.
+- **Recursos (A-THREAT-07):** el propietario aprobó para probes aislados 4 conexiones/workers, parámetro `listen(8)`, cola de aplicación 0, read/write 5 s, deadline global 15 s y `RLIMIT_NOFILE=64`. En Linux AF_UNIX, la comprobación del kernel usa `queue_len > backlog`, por lo que el límite efectivo es 9 conexiones pendientes para `listen(8)`: el runner corregido verifica conexión novena exitosa y décima rechazada con EAGAIN. Commit `634e19decce2322e94ca0d1fe410b259f23dcb67`, pendiente de validación. CP-01/04 pasan; CP-05..CP-12 siguen pendientes. No es configuración de producción. Plan: `design/local-authority-admin-private-listener-mutual-auth-capacity-probe.md`.
 - **Lifecycle (A-THREAT-08):** máquina de estados, readiness, shutdown/drenaje y cierre de FDs aún no diseñados/validados.
 - **Evidencia de despliegue (A-THREAT-09):** A09 usó runner UID 1000 y peer UID 1001; no probó cliente root, servicio `atlas-runtime` ni permisos/ownership finales.
-- **Siguiente paso:** actualizar `Atlas-VM-test` a `67526c21a1edc2938b5caefb699aa6c6576c5b73` y ejecutar CP-02/CP-03 recién implementados. El runner requiere iproute2 `ss` root-owned y no escribible por grupo/otros para observar la cola real. Si pasan, continuar con CP-05 (deadline global) y CP-06 (timeouts read/write frente al deadline). Nunca ejecutar en `greed` de producción ni crear cuentas/grupos.
+- **Siguiente paso:** actualizar `Atlas-VM-test` a `634e19decce2322e94ca0d1fe410b259f23dcb67` y repetir el runner. Debe observarse 8/8 tras ocho conexiones, 9/8 tras la conexión de frontera y EAGAIN en la décima, sin accepts/workers extra. Si pasa, continuar con CP-05 y CP-06. Nunca ejecutar en `greed` de producción ni crear cuentas/grupos.
 - No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. El propietario ejecutó el runner localmente en la VM desechable y reportó MA-01..MA-10 y CP-01/04 PASS. El checkout se había actualizado a `901c792`; el campo commit del JSON fue null. `main` y Debian/host de producción no fueron modificados; no se creó PR.
 
 **Límites de autorización:** el PASS experimental no selecciona por sí solo un transporte productivo ni autoriza listener persistente, daemon, unidades systemd de producción, cambios del host, usuarios/grupos, permisos/privilegios, acceso SQLite, provisioning o despliegue. No habilita operaciones administrativas distintas del ping no mutante usado como fixture.
@@ -583,3 +583,17 @@ Corrección estática adicional en commit
 `global SS_BIN` para que el preflight pueda conservar la ruta resuelta del
 observador sin sombrear el nombre global. Pendiente de validación junto con
 CP-02/CP-03.
+
+
+### Resultado CP-02/CP-03 y corrección de semántica AF_UNIX (2026-11-21)
+
+Ejecución del propietario sobre commit `1ebf930`: overall FAIL en CP-02/CP-03
+porque la conexión no bloqueante posterior a Recv-Q=8 devolvió 0. El resto
+de escenarios MA-01..MA-10 y CP-01/CP-04 pasó; cleanup de sandboxes correcto.
+
+El kernel Linux AF_UNIX compara longitud de cola con backlog usando `>`,
+por lo que `listen(8)` admite nueve conexiones pendientes antes de rechazar
+la siguiente. El runner ahora comprueba la novena conexión exitosa, mide
+Recv-Q=9/Send-Q=8, y exige EAGAIN en la décima. Corrección commit
+`634e19decce2322e94ca0d1fe410b259f23dcb67`. Pendiente de ejecución local;
+no se ejecutaron pruebas desde GitHub.
