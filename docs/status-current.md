@@ -1,7 +1,7 @@
 # Estado vigente de Atlas
 
 > **Corte documental:** 21 de noviembre de 2026 (actualización posterior: A-IPC-01 A09a/A09b 16/16 PASS, validado por el propietario en Debian; véase `status-aipc01-validation-2026-11-21.md`).
-> **Main actual:** PR #29 integrado mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b` (21-11-2026). La suite comunicada fue ejecutada sobre el HEAD de PR `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, antes de los commits documentales y del merge; no se ha reportado una nueva ejecución sobre el merge commit.
+> **Main actual:** HEAD `1bd73d149dbd98e7ee2e5fdc36880883b6b03d16`; PR #29 está integrado en su historia mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`. La suite comunicada fue ejecutada sobre el HEAD de código de PR `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, antes del merge; no se ha reportado una nueva ejecución sobre el HEAD actual de `main`.
 > **PR #29:** cerrado e integrado en `main`; HEAD probado `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`.
 > **PR integrado:** [#29](https://github.com/yon30c/atlas/pull/29), merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`.
 > **Suite completa reportada:** sobre el HEAD de PR #29 `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`: **1,590 tests — OK (skipped=1)**, 34.753 s, Python 3.13.5. La validación precede al merge commit; no afirmar que se ejecutó sobre `main` después del merge.
@@ -17,6 +17,7 @@
 - El handler recibe conexiones ya aceptadas; no crea ni gestiona un listener persistente. No existe daemon administrativo ni acceso administrativo real a SQLite.
 - `authority.ping` es la única operación administrativa funcional. Las otras seis operaciones del catálogo siguen bloqueadas/no implementadas.
 - **Dirección elegida por el propietario:** continuar con **A — listener AF_UNIX/SOCK_SEQPACKET creado por proceso bajo un directorio filesystem privado**. Es la línea principal de evaluación y desarrollo. No equivale a aprobación del transporte para producción.
+- **PR #30:** sigue abierto en Draft y apunta a la rama separada `design/isolated-private-unix-listener-probe`; contiene el diseño original, no el HEAD experimental validado. La rama actual `experiment/a-ipc-01-private-unix-listener-probe` no es el head de PR #30. No se ha abierto un PR para esta rama experimental.
 - **A-IPC-01 validado:** el propietario reportó en Debian 13, commit `1d5bdb122a8480c36b445be7dd961b93806de74b`, resultado `overall=PASS`: A01–A16, 16 PASS, 0 SKIP, 0 FAIL. A09a probó aislamiento DAC desde UID distinto; A09b probó rechazo real del handler mediante SO_PEERCRED. Entorno y evidencias detalladas: [registro A-IPC-01](status-aipc01-validation-2026-11-21.md).
 - El probe usa sandbox temporal sin privilegios, directorio 0700/socket 0600, colisiones no destructivas, no elimina sockets stale para forzar bind, cleanup condicionado por identidad, límites y carrera de dos binds. A09b utiliza un fixture separado 0711/0666 exclusivamente para alcanzar el handler; esos permisos no pertenecen al endpoint candidato.
 - **Riesgos no cubiertos:** root/capabilities suficientes y procesos maliciosos del mismo UID; comparación `lstat`/`unlink` no atómica; ciclo de vida persistente; arranque/parada de servicio; system-manager; separación de privilegios; autorización SQLite; despliegue y operaciones mutantes.
