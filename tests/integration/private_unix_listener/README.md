@@ -8,6 +8,17 @@ The recorded Debian execution is documented below and in
 This is not a production listener and does not select AF_UNIX pathname sockets
 as the production IPC transport.
 
+ 
+> **Current direction (2026-11-21):** the owner selected alternative A as the
+> primary line of technical evaluation and development. This is not production
+> transport approval. The owner-reported execution below supersedes all earlier
+> A09 SKIP / INCOMPLETE statements in the historical notes: A01–A16 = 16 PASS,
+> 0 SKIP, 0 FAIL on commit
+> `1d5bdb122a8480c36b445be7dd961b93806de74b`. Historical sections are retained
+> to preserve the sequence of implementation and preflight decisions; read them
+> as historical snapshots, not as the current validation state. See the
+> [canonical validation record](../../../docs/status-aipc01-validation-2026-11-21.md).
+
 ## Scope and safety boundary
 
 The probe creates one unique temporary sandbox under the current user's
