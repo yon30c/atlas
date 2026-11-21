@@ -76,11 +76,11 @@ El lifecycle menciona una cuenta dedicada sin login y prohíbe ejecución arbitr
 
 ### A-THREAT-04 — Cleanup por identidad tiene una ventana TOCTOU conocida
 
-**Severidad: ALTA — requiere estrategia explícita y aceptación del riesgo.**
+**Severidad: MEDIA — limitación técnica residual aceptada bajo TCB-1, condicionada a exclusividad del directorio y listener de instancia única.**
 
 El lifecycle reconoce que `lstat/stat` seguido de `unlink` no es una operación atómica condicionada por inode. La comparación `st_dev + st_ino + tipo` evita borrar sustitutos en los casos observados, pero no elimina la carrera entre comprobación y unlink. Bajo TCB-1, UIDs externos no deben poder modificar el directorio privado; root y procesos del mismo UID `atlas-runtime` son parte de la TCB. La ventana TOCTOU permanece como limitación técnica y no se declara atómica.
 
-**Requisito antes de implementar:** definir quién puede modificar el directorio durante el cleanup, cuál es el límite de confianza aceptado y cómo se registra un cleanup omitido. No describir el patrón como protección frente a root o procesos con autoridad equivalente. Preferir operaciones relativas a un descriptor de directorio y resolución sin symlinks; documentar que eso no convierte el unlink condicionado por inode en atómico.
+**Condiciones para aceptar el residual:** toda la cadena de directorios debe impedir escritura de UIDs externos; el directorio endpoint debe ser privado, dedicado y propiedad de `atlas-runtime`; el servicio debe ser de instancia única y no compartir el UID con procesos no confiables; cleanup debe usar el descriptor del directorio, revalidar tipo/owner/mode/dev/inode inmediatamente antes de `unlinkat` y omitir la eliminación ante cualquier discrepancia. El diseño no protege frente a root ni procesos del mismo UID, y no afirma que el unlink sea atómico. Si no se puede garantizar cualquiera de estas condiciones, A-THREAT-04 vuelve a ser bloqueante.
 
 ### A-THREAT-05 — Recuperación después de caída no tiene procedimiento operativo completo
 
@@ -150,7 +150,7 @@ Estas garantías son acotadas al código y ejecución identificados. No prueban 
 | Root/capabilities suficientes | Fuera de la TCB de este control | No se prueba | Fuera de alcance declarado |
 | Path preexistente / colisión | Bind sin unlink previo | A02–A05 y A16 | Validado experimentalmente |
 | Socket residual tras crash | Fallar cerrado, no stale cleanup | A05 simula stale; recuperación operacional no probada | Parcial |
-| Sustitución de pathname durante cleanup | Comparar identidad antes de unlink | A06/A07 y diseño reconoce TOCTOU | Parcial; riesgo aceptado pendiente |
+| Sustitución de pathname durante cleanup | Directorio privado TCB-1 + revalidación y unlinkat relativo | A06/A07 y diseño reconoce TOCTOU | Residual aceptado bajo condiciones TCB-1; requiere probe |
 | Saturación / DoS de conexiones | Límites y backpressure | A14 harness 2 workers/backlog 8 | Solo harness |
 | Shutdown bajo carga / restart persistente | Máquina de estados y drenaje | No existe listener persistente | Pendiente |
 | Hardening / privilegios heredados | UID/GID/capabilities/FD explícitos | No probado para proceso de servicio | Pendiente |
@@ -161,7 +161,7 @@ Estas garantías son acotadas al código y ejecución identificados. No prueban 
 2. ¿Cómo autentica el cliente privilegiado al servidor, además de comprobar el pathname?
 3. ¿Cuál es la identidad exacta del cliente autorizado y dónde se fija la allowlist?
 4. ¿Cuál es el procedimiento manual, auditado y separado para recuperar un socket residual?
-5. ¿Qué riesgo TOCTOU de cleanup se acepta y bajo qué hipótesis de exclusividad del directorio?
+5. La ventana TOCTOU de cleanup se acepta bajo TCB-1 solo si ownership/modos excluyen UIDs externos, el listener es de instancia única y cleanup revalida la identidad por descriptor; si no, detener el diseño.
 6. ¿Qué primitive de resolución de ruta y descriptor se exige para todos los componentes?
 7. ¿Qué límites reales de conexiones, FDs, workers, deadlines y shutdown tendrá el servicio?
 8. ¿Qué propiedades del proceso `atlas-runtime` deben verificarse (UID/GID reales/efectivos/saved, capabilities, no_new_privs, descriptores, umask, entorno, cwd y restricciones de ejecución)?
