@@ -386,3 +386,39 @@ A complete overall result is therefore expected to be INCOMPLETE at this stage.
 No tests, builds or workflows have been run by the assistant. The owner must
 review and execute this probe manually. A-IPC-02 does not implement or approve
 a persistent listener or production transport.
+
+
+## A-IPC-02 owner validation and MA-06 update — 2026-11-21
+
+The owner executed the A-IPC-02 runner in disposable VM `Atlas-VM-test`,
+directly as root, on commit
+`069dbb9520f9e640955d9122f3a8012b2f55ba1a`, Debian 13, kernel
+`6.12.117+deb13-amd64`, Python 3.13.5, with SERVICE UID/GID 2005/2005
+and OTHER UID/GID 2006/2006.
+
+- MA-01 through MA-05: PASS.
+- MA-03 specifically observed client EUID 2006, `connect_attempted=false`,
+  and `server_observed_connection=false`.
+- CP-01 and CP-04: PASS; maximum active workers 4; active workers after
+  recovery 0.
+- Backlog 8 was configured but not saturated.
+- Overall INCOMPLETE; duration 1.339 s; private and traversal `/run`
+  sandboxes removed after child processes exited.
+- No FAIL rows were reported.
+
+This evidence belongs to commit `069dbb9` only. The subsequent MA-06
+implementation is in commit `9a8380e` and has not been executed.
+
+### MA-06 — reject client-supplied identity claims
+
+The runner now sends a valid ping envelope augmented with untrusted top-level
+`uid`, `gid` and `pid` claims. The fixture authenticates the connected
+peer using kernel SO_PEERCRED first, then passes the packet through the strict
+request decoder. MA-06 requires rejection with `INVALID_REQUEST`, while the
+observed peer UID remains the kernel UID (root in this scenario); the supplied
+identity fields are not accepted as credentials.
+
+MA-06 is implemented but pending owner execution. This is a protocol-envelope
+negative test, not proof against a compromised root client or kernel. The
+overall runner remains INCOMPLETE until the remaining MA/CP scenarios are
+implemented and owner-validated.
