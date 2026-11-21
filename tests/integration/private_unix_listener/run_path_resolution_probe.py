@@ -402,7 +402,7 @@ def _scenario_11_descriptor_anchoring(sandbox: Path) -> dict:
     _mkdir(outside)
     _write_file(original / "child", b"anchored-original")
     _write_file(outside / "child", b"outside-sentinel")
-    parent_fd = os.open(original, DIRECTORY_FLAGS)
+    parent_fd, _ = open_directory_path(str(original))
     try:
         held = sandbox / "race-parent-held"
         os.rename(original, held)
