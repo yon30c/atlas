@@ -2293,22 +2293,19 @@ def _git_commit() -> str | None:
     return result.stdout.strip() if result.returncode == 0 else None
 
 
-
-def _apply_cp12_low_nofile_limit() -> None:
-    """Applied in the child between fork and exec to model an inherited limit."""
-    resource.setrlimit(
-        resource.RLIMIT_NOFILE,
-        (CP12_LOW_FD_LIMIT, CP12_LOW_FD_LIMIT),
-    )
-
-
 def _scenario_low_rlimit_startup(
     script: Path, service_dir: Path, uid: int, gid: int
 ) -> dict:
     """CP-12: reject startup on inherited low soft/hard NOFILE without raising it."""
     socket_path = service_dir / "low-rlimit.sock"
+    limit_wrapper = (
+        "import os, resource, sys; "
+        f"resource.setrlimit(resource.RLIMIT_NOFILE, "
+        f"({CP12_LOW_FD_LIMIT}, {CP12_LOW_FD_LIMIT})); "
+        "os.execv(sys.executable, [sys.executable, *sys.argv[1:]])"
+    )
     command = [
-        sys.executable, str(script), "--server-child",
+        sys.executable, "-c", limit_wrapper, str(script), "--server-child",
         "--socket", str(socket_path),
         "--socket-mode", "0o600",
         "--allowed-uid", "0",
@@ -2327,7 +2324,6 @@ def _scenario_low_rlimit_startup(
             user=uid,
             group=gid,
             extra_groups=[],
-            preexec_fn=_apply_cp12_low_nofile_limit,
         )
     except subprocess.TimeoutExpired as exc:
         raise ProbeFailure("CP-12 low-RLIMIT child did not reject startup promptly") from exc
