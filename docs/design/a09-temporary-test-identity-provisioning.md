@@ -105,20 +105,18 @@ El runner actual no implementa A09a/A09b ni coordinación con un cliente externo
 
 ## 7. Puertas de autorización
 
-La autorización para crear la identidad fue concedida y consumida. El propietario confirmó la creación del grupo, cuenta y HOME; no se requieren más cambios para esa fase. Antes de modificar Debian se requiere aprobación explícita separada para:
-- generar e instalar la clave pública restringida en `authorized_keys`;
-- iniciar una sesión SSH local de prueba.
+La autorización para crear la identidad fue concedida y consumida. El propietario confirmó la creación del grupo, cuenta y HOME; no se requieren más cambios para esa fase. Las aprobaciones para generar/instalar la clave pública restringida y probar una sesión SSH local fueron concedidas y consumidas; ambas fases fueron ejecutadas por el propietario. El cambio futuro del comando forzado en `authorized_keys` sigue requiriendo aprobación explícita separada.
 
-La implementación del cliente/runner A09 requiere además revisión estática en GitHub y aprobación separada antes de ejecutarla. La eliminación futura de la cuenta/grupo/HOME también requerirá aprobación separada. No se modificará el handler, contrato, runtime, SQLite, systemd ni servicios de producción.
+La implementación del cliente/runner A09 está publicada en la rama experimental; requiere revisión estática y aprobación independiente antes de ejecutarla. La eliminación futura de la cuenta/grupo/HOME también requerirá aprobación separada. No se modificará el handler, contrato, runtime, SQLite, systemd ni servicios de producción.
 
 ## 8. Estado
 
 - Cuenta `atlas-a09-test`: **creada y verificada por el propietario**; UID `1001`, GID `984`, grupo primario dedicado, sin grupos suplementarios adicionales, HOME `0700`, shell `/bin/bash`, contraseña bloqueada.
 - Inactividad/privilegios verificados por el propietario: sin procesos del UID, sin sesión ni linger según `loginctl`, `user@1001.service` inactive, sin archivo de linger y sin permisos sudo.
 - Claves: Ed25519 temporal generada e instalada por el propietario; autenticación SSH local confirmada. La clave privada permanece fuera del repositorio.
-- SSH/PAM/firewall: **sin cambios**. El daemon escucha en todas las interfaces; la clave experimental, si se autoriza, deberá limitarse a loopback.
+- SSH/PAM/firewall: **sin cambios globales**. El daemon escucha en todas las interfaces; la clave experimental está restringida a origen loopback y `restrict`, pero su comando forzado actual sigue siendo `/usr/bin/id -u`.
 - Host key ED25519 de loopback verificada por fingerprint coincidente: `SHA256:txiDPT+/ldcIwnN6BPotbeL7QsofAieAeqF3GKMa9xI`.
-- A09a/A09b: **no implementados y no validados**.
+- A09a/A09b: helper/runner implementados en la rama experimental, pero no ejecutados ni validados.
 - Última evidencia A-IPC-01 comunicada: 15 PASS, A09 SKIP, 0 FAIL; global INCOMPLETE.
 - `main`: intacta.
 - Transporte de producción: no seleccionado ni aprobado.
