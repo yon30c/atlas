@@ -270,8 +270,11 @@ the reported run.
 
 ## A-IPC-02 — mutual authentication and bounded-capacity probe
 
-**Status:** first implementation increment published; static review only. It has
-not been executed. It is separate from the unprivileged A-IPC-01 runner above:
+**Status:** six initial scenarios were owner-validated on commit
+`fbc8c68e75c7d5d32768442666cf861f7880eb28` with PASS and cleanup verified;
+the overall probe correctly returned INCOMPLETE because required coverage
+remained. The current branch adds MA-03 in commit `7a0d4f1`, pending owner
+execution. This is not a production listener or transport approval. It is separate from the unprivileged A-IPC-01 runner above:
 A-IPC-01 continues to refuse EUID 0; A-IPC-02 requires direct root execution
 inside a disposable VM because it must prove a real EUID 0 client against
 service and alternate numeric fixture identities.
@@ -318,12 +321,35 @@ The command is intentionally not part of the default test suite. Do not invent
 or reuse IDs from the host; first reserve four numeric fixture IDs exclusively
 inside the disposable VM. The runner does not create accounts or groups.
 
+### Owner-reported baseline execution — 2026-11-21
+
+The owner executed A-IPC-02 in the disposable VM `Atlas-VM-test`, directly
+as root, on commit `fbc8c68e75c7d5d32768442666cf861f7880eb28`, using fixture
+UID/GID pairs 2005/2005 and 2006/2006. Debian 13, kernel
+`6.12.117+deb13-amd64`, Python 3.13.5.
+
+- MA-01, MA-02, MA-04 and MA-05: PASS.
+- CP-01 and CP-04: PASS; observed maximum active workers 4, and zero active
+  workers after recovery.
+- Kernel backlog was configured to 8 but exact saturation was not tested.
+- Overall: INCOMPLETE, as required while omitted scenarios remain.
+- Duration: 1.177 s.
+- Cleanup: both private and traversal `/run` sandboxes removed after child
+  processes exited.
+- No FAIL rows were reported.
+
+This execution validates only the six scenarios above on the recorded
+commit/environment. The current MA-03 addition was authored afterward in
+commit `7a0d4f1` and has not yet been executed. Do not attribute MA-03 PASS
+or the baseline run to the newer commit.
+
 ### Implemented evidence in this increment
 
 | Scenario | Evidence |
 |---|---|
 | MA-01 | Root client verifies the server's kernel UID before sending a valid ping |
 | MA-02 | Root client rejects a server running under the alternate UID and sends zero bytes |
+| MA-03 | Non-root client fixture is rejected by the EUID guard before socket creation/connect; server observes no connection (new code, pending owner execution) |
 | MA-04 | Service receives a real kernel peer UID 0 and processes the ping |
 | MA-05 | Service rejects the alternate-UID client before calling recv and sends no response |
 | CP-01 | Four active workers occupy all slots; a fifth connection remains pending rather than creating a fifth worker |
@@ -337,7 +363,7 @@ tests for timeout expiry and exact backlog saturation remain incomplete.
 **Not yet implemented/validated:** exact kernel backlog saturation; full
 open-FD accounting; idle/read/write deadline adversaries; exception-path
 worker recovery; request/response boundary and JSON-depth adversaries;
-client EUID-negative pre-connect; configuration parsing/immutability;
+configuration parsing/immutability;
 pathname component-walk, symlink and collision matrix; stale recovery.
 The current runner reports these omitted scenarios as INCOMPLETE, never PASS.
 A complete overall result is therefore expected to be INCOMPLETE at this stage.
