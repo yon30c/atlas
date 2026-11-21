@@ -136,13 +136,19 @@ def _proc_pid_entries(proc_root: str = "/proc") -> list[str]:
 
 def _namespace_identity(pid: str, proc_root: str = "/proc") -> tuple[int, int, str]:
     path = os.path.join(proc_root, pid, "ns", "net")
+    descriptor = None
     try:
-        info = os.stat(path, follow_symlinks=True)
-        target = os.readlink(path)
+        flags = getattr(os, "O_PATH", os.O_RDONLY) | os.O_CLOEXEC
+        descriptor = os.open(path, flags)
+        info = os.fstat(descriptor)
+        target = os.readlink(f"/proc/self/fd/{descriptor}")
     except OSError as exc:
         if exc.errno in (errno.ENOENT, errno.ESRCH, errno.ENOTDIR):
             raise ProcessRace(f"PID {pid} disappeared during namespace inspection") from exc
         raise CoverageError(f"cannot inspect PID {pid} network namespace: {exc.errno}") from exc
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
     match = NETNS_RE.fullmatch(target)
     if not match:
         raise CoverageError(f"PID {pid} returned an ambiguous net namespace link")
@@ -230,6 +236,9 @@ def inspect_visible_namespaces(
                 if current[:2] != (device, inode):
                     raise ProcessRace(f"representative PID {pid} changed namespace")
                 raw = table_reader(pid, proc_root)
+                after_read = _namespace_identity(pid, proc_root)
+                if after_read[:2] != (device, inode):
+                    raise ProcessRace(f"representative PID {pid} changed namespace during table read")
                 if len(raw) > 4 * 1024 * 1024:
                     raise CoverageError("namespace unix table exceeds 4 MiB safety limit")
                 records = _parse_unix_table(raw)
@@ -551,6 +560,18 @@ def _scenario_10_approved_removal(sandbox: Path, uid: int, gid: int) -> dict:
         observed = _identity_at(parent, name)
         _check_expected_socket(observed, uid, gid)
         token = _issue_fixture_token(path, observed)
+        wrong_identity = FsIdentity(
+            observed.device, observed.inode + 1, observed.file_type,
+            observed.uid, observed.gid, observed.mode,
+        )
+        wrong_token = ApprovalToken(path, wrong_identity, token.challenge)
+        wrong_token_rejected = False
+        try:
+            _remove_with_fixture_token(parent, name, path, observed, wrong_token)
+        except ProbeFailure:
+            wrong_token_rejected = True
+        if not wrong_token_rejected or _identity_at(parent, name) != observed:
+            raise ProbeFailure("SR-10 mismatched token was not rejected without mutation")
         _remove_with_fixture_token(parent, name, path, observed, token)
         try:
             os.stat(name, dir_fd=parent, follow_symlinks=False)
@@ -563,6 +584,7 @@ def _scenario_10_approved_removal(sandbox: Path, uid: int, gid: int) -> dict:
         return {
             "decision": "REMOVED_EXACT_APPROVED_FIXTURE",
             "approval_token_bound_to_identity": True,
+            "mismatched_token_rejected_without_mutation": wrong_token_rejected,
             "removed_identity": observed.as_dict(),
             "absent_after_unlink": absent,
         }
