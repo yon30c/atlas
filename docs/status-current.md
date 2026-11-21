@@ -199,3 +199,20 @@ El resultado valida el alcance de ese HEAD. No prueba system-manager, separació
 PR [#29](https://github.com/yon30c/atlas/pull/29) fue marcado Ready for review e integrado en `main` mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`. La evidencia local comunicada corresponde al HEAD de código `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`: probe systemd user-manager `PASS` y suite `Ran 1590 tests in 34.753s — OK (skipped=1)`. Los commits posteriores del PR fueron documentales. No se ejecutaron pruebas desde GitHub ni se ha afirmado una nueva suite sobre el merge commit.
 
 La integración no habilita listener persistente, system-manager, separación de privilegios, operaciones administrativas ni transporte de producción. La activación systemd sobre filesystem sigue suspendida por la colisión destructiva observada. Los probes A y C permanecen pendientes como experimentos independientes.
+
+
+## Diseño A-IPC-01 — listener Unix propio en directorio privado (2026-11-21)
+
+**Estado:** diseño propuesto; pendiente de revisión/aprobación. No implementado ni ejecutado.
+
+Documento: [local-authority-admin-private-unix-listener-probe.md](design/local-authority-admin-private-unix-listener-probe.md).
+
+El experimento evaluará la alternativa A: creación del endpoint AF_UNIX/SOCK_SEQPACKET por el propio proceso mediante `bind()`, dentro de un directorio temporal privado. Incluye colisiones con archivo regular, symlink, socket activo y socket stale; integridad de objetos preexistentes; cleanup condicionado por tipo/dispositivo/inode; lifecycle del listener; SO_PEERCRED y autorización separada; desconexión, truncamiento, ancillary, timeouts y límites de concurrencia/recursos.
+
+**Invariantes:** no unlink preventivo; no stale cleanup automático; ninguna colisión puede modificar el objeto existente; si la identidad del pathname no coincide durante cleanup, no se elimina; no sudo, no cambios de UID/GID, no recursos Atlas existentes.
+
+**Límites:** la secuencia lstat/unlink conserva riesgo TOCTOU; el directorio privado no protege frente a root ni procesos del mismo UID. La prueba con UID distinto es condicional y se marca SKIP/INCOMPLETE si no puede realizarse sin privilegios ni cambios del host.
+
+**Exclusiones:** no listener persistente, daemon, systemd, SQLite, operaciones administrativas, cambios del host ni despliegue. No existe todavía comando de ejecución. La validación queda a cargo del propietario en Debian una vez implementado y revisado el probe.
+
+La rama `design/isolated-private-unix-listener-probe` se creó desde `main`. No se modificó `main`, no se abrió PR y no se ejecutaron pruebas ni workflows remotos.
