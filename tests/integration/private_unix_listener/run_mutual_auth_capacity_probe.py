@@ -423,9 +423,16 @@ def _negative_euid_client_child(socket_path: str) -> int:
 
 
 class Server:
-    def __init__(self, process: subprocess.Popen[str], socket_path: Path) -> None:
+    def __init__(
+        self,
+        process: subprocess.Popen[str],
+        socket_path: Path,
+        *,
+        expected_worker_errors: int = 0,
+    ) -> None:
         self.process = process
         self.socket_path = socket_path
+        self.expected_worker_errors = expected_worker_errors
         self.socket_identity: tuple[int, int, int] | None = None
         self.events: list[dict[str, object]] = []
         self._output: queue.Queue[object] = queue.Queue()
@@ -457,9 +464,18 @@ class Server:
         if not isinstance(item, dict):
             raise ProbeFailure(f"server emitted invalid event type: {type(item).__name__}")
         self.events.append(item)
-        if item.get("event") in {
-            "startup_error", "server_error", "worker_error",
-            "cleanup_error", "cleanup_preserved",
+        event_name = item.get("event")
+        if event_name == "worker_error":
+            expected_error = "RuntimeError: CP-07 one-shot worker exception"
+            if (
+                self.expected_worker_errors > 0
+                and item.get("error") == expected_error
+            ):
+                self.expected_worker_errors -= 1
+            else:
+                raise ProbeFailure(f"server reported unexpected worker error {item}")
+        elif event_name in {
+            "startup_error", "server_error", "cleanup_error", "cleanup_preserved",
         }:
             raise ProbeFailure(f"server reported {item}")
         return item
@@ -559,7 +575,11 @@ def _start_server(
         group=gid,
         extra_groups=[],
     )
-    server = Server(process, socket_path)
+    server = Server(
+        process,
+        socket_path,
+        expected_worker_errors=1 if inject_worker_exception_once else 0,
+    )
     registry.append(server)
     ready = server.wait_event("ready", timeout=5.0)
     identity = ready.get("socket_identity")
