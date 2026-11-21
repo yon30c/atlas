@@ -96,9 +96,9 @@ El diseño correctamente prohíbe stale cleanup automático y establece que un p
 
 El lifecycle recomienda descriptor de directorio, `dir_fd` y `O_NOFOLLOW`, además de validar propietario/modo. Debe aclararse cómo se resuelven **todos** los componentes de la ruta, no solo el componente final: abrir el directorio final con `O_NOFOLLOW` no demuestra por sí solo que ningún componente padre haya sido sustituido por symlink durante una resolución absoluta ordinaria.
 
-**Diseño candidato publicado:** [Resolución segura de rutas y ownership](local-authority-admin-private-listener-path-resolution.md) define recorrido componente a componente desde `/` mediante `openat`/ `dir_fd`, `O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC`, validación `fstat` de cada directorio y apertura del archivo final relativa al descriptor padre. También distingue la configuración root-managed del directorio privado del endpoint y documenta que `bind()` pathname no recibe `dir_fd` en la API Python estándar.
+**Diseño candidato publicado:** [Resolución segura de rutas y ownership](local-authority-admin-private-listener-path-resolution.md) define recorrido componente a componente desde `/` mediante `openat`/ `dir_fd`, `O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC`, validación `fstat` de cada directorio y apertura del archivo final relativa al descriptor padre. La investigación añadió un candidato Linux procfs (`/proc/self/fd/<dirfd>/...`) documentado por `sockat` para bind/connect.
 
-**Estado:** el requisito está especificado a nivel de diseño, pero no cerrado para implementación. Falta revisar/probar el método concreto de bind respecto del directorio validado y demostrar el recorrido completo con escenarios de symlink/escape. No usar `realpath()` ni asumir que `O_NOFOLLOW` en el último componente protege los ancestros.
+**Estado:** el requisito está especificado a nivel de diseño, pero no cerrado para implementación. Falta un probe que demuestre que el bind procfs crea exactamente en el directorio validado, que connect por descriptor llega al mismo socket, que `getsockname()` no se usa como ruta canónica y que los artefactos temporales se limpian de forma segura. No usar `realpath()` ni asumir que `O_NOFOLLOW` en el último componente protege los ancestros.
 
 ### A-THREAT-07 — Límites del probe no equivalen a límites del servicio
 
