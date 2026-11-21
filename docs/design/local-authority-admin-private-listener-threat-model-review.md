@@ -46,33 +46,33 @@ No se debe afirmar simultáneamente que el UID de servicio es compartido y que D
 
 ## 4. Hallazgos
 
-### A-THREAT-01 — Autenticación del servidor frente al cliente no especificada
+### A-THREAT-01 — Autenticación mutua diseñada, aún no implementada
 
 **Severidad: ALTA — bloqueante para integrar un cliente privilegiado.**
 
-El contrato define autenticación del peer en el handler: el servidor obtiene `SO_PEERCRED` y compara el UID del cliente con una allowlist antes de leer el paquete. No define el mecanismo por el cual el cliente comprueba que el pathname al que se conecta termina en el proceso Atlas legítimo.
+El handler autentica al cliente mediante `SO_PEERCRED` antes de leer. El diseño de frontera ahora define la autenticación del servidor: el cliente consulta `SO_PEERCRED` inmediatamente después de connect y antes de enviar bytes, y exige el UID numérico esperado de `atlas-runtime`. La autenticación identifica el dominio UID TCB-1, no un ejecutable específico.
 
 La propuesta A deja el directorio bajo propiedad de `atlas-runtime`. Un proceso con ese mismo UID puede modificar el directorio y sustituir la entrada del socket. Si el cliente privilegiado conecta solo por pathname y no autentica al servidor, podría hablar con un endpoint falso. Comprobar únicamente que el servidor reporta UID `atlas-runtime` tampoco distingue dos procesos que comparten ese UID.
 
-**Requisito antes de implementar:** especificar autenticación mutua o declarar formalmente que todo proceso con el UID de servicio es parte de la TCB. La solución elegida debe ser comprobable por el cliente y no depender de datos declarados en JSON. No se prescribe todavía un mecanismo concreto.
+**Estado:** TCB-1 fue aceptada y el mecanismo mutuo por `SO_PEERCRED` está diseñado, pero la consulta del lado cliente no existe en código ni ha sido probada. Antes de integrar el listener, implementar el cliente y un probe que demuestre rechazo del UID servidor incorrecto antes de enviar cualquier byte. No depender de datos declarados en JSON.
 
-### A-THREAT-02 — Alcance de confianza del UID de servicio sin cerrar
+### A-THREAT-02 — TCB-1 aceptada; exclusividad operativa del UID pendiente
 
-**Severidad: ALTA — bloqueante para fijar permisos y despliegue.**
+**Severidad: ALTA — bloqueante para preparar la identidad de servicio y despliegue.**
 
 El directorio 0700 y el socket 0600 impiden acceso DAC desde otros UIDs no privilegiados, como se observó en A09a. No aíslan procesos con el mismo UID propietario: estos comparten autoridad DAC sobre el directorio y pueden conectar, retirar o sustituir entradas.
 
 El lifecycle menciona una cuenta dedicada sin login y prohíbe ejecución arbitraria bajo ella, pero no existe aún evidencia de su aprovisionamiento, restricciones de ejecución, procesos asociados o exclusividad.
 
-**Requisito antes de implementar:** decidir si el UID completo es confiable y definir cómo se mantiene esa condición. Si no lo es, introducir una frontera adicional y probarla. No reutilizar `greed`, `atlas-sandbox` ni una identidad de despliegue antigua.
+**Decisión:** el propietario aceptó TCB-1: todos los procesos bajo `atlas-runtime` pertenecen al mismo dominio confiable; no se exige aislamiento intra-UID para A. **Pendiente:** el UID debe ser dedicado y su exclusividad operativa (sin login arbitrario ni procesos ajenos) debe quedar demostrada en el plan de instalación. No crear la cuenta ni cambiar el host en esta fase. No reutilizar `greed`, `atlas-sandbox` ni una identidad antigua.
 
-### A-THREAT-03 — Allowlist del cliente aún depende del futuro caller
+### A-THREAT-03 — Política de allowlist decidida; caller/configuración aún no implementados
 
-**Severidad: ALTA — bloqueante para conectar el listener.**
+**Severidad: ALTA — bloqueante para conectar el listener hasta implementar y verificar el caller.**
 
 `handle_admin_connection()` recibe `allowed_peer_uids` como argumento y valida que sea un conjunto no vacío de UIDs válidos. Esto es correcto para un handler reutilizable, pero no fija la política del servicio. El propietario ya fijó EUID 0 como requisito del frontend y `client_uids={0}` para esta configuración; no es una autorización universal para otros consumidores. El entrypoint real aún no existe/revisado.
 
-**Requisito antes de implementar:** definir una única política de UID del cliente en configuración de confianza del servicio; no permitir que el cliente, variables de entorno no confiables o una solicitud alteren esa política. Verificarla al arrancar y mantenerla inmutable durante la vida del listener. La prueba A09b valida rechazo de UID 1001 en un fixture, no la política real UID 0 ↔ `atlas-runtime`.
+**Decisión:** el propietario fijó EUID 0 y `client_uids={0}`. La propuesta de configuración root-managed está en `local-authority-admin-private-listener-identity-config.md`; no se creó el archivo. **Pendiente:** implementar carga inmutable, fijar el caller/entrypoint y verificar su EUID real antes de conectar. La prueba A09b valida rechazo de UID 1001 en fixture, no el par real UID 0 ↔ `atlas-runtime`.
 
 ### A-THREAT-04 — Cleanup por identidad tiene una ventana TOCTOU conocida
 
