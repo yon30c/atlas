@@ -25,7 +25,7 @@ _REQUIRED_KEYS = frozenset(
     }
 )
 _DECIMAL = re.compile(r"[1-9][0-9]{0,9}\Z")
-_MODE = re.compile(r"0[0-7]{3}\Z")
+_SOCKET_PATH = re.compile(r"/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*\Z")
 
 
 class ProbeConfigRejected(ValueError):
@@ -65,11 +65,9 @@ def _socket_path(value: str) -> str:
     if len(encoded) > 107:
         raise ProbeConfigRejected("socket_path exceeds the Linux sun_path limit")
     components = value[1:].split("/")
-    if any(
-        component in {"", ".", ".."}
-        or "\\" in component
-        or "\x00" in component
-        for component in components
+    if (
+        not _SOCKET_PATH.fullmatch(value)
+        or any(component in {".", ".."} for component in components)
     ):
         raise ProbeConfigRejected("socket_path contains an ambiguous component")
     return value
@@ -118,10 +116,6 @@ def parse_probe_config(data: bytes) -> ProbeConfigSnapshot:
         raise ProbeConfigRejected("socket_mode must be the probe value 0600")
     if values["socket_dir_mode"] != "0700":
         raise ProbeConfigRejected("socket_dir_mode must be the probe value 0700")
-    if not _MODE.fullmatch(values["socket_mode"]) or not _MODE.fullmatch(
-        values["socket_dir_mode"]
-    ):
-        raise ProbeConfigRejected("socket modes must use canonical four-digit octal")
 
     return ProbeConfigSnapshot(
         schema_version=1,
@@ -157,7 +151,11 @@ def load_probe_config_at(
     expected_service_gid: int,
 ) -> ProbeConfigSnapshot:
     """Load one root-owned file relative to an already trusted directory fd."""
-    if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+", name):
+    if (
+        not isinstance(name, str)
+        or name in {".", ".."}
+        or not re.fullmatch(r"[A-Za-z0-9_.-]+", name)
+    ):
         raise ProbeConfigRejected("configuration filename must be one safe path component")
     if not hasattr(os, "O_NOFOLLOW"):
         raise ProbeConfigRejected("O_NOFOLLOW is unavailable")
