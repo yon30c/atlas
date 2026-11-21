@@ -964,7 +964,7 @@ connect to Atlas services, or change host accounts/configuration.
 | SR-11 | Active local listener detected without connect/accept/send/recv |
 | SR-12 | SKIP/FAIL/cleanup uncertainty cannot produce global PASS |
 
-The inspector enumerates numeric PIDs visible through the current procfs mount,
+The parser accepts the Linux `/proc/net/unix` `Num` field only with its required trailing colon, and SR-06 includes a realistic kernel-format row plus missing/doubled-delimiter rejection. If the initial namespace inventory fails, its counters remain `null` rather than misleadingly reporting zero processes/namespaces. The inspector enumerates numeric PIDs visible through the current procfs mount,
 deduplicates network namespaces by namespace device/inode, and reads one
 `/proc/<representative-pid>/net/unix` table per namespace. It requires three
 stable process/namespace snapshots, retries PID disappearance races up to
