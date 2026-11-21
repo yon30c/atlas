@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import errno
 import json
 import os
 from pathlib import Path
@@ -35,6 +36,7 @@ GLOBAL_DEADLINE = 15.0
 REQUEST_LIMIT = 16 * 1024
 RESPONSE_LIMIT = 64 * 1024
 FD_LIMIT = 64
+SS_BIN = shutil.which("ss")
 _EMIT_LOCK = threading.Lock()
 
 
@@ -578,6 +580,19 @@ def _preflight(args: argparse.Namespace) -> tuple[Path, Path]:
         raise ProbeIncomplete("service and alternate fixture UIDs must differ")
     if args.service_gid == args.other_gid:
         raise ProbeIncomplete("service and alternate fixture GIDs must differ")
+    if SS_BIN is None:
+        raise ProbeIncomplete("iproute2 ss is required for exact kernel backlog observation")
+    try:
+        ss_info = Path(SS_BIN).resolve(strict=True).stat()
+    except OSError as exc:
+        raise ProbeIncomplete(f"cannot validate ss executable: {exc}") from exc
+    if (
+        not stat.S_ISREG(ss_info.st_mode)
+        or ss_info.st_uid != 0
+        or stat.S_IMODE(ss_info.st_mode) & 0o022
+        or not os.access(SS_BIN, os.X_OK)
+    ):
+        raise ProbeIncomplete("ss executable must be a root-owned regular file not writable by group/others")
     run_dir = Path("/run")
     info = run_dir.lstat()
     if (
@@ -806,6 +821,147 @@ def _scenario_mutual_auth(
         }
     finally:
         server.stop()
+
+
+def _unix_listener_queue(socket_path: Path) -> tuple[int, int]:
+    """Read Linux AF_UNIX listener queue occupancy through iproute2 ss."""
+    if SS_BIN is None:
+        raise ProbeIncomplete("iproute2 ss is required to observe the kernel AF_UNIX backlog")
+    try:
+        result = subprocess.run(
+            [SS_BIN, "-x", "-l", "-n", "-H"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=2.0,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise ProbeIncomplete(f"could not inspect AF_UNIX listener queues: {type(exc).__name__}") from exc
+    if result.returncode != 0:
+        raise ProbeIncomplete(f"ss could not inspect AF_UNIX listener queues: {result.stderr.strip()}")
+    expected_path = str(socket_path)
+    matches: list[tuple[int, int]] = []
+    for line in result.stdout.splitlines():
+        fields = line.split()
+        if len(fields) < 5 or fields[1] != "LISTEN" or fields[4] != expected_path:
+            continue
+        try:
+            matches.append((int(fields[2]), int(fields[3])))
+        except ValueError as exc:
+            raise ProbeFailure(f"ss returned non-numeric queue counters: {line!r}") from exc
+    if len(matches) != 1:
+        raise ProbeFailure(
+            f"expected one ss LISTEN row for {expected_path}, observed {len(matches)}"
+        )
+    return matches[0]
+
+
+def _scenario_backlog(server: Server, socket_path: Path) -> dict:
+    """Fill all workers and the kernel backlog, then prove overflow is rejected."""
+    active_clients: list[socket.socket] = []
+    queued_clients: list[socket.socket] = []
+    overflow: socket.socket | None = None
+    accepted_before = max(
+        (
+            int(item.get("accepted", 0))
+            for item in server.events
+            if item.get("event") == "accepted"
+        ),
+        default=0,
+    )
+    try:
+        for _ in range(WORKERS):
+            client = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+            client.settimeout(2.0)
+            client.connect(str(socket_path))
+            active_clients.append(client)
+        _wait_metrics(server, active=WORKERS, accepted_at_least=accepted_before + WORKERS)
+
+        for _ in range(BACKLOG):
+            client = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+            client.settimeout(2.0)
+            client.connect(str(socket_path))
+            queued_clients.append(client)
+
+        recv_q, send_q = _unix_listener_queue(socket_path)
+        if (recv_q, send_q) != (BACKLOG, BACKLOG):
+            raise ProbeFailure(
+                f"kernel backlog did not reach the configured bound: "
+                f"Recv-Q={recv_q}, Send-Q={send_q}, expected {BACKLOG}/{BACKLOG}"
+            )
+
+        server.drain(0.15)
+        accepted_while_full = max(
+            (
+                int(item.get("accepted", 0))
+                for item in server.events
+                if item.get("event") == "accepted"
+            ),
+            default=0,
+        )
+        active_max = max(
+            (
+                int(item.get("max_active", 0))
+                for item in server.events
+                if item.get("event") == "metrics"
+            ),
+            default=0,
+        )
+        if accepted_while_full != accepted_before + WORKERS:
+            raise ProbeFailure("server accepted a queued connection while all worker slots were occupied")
+        if active_max > WORKERS:
+            raise ProbeFailure("worker count exceeded the fixed capacity during backlog saturation")
+
+        overflow = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+        overflow.setblocking(False)
+        overflow_result = overflow.connect_ex(str(socket_path))
+        if overflow_result not in {errno.EAGAIN, errno.EWOULDBLOCK}:
+            raise ProbeFailure(
+                f"connection beyond full kernel backlog was not rejected with EAGAIN: "
+                f"connect_ex={overflow_result}"
+            )
+
+        recv_q_after, send_q_after = _unix_listener_queue(socket_path)
+        if (recv_q_after, send_q_after) != (BACKLOG, BACKLOG):
+            raise ProbeFailure(
+                f"overflow attempt changed the full kernel backlog: "
+                f"Recv-Q={recv_q_after}, Send-Q={send_q_after}"
+            )
+        server.drain(0.15)
+        accepted_after_overflow = max(
+            (
+                int(item.get("accepted", 0))
+                for item in server.events
+                if item.get("event") == "accepted"
+            ),
+            default=0,
+        )
+        if accepted_after_overflow != accepted_before + WORKERS:
+            raise ProbeFailure("overflow attempt caused an additional application accept")
+
+        return {
+            "configured_kernel_backlog": BACKLOG,
+            "active_workers_at_saturation": WORKERS,
+            "accepted_before_saturation": accepted_before,
+            "accepted_while_full": accepted_while_full,
+            "kernel_recv_q": recv_q,
+            "kernel_send_q": send_q,
+            "overflow_connect_errno": overflow_result,
+            "kernel_recv_q_after_overflow": recv_q_after,
+            "kernel_send_q_after_overflow": send_q_after,
+            "accepted_after_overflow": accepted_after_overflow,
+            "worker_limit_respected": active_max <= WORKERS,
+        }
+    finally:
+        if overflow is not None:
+            overflow.close()
+        for client in queued_clients + active_clients:
+            try:
+                client.close()
+            except OSError:
+                pass
 
 
 def _scenario_capacity(server: Server, socket_path: Path) -> dict:
@@ -1378,10 +1534,12 @@ def _main_parent(args: argparse.Namespace) -> int:
         results.append({"id": "MA-10", "status": "PASS", "observations": transport})
         capacity = _scenario_capacity(server, service_socket)
         results.append({"id": "CP-01,CP-04", "status": "PASS", "observations": capacity})
+        backlog = _scenario_backlog(server, service_socket)
+        results.append({"id": "CP-02,CP-03", "status": "PASS", "observations": backlog})
         results.append({
-            "id": "CP-02..CP-03,CP-05..CP-12",
+            "id": "CP-05..CP-12",
             "status": "INCOMPLETE",
-            "detail": "exact backlog saturation, read/write/global deadline adversaries, exception recovery, payload/depth boundaries and full FD accounting remain unimplemented",
+            "detail": "read/write/global deadline adversaries, exception recovery, payload/depth boundaries and full FD accounting remain unimplemented",
         })
         overall = "INCOMPLETE"
     except ProbeIncomplete as exc:
