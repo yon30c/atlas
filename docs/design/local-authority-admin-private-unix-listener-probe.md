@@ -1,6 +1,6 @@
 # Diseño del probe A-IPC-01 — listener Unix propio en directorio privado
 
-**Estado:** diseño aprobado e implementación experimental preparada en rama separada; revisión estática de GitHub completada con una corrección de determinismo en A14; pendiente de inspección local y ejecución por el propietario. No validado; no aprobado como transporte de producción.
+**Estado:** probe experimental implementado y validado por el propietario: A01–A16, 16 PASS, 0 SKIP, 0 FAIL en Debian 13 sobre el commit `1d5bdb122a8480c36b445be7dd961b93806de74b`; no aprobado como listener persistente ni transporte de producción. La auditoría estática posterior del modelo de amenazas está en `local-authority-admin-private-listener-threat-model-review.md`.
 **Fase:** 2.5 — evaluación experimental de propiedad del endpoint IPC.  
 **Alternativa evaluada:** A — listener creado por el propio proceso sobre un pathname AF_UNIX dentro de un directorio privado.  
 **Contrato de aplicación:** `atlas-admin/1`; este probe no modifica el contrato ni amplía el catálogo de operaciones.
