@@ -23,6 +23,7 @@ import time
 import uuid
 
 ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "src"))
 MAX_REQUEST_BYTES = 16 * 1024
 MAX_RESPONSE_BYTES = 64 * 1024
 READ_TIMEOUT = 0.35
@@ -502,6 +503,7 @@ class BoundedAcceptHarness:
         self.listener = listener
         self.slots = threading.BoundedSemaphore(MAX_ACTIVE_CONNECTIONS)
         self.stop_event = threading.Event()
+        self.paused = threading.Event()
         self.lock = threading.Lock()
         self.active = 0
         self.peak = 0
@@ -515,6 +517,9 @@ class BoundedAcceptHarness:
 
     def _accept_loop(self) -> None:
         while not self.stop_event.is_set():
+            if self.paused.is_set():
+                time.sleep(0.01)
+                continue
             try:
                 connection, _ = self.listener.accept()
             except TimeoutError:
@@ -593,6 +598,8 @@ def _scenario_a14(root: Path) -> None:
         clients.clear()
         if not harness.wait_idle():
             raise ProbeFailure("worker capacity did not recover after clients closed")
+        harness.paused.set()
+        time.sleep(0.15)
         request_id, packet = _ping_packet()
         with _connect(listener.path) as client:
             client.sendall(packet)
@@ -787,7 +794,7 @@ def main() -> int:
                 function(root)
             except ProbeSkip as exc:
                 status, detail = "SKIP", str(exc)
-            except BaseException as exc:
+            except Exception as exc:
                 status, detail = "FAIL", f"{type(exc).__name__}: {exc}"
             else:
                 status, detail = "PASS", "completed"
