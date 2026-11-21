@@ -28,7 +28,7 @@ Propiedades observadas en Debian según la salida comunicada por el propietario:
 - HOME `/var/lib/atlas-a09-test`, directory, owner/group `atlas-a09-test`, modo `0700`;
 - shell `/bin/bash`.
 
-La cuenta cumple el aislamiento de identidad solicitado. La salida no demuestra por sí sola ausencia de procesos/sesiones/servicios/linger; esos puntos deben comprobarse antes y después de la prueba SSH.
+La cuenta cumple el aislamiento de identidad solicitado. En una comprobación posterior comunicada por el propietario: `ps -u atlas-a09-test` no mostró procesos; `loginctl show-user` respondió que UID 1001 no está conectado ni tiene linger; `user@1001.service` está `inactive`; no existe `/var/lib/systemd/linger/atlas-a09-test`; `sudo -l -U atlas-a09-test` confirmó que no puede usar sudo. Esto verifica inactividad en ese momento, no ausencia universal de cualquier unidad de sistema que pudiera referenciar la cuenta.
 
 Propiedades de diseño restantes:
 - cuenta local ordinaria, con UID asignado automáticamente y distinto de 1000; no fijar ni reutilizar un UID;
@@ -114,6 +114,7 @@ La implementación del cliente/runner A09 requiere además revisión estática e
 ## 8. Estado
 
 - Cuenta `atlas-a09-test`: **creada y verificada por el propietario**; UID `1001`, GID `984`, grupo primario dedicado, sin grupos suplementarios adicionales, HOME `0700`, shell `/bin/bash`, contraseña bloqueada.
+- Inactividad/privilegios verificados por el propietario: sin procesos del UID, sin sesión ni linger según `loginctl`, `user@1001.service` inactive, sin archivo de linger y sin permisos sudo.
 - Claves: **no generadas ni instaladas**; no se ha probado autenticación SSH.
 - SSH/PAM/firewall: **sin cambios**. El daemon escucha en todas las interfaces; la clave experimental, si se autoriza, deberá limitarse a loopback.
 - Host key ED25519 de loopback verificada por fingerprint coincidente: `SHA256:txiDPT+/ldcIwnN6BPotbeL7QsofAieAeqF3GKMa9xI`.
