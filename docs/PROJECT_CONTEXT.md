@@ -746,3 +746,12 @@ Se publicó `docs/design/local-authority-admin-private-listener-stale-recovery.m
 A-THREAT-05 sigue abierto hasta validar el procedimiento en un sandbox, especialmente la enumeración de namespaces y la correlación con el pathname canónico. El diseño presupone que cliente y servicio comparten network namespace y que el descriptor listener no se hereda ni se pasa mediante SCM_RIGHTS. Si se adopta el bind procfs experimental, la recuperación debe revisarse porque la ruta registrada por el kernel puede no ser el pathname canónico.
 
 **Baseline de rutas:** bajo TCB-1, el bind pathname absoluto canónico después de validar toda la cadena y demostrar que UIDs externos no pueden escribir en ningún ancestro es el baseline más simple. El candidato procfs se conserva como alternativa experimental, no requisito; añade complejidad de observabilidad y recuperación. No hay código ni cambios de host.
+
+
+### Presupuesto de recursos del listener — A-THREAT-07 (2026-11-21)
+
+Se publicó `docs/design/local-authority-admin-private-listener-resource-budget.md`. Revisión del handler: request 16 KiB, response 64 KiB, JSON depth 16, read/write timeout por defecto 5 s cada uno y máximo configurable 60 s por timeout individual; no existe deadline global ni accept loop. A14 usa 2 workers/backlog 8 solo en el harness.
+
+Perfil inicial propuesto para revisión (no aprobado): 4 conexiones/workers fijos, backlog 8, sin cola de aplicación, 5 s read/write, 15 s deadline global y `RLIMIT_NOFILE=64` candidato. Mutaciones SQLite deberían serializarse; operaciones largas no deben retener una conexión IPC y necesitan identificador/status. Memoria/CPU/TasksMax/shutdown quedan pendientes de medición y diseño.
+
+A-THREAT-07 sigue abierto hasta decisión del propietario y probe aislado. No se modificó código ni se ejecutaron pruebas/workflows.
