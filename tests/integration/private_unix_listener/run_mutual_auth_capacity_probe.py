@@ -1749,15 +1749,15 @@ def _process_resource_snapshot(pid: int) -> dict[str, int]:
     try:
         fd_count = len(list((process_root / "fd").iterdir()))
         thread_count = len(list((process_root / "task").iterdir()))
-        status = (process_root / "status").read_text(encoding="ascii")
+        limits = (process_root / "limits").read_text(encoding="ascii")
     except OSError as exc:
         raise ProbeFailure(f"CP-10 cannot inspect fixture process {pid}: {exc}") from exc
     nofile_line = next(
-        (line for line in status.splitlines() if line.startswith("Max open files:")),
+        (line for line in limits.splitlines() if line.startswith("Max open files")),
         None,
     )
     if nofile_line is None:
-        raise ProbeFailure("CP-10 procfs status omitted Max open files")
+        raise ProbeFailure("CP-10 procfs limits omitted Max open files")
     fields = nofile_line.split()
     if len(fields) < 6 or fields[3] != "64" or fields[4] != "64":
         raise ProbeFailure(f"CP-10 fixture RLIMIT_NOFILE is not 64/64: {nofile_line}")
