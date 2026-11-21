@@ -511,23 +511,8 @@ def _a09_config(args: argparse.Namespace) -> dict[str, object]:
         raise ProbeSkip("A09 key and known_hosts must not be hard-linked files")
     if key_info.st_size > 16 * 1024 or hosts_info.st_size > 16 * 1024:
         raise ProbeSkip("A09 key or known_hosts file exceeds the 16 KiB preflight limit")
-    try:
-        hosts_parent = known_hosts.parent.lstat()
-    except OSError as exc:
-        raise ProbeSkip(f"A09 known_hosts directory cannot be inspected: {exc}") from exc
-    private_parent = (
-        stat.S_ISDIR(hosts_parent.st_mode)
-        and hosts_parent.st_uid == os.geteuid()
-        and stat.S_IMODE(hosts_parent.st_mode) == 0o700
-    )
-    sticky_tmp_parent = (
-        stat.S_ISDIR(hosts_parent.st_mode)
-        and hosts_parent.st_uid == 0
-        and stat.S_IMODE(hosts_parent.st_mode) == 0o1777
-        and known_hosts.parent == Path("/tmp")
-    )
-    if not (private_parent or sticky_tmp_parent):
-        raise ProbeSkip("A09 known_hosts parent must be runner-private 0700 or root-owned sticky /tmp 01777")
+    if known_hosts.parent != Path("/tmp"):
+        raise ProbeSkip("A09 known_hosts must be directly under the verified sticky /tmp directory")
 
     try:
         tmp_info = Path("/tmp").lstat()
