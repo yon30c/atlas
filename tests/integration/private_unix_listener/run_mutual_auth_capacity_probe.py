@@ -457,12 +457,23 @@ def _preflight(args: argparse.Namespace) -> Path:
         or stat.S_IMODE(info.st_mode) & 0o022
     ):
         raise ProbeIncomplete("/run must be a real root-owned directory not writable by group/others")
-    root = Path(__import__("tempfile").mkdtemp(prefix="atlas-mutual-auth-", dir="/run"))
+    tempfile = __import__("tempfile")
+    root = Path(tempfile.mkdtemp(prefix="atlas-mutual-auth-", dir="/run"))
+    public_root = Path(tempfile.mkdtemp(prefix="atlas-mutual-auth-public-", dir="/run"))
     os.chmod(root, 0o700)
+    os.chmod(public_root, 0o711)
     info = root.lstat()
+    public_info = public_root.lstat()
     if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o700:
         raise ProbeFailure("private /run sandbox failed owner/type/mode validation")
-    return root
+    if (
+        not stat.S_ISDIR(public_info.st_mode)
+        or public_info.st_uid != 0
+        or stat.S_IMODE(public_info.st_mode) != 0o711
+        or public_info.st_mode & 0o022
+    ):
+        raise ProbeFailure("public traversal fixture root failed owner/type/mode validation")
+    return root, public_root
 
 
 def _create_fixture_dir(path: Path, uid: int, gid: int, mode: int) -> None:
@@ -476,8 +487,10 @@ def _create_fixture_dir(path: Path, uid: int, gid: int, mode: int) -> None:
         raise ProbeFailure(f"fixture directory permissions mismatch: {path}")
 
 
-def _scenario_mutual_auth(root: Path, args: argparse.Namespace, script: Path) -> dict:
-    service_dir = root / "auth-service"
+def _scenario_mutual_auth(
+    root: Path, public_root: Path, args: argparse.Namespace, script: Path
+) -> dict:
+    service_dir = public_root / "auth-service"
     wrong_server_dir = root / "wrong-server"
     _create_fixture_dir(service_dir, args.service_uid, args.service_gid, 0o711)
     _create_fixture_dir(wrong_server_dir, args.other_uid, args.other_gid, 0o700)
@@ -604,25 +617,36 @@ def _scenario_capacity(server: Server, socket_path: Path) -> dict:
                 pass
 
 
-def _cleanup_root(root: Path) -> str:
-    # The root is a fresh root-owned 0700 directory under /run. Child servers
-    # must have exited before this narrowly-scoped recursive cleanup.
+def _cleanup_root(root: Path, public_root: Path) -> str:
+    # Both paths are fresh root-owned directories under /run. The private
+    # root is 0700; the public traversal fixture is 0711 and not writable by
+    # group/others. Child servers must exit before this scoped cleanup.
     info = root.lstat()
+    public_info = public_root.lstat()
     if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o700:
-        raise ProbeFailure("sandbox root identity changed; refusing cleanup")
+        raise ProbeFailure("private sandbox root identity changed; refusing cleanup")
+    if (
+        not stat.S_ISDIR(public_info.st_mode)
+        or public_info.st_uid != 0
+        or stat.S_IMODE(public_info.st_mode) != 0o711
+        or public_info.st_mode & 0o022
+    ):
+        raise ProbeFailure("public fixture root identity changed; refusing cleanup")
     shutil.rmtree(root)
-    return "private /run sandbox removed after child processes exited"
+    shutil.rmtree(public_root)
+    return "private and traversal fixture /run sandboxes removed after child processes exited"
 
 
 def _main_parent(args: argparse.Namespace) -> int:
     root: Path | None = None
+    public_root: Path | None = None
     servers: list[Server] = []
     started = time.monotonic()
     results: list[dict[str, object]] = []
     cleanup = "not started"
     overall = "FAIL"
     try:
-        root = _preflight(args)
+        root, public_root = _preflight(args)
         script = Path(__file__).resolve()
         service_dir = root / "service"
         _create_fixture_dir(service_dir, args.service_uid, args.service_gid, 0o711)
@@ -631,7 +655,7 @@ def _main_parent(args: argparse.Namespace) -> int:
             script, service_socket, args.service_uid, args.service_gid, 0o666, 0
         )
         servers.append(server)
-        auth = _scenario_mutual_auth(root, args, script)
+        auth = _scenario_mutual_auth(root, public_root, args, script)
         results.append({"id": "MA-01,MA-02,MA-04,MA-05", "status": "PASS", "observations": auth})
         capacity = _scenario_capacity(server, service_socket)
         results.append({"id": "CP-01,CP-04", "status": "PASS", "observations": capacity})
@@ -654,12 +678,12 @@ def _main_parent(args: argparse.Namespace) -> int:
                 server.stop()
             except Exception as exc:
                 stop_errors.append(str(exc))
-        if root is not None and not stop_errors:
+        if root is not None and public_root is not None and not stop_errors:
             try:
-                cleanup = _cleanup_root(root)
+                cleanup = _cleanup_root(root, public_root)
             except Exception as exc:
                 stop_errors.append(str(exc))
-        elif root is not None:
+        elif root is not None or public_root is not None:
             cleanup = "sandbox preserved because a child server did not stop cleanly"
         if stop_errors:
             results.append({"id": "CLEANUP", "status": "FAIL", "detail": "; ".join(stop_errors)})
