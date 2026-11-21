@@ -738,7 +738,9 @@ def _scenario_capacity(server: Server, socket_path: Path) -> dict:
                 pass
 
 
-def _cleanup_root(root: Path, public_root: Path) -> str:
+def _cleanup_root(
+    root: Path, public_root: Path, args: argparse.Namespace
+) -> str:
     # Both paths are fresh root-owned directories under /run. The private
     # root is 0700; the public traversal fixture is 0711 and not writable by
     # group/others. Child servers must exit before this scoped cleanup.
@@ -753,6 +755,34 @@ def _cleanup_root(root: Path, public_root: Path) -> str:
         or public_info.st_mode & 0o022
     ):
         raise ProbeFailure("public fixture root identity changed; refusing cleanup")
+    if list(root.iterdir()):
+        raise ProbeFailure("private sandbox contains unexpected entries; preserving it")
+    expected_public_entries = {
+        "probe-runtime", "auth-service", "wrong-server", "capacity-service"
+    }
+    actual_public_entries = {entry.name for entry in public_root.iterdir()}
+    if not actual_public_entries.issubset(expected_public_entries):
+        raise ProbeFailure("public sandbox contains unexpected entries; preserving it")
+    fixture_directories = (
+        ("auth-service", args.service_uid, args.service_gid, 0o711),
+        ("capacity-service", args.service_uid, args.service_gid, 0o711),
+        ("wrong-server", args.other_uid, args.other_gid, 0o700),
+    )
+    for name, expected_uid, expected_gid, expected_mode in fixture_directories:
+        candidate = public_root / name
+        try:
+            entry = candidate.lstat()
+        except FileNotFoundError:
+            continue
+        if (
+            not stat.S_ISDIR(entry.st_mode)
+            or entry.st_uid != expected_uid
+            or entry.st_gid != expected_gid
+            or stat.S_IMODE(entry.st_mode) != expected_mode
+        ):
+            raise ProbeFailure(f"fixture directory identity changed: {name}")
+        if list(candidate.iterdir()):
+            raise ProbeFailure(f"fixture directory {name} contains unexpected entries; preserving sandbox")
     shutil.rmtree(root)
     shutil.rmtree(public_root)
     return "private and traversal fixture /run sandboxes removed after child processes exited"
@@ -816,7 +846,7 @@ def _main_parent(args: argparse.Namespace) -> int:
                 stop_errors.append(str(exc))
         if root is not None and public_root is not None and not stop_errors:
             try:
-                cleanup = _cleanup_root(root, public_root)
+                cleanup = _cleanup_root(root, public_root, args)
             except Exception as exc:
                 stop_errors.append(str(exc))
         elif root is not None or public_root is not None:
