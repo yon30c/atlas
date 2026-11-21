@@ -282,3 +282,105 @@ Este documento define el experimento, no selecciona el transporte IPC definitivo
 El sandbox principal del runner permanece `0700` y no puede ser atravesado por otro UID. Por tanto, no basta con crear un subdirectorio `0711` dentro de ese sandbox: el control DAC del directorio padre seguiría bloqueando el acceso antes de llegar al socket. El fixture A09b debe crearse como directorio temporal independiente, hermano del sandbox principal, directamente bajo un directorio temporal compartido que haya superado preflight de seguridad (p. ej. `/tmp` con sticky bit). El fixture independiente tendrá modo `0711`, pertenecerá al UID ejecutor y contendrá el socket de prueba `0666`. Nunca se cambiarán los modos del sandbox principal ni del endpoint candidato.
 
 La ejecución requiere dos sesiones de usuario ordinario ya autenticadas: una mantiene el runner/servidor y la otra ejecuta el cliente bajo un UID distinto preexistente. El runner no invoca `sudo`, `su`, `runuser`, `setuid`, systemd ni mecanismos para cambiar credenciales. Si el propietario no dispone de una segunda sesión real y controlable, A09a/A09b permanecen SKIP; no se sustituye esa condición por una identidad simulada.
+
+
+## 16. Diseño de coordinación externa para A09a/A09b — 2026-11-21
+
+### 16.1 Evidencia nueva y estado real de SSH
+
+El propietario confirmó en Debian que la clave Ed25519 temporal está instalada y restringida en `authorized_keys` con `from="127.0.0.1",restrict` y el comando forzado `/usr/bin/id -u`. Ejecutó una conexión SSH a `127.0.0.1:22` con autenticación exclusivamente por clave, host key ED25519 verificada estrictamente y sin PTY; la salida fue `1001`.
+
+Esto confirma autenticación SSH de la cuenta `atlas-a09-test` (UID 1001) y ejecución del comando forzado actual. **No** demuestra A09a, A09b ni que el helper de cliente exista. El comando forzado actual `/usr/bin/id -u` no puede realizar las operaciones de socket requeridas.
+
+La documentación anterior que indicaba que no había clave ni login probado queda supersedida por esta evidencia, sin cambiar el hecho de que SSH/PAM/firewall globales no fueron modificados.
+
+### 16.2 Modelo de coordinación seleccionado para el diseño
+
+Se propone que el runner sea el orquestador de dos procesos independientes:
+
+1. El proceso servidor/runner permanece bajo el UID ordinario del propietario del checkout (actualmente 1000).
+2. El runner inicia un cliente SSH local mediante `subprocess`. El proceso cliente SSH también se ejecuta localmente bajo el UID 1000; el proceso remoto que sshd inicia por la clave restringida se ejecuta como `atlas-a09-test` (UID 1001).
+
+El runner no cambia sus credenciales y no invoca `sudo`, `su`, `runuser`, `setuid`, capabilities ni systemd. La identidad distinta proviene de una autenticación SSH real y de la sesión remota administrada por sshd. No se necesitan dos terminales interactivos ni se pasa el control del runner a una shell remota.
+
+### 16.3 Cliente remoto fijo, sin canal de órdenes genéricas
+
+Se propone añadir al repositorio un helper autónomo, por ejemplo `tests/integration/private_unix_listener/a09_ssh_client.py`, que use solo la biblioteca estándar y no importe el paquete Atlas ni acceda al checkout.
+
+Antes de abrir SSH, el runner copiará el helper a una ruta fija y temporal, `/tmp/atlas-a09-client.py`, mediante creación exclusiva (`O_CREAT|O_EXCL`), sin sobrescribir ningún objeto existente. El archivo será propiedad del UID del runner y modo `0644`; el sticky bit de `/tmp` impide que otro UID lo reemplace o elimine. El contenido no incluye claves ni secretos. Si el pathname ya existe, el runner no lo modifica y marca los escenarios como SKIP/INCOMPLETE o aborta el preflight. Si el proceso termina abruptamente y deja el helper, la siguiente ejecución no lo sobrescribe: requiere inspección y limpieza explícitas.
+
+La clave de prueba tendría un comando forzado fijo:
+
+```text
+/usr/bin/python3 -I /tmp/atlas-a09-client.py
+```
+
+El helper acepta exclusivamente un mensaje JSON de tamaño limitado por stdin, con esquema estricto y campos permitidos para `scenario`, `socket_path` y nonce aleatorio de ejecución. Rechaza campos adicionales, datos excesivos, escenarios desconocidos y cualquier `SSH_ORIGINAL_COMMAND` no vacío. No ejecuta shell, no acepta comandos ni argumentos remotos, no cambia UID/GID y no lee el repositorio.
+
+El runner envía una instrucción por conexión SSH y valida una única respuesta JSON por stdout, incluyendo nonce, escenario, UID/GID/PID del proceso cliente y resultado de socket. stderr se captura por separado; no se mezcla con el JSON. No se registran rutas de clave privada ni contenido de claves.
+
+### 16.4 Opciones obligatorias de SSH
+
+El runner solo podrá invocar SSH con parámetros fijos y explícitos:
+
+- configuración de cliente aislada mediante `-F /dev/null`;
+- destino `atlas-a09-test@127.0.0.1`, puerto 22;
+- clave exacta suministrada por argumento y `IdentitiesOnly=yes`;
+- `BatchMode=yes`, `PreferredAuthentications=publickey`, password y keyboard-interactive desactivados;
+- `StrictHostKeyChecking=yes`, archivo `UserKnownHostsFile` explícito y previamente verificado;
+- `HostKeyAlgorithms=ssh-ed25519` y `PubkeyAcceptedAlgorithms=ssh-ed25519`;
+- `GlobalKnownHostsFile=/dev/null`, `ClearAllForwardings=yes`, `ForwardAgent=no`, `ForwardX11=no`, `RequestTTY=no`;
+- timeout de conexión y timeout total de proceso acotados;
+- ningún comando remoto adicional: el comando forzado de `authorized_keys` es el único ejecutable remoto.
+
+Antes de lanzar SSH, el runner verificará que la clave privada y el archivo known_hosts sean archivos regulares, no symlinks, propiedad del UID ejecutor y con permisos privados exactos (clave y known_hosts modo `0600`). El UID esperado del peer se obtendrá de la cuenta local configurada (por defecto `atlas-a09-test`) mediante consulta de la base de cuentas; no se fija UID 1001 en el código. Se exigirá que sea distinto del UID ejecutor.
+
+La opción `from="127.0.0.1"` restringe esta clave a conexiones originadas en loopback; `restrict` deshabilita PTY y forwarding para esta clave. Esto **no** restringe la escucha global de sshd, que ya fue observada en todas las interfaces. No se cambiarán sshd_config, PAM, firewall ni el servicio SSH.
+
+### 16.5 Secuencia A09a — DAC del endpoint candidato
+
+1. El runner crea el listener candidato habitual dentro de su sandbox privado, conservando directorio `0700` y socket `0600`.
+2. El runner genera un nonce y envía por stdin SSH el escenario A09a y el pathname del socket.
+3. El helper remoto intenta una única conexión AF_UNIX/SOCK_SEQPACKET, sin inspeccionar ni modificar el pathname.
+4. Resultado esperado del cliente: `EACCES` por DAC. No se interpreta como rechazo SO_PEERCRED.
+5. El runner verifica que no se haya aceptado ninguna conexión durante una ventana acotada y que el listener y su identidad inode sigan intactos.
+6. El helper devuelve JSON con UID real y errno observado; el runner valida nonce, escenario y UID.
+
+Cualquier conexión exitosa, errno distinto del esperado, respuesta incoherente, aceptación inesperada o alteración de identidad es FAIL. Si el entorno no permite demostrar el errno o no hay identidad externa disponible, SKIP.
+
+### 16.6 Secuencia A09b — autorización real mediante SO_PEERCRED
+
+1. El runner verifica que `/tmp` sea un directorio real, propiedad de root y modo `01777` (sticky bit y escritura compartida).
+2. Crea un fixture temporal hermano del sandbox privado, directamente bajo `/tmp`; el directorio del fixture será `0711`, propiedad del UID ejecutor. No se anida bajo el sandbox `0700`.
+3. Crea el listener AF_UNIX/SOCK_SEQPACKET y cambia únicamente el socket del fixture a `0666`; verifica tipo, propietario, inode y modo antes de lanzar el cliente. Estos permisos nunca se aplican al endpoint candidato.
+4. El runner inicia el helper remoto por SSH. El helper conecta y envía un único paquete válido e inocuo `authority.ping`.
+5. El servidor acepta una conexión, obtiene una observación independiente de `SO_PEERCRED` para registrar PID/UID/GID y llama al handler real `handle_admin_connection` con allowlist que contiene solo el UID del runner.
+6. El handler vuelve a leer `SO_PEERCRED` y, por el orden actual del código, debe lanzar `AdminPeerRejected` / `UNAUTHORIZED_PEER` antes de ejecutar `recvmsg()`. No se modifica ni simula el handler.
+7. El servidor cierra la conexión. El cliente debe observar EOF o reset sin recibir ningún byte de respuesta; timeout o cualquier byte recibido es FAIL.
+8. El runner comprueba que el UID observado por el kernel coincide con el UID de `atlas-a09-test`, distinto del UID autorizado.
+
+La observación previa de credenciales por el runner es únicamente evidencia; el handler realiza su propia consulta SO_PEERCRED para la decisión de autorización. Una conexión de un UID distinto del esperado no cuenta como PASS y debe tratarse como conexión inesperada/fallo, no como sustituto del peer configurado.
+
+### 16.7 Timeouts, clasificación y cleanup
+
+- Tiempo de conexión SSH: máximo 5 s; tiempo total por invocación: máximo 10 s.
+- Timeout de conexión/lectura del cliente AF_UNIX: máximo 2 s.
+- Espera de aceptación del servidor: limitada por el límite ya definido para el probe.
+- El helper temporal se crea con identidad de archivo capturada. Solo se elimina si sigue siendo el mismo archivo regular, propietario del runner e inode original.
+- El listener se cierra y su pathname se elimina únicamente si conserva la identidad registrada.
+- El fixture se elimina solo después de cerrar el listener, comprobar identidad del directorio y verificar que está vacío. No usar borrado recursivo.
+- Si el proceso SSH, helper, listener o cleanup excede los límites, se termina únicamente el proceso hijo de prueba iniciado por el runner y se registra el fallo; no se detienen servicios del host.
+- El informe expone A09a y A09b como escenarios independientes, con UID esperado/observado, errno, resultado de handler, bytes recibidos y cleanup. Si alguno se omite, el global permanece INCOMPLETE; solo ambos PASS pueden cerrar el requisito multi-UID, y aun así no autorizan producción.
+
+### 16.8 Puertas pendientes
+
+Este diseño no implementa ni ejecuta A09. Antes de la implementación:
+
+1. revisión estática del helper, serialización stdin/stdout, subprocess SSH, validación de archivos, límites y cleanup;
+2. actualizar la clave pública instalada para sustituir el comando forzado actual `/usr/bin/id -u` por `/usr/bin/python3 -I /tmp/atlas-a09-client.py`. Este cambio en `authorized_keys` es una modificación de seguridad del host y requiere autorización explícita específica;
+3. implementar A09a/A09b y el helper en la rama experimental, sin modificar el handler, contrato, runtime, SQLite, systemd ni servicios;
+4. revisión estática completa del diff en GitHub;
+5. autorización explícita independiente para ejecutar A09 en Debian;
+6. validar resultados localmente por el propietario.
+
+No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. `main` permanece intacta, no hay PR y A-IPC-01 no está aprobado como transporte de producción.
