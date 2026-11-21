@@ -1,6 +1,6 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-20 (validación local A-IPC-01 reportada por el propietario).
+> **Última actualización:** 2026-11-20 (provisioning de identidad temporal A09 y preflight SSH reportados por el propietario).
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
@@ -10,13 +10,15 @@
 
 - **Repositorio:** `yon30c/atlas`.
 - **Base estable:** `main` en `1bd73d149dbd98e7ee2e5fdc36880883b6b03d16`; PR #29 está integrado mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`.
-- **Rama activa de este incremento:** `experiment/a-ipc-01-private-unix-listener-probe`; HEAD sincronizado localmente y remoto `314e7395fbc972f8b9ab4a10dd800e85c11c7b59`. El commit `909d658e5ba177941f46b87a50c891869e5ca6d7` contiene la corrección de código A14; los commits posteriores de este ciclo actualizan documentación. No hay PR abierto y `main` no ha sido modificado.
+- **Rama activa de este incremento:** `experiment/a-ipc-01-private-unix-listener-probe`; los cambios más recientes de este ciclo son documentales y registran la identidad A09 creada por el propietario y el preflight SSH. El checkout Debian puede necesitar sincronización con el HEAD remoto antes de continuar. El commit `909d658e5ba177941f46b87a50c891869e5ca6d7` contiene la corrección de código A14; no hay PR abierto y `main` no ha sido modificado.
 - **Validación local más reciente comunicada:** sobre el HEAD de código de PR #29 `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, el propietario reportó en Debian 13 el probe user-manager `PASS` y la suite `Ran 1590 tests in 34.753s`, `OK (skipped=1)`. Esa evidencia no corresponde a esta rama documental ni valida el futuro probe A-IPC-01.
 - **Estado IPC:** contrato `atlas-admin/1` y handler para conexiones ya aceptadas; solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
 - **Transporte:** no hay transporte aprobado para producción. A (listener propio en directorio privado) tiene un diseño de probe aceptado para preparar su implementación experimental. B (socket activation sobre filesystem) permanece suspendida por la colisión destructiva observada en Debian systemd 257.13. C (AF_UNIX abstracto) continúa como alternativa experimental separada.
 - **Diseño A-IPC-01:** `docs/design/local-authority-admin-private-unix-listener-probe.md`, aprobado como base experimental. La implementación opt-in está preparada en `tests/integration/private_unix_listener/run_probe.py`, con instrucciones en `tests/integration/private_unix_listener/README.md`. Usa sandbox temporal sin privilegios, directorio `0700`, socket `0600`, colisiones no destructivas, cleanup condicionado por identidad, SO_PEERCRED, límites y carrera de dos binds simultáneos.
 - **Revisión de código:** revisión estática en GitHub completada. Se corrigió A14 para bloquear workers admitidos hasta observar saturación, exigir los dos slots ocupados y reportar excepciones inesperadas; esto elimina la dependencia de la carrera entre timeout y aceptación. La corrección de código está en el commit `909d658e5ba177941f46b87a50c891869e5ca6d7`. No se ejecutaron pruebas, compilaciones ni workflows.
 - **Validación local A-IPC-01:** el propietario ejecutó el probe en Debian 13, kernel `6.12.117+deb13-amd64`, Python `3.13.5`, UID efectivo `1000`, sobre el commit `314e7395fbc972f8b9ab4a10dd800e85c11c7b59`. Resultado: `overall=INCOMPLETE`; A01–A08 y A10–A16 PASS (15 escenarios); A09 SKIP deliberado. Duración `0.876 s`; cleanup `empty sandbox root removed`. A14 observó `peak_active=2`, `rejected_connections=6`, `handled_connections=8`, `active_after_recovery=0`; A16 confirmó un único ganador. No hubo FAIL. La revisión posterior separa A09a (aislamiento DAC del endpoint privado) y A09b (autorización de aplicación mediante SO_PEERCRED en un fixture temporal independiente); ninguno está implementado ni validado todavía.
+- **Identidad externa A09:** el propietario autorizó y creó `atlas-a09-test`; verificación comunicada: UID `1001`, GID primario `984`, grupo dedicado único (sin grupos suplementarios adicionales), HOME `/var/lib/atlas-a09-test` modo `0700`, shell `/bin/bash`, contraseña bloqueada (`passwd -S` estado `L`). No se ha comprobado aún ausencia de sesiones, procesos, linger o servicios.
+- **Preflight SSH A09:** clave pública habilitada, keyboard-interactive deshabilitado, strict modes activo; X11/TCP/agent forwarding están habilitados globalmente. SSH escucha en `0.0.0.0:22` y `[::]:22`, y nftables muestra INPUT ACCEPT; no hay evidencia de aislamiento global a loopback. Host key ED25519 presentada por loopback coincide con fingerprint `SHA256:txiDPT+/ldcIwnN6BPotbeL7QsofAieAeqF3GKMa9xI`. No se ha generado/instalado clave ni probado login; cualquier clave de prueba requerirá restrict, origen loopback y comando forzado. SSH/PAM/firewall permanecen sin cambios.
 
 **Límites vigentes:** la aceptación del diseño no selecciona A como transporte de producción ni autoriza listener persistente, daemon, systemd, unidades de producción, cambios del host, usuarios, grupos, permisos, privilegios, acceso SQLite, provisioning, operaciones administrativas ni despliegue. La colisión destructiva de systemd no debe repetirse. Cualquier decisión posterior de transporte requiere evidencia local y aprobación explícita del propietario.
 
@@ -634,14 +636,26 @@ Referencias: [diseño A-IPC-01](design/local-authority-admin-private-unix-listen
 Static review found an additional DAC constraint: an A09b fixture with mode 0711 cannot be nested beneath the probe's private root 0700, because traversal is denied at the parent. The fixture must be a separate sibling directory directly under a verified shared sticky temporary parent (for example /tmp), with fixture mode 0711 and socket mode 0666. The private sandbox and candidate endpoint retain their original modes. Both A09 checks require a second, already-authenticated ordinary-user session under a distinct pre-existing UID; no sudo/su/runuser/setuid or account creation is allowed. This topology and orchestration are design requirements only; runner implementation and validation remain pending.
 
 
-## A09 — diseño de identidad temporal multi-UID (2026-11-20)
+## A09 — identidad temporal multi-UID provisionada (2026-11-20)
 
-El propietario autorizó diseñar una cuenta temporal dedicada `atlas-a09-test` para proporcionar el peer externo de A09a/A09b. **La autorización actual no permite ejecutar cambios en Debian.**
+El propietario autorizó expresamente crear una identidad temporal dedicada para proporcionar un peer real con UID distinto en A09a/A09b. La cuenta y el grupo ya fueron creados por el propietario y su salida de verificación se revisó en esta conversación.
 
-- Diseño detallado: [a09-temporary-test-identity-provisioning.md](design/a09-temporary-test-identity-provisioning.md).
-- `atlas-sandbox` se excluye: pertenece a la primera infraestructura Atlas Broker/rootless, tiene UID 997, linger activo y procesos `rootlesskit`, `slirp4netns`, `dockerd` y `containerd`. No reutilizar, desbloquear ni detener esa cuenta.
-- La identidad propuesta tendrá UID automático distinto del runner, grupo primario exclusivo, sin grupos suplementarios/privilegios, HOME privado `0700`, contraseña bloqueada, sin linger ni servicios.
-- Autenticación candidata: clave Ed25519 efímera, restringida a loopback y SSH sin PTY/forwarding. No cambiar sshd/PAM ni desbloquear contraseña; si la política actual impide el acceso con clave, detenerse.
-- A09a conserva el endpoint `0700/0600` y mide denegación DAC. A09b usa fixture independiente bajo padre temporal compartido sticky, con directorio `0711` y socket `0666`, y verifica rechazo real `SO_PEERCRED`. Nunca relajar el endpoint candidato.
-- Cuenta, grupo, HOME, claves y sesión SSH: no creados. A09a/A09b: no implementados ni validados. Última ejecución del probe: 15 PASS, A09 SKIP, 0 FAIL; global INCOMPLETE.
-- Antes de modificar Debian se requiere aprobación explícita adicional. La implementación del cliente/runner también requiere revisión y aprobación separadas. No se ejecutaron pruebas ni workflows desde GitHub.
+**Identidad verificada**
+- Cuenta atlas-a09-test: UID 1001, GID primario 984, shell /bin/bash.
+- Grupo dedicado atlas-a09-test; id muestra únicamente el grupo primario dedicado.
+- Contraseña bloqueada (passwd -S: L).
+- HOME /var/lib/atlas-a09-test, propietario/grupo atlas-a09-test, modo 0700.
+- UID 1001 es distinto del runner (greed, UID 1000). La ausencia de procesos, sesiones, linger y servicios todavía debe comprobarse antes de autenticar la cuenta.
+
+**SSH y red**
+- Configuración efectiva: public-key sí; password sí; keyboard-interactive no; usepam sí; strictmodes sí; permituserenvironment no. X11, TCP y agent forwarding aparecen habilitados globalmente.
+- sshd escucha en 0.0.0.0:22 y [::]:22. El ruleset nftables reportado muestra INPUT ACCEPT para IPv4 e IPv6; no afirmar que SSH esté limitado globalmente a loopback.
+- Fingerprint ED25519 presentado por 127.0.0.1 coincide con la host key local inspeccionada: SHA256:txiDPT+/ldcIwnN6BPotbeL7QsofAieAeqF3GKMa9xI.
+- SSH/PAM/firewall no fueron modificados. No se ha generado ni instalado clave, ni probado login SSH. Si se aprueba esa fase, la clave deberá tener restrict, from=127.0.0.1 y comando forzado; esto limita la clave de prueba, no el daemon global.
+
+**Puertas pendientes**
+- La fase de creación de cuenta/grupo/HOME está completada; su autorización no se extiende a instalación de clave, sesión SSH ni A09.
+- Instalar clave Ed25519 y probar un comando fijo SSH requiere aprobación explícita separada.
+- La coordinación cliente/runner de A09a/A09b aún requiere diseño, revisión estática e implementación aprobada. A09a/A09b siguen SKIP/no validados; el último resultado del probe continúa 15 PASS, A09 SKIP, 0 FAIL, global INCOMPLETE.
+- Eliminar cuenta/grupo/HOME al finalizar también requerirá aprobación explícita separada.
+- No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. main permanece intacta, no hay PR abierto y ningún transporte IPC está aprobado para producción.
