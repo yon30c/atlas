@@ -414,3 +414,12 @@ La investigación encontró un patrón Linux procfs usado por `sockat` para bind
 Se publicó `docs/design/local-authority-admin-private-listener-stale-recovery.md` con un procedimiento de mantenimiento separado: detener servicio, confirmar que no quedan procesos/FDs del listener, inspeccionar las tablas AF_UNIX de los network namespaces visibles (`/proc/<pid>/net/unix`), validar tipo/owner/mode/inode mediante descriptor de directorio, pedir autorización específica y retirar solo el objeto exacto con `unlinkat`. Ante cualquier duda, se conserva el socket. No se conecta para probar si está vivo.
 
 A-THREAT-05 sigue abierto hasta validar la enumeración de namespaces y la retirada exacta en sandbox. Se presupone pathname canónico absoluto como baseline y cliente/servicio en el mismo network namespace; no heredar ni pasar el FD listener. La alternativa procfs queda experimental porque cambia la ruta reportada y complica diagnóstico stale.
+
+
+## A-THREAT-07 — presupuesto de recursos propuesto (2026-11-21)
+
+Se publicó `docs/design/local-authority-admin-private-listener-resource-budget.md`. El handler actual limita request 16 KiB, response 64 KiB y JSON depth 16; read/write defaults 5 s, con máximo individual configurable 60 s, pero no deadline global ni accept loop. A14 (2 workers/backlog 8) es solo harness.
+
+Propuesta inicial pendiente de aprobación: 4 conexiones/workers fijos, backlog 8, cola de aplicación 0, read/write 5 s, deadline total 15 s y `RLIMIT_NOFILE=64` provisional. Mutaciones serializadas; operaciones largas con ID/status sin retener conexión. Memoria, CPU, TasksMax y shutdown no están fijados.
+
+A-THREAT-07 sigue abierto hasta aceptar capacidad y validar el perfil en un probe aislado. No se modificó código ni host.
