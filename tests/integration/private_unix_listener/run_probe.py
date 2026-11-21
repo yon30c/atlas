@@ -595,7 +595,7 @@ class BoundedAcceptHarness:
             # Hold admitted workers until the test has filled the bounded
             # capacity. This makes saturation independent of scheduler speed
             # and the handler's read timeout.
-            if not self.worker_release.wait(timeout=2.0):
+            if not self.worker_release.wait(timeout=MAX_ACCEPT_WAIT_SECONDS):
                 with self.lock:
                     self.worker_errors.append("worker release gate timed out")
                 return
