@@ -921,3 +921,12 @@ grupo/otros, y valida cada directorio ancestro hasta `/` con las mismas
 restricciones de ownership/escritura. La ejecución usa la ruta resuelta.
 Sigue pendiente que el propietario ejecute el runner en `Atlas-VM-test`;
 no se ejecutaron pruebas desde GitHub.
+
+
+### Corrección de revisión estática del preflight
+
+En commit `4ab6a1b7762f4d45a745ea2c36f7289411a9c848` se declaró
+explícitamente `global SS_BIN` dentro de `_preflight`; sin ello, la
+asignación de la ruta resuelta habría sombreado el global y provocado
+`UnboundLocalError`. La corrección fue inspeccionada en GitHub; no se
+ejecutaron pruebas ni el probe. La validación local CP-02/CP-03 sigue pendiente.
