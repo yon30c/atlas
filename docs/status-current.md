@@ -8,7 +8,7 @@
 > **Validación A-IPC-01:** commit probado `1d5bdb122a8480c36b445be7dd961b93806de74b`, Debian 13, 16 PASS, 0 SKIP, 0 FAIL. Esta evidencia valida el probe experimental, no el despliegue.
 > **Decisiones del propietario:** TCB-1 aceptada (todos los procesos `atlas-runtime` pertenecen a la TCB); frontend administrativo requerido con EUID 0; política de diseño del servicio `client_uids={0}`.
 > **Diseños publicados en esta rama:** configuración confiable de identidad; autenticación mutua por `SO_PEERCRED`; resolución segura de rutas; recuperación manual de socket stale; presupuesto de recursos/backpressure aprobado para probes; plan de probe de autenticación mutua y capacidad. Ver hallazgos y estado debajo.
-> **Límites:** no se implementó código nuevo de listener/cliente; no se ejecutaron pruebas, compilaciones ni workflows desde GitHub; no hubo cambios en Debian/host, `main`, cuentas, permisos, servicios o SQLite. No se autorizó listener persistente ni despliegue.
+> **Límites:** no se implementó listener ni cliente IPC productivo; A-IPC-02 es un harness experimental separado. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub; la validación citada fue ejecutada por el propietario. No hubo cambios en Debian/host, `main`, cuentas, permisos, servicios o SQLite. No se autorizó listener persistente ni despliegue.
 
 ## Autoridad administrativa local e IPC — estado al 2026-11-21
 
