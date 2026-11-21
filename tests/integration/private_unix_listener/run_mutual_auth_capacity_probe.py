@@ -757,6 +757,22 @@ def _cleanup_root(root: Path, public_root: Path) -> str:
     return "private and traversal fixture /run sandboxes removed after child processes exited"
 
 
+def _git_commit() -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=2.0,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
 def _main_parent(args: argparse.Namespace) -> int:
     root: Path | None = None
     public_root: Path | None = None
@@ -812,7 +828,7 @@ def _main_parent(args: argparse.Namespace) -> int:
     report = {
         "probe": "A-IPC-02-mutual-auth-capacity",
         "overall": overall,
-        "commit": None,
+        "commit": _git_commit(),
         "platform": platform.platform(),
         "kernel": platform.release(),
         "python": platform.python_version(),
