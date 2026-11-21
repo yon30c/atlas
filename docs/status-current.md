@@ -402,3 +402,8 @@ El propietario informó que el cambio temporal de `authorized_keys` conservó `f
 **Diseño publicado:** `docs/design/local-authority-admin-private-listener-path-resolution.md` especifica recorrido de todos los componentes desde `/` con descriptores, `openat`/`dir_fd`, `O_DIRECTORY|O_NOFOLLOW`, validación de cada directorio y lectura de configuración desde descriptor. A-THREAT-06 queda especificado pero sigue pendiente de probe y de resolver la limitación de `bind()` pathname sin `dir_fd`. Cleanup con `unlinkat` conserva ventana TOCTOU; bajo TCB-1, los UIDs externos quedan excluidos por el directorio privado y root/procesos del mismo UID pertenecen a la TCB.
 
 **Próximos bloqueos:** (1) resolver y probar el bind respecto del directorio validado; (2) definir recuperación manual y auditada de socket stale (A-THREAT-05); (3) diseñar probe aislado de resolución de ruta y autenticación mutua; (4) identificar/revisar el entrypoint cliente con EUID 0. No se modifica código ni contrato. No se ejecutaron pruebas, compilaciones ni workflows; no hubo cambios en Debian/host, `main` ni PR.
+
+
+### Candidato técnico para resolver bind/pathname
+
+La investigación encontró un patrón Linux usado por `sockat`: bind mediante `/proc/self/fd/<D-fd>/R/<socket-name>` y connect mediante `/proc/self/fd/<endpoint-dir-fd>/<socket-name>`. No es un `bindat()` ni una garantía automática; `getsockname()` puede devolver la ruta procfs temporal y pueden quedar artefactos D/R ante crash. Se añadió al diseño de rutas como candidato para un probe aislado, con D dentro del directorio privado Atlas, verificación posterior por descriptor canónico y fallo cerrado si procfs no está disponible. No se añadió dependencia ni código.
