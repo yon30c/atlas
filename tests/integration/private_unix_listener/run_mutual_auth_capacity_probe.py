@@ -192,6 +192,7 @@ def _server_child(
     socket_mode: int,
     allowed_uid: int,
     pre_read_delay_seconds: float = 0.0,
+    inject_worker_exception_once: bool = False,
 ) -> int:
     global _STOP
     _STOP = threading.Event()
@@ -202,6 +203,7 @@ def _server_child(
     max_active = 0
     max_workers = 0
     accepted = 0
+    worker_exception_pending = inject_worker_exception_once
     slots = threading.BoundedSemaphore(WORKERS)
 
     from atlas.platform_admin_ipc import (
@@ -277,7 +279,7 @@ def _server_child(
         )
 
         def worker(connection: socket.socket, accepted_at: float) -> None:
-            nonlocal active, max_active, max_workers
+            nonlocal active, max_active, max_workers, worker_exception_pending
             with lock:
                 active += 1
                 max_active = max(max_active, active)
@@ -286,6 +288,14 @@ def _server_child(
                      max_workers=max_workers, accepted=accepted)
             try:
                 with connection:
+                    inject_exception = False
+                    with lock:
+                        if worker_exception_pending:
+                            worker_exception_pending = False
+                            inject_exception = True
+                    if inject_exception:
+                        emit(event="worker_fault_injected", fault="RuntimeError")
+                        raise RuntimeError("CP-07 one-shot worker exception")
                     _serve_authenticated(
                         connection, allowed_uid, accepted_at, pre_read_delay_seconds
                     )
@@ -528,6 +538,7 @@ def _start_server(
     registry: list[Server],
     *,
     pre_read_delay_seconds: float = 0.0,
+    inject_worker_exception_once: bool = False,
 ) -> Server:
     process = subprocess.Popen(
         [
@@ -536,6 +547,8 @@ def _start_server(
             "--socket-mode", str(socket_mode),
             "--allowed-uid", str(allowed_uid),
             "--pre-read-delay-seconds", str(pre_read_delay_seconds),
+            "--inject-worker-exception-once",
+            "1" if inject_worker_exception_once else "0",
         ],
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
@@ -1629,6 +1642,74 @@ def _scenario_global_deadline(
         server.stop()
 
 
+def _scenario_worker_exception(
+    script: Path,
+    service_dir: Path,
+    uid: int,
+    gid: int,
+    registry: list[Server],
+) -> dict:
+    """CP-07: worker exception closes its peer and releases its slot in finally."""
+    socket_path = service_dir / "worker-exception.sock"
+    server = _start_server(
+        script,
+        socket_path,
+        uid,
+        gid,
+        0o666,
+        0,
+        registry,
+        inject_worker_exception_once=True,
+    )
+    first_peer = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+    first_peer.settimeout(3.0)
+    try:
+        first_peer.connect(str(socket_path))
+        first_request_id, first_packet = _request_packet()
+        if first_peer.send(first_packet) != len(first_packet):
+            raise ProbeFailure("CP-07 fault-triggering request was not sent atomically")
+        fault = server.wait_event("worker_fault_injected", timeout=3.0)
+        worker_error = server.wait_event(
+            "worker_error",
+            predicate=lambda item: item.get("error") == "RuntimeError: CP-07 one-shot worker exception",
+            timeout=3.0,
+        )
+        first_response = first_peer.recv(RESPONSE_LIMIT)
+        if first_response != b"":
+            raise ProbeFailure("CP-07 exception path returned response bytes instead of closing peer")
+        recovered = _wait_metrics(server, active=0, accepted_at_least=1, timeout=3.0)
+        if server.process.poll() is not None:
+            raise ProbeFailure("CP-07 server exited after an isolated worker exception")
+
+        _peer, response = _connect_as_root(
+            socket_path, expected_server_uid=uid, send_request=True
+        )
+        if response is None or response.get("code") != "OK":
+            raise ProbeFailure("CP-07 server did not process a valid request after worker recovery")
+        recovered_again = _wait_metrics(server, active=0, accepted_at_least=2, timeout=3.0)
+        if server.process.poll() is not None:
+            raise ProbeFailure("CP-07 server exited after the post-exception recovery request")
+        return {
+            "injected_exception": fault.get("fault"),
+            "worker_error_observed": worker_error.get("error"),
+            "faulting_request_id": first_request_id,
+            "faulting_peer_eof": True,
+            "faulting_peer_response_bytes": 0,
+            "active_after_exception": recovered.get("active"),
+            "accepted_after_exception": recovered.get("accepted"),
+            "server_alive_after_exception": True,
+            "recovery_request_id": response.get("request_id"),
+            "recovery_response_code": response.get("code"),
+            "active_after_recovery_request": recovered_again.get("active"),
+            "accepted_after_recovery_request": recovered_again.get("accepted"),
+            "server_alive_after_recovery_request": True,
+            "slot_released_in_finally": True,
+        }
+    finally:
+        first_peer.close()
+        server.stop()
+
+
 def _cleanup_root(
     root: Path, public_root: Path, args: argparse.Namespace
 ) -> str:
@@ -1733,10 +1814,14 @@ def _main_parent(args: argparse.Namespace) -> int:
             script, service_dir, args.service_uid, args.service_gid, servers
         )
         results.append({"id": "CP-06", "status": "PASS", "observations": global_deadline})
+        worker_exception = _scenario_worker_exception(
+            script, service_dir, args.service_uid, args.service_gid, servers
+        )
+        results.append({"id": "CP-07", "status": "PASS", "observations": worker_exception})
         results.append({
-            "id": "CP-07..CP-12",
+            "id": "CP-08..CP-12",
             "status": "INCOMPLETE",
-            "detail": "exception recovery, payload/depth boundaries and full FD accounting remain unimplemented",
+            "detail": "payload/response/depth boundaries and full FD accounting remain unimplemented",
         })
         overall = "INCOMPLETE"
     except ProbeIncomplete as exc:
@@ -1811,6 +1896,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--pre-read-delay-seconds", type=float, default=0.0, help=argparse.SUPPRESS
     )
+    parser.add_argument(
+        "--inject-worker-exception-once", type=int, choices=(0, 1), default=0,
+        help=argparse.SUPPRESS,
+    )
     return parser.parse_args()
 
 
@@ -1826,6 +1915,7 @@ def main() -> int:
             args.socket_mode,
             args.allowed_uid,
             args.pre_read_delay_seconds,
+            bool(args.inject_worker_exception_once),
         )
     if args.client_child:
         if not args.socket:
