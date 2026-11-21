@@ -2,16 +2,13 @@
 
 > **Corte documental:** 20 de noviembre de 2026.
 > **Rama de código base validada:** `main` — `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552` (PR #28 integrado).
-> **Rama de trabajo documental/probe:** `work/systemd-socket-activation-probe-contract-alignment` — HEAD observado `12bf6b045a1e9286857e043eb5dc43f0dc7393d5`.
+> **Rama de trabajo documental/probe:** `work/systemd-socket-activation-probe-contract-alignment` — HEAD observado `ca80330b298e516846bce7ba0bffe80982bf1a60`.
 > **PR en curso:** [#29](https://github.com/yon30c/atlas/pull/29), abierto como draft contra `main`; sus cambios siguen pendientes de validación local.
 > **Última suite completa reportada por el propietario:** en Debian, sobre `main` en `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`: **1,590 tests — OK (skipped=1)**, 34.895 s, Python 3.13.5. Esta suite **no valida PR #29**.
 > **Validación de PR #29:** pendiente. No se ejecutaron pruebas, compilaciones ni workflows remotos durante este ciclo documental.
-> **Estado IPC:** handler/prototipo para conexiones ya aceptadas; solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
+> **Estado IPC:** handler/prototipo para conexiones ya aceptadas; solo `authority.ping` está implementado. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
 > **Estado de transporte:** ninguno aprobado para producción. Listener propio en filesystem privado: candidato para probe aislado; socket activation systemd sobre filesystem: suspendida por colisión destructiva observada; AF_UNIX abstracto: alternativa experimental con riesgos de preclaim/DoS y sin DAC.
 > **Este documento diferencia** implementación publicada, cambios en PR, validación local reportada y capacidades conectadas al runtime.
-
-
-
 
 ## Autoridad administrativa local e IPC — estado al 2026-11-20
 
