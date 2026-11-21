@@ -910,3 +910,14 @@ ejecución por el propietario en `Atlas-VM-test`. CP-05..CP-12 pendientes.
 Siguiente paso único: ejecutar el runner actualizado en la VM desechable,
 nunca en `greed` producción. No se autoriza listener persistente, systemd,
 acceso SQLite, cambios de host ni despliegue.
+
+
+### Seguimiento de CP-02/CP-03 — endurecimiento estático
+
+Commit posterior: `67526c21a1edc2938b5caefb699aa6c6576c5b73`.
+El preflight ya no valida únicamente el archivo ejecutable `ss`: resuelve
+la ruta real, comprueba que el archivo sea root-owned y no escribible por
+grupo/otros, y valida cada directorio ancestro hasta `/` con las mismas
+restricciones de ownership/escritura. La ejecución usa la ruta resuelta.
+Sigue pendiente que el propietario ejecute el runner en `Atlas-VM-test`;
+no se ejecutaron pruebas desde GitHub.
