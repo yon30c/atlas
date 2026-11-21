@@ -29,7 +29,7 @@
 - **Recursos (A-THREAT-07):** perfil experimental aprobado: 4 workers, `listen(8)`, cola de aplicación 0, read/write 5 s, deadline global 15 s y `RLIMIT_NOFILE=64`. En Linux AF_UNIX se observaron 9 conexiones pendientes efectivas: la novena conecta y la décima recibe EAGAIN. El propietario validó CP-01..CP-06 en `0db2628`; CP-07..CP-12 pendientes. No es configuración de producción. Plan: `design/local-authority-admin-private-listener-mutual-auth-capacity-probe.md`.
 - **Lifecycle (A-THREAT-08):** máquina de estados, readiness, shutdown/drenaje y cierre de FDs aún no diseñados/validados.
 - **Evidencia de despliegue (A-THREAT-09):** A09 usó runner UID 1000 y peer UID 1001; no probó cliente root, servicio `atlas-runtime` ni permisos/ownership finales.
-- **Siguiente paso:** diseñar e implementar CP-07 (excepción de worker, cierre de socket y liberación del slot en `finally`) en el harness experimental; revisión estática en GitHub y validación posterior solo en `Atlas-VM-test`.
+- **Siguiente paso:** actualizar Atlas-VM-test al commit fbd4512d163b31e53b355280e636fb47cf8d66a9 y ejecutar A-IPC-02 para validar CP-07; después revisar CP-08..CP-12. Solo en la VM desechable.
 - No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. El propietario ejecutó el runner localmente en la VM desechable y reportó MA-01..MA-10 y CP-01/04 PASS. El checkout se había actualizado a `901c792`; el campo commit del JSON fue null. `main` y Debian/host de producción no fueron modificados; no se creó PR.
 
 **Límites de autorización:** el PASS experimental no selecciona por sí solo un transporte productivo ni autoriza listener persistente, daemon, unidades systemd de producción, cambios del host, usuarios/grupos, permisos/privilegios, acceso SQLite, provisioning o despliegue. No habilita operaciones administrativas distintas del ping no mutante usado como fixture.
@@ -632,3 +632,10 @@ El propietario ejecutó commit 0db262802ce30ec38a4ce52a4f5bfaa3081fc2b1 en Atlas
 - CP-07..CP-12: INCOMPLETE; sin FAIL en escenarios reportados. Overall permanece INCOMPLETE.
 
 CP-06 usa una espera artificial test-only; no representa trabajo productivo ni una escritura bloqueada. No se ejecutaron pruebas/builds/workflows desde GitHub; no se modificó handler productivo, contrato, main ni host. No hay aprobación de transporte productivo ni despliegue.
+
+
+## A-IPC-02 — CP-07 implementado (2026-11-21)
+
+Runner commit: fbd4512d163b31e53b355280e636fb47cf8d66a9. CP-07 inyecta una RuntimeError de un solo uso en un worker fixture. Requiere EOF y cero respuesta en el peer fallido, evento worker_error, active=0 tras la excepción, servidor todavía vivo y una segunda petición authority.ping exitosa seguida de active=0. La inyección es test-only; el handler productivo no cambia.
+
+**Estado:** CP-07 implementado y revisado estáticamente, pendiente de ejecución del propietario en Atlas-VM-test. CP-08..CP-12 pendientes; overall INCOMPLETE. No se ejecutaron pruebas, builds ni workflows desde GitHub; no se modificó main, host ni servicios.
