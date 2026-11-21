@@ -6,6 +6,7 @@ create a persistent Atlas listener. Run manually from the repository root.
 """
 from __future__ import annotations
 
+import argparse
 import array
 import errno
 import json
@@ -417,6 +418,475 @@ def _scenario_a08(root: Path) -> dict[str, int]:
         if errors:
             raise ProbeFailure("; ".join(errors))
 
+
+
+A09_ACCOUNT = "atlas-a09-test"
+A09_HELPER_PATH = Path("/tmp/atlas-a09-client.py")
+A09_EXPECTED_HOSTKEY = "SHA256:txiDPT+/ldcIwnN6BPotbeL7QsofAieAeqF3GKMa9xI"
+A09_SSH_TIMEOUT_SECONDS = 10.0
+A09_CLIENT_TIMEOUT_SECONDS = 2.0
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Opt-in A-IPC-01 private Unix listener probe")
+    parser.add_argument(
+        "--enable-a09",
+        action="store_true",
+        help="run A09a/A09b using the pre-provisioned, restricted SSH identity",
+    )
+    parser.add_argument("--a09-identity-file", type=Path)
+    parser.add_argument("--a09-known-hosts", type=Path)
+    args = parser.parse_args()
+    if args.enable_a09 and (args.a09_identity_file is None or args.a09_known_hosts is None):
+        parser.error("--enable-a09 requires --a09-identity-file and --a09-known-hosts")
+    if not args.enable_a09 and (args.a09_identity_file is not None or args.a09_known_hosts is not None):
+        parser.error("A09 key paths require --enable-a09")
+    return args
+
+
+def _regular_owned_file(path: Path, *, mode: int, uid: int, label: str) -> os.stat_result:
+    try:
+        info = path.lstat()
+    except OSError as exc:
+        raise ProbeSkip(f"{label} cannot be inspected: {exc}") from exc
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != uid or stat.S_IMODE(info.st_mode) != mode:
+        raise ProbeSkip(f"{label} must be a regular file owned by UID {uid} with mode {mode:04o}")
+    return info
+
+
+def _a09_config(args: argparse.Namespace) -> dict[str, object]:
+    import pwd
+
+    if not args.enable_a09:
+        raise ProbeSkip("A09a/A09b disabled; pass --enable-a09 after host-side helper authorization")
+    if os.geteuid() == 0:
+        raise ProbeSkip("A09 requires the ordinary checkout UID")
+    try:
+        account = pwd.getpwnam(A09_ACCOUNT)
+    except KeyError as exc:
+        raise ProbeSkip(f"required external account {A09_ACCOUNT} is unavailable") from exc
+    if account.pw_uid in (0, os.geteuid()):
+        raise ProbeSkip("external peer UID must be non-root and different from the runner UID")
+
+    identity_file = args.a09_identity_file.absolute()
+    known_hosts = args.a09_known_hosts.absolute()
+    key_parent = identity_file.parent.lstat()
+    if (
+        not stat.S_ISDIR(key_parent.st_mode)
+        or key_parent.st_uid != os.geteuid()
+        or stat.S_IMODE(key_parent.st_mode) != 0o700
+    ):
+        raise ProbeSkip("A09 private-key directory must be owned by the runner with mode 0700")
+    _regular_owned_file(identity_file, mode=0o600, uid=os.geteuid(), label="A09 private key")
+    _regular_owned_file(known_hosts, mode=0o600, uid=os.geteuid(), label="A09 known_hosts")
+
+    tmp_info = Path("/tmp").lstat()
+    if (
+        not stat.S_ISDIR(tmp_info.st_mode)
+        or tmp_info.st_uid != 0
+        or stat.S_IMODE(tmp_info.st_mode) != 0o1777
+    ):
+        raise ProbeSkip("/tmp must be a real root-owned directory with exact mode 01777")
+
+    try:
+        known_text = known_hosts.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise ProbeSkip(f"A09 known_hosts cannot be read: {exc}") from exc
+    pinned_entry = any(
+        len(fields := line.split()) >= 3
+        and fields[0] == "[127.0.0.1]:22"
+        and fields[1] == "ssh-ed25519"
+        for line in known_text.splitlines()
+        if line and not line.startswith("#")
+    )
+    if not pinned_entry:
+        raise ProbeSkip("A09 known_hosts lacks the explicit [127.0.0.1]:22 ED25519 entry")
+    try:
+        fingerprint = subprocess.run(
+            ["/usr/bin/ssh-keygen", "-lf", str(known_hosts), "-E", "sha256"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=2.0,
+            check=False,
+            env={"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C"},
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise ProbeSkip(f"cannot verify A09 known_hosts fingerprint: {exc}") from exc
+    if fingerprint.returncode != 0 or A09_EXPECTED_HOSTKEY not in fingerprint.stdout:
+        raise ProbeSkip("A09 known_hosts does not contain the previously verified ED25519 host key")
+
+    return {
+        "username": A09_ACCOUNT,
+        "peer_uid": account.pw_uid,
+        "peer_gid": account.pw_gid,
+        "identity_file": identity_file,
+        "known_hosts": known_hosts,
+    }
+
+
+def _install_a09_helper() -> tuple[Path, tuple[int, int, int]]:
+    tmp_info = Path("/tmp").lstat()
+    if (
+        not stat.S_ISDIR(tmp_info.st_mode)
+        or tmp_info.st_uid != 0
+        or stat.S_IMODE(tmp_info.st_mode) != 0o1777
+    ):
+        raise ProbeSkip("/tmp failed the exact root-owned 01777 precondition")
+    source = Path(__file__).with_name("a09_ssh_client.py")
+    source_info = source.lstat()
+    if not stat.S_ISREG(source_info.st_mode):
+        raise ProbeFailure("A09 helper source is not a regular file")
+    content = source.read_bytes()
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(A09_HELPER_PATH, flags, 0o644)
+    except FileExistsError as exc:
+        raise ProbeSkip("fixed A09 helper path already exists; preserved without modification") from exc
+    try:
+        os.fchmod(fd, 0o644)
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 0o644:
+            raise ProbeFailure("temporary A09 helper has unexpected type, owner or mode")
+        view = memoryview(content)
+        while view:
+            written = os.write(fd, view)
+            if written <= 0:
+                raise ProbeFailure("short write while installing temporary A09 helper")
+            view = view[written:]
+        os.fsync(fd)
+        identity = (info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode))
+    except BaseException:
+        os.close(fd)
+        try:
+            current = A09_HELPER_PATH.lstat()
+            if stat.S_ISREG(current.st_mode) and current.st_uid == os.geteuid():
+                A09_HELPER_PATH.unlink()
+        except OSError:
+            pass
+        raise
+    else:
+        os.close(fd)
+    current = A09_HELPER_PATH.lstat()
+    if (
+        (current.st_dev, current.st_ino, stat.S_IFMT(current.st_mode)) != identity
+        or not stat.S_ISREG(current.st_mode)
+        or current.st_uid != os.geteuid()
+        or stat.S_IMODE(current.st_mode) != 0o644
+    ):
+        raise ProbeFailure("temporary A09 helper identity changed during installation")
+    return A09_HELPER_PATH, identity
+
+
+def _remove_a09_helper(path: Path, identity: tuple[int, int, int]) -> None:
+    try:
+        current = path.lstat()
+    except FileNotFoundError:
+        raise ProbeFailure("temporary A09 helper disappeared before cleanup")
+    if (
+        (current.st_dev, current.st_ino, stat.S_IFMT(current.st_mode)) != identity
+        or not stat.S_ISREG(current.st_mode)
+        or current.st_uid != os.geteuid()
+        or stat.S_IMODE(current.st_mode) != 0o644
+    ):
+        raise ProbeFailure("temporary A09 helper identity changed; preserved")
+    path.unlink()
+
+
+def _start_a09_ssh(
+    config: dict[str, object],
+    scenario: str,
+    socket_path: Path,
+    helper_path: Path,
+) -> tuple[subprocess.Popen[bytes], threading.Thread, dict[str, object]]:
+    nonce = uuid.uuid4().hex
+    instruction = json.dumps(
+        {"scenario": scenario, "socket_path": str(socket_path), "nonce": nonce},
+        separators=(",", ":"),
+    ).encode("utf-8")
+    command = [
+        "/usr/bin/ssh",
+        "-F", "/dev/null",
+        "-T",
+        "-p", "22",
+        "-i", str(config["identity_file"]),
+        "-o", "IdentitiesOnly=yes",
+        "-o", "BatchMode=yes",
+        "-o", "PreferredAuthentications=publickey",
+        "-o", "PasswordAuthentication=no",
+        "-o", "KbdInteractiveAuthentication=no",
+        "-o", "StrictHostKeyChecking=yes",
+        "-o", f"UserKnownHostsFile={config['known_hosts']}",
+        "-o", "GlobalKnownHostsFile=/dev/null",
+        "-o", "HostKeyAlgorithms=ssh-ed25519",
+        "-o", "PubkeyAcceptedAlgorithms=ssh-ed25519",
+        "-o", "ConnectTimeout=5",
+        "-o", "ConnectionAttempts=1",
+        "-o", "ControlMaster=no",
+        "-o", "ControlPath=none",
+        "-o", "ProxyCommand=none",
+        "-o", "ProxyJump=none",
+        "-o", "ForwardAgent=no",
+        "-o", "ForwardX11=no",
+        "-o", "ClearAllForwardings=yes",
+        "-o", "PermitLocalCommand=no",
+        "-o", "UpdateHostKeys=no",
+        f"{config['username']}@127.0.0.1",
+    ]
+    try:
+        process = subprocess.Popen(
+            command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            close_fds=True,
+            env={"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C"},
+        )
+    except OSError as exc:
+        raise ProbeSkip(f"cannot start the fixed local SSH client: {exc}") from exc
+    outcome: dict[str, object] = {"nonce": nonce}
+
+    def communicate() -> None:
+        try:
+            stdout, stderr = process.communicate(instruction, timeout=A09_SSH_TIMEOUT_SECONDS)
+            outcome.update({"stdout": stdout, "stderr": stderr, "returncode": process.returncode})
+        except subprocess.TimeoutExpired:
+            process.kill()
+            stdout, stderr = process.communicate()
+            outcome.update({
+                "stdout": stdout,
+                "stderr": stderr,
+                "returncode": process.returncode,
+                "timeout": True,
+            })
+        except BaseException as exc:
+            outcome["exception"] = f"{type(exc).__name__}: {exc}"
+
+    worker = threading.Thread(target=communicate, name=f"{scenario}-ssh", daemon=True)
+    worker.start()
+    return process, worker, outcome
+
+
+def _finish_a09_ssh(
+    process: subprocess.Popen[bytes],
+    worker: threading.Thread,
+    outcome: dict[str, object],
+) -> dict[str, object]:
+    worker.join(timeout=A09_SSH_TIMEOUT_SECONDS + 2.0)
+    if worker.is_alive():
+        process.kill()
+        worker.join(timeout=2.0)
+    if worker.is_alive():
+        raise ProbeFailure("A09 SSH communication worker did not terminate after child kill")
+    if "exception" in outcome:
+        raise ProbeFailure(f"A09 SSH communication failed: {outcome['exception']}")
+    if outcome.get("timeout"):
+        raise ProbeFailure("A09 SSH client exceeded its 10-second total timeout")
+    if outcome.get("returncode") != 0:
+        stderr = outcome.get("stderr", b"")
+        detail = stderr.decode("utf-8", errors="replace")[:500] if isinstance(stderr, bytes) else ""
+        raise ProbeFailure(f"A09 SSH client exited unsuccessfully: {detail or outcome.get('returncode')}")
+    stdout = outcome.get("stdout")
+    stderr = outcome.get("stderr")
+    if not isinstance(stdout, bytes) or len(stdout) > 4096 or not isinstance(stderr, bytes):
+        raise ProbeFailure("A09 SSH helper output exceeded its bounded format")
+    if stderr:
+        raise ProbeFailure("A09 SSH emitted unexpected stderr output")
+    try:
+        lines = stdout.decode("ascii", errors="strict").splitlines()
+        if len(lines) != 1:
+            raise ValueError("expected exactly one JSON line")
+        report = json.loads(lines[0])
+    except (UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        raise ProbeFailure(f"A09 SSH helper returned invalid JSON: {exc}") from exc
+    if not isinstance(report, dict):
+        raise ProbeFailure("A09 SSH helper result is not a JSON object")
+    if report.get("nonce") != outcome["nonce"]:
+        raise ProbeFailure("A09 SSH helper nonce mismatch")
+    return report
+
+
+def _validate_a09_client_identity(report: dict[str, object], config: dict[str, object], scenario: str) -> None:
+    if report.get("scenario") != scenario:
+        raise ProbeFailure(f"{scenario}: SSH helper reported a different scenario")
+    if report.get("uid") != config["peer_uid"] or report.get("gid") != config["peer_gid"]:
+        raise ProbeFailure(f"{scenario}: SSH helper credentials do not match the provisioned peer")
+    if not isinstance(report.get("pid"), int) or report["pid"] <= 0:
+        raise ProbeFailure(f"{scenario}: SSH helper did not report a valid PID")
+
+
+def _scenario_a09a(root: Path, config: dict[str, object] | None, skip_reason: str | None) -> dict[str, object]:
+    if config is None:
+        raise ProbeSkip(skip_reason or "A09 SSH preflight is unavailable")
+    box = CaseSandbox(root, "a09a")
+    listener = OwnedListener(box.path / "s")
+    helper_path = None
+    helper_identity = None
+    process = None
+    worker = None
+    outcome = None
+    try:
+        listener.bind_listen()
+        box.track(listener.path)
+        listener.socket.settimeout(MAX_ACCEPT_WAIT_SECONDS)
+        helper_path, helper_identity = _install_a09_helper()
+        process, worker, outcome = _start_a09_ssh(config, "A09a", listener.path, helper_path)
+        worker.join(timeout=A09_SSH_TIMEOUT_SECONDS + 2.0)
+        if worker.is_alive():
+            process.kill()
+            worker.join(timeout=2.0)
+        if worker.is_alive():
+            raise ProbeFailure("A09a SSH worker did not terminate")
+        report = _finish_a09_ssh(process, worker, outcome)
+        _validate_a09_client_identity(report, config, "A09a")
+        if report.get("connected") is not False or report.get("connect_errno") != errno.EACCES:
+            raise ProbeFailure(f"A09a expected DAC EACCES, got {report!r}")
+        listener.socket.settimeout(0.25)
+        try:
+            unexpected, _ = listener.socket.accept()
+        except TimeoutError:
+            pass
+        else:
+            unexpected.close()
+            raise ProbeFailure("A09a listener accepted a connection despite expected DAC denial")
+        if _identity(listener.path) != listener.identity:
+            raise ProbeFailure("A09a candidate socket identity changed")
+        info = listener.path.lstat()
+        if stat.S_IMODE(info.st_mode) != 0o600 or stat.S_IMODE(box.path.stat().st_mode) != 0o700:
+            raise ProbeFailure("A09a candidate endpoint permissions changed")
+        return {
+            "peer_uid": report["uid"],
+            "peer_gid": report["gid"],
+            "peer_pid": report["pid"],
+            "connect_errno": report["connect_errno"],
+            "accepted_connections": 0,
+            "candidate_socket": _describe(listener.path),
+            "directory_mode": stat.S_IMODE(box.path.stat().st_mode),
+        }
+    finally:
+        if process is not None and process.poll() is None:
+            process.kill()
+        listener.socket.close()
+        if helper_path is not None and helper_identity is not None:
+            _remove_a09_helper(helper_path, helper_identity)
+        errors = box.cleanup()
+        if errors:
+            raise ProbeFailure("; ".join(errors))
+
+
+def _scenario_a09b(root: Path, config: dict[str, object] | None, skip_reason: str | None) -> dict[str, object]:
+    if config is None:
+        raise ProbeSkip(skip_reason or "A09 SSH preflight is unavailable")
+    tmp = Path("/tmp")
+    tmp_info = tmp.lstat()
+    if (
+        not stat.S_ISDIR(tmp_info.st_mode)
+        or tmp_info.st_uid != 0
+        or stat.S_IMODE(tmp_info.st_mode) != 0o1777
+    ):
+        raise ProbeSkip("/tmp is not a verified root-owned sticky directory")
+    fixture = Path(tempfile.mkdtemp(prefix="atlas-a09b-", dir=str(tmp)))
+    fixture_info = fixture.lstat()
+    fixture_identity = (fixture_info.st_dev, fixture_info.st_ino, stat.S_IFMT(fixture_info.st_mode))
+    listener = OwnedListener(fixture / "s")
+    helper_path = None
+    helper_identity = None
+    process = None
+    worker = None
+    outcome = None
+    try:
+        if (
+            not stat.S_ISDIR(fixture_info.st_mode)
+            or fixture_info.st_uid != os.geteuid()
+            or stat.S_IMODE(fixture_info.st_mode) != 0o700
+        ):
+            raise ProbeFailure("A09b fixture was not created as an owned 0700 directory")
+        os.chmod(fixture, 0o711)
+        if stat.S_IMODE(fixture.lstat().st_mode) != 0o711:
+            raise ProbeFailure("A09b fixture directory mode is not exactly 0711")
+        listener.bind_listen()
+        os.chmod(listener.path, 0o666)
+        info = listener.path.lstat()
+        if (
+            not stat.S_ISSOCK(info.st_mode)
+            or info.st_uid != os.geteuid()
+            or stat.S_IMODE(info.st_mode) != 0o666
+        ):
+            raise ProbeFailure("A09b fixture socket type, owner or mode mismatch")
+        listener.socket.settimeout(MAX_ACCEPT_WAIT_SECONDS)
+        helper_path, helper_identity = _install_a09_helper()
+        process, worker, outcome = _start_a09_ssh(config, "A09b", listener.path, helper_path)
+        try:
+            connection, _ = listener.socket.accept()
+        except TimeoutError as exc:
+            raise ProbeFailure("A09b external peer did not reach the fixture listener") from exc
+        from atlas.platform_admin_ipc import AdminPeerRejected, read_peer_credentials
+
+        with connection:
+            peer = read_peer_credentials(connection)
+            if peer.uid != config["peer_uid"] or peer.uid == os.getuid():
+                raise ProbeFailure("A09b kernel SO_PEERCRED UID does not match the external test identity")
+            try:
+                _serve_one(connection)
+            except AdminPeerRejected as exc:
+                if exc.code != "UNAUTHORIZED_PEER":
+                    raise ProbeFailure(f"A09b handler returned unexpected rejection {exc.code}") from exc
+            else:
+                raise ProbeFailure("A09b handler did not reject the external peer")
+        report = _finish_a09_ssh(process, worker, outcome)
+        _validate_a09_client_identity(report, config, "A09b")
+        if (
+            report.get("connected") is not True
+            or report.get("connect_errno") is not None
+            or report.get("peer_closed") is not True
+            or report.get("bytes_received") != 0
+            or report.get("closure") not in {"eof", "reset"}
+        ):
+            raise ProbeFailure(f"A09b peer received data or did not observe server closure: {report!r}")
+        return {
+            "peer_pid": peer.pid,
+            "peer_uid": peer.uid,
+            "peer_gid": peer.gid,
+            "handler_rejection": "UNAUTHORIZED_PEER",
+            "response_bytes": report["bytes_received"],
+            "client_observed_closure": report["closure"],
+            "fixture_directory_mode": 0o711,
+            "fixture_socket_mode": 0o666,
+        }
+    finally:
+        if process is not None and process.poll() is None:
+            process.kill()
+        listener.socket.close()
+        if listener.identity is not None:
+            try:
+                current = _identity(listener.path)
+            except FileNotFoundError:
+                pass
+            else:
+                if current == listener.identity and stat.S_ISSOCK(current[2]):
+                    listener.path.unlink()
+                else:
+                    raise ProbeFailure("A09b fixture socket identity changed; preserved")
+        if helper_path is not None and helper_identity is not None:
+            _remove_a09_helper(helper_path, helper_identity)
+        try:
+            current_dir = fixture.lstat()
+        except FileNotFoundError:
+            pass
+        else:
+            current_identity = (current_dir.st_dev, current_dir.st_ino, stat.S_IFMT(current_dir.st_mode))
+            if current_identity != fixture_identity or not stat.S_ISDIR(current_dir.st_mode):
+                raise ProbeFailure("A09b fixture directory identity changed; preserved")
+            fixture.rmdir()
+
+
+def _scenario_a09a_entry(root: Path, state: dict[str, object]) -> dict[str, object]:
+    return _scenario_a09a(root, state.get("config"), state.get("skip_reason"))
+
+
+def _scenario_a09b_entry(root: Path, state: dict[str, object]) -> dict[str, object]:
+    return _scenario_a09b(root, state.get("config"), state.get("skip_reason"))
 
 def _scenario_a09(root: Path) -> None:
     raise ProbeSkip(
