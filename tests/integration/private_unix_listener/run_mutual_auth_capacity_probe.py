@@ -70,6 +70,7 @@ def _serve_authenticated(
 ) -> None:
     """Fixture handler: authenticate before recv and enforce one global deadline."""
     from atlas.platform_admin_ipc import (
+        AdminProtocolRejected,
         MAX_REQUEST_BYTES,
         PROTOCOL_ID,
         _encode_response,
@@ -114,17 +115,14 @@ def _serve_authenticated(
 
     try:
         request = decode_admin_request(packet)
-    except Exception as exc:
-        from atlas.platform_admin_ipc import AdminProtocolRejected
-        if isinstance(exc, AdminProtocolRejected):
-            emit(
-                event="request_rejected",
-                peer_uid=peer.uid,
-                code=exc.code,
-                request_id=exc.request_id,
-            )
-            return
-        raise
+    except AdminProtocolRejected as exc:
+        emit(
+            event="request_rejected",
+            peer_uid=peer.uid,
+            code=exc.code,
+            request_id=exc.request_id,
+        )
+        return
     if request.operation != "authority.ping":
         raise ProbeFailure("fixture received an operation other than authority.ping")
 
