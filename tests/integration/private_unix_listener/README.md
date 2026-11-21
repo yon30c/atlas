@@ -718,3 +718,30 @@ Runner corregido en c1fdcc12eb3d7a0fcb6cccccb8eb07b0028dcb40: solo el servidor C
 En la ejecución del commit ccfc495e4bcbe0adc9283f75bee1823d5338451b, MA-01..MA-10 y CP-01..CP-06 pasaron, pero CP-07 falló con ConnectionResetError (ECONNRESET). El fixture lanzaba la excepción sin leer el paquete SOCK_SEQPACKET enviado por el peer. El cierre con un registro pendiente puede producir reset en lugar de EOF, así que el resultado no demuestra la recuperación esperada.
 
 Runner corregido en 1df8385f3783308636ccd9538d4c1033fd05be33: el worker de CP-07 consume el paquete desencadenante antes de inyectar RuntimeError. El evento de inyección informa trigger_request_bytes. Se conserva la exigencia de EOF, cero respuesta, active=0, servidor vivo y segunda petición válida. Repetir únicamente en Atlas-VM-test desechable, como root; nunca en greed. No se ejecutaron pruebas, builds ni workflows.
+
+## A-IPC-02 — CP-08/CP-09 boundary scenarios
+
+The separate root-only mutual-auth/capacity runner now includes:
+
+- **CP-08 request size:** a packet exactly 16 KiB reaches schema validation;
+  16 KiB + 1 is rejected with `REQUEST_TOO_LARGE`; a packet larger than
+  the `recvmsg(16 KiB + 1)` buffer is rejected with `MESSAGE_TRUNCATED`
+  and no response envelope.
+- **CP-08 response size:** the real response sender transmits an exact 64 KiB
+  packet without truncation. A 64 KiB + 1 response is rejected with
+  `INTERNAL_ERROR` before any peer bytes are sent.
+- **CP-09 JSON depth:** total container depth 16 reaches schema validation;
+  depth 17 is rejected with `INVALID_JSON`. The root JSON object counts as
+  depth 1.
+
+These cases use temporary AF_UNIX/SOCK_SEQPACKET socketpairs and the existing
+IPC decoder/encoder/sender; they do not change production handler code or the
+protocol contract. CP-08/CP-09 are implemented but require owner execution
+on the disposable `Atlas-VM-test` before they can be called PASS.
+
+CP-10..CP-12 remain pending: full FD/thread accounting under load, repeated
+load/recovery after saturation, and startup rejection when the inherited
+`RLIMIT_NOFILE` is insufficient (without raising it). The overall result
+must remain INCOMPLETE until all required scenarios are implemented and
+owner-validated. Never run this root-only probe on the `greed` production
+server.
