@@ -453,3 +453,43 @@ Corrección en runner commit c1fdcc12eb3d7a0fcb6cccccb8eb07b0028dcb40: cada inst
 El propietario ejecutó el runner en commit ccfc495e4bcbe0adc9283f75bee1823d5338451b. MA-01..MA-10 y CP-01..CP-06 PASS; CP-07 falló con ConnectionResetError: [Errno 104] Connection reset by peer. La inspección del flujo muestra que el fixture inyectaba la excepción inmediatamente después de accept, sin consumir el paquete SOCK_SEQPACKET que el cliente ya había enviado. En Linux, cerrar un socket orientado a registros con datos entrantes sin leer puede producir ECONNRESET en el peer, en lugar del EOF ordenado requerido por el escenario. Por tanto no se demostró todavía la recuperación CP-07.
 
 Runner corregido en commit 1df8385f3783308636ccd9538d4c1033fd05be33: el worker CP-07 consume el paquete desencadenante antes de lanzar la excepción deliberada. El evento worker_fault_injected registra el tamaño consumido; la conexión se cierra después de drenar el registro, permitiendo comprobar EOF y cero bytes de respuesta sin confundirlo con el reset causado por datos pendientes. El consumo es específico del fixture de inyección; no altera el handler productivo. Repetir la ejecución completa en Atlas-VM-test. No se ejecutaron pruebas, builds ni workflows desde GitHub.
+
+## A-IPC-02 — CP-07 validado; CP-08/CP-09 implementados (2026-11-21)
+
+El propietario ejecutó el commit `077e01b00e8f3c628d5f1cee44b8a58670434789`
+en `Atlas-VM-test`, Debian 13, kernel `6.12.117+deb13-amd64`,
+Python 3.13.5, como EUID 0 real y fixtures SERVICE `2005/2005` y
+OTHER `2006/2006`. MA-01..MA-10 y CP-01..CP-07 reportaron PASS.
+CP-07 confirmó EOF sin respuesta para el peer de la excepción, active=0,
+slot liberado, servidor vivo y una segunda petición ping respondida OK.
+Cleanup de ambos sandboxes `/run` completado. El resultado global fue
+INCOMPLETE únicamente por CP-08..CP-12 aún no implementados en ese commit.
+
+En el siguiente incremento del runner se implementaron CP-08 y CP-09:
+
+- **CP-08 — tamaño de request/response:** request exactamente 16 KiB alcanza
+  el decoder (y se rechaza por el campo extra, no por tamaño); 16 KiB + 1
+  devuelve `REQUEST_TOO_LARGE`; un paquete mayor que el buffer de recepción
+  produce `MESSAGE_TRUNCATED` sin envelope. Para response, se envía un
+  paquete de exactamente 64 KiB y se comprueba su longitud íntegra; un
+  response de 64 KiB + 1 falla con `INTERNAL_ERROR` antes de enviar bytes.
+  Los casos usan sockets AF_UNIX/SOCK_SEQPACKET temporales y el encoder/
+  sender real del módulo IPC.
+- **CP-09 — profundidad JSON:** la estructura con 16 niveles de contenedores
+  anidados pasa el gate de profundidad y llega al rechazo posterior de schema
+  (`INVALID_REQUEST` por el campo extra); 17 niveles se rechazan como
+  `INVALID_JSON`. El root object cuenta como profundidad 1, por lo que se
+  usan 15/16 listas anidadas respectivamente para construir profundidad total
+  16/17.
+
+**Estado de CP-08/CP-09:** implementados y revisados estáticamente en GitHub;
+pendientes de ejecución del propietario en `Atlas-VM-test`. No se ejecutaron
+pruebas, compilaciones ni workflows desde GitHub. CP-10..CP-12 permanecen
+sin implementar: contabilidad de FDs/threads bajo carga, ciclos de carga y
+recuperación después de saturación, y rechazo de startup con RLIMIT_NOFILE
+insuficiente sin elevarlo.
+
+Siguiente paso: ejecutar el runner actualizado solo en la VM desechable y
+compartir el JSON completo. No usar `greed` de producción. Esta etapa no
+modifica handler/contrato, no crea servicios y no autoriza listener
+persistente, systemd, SQLite, cambios del host ni despliegue.
