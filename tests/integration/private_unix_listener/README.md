@@ -1,10 +1,12 @@
 # A-IPC-01 — private Unix listener probe
 
-**Status:** opt-in experiment, with A09a/A09b helper and runner code now
-implemented on this branch but not yet executed or validated. The last
-owner-reported Debian run predates this implementation and remains 15 PASS,
-A09 SKIP, 0 FAIL; overall INCOMPLETE. This is not a production listener and
-does not select AF_UNIX pathname sockets as the production IPC transport.
+**Status:** opt-in experimental probe implemented and owner-validated on
+commit `1d5bdb122a8480c36b445be7dd961b93806de74b`: A01–A16 all PASS,
+including A09a (DAC) and A09b (SO_PEERCRED), with 0 SKIP and 0 FAIL.
+The recorded Debian execution is documented below and in
+[the validation record](../../../docs/status-aipc01-validation-2026-11-21.md).
+This is not a production listener and does not select AF_UNIX pathname sockets
+as the production IPC transport.
 
 ## Scope and safety boundary
 
@@ -69,10 +71,11 @@ The runner prints one JSON report and returns:
 | A15 | A closed listener no longer accepts new connections |
 | A16 | Two concurrent binds produce exactly one winner; winner remains operational |
 
-A09 is split into two independent checks. Both remain SKIP unless the operator
-explicitly enables them with the reviewed SSH identity, the host forced command
-has been separately approved and updated, and shell startup files have been
-reviewed. No A09 execution has yet been reported:
+A09 is split into two independent checks. Both remain SKIP by default unless
+the operator explicitly enables them with the reviewed SSH identity, the host
+forced command has been separately approved and updated, and shell startup
+files have been reviewed. The owner has now reported one successful opt-in
+execution; see the execution record below:
 
 - **A09a (filesystem DAC):** use the candidate endpoint with its unchanged directory mode 0700 and socket mode 0600. A pre-existing different-UID process should be denied before the listener accepts the connection. This proves filesystem reachability isolation only; it does not exercise the handler's SO_PEERCRED allowlist.
 - **A09b (application authorization):** use a separate, disposable fixture whose directory is traversable but not writable by other UIDs (for example 0711) and whose test socket permits connect (for example 0666). A different UID must reach the listener; the real handler must read SO_PEERCRED, reject that UID as UNAUTHORIZED_PEER, and send no protocol response. These relaxed permissions belong only to the isolated fixture and must never be applied to the candidate endpoint or treated as production settings. The fixture must be a sibling of the private probe sandbox, directly under a verified shared sticky temporary parent (such as /tmp), not nested inside the sandbox root (0700), because the parent directory's DAC permissions also govern traversal.
