@@ -201,31 +201,28 @@ PR [#29](https://github.com/yon30c/atlas/pull/29) fue marcado Ready for review e
 La integración no habilita listener persistente, system-manager, separación de privilegios, operaciones administrativas ni transporte de producción. La activación systemd sobre filesystem sigue suspendida por la colisión destructiva observada. Los probes A y C permanecen pendientes como experimentos independientes.
 
 
-## Diseño A-IPC-01 — listener Unix propio en directorio privado (2026-11-21)
+## A-IPC-01 — implementación experimental del listener Unix privado (2026-11-20)
 
-**Estado:** diseño propuesto; pendiente de revisión/aprobación. No implementado ni ejecutado.
+**Estado:** implementación opt-in preparada en una rama separada; pendiente de revisión/ejecución local por el propietario. No validada y no aprobada como transporte de producción.
 
-Documento: [local-authority-admin-private-unix-listener-probe.md](design/local-authority-admin-private-unix-listener-probe.md).
+- **Diseño aprobado:** [local-authority-admin-private-unix-listener-probe.md](design/local-authority-admin-private-unix-listener-probe.md).
+- **Rama de implementación:** `experiment/a-ipc-01-private-unix-listener-probe`, creada desde el HEAD documental `d7a14302061e1cfc52df5097a42d65bd4ba482bb` de `design/isolated-private-unix-listener-probe`.
+- **Archivos:** `tests/integration/private_unix_listener/run_probe.py` y `tests/integration/private_unix_listener/README.md`.
+- **Cobertura:** A01–A08 y A10–A16; sandbox temporal privado; directorio `0700`; socket `0600`; colisiones con archivo, symlink, listener activo y socket stale; sustitución controlada durante cleanup; ping `atlas-admin/1`; SO_PEERCRED; desconexión; truncamiento; ancillary; timeout; harness de concurrencia acotada; carrera de dos binds.
+- **A09 multi-UID:** SKIP deliberado. El ejecutor no cambia UID/GID, no usa sudo y no crea identidades. Por tanto, sin fallos en otros escenarios el resultado global es INCOMPLETE, nunca PASS. No se sustituye evidencia multi-UID por mocks.
+- **A14:** el máximo de dos workers y backlog ocho pertenecen únicamente al harness experimental; no son parámetros de producción.
+- **Seguridad:** no se modifica el handler ni el contrato; no listener persistente, daemon, systemd, SQLite, operaciones administrativas, cambios del host ni despliegue. Cleanup compara dispositivo/inode/tipo y conserva el límite TOCTOU documentado.
+- **Comando para el propietario, desde la raíz del checkout y sin sudo:**
 
-El experimento evaluará la alternativa A: creación del endpoint AF_UNIX/SOCK_SEQPACKET por el propio proceso mediante `bind()`, dentro de un directorio temporal privado. Incluye colisiones con archivo regular, symlink, socket activo y socket stale; integridad de objetos preexistentes; cleanup condicionado por tipo/dispositivo/inode; lifecycle del listener; SO_PEERCRED y autorización separada; desconexión, truncamiento, ancillary, timeouts y límites de concurrencia/recursos.
+  ```bash
+  PYTHONPATH=src python tests/integration/private_unix_listener/run_probe.py
+  ```
 
-**Invariantes:** no unlink preventivo; no stale cleanup automático; ninguna colisión puede modificar el objeto existente; si la identidad del pathname no coincide durante cleanup, no se elimina; no sudo, no cambios de UID/GID, no recursos Atlas existentes.
+**Validación:** no se ejecutaron pruebas, compilaciones ni workflows desde GitHub. No hay resultado local comunicado para esta implementación. El propietario debe revisar el commit exacto y ejecutar el comando en Debian; conservar el JSON completo, incluyendo INCOMPLETE/SKIP y cleanup.
 
-**Límites:** la secuencia lstat/unlink conserva riesgo TOCTOU; el directorio privado no protege frente a root ni procesos del mismo UID. La prueba con UID distinto es condicional y se marca SKIP/INCOMPLETE si no puede realizarse sin privilegios ni cambios del host.
+**Estado de Git:** `main` no fue modificado y no se abrió PR. La rama de implementación contiene únicamente el probe y las actualizaciones documentales de este incremento; la comparación exacta y HEAD deben consultarse en GitHub antes de continuar.
 
-**Exclusiones:** no listener persistente, daemon, systemd, SQLite, operaciones administrativas, cambios del host ni despliegue. No existe todavía comando de ejecución. La validación queda a cargo del propietario en Debian una vez implementado y revisado el probe.
+**Siguiente paso:** revisión final del diff en GitHub y entrega del commit exacto/comando para validación local; después analizar el JSON reportado. A no queda seleccionado como transporte definitivo.
 
-La rama `design/isolated-private-unix-listener-probe` se creó desde `main`. No se modificó `main`, no se abrió PR y no se ejecutaron pruebas ni workflows remotos.
+**Límites vigentes:** la implementación del probe no autoriza listener persistente, daemon, systemd, unidades de producción, cambios del host, usuarios, grupos, permisos, privilegios, acceso SQLite, provisioning, operaciones administrativas ni despliegue. La colisión destructiva de systemd no debe repetirse.
 
-
-### Decisión del propietario — A-IPC-01
-
-El propietario aceptó avanzar con el diseño del probe A-IPC-01. El documento de diseño fue revisado y queda como base para preparar su implementación experimental en una rama separada.
-
-- Directorio temporal privado: modo exacto `0700`; socket: modo exacto `0600`.
-- Se añadió el escenario de carrera de dos binds simultáneos: exactamente un ganador y ningún daño al endpoint ganador.
-- La implementación futura seguirá siendo opt-in, sin privilegios y limitada al sandbox temporal del ejecutor.
-- Esta aceptación no selecciona A como transporte de producción ni autoriza listener persistente, daemon, systemd, SQLite, operaciones administrativas, cambios del host o despliegue.
-- No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. La validación del probe corresponderá al propietario en Debian después de revisar y publicar la implementación.
-
-**Siguiente paso:** preparar la implementación aislada del probe A-IPC-01, sin modificar el handler ni el runtime de Atlas.
