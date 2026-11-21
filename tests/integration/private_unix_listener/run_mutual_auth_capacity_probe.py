@@ -68,7 +68,10 @@ def _request_packet() -> tuple[str, bytes]:
 
 
 def _serve_authenticated(
-    connection: socket.socket, allowed_uid: int, accepted_at: float
+    connection: socket.socket,
+    allowed_uid: int,
+    accepted_at: float,
+    pre_read_delay_seconds: float = 0.0,
 ) -> None:
     """Fixture handler: authenticate before recv and enforce one global deadline."""
     from atlas.platform_admin_ipc import (
@@ -92,17 +95,45 @@ def _serve_authenticated(
         )
         return
 
+    if pre_read_delay_seconds:
+        emit(
+            event="pre_read_delay_started",
+            peer_uid=peer.uid,
+            delay_seconds=pre_read_delay_seconds,
+            elapsed_seconds=round(time.monotonic() - accepted_at, 3),
+        )
+        time.sleep(pre_read_delay_seconds)
+
     deadline = accepted_at + GLOBAL_DEADLINE
     remaining = deadline - time.monotonic()
     if remaining <= 0:
-        emit(event="deadline_before_read", peer_uid=peer.uid)
+        emit(
+            event="deadline_before_read",
+            peer_uid=peer.uid,
+            elapsed_seconds=round(time.monotonic() - accepted_at, 3),
+        )
         return
 
-    connection.settimeout(min(READ_TIMEOUT, remaining))
+    effective_read_timeout = min(READ_TIMEOUT, remaining)
+    connection.settimeout(effective_read_timeout)
+    emit(
+        event="read_started",
+        peer_uid=peer.uid,
+        elapsed_seconds=round(time.monotonic() - accepted_at, 3),
+        timeout_seconds=round(effective_read_timeout, 3),
+        remaining_global_seconds=round(remaining, 3),
+    )
     try:
         packet, ancillary, flags, _address = connection.recvmsg(MAX_REQUEST_BYTES + 1)
     except TimeoutError:
-        emit(event="read_timeout", peer_uid=peer.uid)
+        elapsed = time.monotonic() - accepted_at
+        emit(
+            event="read_timeout",
+            peer_uid=peer.uid,
+            elapsed_seconds=round(elapsed, 3),
+            timeout_seconds=round(effective_read_timeout, 3),
+            global_deadline_reached=elapsed >= GLOBAL_DEADLINE - 0.25,
+        )
         return
 
     if not packet:
@@ -156,7 +187,12 @@ def _serve_authenticated(
     emit(event="request_completed", peer_uid=peer.uid, bytes_received=len(packet))
 
 
-def _server_child(socket_path: str, socket_mode: int, allowed_uid: int) -> int:
+def _server_child(
+    socket_path: str,
+    socket_mode: int,
+    allowed_uid: int,
+    pre_read_delay_seconds: float = 0.0,
+) -> int:
     global _STOP
     _STOP = threading.Event()
     listener: socket.socket | None = None
@@ -250,7 +286,9 @@ def _server_child(socket_path: str, socket_mode: int, allowed_uid: int) -> int:
                      max_workers=max_workers, accepted=accepted)
             try:
                 with connection:
-                    _serve_authenticated(connection, allowed_uid, accepted_at)
+                    _serve_authenticated(
+                        connection, allowed_uid, accepted_at, pre_read_delay_seconds
+                    )
             except Exception as exc:
                 emit(event="worker_error", error=f"{type(exc).__name__}: {exc}")
             finally:
@@ -488,6 +526,8 @@ def _start_server(
     socket_mode: int,
     allowed_uid: int,
     registry: list[Server],
+    *,
+    pre_read_delay_seconds: float = 0.0,
 ) -> Server:
     process = subprocess.Popen(
         [
@@ -495,6 +535,7 @@ def _start_server(
             "--socket", str(socket_path),
             "--socket-mode", str(socket_mode),
             "--allowed-uid", str(allowed_uid),
+            "--pre-read-delay-seconds", str(pre_read_delay_seconds),
         ],
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
@@ -1478,6 +1519,116 @@ def _scenario_transport() -> dict:
             listener.close()
 
 
+def _scenario_read_timeout(
+    script: Path,
+    service_dir: Path,
+    uid: int,
+    gid: int,
+    registry: list[Server],
+) -> dict:
+    """CP-05: an idle authorized peer is closed by the five-second read timeout."""
+    socket_path = service_dir / "idle-timeout.sock"
+    server = _start_server(
+        script, socket_path, uid, gid, 0o666, 0, registry
+    )
+    peer = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+    peer.settimeout(8.0)
+    connected_at = time.monotonic()
+    try:
+        peer.connect(str(socket_path))
+        read_started = server.wait_event("read_started", timeout=3.0)
+        timeout_event = server.wait_event("read_timeout", timeout=7.0)
+        elapsed = float(timeout_event["elapsed_seconds"])
+        configured_timeout = float(timeout_event["timeout_seconds"])
+        if (
+            not 4.5 <= elapsed <= 7.5
+            or abs(configured_timeout - READ_TIMEOUT) > 0.05
+            or timeout_event.get("global_deadline_reached") is not False
+        ):
+            raise ProbeFailure(
+                "CP-05 did not terminate at the independent five-second read timeout: "
+                f"{timeout_event}"
+            )
+        if float(read_started["timeout_seconds"]) < READ_TIMEOUT - 0.05:
+            raise ProbeFailure("CP-05 read phase was unexpectedly shortened by the global deadline")
+        eof = peer.recv(1)
+        if eof != b"":
+            raise ProbeFailure("CP-05 server did not close the idle peer after read timeout")
+        return {
+            "configured_read_timeout_seconds": READ_TIMEOUT,
+            "observed_elapsed_from_accept_seconds": elapsed,
+            "global_deadline_reached": False,
+            "peer_observed_eof": True,
+            "response_bytes": 0,
+            "client_elapsed_seconds": round(time.monotonic() - connected_at, 3),
+        }
+    finally:
+        peer.close()
+        server.stop()
+
+
+def _scenario_global_deadline(
+    script: Path,
+    service_dir: Path,
+    uid: int,
+    gid: int,
+    registry: list[Server],
+) -> dict:
+    """CP-06: pre-read fixture work consumes the accept-based global budget."""
+    # The controlled delay is test-only. It models time already spent after
+    # accept and before a later I/O phase; it is not a production handler delay.
+    pre_read_delay = 11.0
+    socket_path = service_dir / "global-deadline.sock"
+    server = _start_server(
+        script,
+        socket_path,
+        uid,
+        gid,
+        0o666,
+        0,
+        registry,
+        pre_read_delay_seconds=pre_read_delay,
+    )
+    peer = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+    peer.settimeout(19.0)
+    try:
+        peer.connect(str(socket_path))
+        read_started = server.wait_event("read_started", timeout=13.0)
+        timeout_event = server.wait_event("read_timeout", timeout=6.0)
+        elapsed = float(timeout_event["elapsed_seconds"])
+        effective_timeout = float(read_started["timeout_seconds"])
+        remaining_at_read = float(read_started["remaining_global_seconds"])
+        if (
+            not 10.5 <= float(read_started["elapsed_seconds"]) <= 12.5
+            or not 3.0 <= effective_timeout <= 4.5
+            or abs(effective_timeout - remaining_at_read) > 0.1
+            or not 14.0 <= elapsed <= 18.0
+            or timeout_event.get("global_deadline_reached") is not True
+        ):
+            raise ProbeFailure(
+                "CP-06 did not enforce the accept-based 15-second global deadline: "
+                f"read_started={read_started}, timeout={timeout_event}"
+            )
+        eof = peer.recv(1)
+        if eof != b"":
+            raise ProbeFailure("CP-06 server did not close the peer at the global deadline")
+        return {
+            "global_deadline_seconds": GLOBAL_DEADLINE,
+            "test_only_pre_read_delay_seconds": pre_read_delay,
+            "read_phase_elapsed_from_accept_seconds": read_started["elapsed_seconds"],
+            "effective_read_timeout_seconds": effective_timeout,
+            "remaining_global_seconds_at_read": remaining_at_read,
+            "observed_elapsed_from_accept_seconds": elapsed,
+            "global_deadline_reached": True,
+            "peer_observed_eof": True,
+            "response_bytes": 0,
+            "note": "The fixture delay verifies deadline accounting; it does not simulate production work or a blocked write.",
+        }
+    finally:
+        peer.close()
+        server.stop()
+
+
 def _cleanup_root(
     root: Path, public_root: Path, args: argparse.Namespace
 ) -> str:
@@ -1574,10 +1725,18 @@ def _main_parent(args: argparse.Namespace) -> int:
         results.append({"id": "CP-01,CP-04", "status": "PASS", "observations": capacity})
         backlog = _scenario_backlog(server, service_socket)
         results.append({"id": "CP-02,CP-03", "status": "PASS", "observations": backlog})
+        read_timeout = _scenario_read_timeout(
+            script, service_dir, args.service_uid, args.service_gid, servers
+        )
+        results.append({"id": "CP-05", "status": "PASS", "observations": read_timeout})
+        global_deadline = _scenario_global_deadline(
+            script, service_dir, args.service_uid, args.service_gid, servers
+        )
+        results.append({"id": "CP-06", "status": "PASS", "observations": global_deadline})
         results.append({
-            "id": "CP-05..CP-12",
+            "id": "CP-07..CP-12",
             "status": "INCOMPLETE",
-            "detail": "read/write/global deadline adversaries, exception recovery, payload/depth boundaries and full FD accounting remain unimplemented",
+            "detail": "exception recovery, payload/depth boundaries and full FD accounting remain unimplemented",
         })
         overall = "INCOMPLETE"
     except ProbeIncomplete as exc:
@@ -1649,6 +1808,9 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--socket", help=argparse.SUPPRESS)
     parser.add_argument("--socket-mode", type=lambda value: int(value, 0), default=0o600, help=argparse.SUPPRESS)
     parser.add_argument("--allowed-uid", type=int, default=0, help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--pre-read-delay-seconds", type=float, default=0.0, help=argparse.SUPPRESS
+    )
     return parser.parse_args()
 
 
@@ -1657,7 +1819,14 @@ def main() -> int:
     if args.server_child:
         if not args.socket:
             return 3
-        return _server_child(args.socket, args.socket_mode, args.allowed_uid)
+        if not 0.0 <= args.pre_read_delay_seconds <= GLOBAL_DEADLINE:
+            return 3
+        return _server_child(
+            args.socket,
+            args.socket_mode,
+            args.allowed_uid,
+            args.pre_read_delay_seconds,
+        )
     if args.client_child:
         if not args.socket:
             return 3
