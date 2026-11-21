@@ -180,7 +180,7 @@ The following code is now present on the experimental branch:
   - `--a09-identity-file` and `--a09-known-hosts`;
   - `--a09-forced-command-confirmed`, acknowledging the separately approved host-side `authorized_keys` forced-command update;
   - `--a09-shell-startup-reviewed`, acknowledging read-only review of the peer account's shell startup files.
-- Preflight checks the peer account UID/GID from the local account database, requires a distinct non-root identity, exact key/known_hosts ownership and modes, no hard links, the previously verified loopback ED25519 host-key fingerprint, and `/tmp` as a root-owned 01777 directory.
+- Preflight checks the peer account UID/GID from the local account database, requires a distinct non-root identity, exact key/known_hosts ownership and modes, no hard links, known_hosts directly under `/tmp`, the previously verified loopback ED25519 host-key fingerprint, and `/tmp` as a root-owned 01777 directory.
 - SSH is invoked with `-F /dev/null`, an explicit identity, `IdentityAgent=none`, public-key-only authentication, strict host-key checking, ED25519-only algorithms, no PTY, no forwarding, no proxy, no control master and a bounded connection/total timeout. No remote command is supplied; the authorized-key forced command is the only remote entrypoint.
 - The helper is copied to `/tmp/atlas-a09-client.py` with exclusive creation, mode 0644, and identity-checked cleanup. A pre-existing helper path is never overwritten.
 - A09a requires external `EACCES`, zero accepted connections and unchanged candidate endpoint identity/modes.
