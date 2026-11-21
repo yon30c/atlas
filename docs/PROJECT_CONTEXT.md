@@ -1,6 +1,6 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-19.
+> **Última actualización:** 2026-11-20.
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
@@ -11,7 +11,7 @@
 - **Repositorio:** `yon30c/atlas`.
 - **Rama de trabajo activa:** `work/systemd-socket-activation-probe-contract-alignment`.
 - **PR activo:** [#29 — Alinear probe systemd con atlas-admin/1 y registrar puertas del listener](https://github.com/yon30c/atlas/pull/29), abierto como draft, base `main`.
-- **HEAD observado de la rama del PR:** `12bf6b045a1e9286857e043eb5dc43f0dc7393d5` (9 commits sobre la rama al consultar PR #29).
+- **HEAD observado de la rama del PR:** `ca80330b298e516846bce7ba0bffe80982bf1a60` (12 commits sobre `main`, incluidos los tres commits de este ciclo documental).
 - **Base estable:** `main` en `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`; PR #28 ya integrado.
 - **Última validación local reportada:** sobre `main` en ese SHA, el propietario ejecutó 1.590 tests: `OK (skipped=1)`, 34.895 s, Python 3.13.5. Esta evidencia valida esa base, **no** los cambios del PR #29.
 - **Validación de PR #29:** pendiente de ejecución local en Debian. No se han ejecutado pruebas, compilaciones ni workflows remotos para este PR en este ciclo documental.
