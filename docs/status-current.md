@@ -328,3 +328,18 @@ El propietario confirmó la instalación de una clave Ed25519 efímera y una con
 La coordinación A09 se diseñó en [local-authority-admin-private-unix-listener-probe.md](design/local-authority-admin-private-unix-listener-probe.md), sección 16. El modelo propuesto es un helper remoto fijo, sin órdenes genéricas, ejecutado mediante un subprocess SSH con opciones estrictas; el runner permanece UID 1000 y no cambia credenciales. A09a conserva endpoint 0700/0600 y espera EACCES antes de accept. A09b usa fixture hermano independiente bajo /tmp sticky (0711/0666), envía ping y exige que el handler real observe el UID externo y rechace UNAUTHORIZED_PEER antes de leer el request, sin respuesta.
 
 **Pendiente:** helper/runner A09a/A09b no implementados; cambio de comando forzado de authorized_keys no autorizado todavía; ejecución A09 no autorizada todavía. Cambiar authorized_keys requiere aprobación explícita específica. No modificar sshd_config, PAM, firewall, systemd, handler, contrato, runtime, SQLite ni servicios. La evidencia A-IPC-01 sigue en 15 PASS + A09 SKIP + 0 FAIL, global INCOMPLETE. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub.
+
+
+## A09 — helper y runner implementados, host change pendiente (2026-11-21)
+
+La rama experimental ahora contiene una primera implementación de A09a/A09b:
+
+- `tests/integration/private_unix_listener/a09_ssh_client.py`: helper fijo y stdlib-only; entrada JSON limitada, escenarios cerrados A09a/A09b, sin shell arbitraria, sin cambio de credenciales ni acceso al checkout.
+- `tests/integration/private_unix_listener/run_probe.py`: SSH local con clave explícita, agente desactivado, autenticación solo por clave, host key ED25519 estricta/fijada, sin PTY/forwarding/proxy, A09a/A09b independientes y cleanup por identidad.
+- A09a exige EACCES, cero accepts y endpoint candidato 0700/0600 intacto.
+- A09b usa fixture hermano /tmp 0711/0666, comprueba SO_PEERCRED PID/UID/GID, exige que el handler real lance UNAUTHORIZED_PEER y que el cliente reciba cero bytes.
+- A09 queda deshabilitado por defecto. El opt-in requiere rutas explícitas de clave/known_hosts y confirmaciones del operador de que el comando forzado fue aprobado/actualizado y que los archivos de inicio del shell fueron revisados.
+
+**No ejecutar todavía:** la clave instalada sigue forzando `/usr/bin/id -u`. Cambiarla a `/usr/bin/python3 -I /tmp/atlas-a09-client.py` modifica seguridad del host y requiere aprobación explícita específica. No se ha modificado `authorized_keys`, sshd_config, PAM, firewall ni shell startup files. El propietario debe inspeccionar estos últimos de forma read-only antes de considerar el cambio.
+
+**Validación:** el código es implementación en rama experimental, no evidencia de ejecución. No se han ejecutado pruebas, compilaciones ni workflows desde GitHub. La última evidencia local comunicada sigue siendo 15 PASS, A09 SKIP, 0 FAIL, global INCOMPLETE; los nuevos escenarios A09a/A09b no están validados. `main` permanece intacta; no hay PR y ningún transporte está aprobado para producción.
