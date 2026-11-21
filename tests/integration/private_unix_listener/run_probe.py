@@ -527,10 +527,10 @@ def _a09_config(args: argparse.Namespace) -> dict[str, object]:
         if not line or line.startswith("#"):
             continue
         fields = line.split()
-        if len(fields) >= 3 and fields[0] == "[127.0.0.1]:22" and fields[1] == "ssh-ed25519":
+        if len(fields) >= 3 and fields[0] in {"127.0.0.1", "[127.0.0.1]:22"} and fields[1] == "ssh-ed25519":
             pinned_keys.append(fields[2])
     if len(pinned_keys) != 1:
-        raise ProbeSkip("A09 known_hosts must contain exactly one explicit [127.0.0.1]:22 ED25519 entry")
+        raise ProbeSkip("A09 known_hosts must contain exactly one explicit loopback ED25519 entry for port 22")
     try:
         key_blob = base64.b64decode(pinned_keys[0], validate=True)
     except ValueError as exc:
