@@ -1,7 +1,7 @@
 # Resolución segura de rutas y ownership — listener privado
 
 **Fecha:** 2026-11-21  
-**Estado:** diseño candidato para alternativa A; pendiente de revisión y probes aislados. No autoriza implementación persistente ni cambios del host.  
+**Estado:** diseño candidato para alternativa A; A-IPC-03 implementado como harness aislado PR-01..PR-12, pendiente de ejecución y validación del propietario. No autoriza implementación persistente ni cambios del host.  
 **Rama:** `experiment/a-ipc-01-private-unix-listener-probe`  
 **Relacionado:** `local-authority-admin-private-listener-identity-config.md`, `local-authority-admin-listener-lifecycle.md`, `local-authority-admin-private-listener-threat-model-review.md`.
 
@@ -153,3 +153,26 @@ Los escenarios son requisitos de diseño; no se han implementado ni ejecutado.
 - No se ejecutaron pruebas, compilaciones ni workflows.
 - No se crearon rutas, archivos `/etc`, usuarios, grupos, permisos, servicios ni sockets.
 - No se aprobó listener persistente, systemd, acceso SQLite ni despliegue.
+
+
+## 11. Probe A-IPC-03 — implementación del harness (validación pendiente)
+
+El plan ejecutable se documenta en
+`local-authority-admin-private-listener-path-resolution-probe.md`.
+El runner `tests/integration/private_unix_listener/run_path_resolution_probe.py`
+implementa PR-01..PR-12 con un recorrido desde `/` mediante descriptores,
+`O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC`, validación `fstat` por componente,
+apertura de configuración relativa al parent dirfd y comprobación de acceso
+DAC desde OTHER UID.
+
+El harness cubre rutas no canónicas, symlinks en cada nivel fixture,
+componentes no-directorio, ancestros group/other-writable, owner ajeno,
+directorio endpoint SERVICE 0700, metadata incorrecta, archivo de configuración
+symlink/FIFO/hardlink, reemplazo del pathname del padre después de abrir el
+descriptor y denegación de rename/symlink por OTHER UID.
+
+**Estado:** implementación y revisión estática en GitHub; no ejecutado por el
+asistente ni validado por el propietario. La ruta y los IDs usados son fixtures
+temporales; no se fijan rutas productivas ni una política de instalación.
+Ejecutar únicamente en `Atlas-VM-test` desechable. No crea sockets, no hace
+bind/connect y no modifica `/etc/atlas`, host, servicios, cuentas o SQLite.
