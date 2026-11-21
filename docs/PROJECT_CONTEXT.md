@@ -757,6 +757,6 @@ A-THREAT-05 sigue abierto hasta validar el procedimiento en un sandbox, especial
 
 Se publicó `docs/design/local-authority-admin-private-listener-resource-budget.md`. Revisión del handler: request 16 KiB, response 64 KiB, JSON depth 16, read/write timeout por defecto 5 s cada uno y máximo configurable 60 s por timeout individual; no existe deadline global ni accept loop. A14 usa 2 workers/backlog 8 solo en el harness.
 
-Perfil inicial propuesto para revisión (no aprobado): 4 conexiones/workers fijos, backlog 8, sin cola de aplicación, 5 s read/write, 15 s deadline global y `RLIMIT_NOFILE=64` candidato. Mutaciones SQLite deberían serializarse; operaciones largas no deben retener una conexión IPC y necesitan identificador/status. Memoria/CPU/TasksMax/shutdown quedan pendientes de medición y diseño.
+Perfil aprobado por el propietario para probes aislados: 4 conexiones/workers fijos, backlog 8, sin cola de aplicación, 5 s read/write, 15 s deadline global y `RLIMIT_NOFILE=64`. No equivale a configuración de producción. Mutaciones SQLite deben serializarse; operaciones largas no deben retener una conexión IPC y necesitan identificador/status. Memoria/CPU/TasksMax/shutdown e inventario real de FDs quedan pendientes.
 
-A-THREAT-07 sigue abierto hasta decisión del propietario y probe aislado. No se modificó código ni se ejecutaron pruebas/workflows.
+A-THREAT-07 permanece abierto hasta implementar y validar el probe aislado; no se modificó handler ni se ejecutaron pruebas/workflows.
