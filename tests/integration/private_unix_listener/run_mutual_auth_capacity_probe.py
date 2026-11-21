@@ -65,7 +65,9 @@ def _request_packet() -> tuple[str, bytes]:
     return request_id, packet
 
 
-def _serve_authenticated(connection: socket.socket, allowed_uid: int) -> None:
+def _serve_authenticated(
+    connection: socket.socket, allowed_uid: int, accepted_at: float
+) -> None:
     """Fixture handler: authenticate before recv and enforce one global deadline."""
     from atlas.platform_admin_ipc import (
         MAX_REQUEST_BYTES,
@@ -87,7 +89,7 @@ def _serve_authenticated(connection: socket.socket, allowed_uid: int) -> None:
         )
         return
 
-    deadline = time.monotonic() + GLOBAL_DEADLINE
+    deadline = accepted_at + GLOBAL_DEADLINE
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         emit(event="deadline_before_read", peer_uid=peer.uid)
@@ -212,7 +214,7 @@ def _server_child(socket_path: str, socket_mode: int, allowed_uid: int) -> int:
             socket_identity=list(socket_identity),
         )
 
-        def worker(connection: socket.socket) -> None:
+        def worker(connection: socket.socket, accepted_at: float) -> None:
             nonlocal active, max_active, max_workers
             with lock:
                 active += 1
@@ -222,7 +224,7 @@ def _server_child(socket_path: str, socket_mode: int, allowed_uid: int) -> int:
                      max_workers=max_workers, accepted=accepted)
             try:
                 with connection:
-                    _serve_authenticated(connection, allowed_uid)
+                    _serve_authenticated(connection, allowed_uid, accepted_at)
             except Exception as exc:
                 emit(event="worker_error", error=f"{type(exc).__name__}: {exc}")
             finally:
@@ -253,7 +255,7 @@ def _server_child(socket_path: str, socket_mode: int, allowed_uid: int) -> int:
                     current_accepted = accepted
                 emit(event="accepted", accepted=current_accepted)
                 try:
-                    pool.submit(worker, connection)
+                    pool.submit(worker, connection, time.monotonic())
                 except Exception:
                     connection.close()
                     slots.release()
