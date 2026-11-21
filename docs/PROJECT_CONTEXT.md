@@ -1,6 +1,6 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-21 (A-IPC-02: MA-01..MA-06 y CP-01/04 validados por el propietario; MA-07/08 implementados, pendientes de ejecución).
+> **Última actualización:** 2026-11-21 (A-IPC-02: MA-01..MA-08 y CP-01/04 validados por el propietario; global INCOMPLETE).
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
@@ -13,11 +13,11 @@
 - **Rama activa:** `experiment/a-ipc-01-private-unix-listener-probe`; separada de `main`, sin PR propio. PR #30 sigue abierto en Draft en su rama original de diseño.
 - **IPC existente:** contrato `atlas-admin/1` y handler para conexiones ya aceptadas. Solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
 - **A-IPC-01:** el propietario reportó en Debian 13, commit `1d5bdb122a8480c36b445be7dd961b93806de74b`, resultado 16 PASS, 0 SKIP, 0 FAIL. Registro: `docs/status-aipc01-validation-2026-11-21.md`. No demuestra despliegue.
-- **A-IPC-02:** ejecución del propietario en `Atlas-VM-test`, Debian 13, commit `b4eda57d36338f065adb2cb4e00d19a8ade58069`: MA-01..MA-06 y CP-01/04 PASS; global INCOMPLETE; 1.431 s; cleanup de sandboxes `/run` completado. Fixtures 2005/2005 y 2006/2006. Backlog 8 configurado, no saturado. MA-07/08 están implementados en el runner mediante `probe_config.py`, pendientes de validación local.
+- **A-IPC-02:** ejecución del propietario en `Atlas-VM-test`, Debian 13, commit `585dd3d979bc1b800550e4b9c79c382b22cf1f6c`: MA-01..MA-08 y CP-01/04 PASS; global INCOMPLETE; 1.497 s; cleanup de sandboxes `/run` completado. Fixtures 2005/2005 y 2006/2006. Backlog 8 configurado, no saturado. MA-07 rechazó 11 configuraciones inválidas y aceptó la válida; MA-08 confirmó snapshot inmutable ante reemplazo atómico.
 - **Alternativa A:** elegida como línea principal de evaluación, no aprobada para producción. Alternativa B suspendida por colisión destructiva en systemd; C no priorizada.
 - **TCB-1 aceptada:** todos los procesos bajo la cuenta dedicada `atlas-runtime` pertenecen a la TCB; no se exige aislamiento intra-UID. La exclusividad operativa de esa cuenta aún debe definirse/verificarse.
 - **Identidad del cliente aceptada:** el frontend administrativo debe conectar con **EUID 0**; la política de diseño del servicio es exactamente `client_uids={0}`. No se admiten otros consumidores sin nueva decisión. El entrypoint IPC real aún no existe/revisado; la decisión no es evidencia operativa.
-- **Autenticación mutua:** A-IPC-02 validó MA-01..MA-06 en `b4eda57`, incluida la comprobación de UID del servidor antes de send, UID cliente antes de recv, rechazo pre-connect de EUID no-root y rechazo de claims UID/GID/PID extra en el envelope. El entrypoint cliente/servidor de producción sigue sin existir/revisar.
+- **Autenticación mutua:** A-IPC-02 validó MA-01..MA-08 en `585dd3d`, incluida la comprobación de UID del servidor antes de send, UID cliente antes de recv, rechazo pre-connect de EUID no-root, rechazo de claims UID/GID/PID extra, configuración fixture estricta y snapshot inmutable. El entrypoint cliente/servidor de producción sigue sin existir/revisar.
 - **Configuración confiable:** `docs/design/local-authority-admin-private-listener-identity-config.md` propone archivo root-managed `/etc/atlas/admin-ipc.conf`, root:root 0644 sin secretos, parser estricto y snapshot inmutable. Ruta candidata, no existente; no crear en host.
 - **Resolución de rutas:** `docs/design/local-authority-admin-private-listener-path-resolution.md` define recorrido desde `/` por descriptores y validación de cada componente. Bajo TCB-1, el baseline es bind al pathname absoluto canónico después de verificar que UIDs externos no pueden escribir en ningún ancestro. El bind no es dirfd-atómico. La técnica procfs queda como alternativa experimental, no baseline.
 - **A-THREAT-04:** ventana TOCTOU de unlink aceptada como residual bajo TCB-1 solo con directorio privado, instancia única y revalidación por descriptor; unlink no es atómico.
@@ -859,3 +859,15 @@ producción ni despliegue.
 El runner incorpora `probe_config.py`, código temporal exclusivo de `tests/integration/private_unix_listener/`. Su gramática cerrada `clave=valor` es deliberadamente un formato de fixture, no una decisión para producción. La carga usa un descriptor de directorio del sandbox privado y valida archivo regular, root:root, modo 0644, hardlink único y tamaño máximo. MA-07 cubre archivo ausente, duplicados, claves desconocidas/ausentes, identidad alterada, symlink, FIFO, owner/mode inseguros, tamaño excesivo y hardlink. MA-08 comprueba que el reemplazo atómico del archivo no modifica el snapshot congelado en memoria.
 
 La prueba no lee ni crea `/etc/atlas/admin-ipc.conf`, no cambia el handler y no implementa el recorrido de ancestros desde `/`; ese recorrido sigue siendo una etapa PA separada. MA-07/08 están implementados, pero **pendientes de ejecución del propietario** en `Atlas-VM-test`.
+
+## A-IPC-02 — validación MA-07/MA-08 por el propietario (2026-11-21)
+
+Evidencia recibida de `Atlas-VM-test`, Debian 13, kernel `6.12.117+deb13-amd64`, Python 3.13.5, EUID 0 real, fixtures SERVICE `2005/2005` y OTHER `2006/2006`, commit `585dd3d979bc1b800550e4b9c79c382b22cf1f6c`:
+
+- MA-01..MA-08: PASS; MA-01..06 agrupados en el reporte, MA-07 y MA-08 reportados individualmente.
+- MA-07: configuración válida aceptada (`client_uids=[0]`); 11 variantes inválidas rechazadas, incluidas symlink, FIFO, owner/mode incorrectos, hardlink y archivo oversized.
+- MA-08: reemplazo atómico de la configuración no alteró el snapshot ya cargado; dataclass frozen y tuple inmutables.
+- CP-01/CP-04: PASS; máximo 4 workers activos y recuperación a 0. Backlog 8 configurado, no saturado.
+- Duración 1.497 s; cleanup de los dos sandboxes `/run` confirmado; cero filas FAIL; global INCOMPLETE.
+
+La evidencia solo aplica al commit indicado. Permanecen MA-09..MA-10 y CP-02..CP-03/CP-05..CP-12. No implica configuración de producción, path-walk completo, listener persistente ni despliegue. Próximo paso: revisar diseño/runner e implementar MA-09/MA-10 sin ampliar el alcance a código productivo.
