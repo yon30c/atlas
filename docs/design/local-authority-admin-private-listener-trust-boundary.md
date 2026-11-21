@@ -17,7 +17,7 @@ El código actual src/atlas/platform_admin_ipc.py ofrece:
 - handle_admin_connection(..., allowed_peer_uids=...): valida AF_UNIX/SOCK_SEQPACKET y obtiene las credenciales del peer antes de recibir el paquete.
 - La allowlist se entrega al handler como argumento; el handler no determina por sí solo qué UID debe estar autorizado.
 - El handler no crea listener, no cambia credenciales ni abre SQLite.
-- El contrato §3.2 deja el UID concreto como política local; UID 0 es candidato, no una autorización universal.
+- El contrato §3.2 deja el UID concreto como política local; para esta configuración el propietario fijó EUID 0 como requisito del frontend y `client_uids={0}`. No es una autorización universal para otros consumidores.
 - El contrato §3.3 deja fuera del protocolo la creación del endpoint y su lifecycle.
 
 Por tanto, la autenticación del cliente hacia el servidor está parcialmente implementada como mecanismo reutilizable, pero la política de identidad todavía debe fijarse por el futuro caller. La autenticación del servidor hacia el cliente aún no está implementada ni especificada.
@@ -146,12 +146,12 @@ La frontera queda lista para implementación solo cuando TCB-1/TCB-2 y las ident
 
 El propietario aceptó explícitamente TCB-1: todos los procesos ejecutados bajo la cuenta dedicada atlas-runtime pertenecen al mismo dominio confiable. No se exige aislamiento intra-UID para esta alternativa. Esta decisión no autoriza crear/modificar cuentas, grupos, permisos, servicios ni desplegar.
 
-La configuración de identidades y endpoint se desarrolla en [Configuración confiable de identidad — alternativa A](local-authority-admin-private-listener-identity-config.md). UID 0 continúa siendo candidato para el cliente, no una identidad confirmada. El siguiente paso es identificar el proceso cliente real y revisar su entrypoint/privilegios antes de fijar allowlist y valores operativos.
+La configuración de identidades y endpoint se desarrolla en [Configuración confiable de identidad — alternativa A](local-authority-admin-private-listener-identity-config.md). La nota histórica de esta sección queda supersedida: el propietario ya fijó EUID 0 y `client_uids={0}` como requisito de diseño. El siguiente paso es implementar e inspeccionar el entrypoint real para verificar que conecta con EUID 0.
 
 
 ## Aclaración sobre identidad del cliente — 2026-11-21
 
-La inspección de docs/design/local-authority-administrative-operations-design.md (nombre canónico en el repositorio: local-authority-admin-administrative-operations-design.md) confirma que el modelo de dominio prevé un frontend privilegiado con EUID 0 (§§2.2/5.1). No se encontró una implementación cliente IPC ni un entrypoint ejecutable que realice connect en el estado revisado. Por tanto, UID 0 es el candidato de diseño recomendado para la allowlist, pero todavía no está validado como identidad efectiva del proceso cliente real.
+La inspección de docs/design/local-authority-administrative-operations-design.md (nombre canónico en el repositorio: local-authority-admin-administrative-operations-design.md) confirma que el modelo de dominio prevé un frontend privilegiado con EUID 0 (§§2.2/5.1). No se encontró una implementación cliente IPC ni un entrypoint ejecutable que realice connect en el estado revisado. Por tanto, UID 0 ya no es solo candidato: es el requisito de diseño aceptado para la allowlist. Sigue sin estar validado como identidad efectiva de un proceso cliente real porque el entrypoint aún no existe/revisado.
 
 La fuente y el esquema candidatos están definidos en local-authority-admin-private-listener-identity-config.md. El siguiente paso es definir el entrypoint del frontend cliente y fijar su contexto de ejecución; no se debe implementar listener persistente antes de eso.
 
