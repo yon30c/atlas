@@ -190,7 +190,7 @@ El informe complementario [Revisión estática del modelo de amenazas](local-aut
 - El cleanup por comparación de inode y posterior unlink conserva TOCTOU. La estrategia debe documentar actores capaces de modificar el directorio y riesgo aceptado.
 - No existe procedimiento operativo completo para recuperar un pathname residual tras crash. El arranque seguirá fallando cerrado; no se añadirá stale cleanup automático.
 - La resolución segura debe cubrir todos los componentes de ruta, no solo el componente final. Debe validarse el directorio mediante descriptor y operar relativamente a él.
-- Los límites 2 workers/backlog 8 son del harness A14, no capacidad de producción. El servicio necesita límites de FD, backpressure, deadlines y shutdown.
+- Los límites 2 workers/backlog 8 son del harness A14, no capacidad de producción. El perfil inicial candidato está en [presupuesto de recursos y backpressure](local-authority-admin-private-listener-resource-budget.md): 4 conexiones/workers, backlog 8, deadline global 15 s y presupuesto FD provisional. Sigue pendiente de decisión y validación.
 - No se ha probado el par de identidades candidato UID 0 ↔ `atlas-runtime`, ni el hardening del proceso de servicio.
 
 **Puerta actual:** continuar diseño de frontera de confianza y autenticación mutua, sin código. No implementar listener persistente hasta cerrar los hallazgos bloqueantes A-THREAT-01 a A-THREAT-05 y fijar criterios de aceptación para los restantes.
