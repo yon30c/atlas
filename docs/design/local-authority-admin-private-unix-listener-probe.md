@@ -1,6 +1,6 @@
 # Diseño del probe A-IPC-01 — listener Unix propio en directorio privado
 
-**Estado:** diseño aprobado e implementación experimental preparada en rama separada; pendiente de revisión local y ejecución por el propietario. No validado; no aprobado como transporte de producción.  
+**Estado:** diseño aprobado e implementación experimental preparada en rama separada; revisión estática de GitHub completada con una corrección de determinismo en A14; pendiente de inspección local y ejecución por el propietario. No validado; no aprobado como transporte de producción.  
 **Fase:** 2.5 — evaluación experimental de propiedad del endpoint IPC.  
 **Alternativa evaluada:** A — listener creado por el propio proceso sobre un pathname AF_UNIX dentro de un directorio privado.  
 **Contrato de aplicación:** `atlas-admin/1`; este probe no modifica el contrato ni amplía el catálogo de operaciones.
@@ -164,7 +164,7 @@ La implementación experimental declara estos límites fijos:
 - espera máxima de aceptación en los escenarios de ping: 8 s;
 - saturación: hasta 8 intentos de cliente; workers adicionales se rechazan sin crear threads adicionales.
 
-A14 verifica que el harness no supera dos workers activos, que al menos una conexión excedente se rechaza y que recupera capacidad después de cerrar los clientes. El harness es código de prueba; no es el listener de producción ni una recomendación de capacidad.
+A14 verifica que el harness no supera dos workers activos, que ocupa ambos slots y rechaza al menos una conexión excedente, y que recupera capacidad después de cerrar los clientes. Los workers admitidos esperan en una compuerta exclusiva del test hasta observar la saturación; así, la comprobación no depende de que el timeout de lectura o la planificación de hilos mantengan ocupados los slots. Las excepciones inesperadas de workers se conservan como fallo en vez de descartarse. El harness es código de prueba; no es el listener de producción ni una recomendación de capacidad.
 
 **Límites de evidencia:** no se impone un límite global de descriptores al proceso ni un watchdog global que interrumpa cualquier escenario a los 8 s. Las operaciones bloqueantes del runner tienen timeouts acotados y se registran duraciones, pero el campo de 8 s solo representa la espera máxima de aceptación indicada, no un timeout global por escenario. Estos puntos quedan como límites explícitos del experimento y no deben describirse como verificados.
 
