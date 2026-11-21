@@ -24,8 +24,8 @@ _REQUIRED_KEYS = frozenset(
         "socket_dir_mode",
     }
 )
-_DECIMAL = re.compile(r"[1-9][0-9]{0,9}\\Z")
-_MODE = re.compile(r"0[0-7]{3}\\Z")
+_DECIMAL = re.compile(r"[1-9][0-9]{0,9}\Z")
+_MODE = re.compile(r"0[0-7]{3}\Z")
 
 
 class ProbeConfigRejected(ValueError):
@@ -67,8 +67,8 @@ def _socket_path(value: str) -> str:
     components = value[1:].split("/")
     if any(
         component in {"", ".", ".."}
-        or "\\\\" in component
-        or "\\x00" in component
+        or "\\" in component
+        or "\x00" in component
         for component in components
     ):
         raise ProbeConfigRejected("socket_path contains an ambiguous component")
@@ -81,7 +81,7 @@ def parse_probe_config(data: bytes) -> ProbeConfigSnapshot:
         raise ProbeConfigRejected("configuration input must be bytes")
     if not data or len(data) > MAX_CONFIG_BYTES:
         raise ProbeConfigRejected("configuration size is outside the allowed range")
-    if not data.endswith(b"\\n") or b"\\r" in data or b"\\x00" in data:
+    if not data.endswith(b"\n") or b"\r" in data or b"\x00" in data:
         raise ProbeConfigRejected("configuration requires LF lines and a final newline")
     try:
         text = data.decode("ascii", errors="strict")
@@ -89,7 +89,7 @@ def parse_probe_config(data: bytes) -> ProbeConfigSnapshot:
         raise ProbeConfigRejected("configuration must be ASCII") from exc
 
     values: dict[str, str] = {}
-    for line in text[:-1].split("\\n"):
+    for line in text[:-1].split("\n"):
         if not line or line != line.strip() or line.count("=") != 1:
             raise ProbeConfigRejected("configuration contains a malformed line")
         key, value = line.split("=", 1)
@@ -162,8 +162,8 @@ def load_probe_config_at(
         or not name
         or name in {".", ".."}
         or "/" in name
-        or "\\\\" in name
-        or "\\x00" in name
+        or "\\" in name
+        or "\x00" in name
     ):
         raise ProbeConfigRejected("configuration filename must be one path component")
     if not hasattr(os, "O_NOFOLLOW"):
