@@ -2,7 +2,7 @@
 
 > **Corte documental:** 20 de noviembre de 2026.
 > **Rama de código base validada:** `main` — `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552` (PR #28 integrado).
-> **Rama de trabajo documental/probe:** `work/systemd-socket-activation-probe-contract-alignment` — HEAD observado `ca80330b298e516846bce7ba0bffe80982bf1a60`.
+> **Rama de trabajo documental/probe:** `work/systemd-socket-activation-probe-contract-alignment`; consultar la cabecera del PR #29 para el HEAD vigente.
 > **PR en curso:** [#29](https://github.com/yon30c/atlas/pull/29), abierto como draft contra `main`; sus cambios siguen pendientes de validación local.
 > **Última suite completa reportada por el propietario:** en Debian, sobre `main` en `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`: **1,590 tests — OK (skipped=1)**, 34.895 s, Python 3.13.5. Esta suite **no valida PR #29**.
 > **Validación de PR #29:** pendiente. No se ejecutaron pruebas, compilaciones ni workflows remotos durante este ciclo documental.
