@@ -108,7 +108,9 @@ El lifecycle recomienda descriptor de directorio, `dir_fd` y `O_NOFOLLOW`, adem�
 
 A14 demuestra límites del harness experimental (dos workers y backlog ocho) y recuperación de slots. El propio diseño advierte que no existe límite global de descriptores ni watchdog global para todos los escenarios. El handler controla tamaño de paquete y timeout por conexión, pero no implementa accept loop, cola, backpressure, política de rechazo, cierre global ni límite de recursos del proceso.
 
-**Requisito antes de implementar:** especificar y probar backlog, máximo de conexiones aceptadas/activas, estrategia de workers, límite de descriptores, deadline total por conexión, cancelación, backpressure, saturación y shutdown. No copiar automáticamente los valores 2/8 del harness como capacidad de producción.
+**Diseño candidato publicado:** [Presupuesto de recursos y backpressure](local-authority-admin-private-listener-resource-budget.md) propone un perfil inicial de cuatro conexiones/workers, backlog ocho, sin cola de aplicación, request/response 16/64 KiB, read/write 5 s, deadline total 15 s y `RLIMIT_NOFILE=64` provisional. Explica el motivo de no copiar el 2/8 de A14.
+
+**Estado:** A-THREAT-07 sigue abierto hasta que el propietario confirme los valores de capacidad, se revise el scheduler de operaciones/SQLite y un probe aislado valide saturación, deadline, FDs, threads y shutdown. Memoria/CPU y límites del supervisor no están fijados.
 
 ### A-THREAT-08 — Lifecycle de shutdown/readiness y descriptor no implementado
 
