@@ -122,3 +122,20 @@ La implementación del cliente/runner A09 requiere además revisión estática e
 - Última evidencia A-IPC-01 comunicada: 15 PASS, A09 SKIP, 0 FAIL; global INCOMPLETE.
 - `main`: intacta.
 - Transporte de producción: no seleccionado ni aprobado.
+
+
+## 9. Actualización — clave instalada y autenticación SSH confirmada (2026-11-21)
+
+La fase de preparación de clave y la prueba de autenticación mínima ya fueron ejecutadas por el propietario, con autorización expresa:
+
+- Clave privada Ed25519 temporal: `/run/user/1000/atlas-a09.IG1QPj/id_ed25519`, bajo directorio runtime privado de `greed`; no se copió al HOME del peer ni al repositorio.
+- Fingerprint de la clave cliente: `SHA256:aUAfFBWJfzoPUX9eErhAfltPrKPWTt7OtFQCa4m5oE4`.
+- `authorized_keys` contiene la clave con las opciones exactas `from="127.0.0.1",restrict,command="/usr/bin/id -u"`; archivo y directorio conservan propietario y modos 0600/0700.
+- Archivo temporal known_hosts: `/tmp/tmp.htQpm2wvEm`, propietario `greed`, modo 0600. La host key ED25519 de loopback coincide con el fingerprint local verificado: `SHA256:txiDPT+/ldcIwnN6BPotbeL7QsofAieAeqF3GKMa9xI`.
+- El propietario ejecutó SSH a `atlas-a09-test@127.0.0.1` con identidad explícita, BatchMode, autenticación solo por clave, host key estricta y algoritmo ED25519; la salida del comando forzado fue `1001`.
+
+**Resultado:** autenticación SSH de la identidad UID 1001 confirmada. No se ha ejecutado A09a/A09b. El comando forzado sigue siendo `/usr/bin/id -u` y no debe sustituirse hasta contar con autorización explícita para ese cambio y con un helper revisado. SSH/PAM/firewall globales no fueron modificados.
+
+La clave privada y el archivo known_hosts son artefactos temporales locales; sus contenidos no deben añadirse al repositorio ni a informes. La ruta privada puede desaparecer al cerrar la sesión runtime; antes de una futura ejecución se debe verificar que ambos archivos sigan presentes y con permisos correctos.
+
+La coordinación propuesta queda documentada en la sección 16 de [Diseño A-IPC-01](local-authority-admin-private-unix-listener-probe.md). La implementación del helper/runner, la sustitución del comando forzado y la ejecución A09 siguen pendientes de revisión y autorización específica. La eliminación de la cuenta/grupo/HOME también sigue requiriendo autorización separada.
