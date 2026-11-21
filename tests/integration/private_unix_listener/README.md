@@ -165,9 +165,9 @@ from="127.0.0.1",restrict,command="/usr/bin/id -u"
 
 The forced command returned UID `1001`. The private key remains under the owner's private runtime directory and is not in the repository. The temporary known_hosts file is owner-only and the ED25519 host key was pinned after fingerprint comparison.
 
-This proves SSH public-key authentication and the forced identity command only. It does not exercise either A09 subscenario. The runner still implements neither A09a nor A09b and retains the prior 15 PASS + A09 SKIP + 0 FAIL / INCOMPLETE evidence.
+This proves SSH public-key authentication and the forced identity command only. It does not exercise either A09 subscenario. The A09a/A09b helper and runner have since been implemented on this branch, but remain unexecuted and unvalidated. The last owner-reported execution still predates that implementation and remains 15 PASS + original A09 SKIP + 0 FAIL / INCOMPLETE.
 
-The proposed orchestration design is recorded in [the A-IPC-01 design](../../../docs/design/local-authority-admin-private-unix-listener-probe.md#16-diseño-de-coordinación-externa-para-a09aa09b--2026-11-21). It uses a fixed, reviewed helper over stdin/stdout and a bounded SSH subprocess; no credential switching is performed by the runner. Implementing the helper is pending static review. Replacing the current forced command in `authorized_keys` is a separate host security change and requires explicit approval. Do not change it or run A09 yet.
+The orchestration design and implementation details are recorded in [the A-IPC-01 design](../../../docs/design/local-authority-admin-private-unix-listener-probe.md#16-diseño-de-coordinación-externa-para-a09aa09b--2026-11-21). The current authorized-key forced command remains `/usr/bin/id -u`; replacing it with the fixed helper is a separate host security change requiring explicit approval. Do not change it or run A09 yet.
 
 
 ## A09 helper/runner implementation — 2026-11-21
