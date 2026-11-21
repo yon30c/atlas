@@ -246,3 +246,19 @@ No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. El
 propietario ejecutó el probe localmente en la VM indicada. `main` no se
 modificó, no se creó PR y no se aprobó listener persistente, transporte de
 producción ni despliegue.
+
+
+## 9.3 Evidencia del propietario — MA-07/MA-08 (2026-11-21)
+
+El propietario ejecutó el runner en `Atlas-VM-test`, Debian 13, kernel `6.12.117+deb13-amd64`, Python 3.13.5, EUID 0 real, fixtures SERVICE UID/GID `2005/2005` y OTHER UID/GID `2006/2006`, sobre el commit `585dd3d979bc1b800550e4b9c79c382b22cf1f6c`.
+
+- MA-01..MA-08: PASS. MA-01..MA-06 se reportaron agrupados; MA-07 y MA-08 como escenarios independientes.
+- MA-07: aceptación de la configuración válida con UID/GID de servicio 2005/2005 y `client_uids=[0]`; rechazo de los 11 casos inválidos listados en §4/README.
+- MA-08: pathname reemplazado de `/run/atlas/admin.sock` a `/run/atlas/changed.sock`; el snapshot retuvo el pathname original, con campos frozen y colección inmutable.
+- CP-01/CP-04: PASS; máximo 4 workers activos y recuperación a 0. Backlog configurado 8, no saturado.
+- Duración 1.497 s; cleanup de ambos sandboxes `/run` completado; cero filas FAIL.
+- Global **INCOMPLETE**: MA-09..MA-10 y CP-02..CP-03/CP-05..CP-12 permanecen sin implementar/validar.
+
+Esta evidencia aplica únicamente al commit indicado. MA-07/08 prueban un parser y loader fixture, no configuración productiva; el loader valida el archivo final relativo a un descriptor de sandbox ya confiable y no sustituye el path-walk PA desde `/`. No se modificó el handler ni el host.
+
+**Siguiente incremento:** inspeccionar el estado actual del runner y del protocolo antes de implementar MA-09 (desconexión durante autenticación) y MA-10 (rechazo de transportes distintos de AF_UNIX/SOCK_SEQPACKET). Mantenerlos como pruebas aisladas y conservar INCOMPLETE hasta completar todos los escenarios obligatorios.
