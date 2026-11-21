@@ -801,3 +801,9 @@ CP-10 observations: four active workers and nine pending connections; accepted c
 
 This validates the resource-accounting scenario on the stated commit and VM only. It does not establish production resource policy or authorize a persistent listener/deployment. CP-11 repeated saturation/recovery and CP-12 low-`RLIMIT_NOFILE` startup rejection remain outstanding. No tests, builds, or workflows were run by the assistant.
 
+### CP-11 — repeated saturation/recovery implemented (owner validation pending)
+
+Runner commit: `70ee6a7a77dc671fe4ec26a6ca98a25a2e47e104`. CP-11 performs three consecutive cycles against the same fixture server. Each cycle occupies all four workers, queues nine AF_UNIX connections, verifies the accepted count does not advance while saturated, closes all peers, and requires all 13 accepted connections to drain. It snapshots FD/thread counts before, during, and after each cycle; FD and thread counts must return exactly to that cycle's baseline, and the server must remain alive. The scenario is harness-only and does not change production code.
+
+CP-11 is implemented and statically reviewed, but **not yet owner-validated**. CP-12 remains unimplemented: startup rejection when the child inherits an insufficient `RLIMIT_NOFILE`, without raising the limit. Run the updated probe only on disposable `Atlas-VM-test`, never on production `greed`. The overall result must remain INCOMPLETE until CP-12 is implemented and validated.
+
