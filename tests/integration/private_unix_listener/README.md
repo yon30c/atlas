@@ -300,11 +300,16 @@ directly (do not use sudo for this probe), then supply four dedicated numeric
 fixture IDs:
 
 ```sh
+read -r -p "UID numérico reservado para atlas-runtime fixture: " SERVICE_UID
+read -r -p "GID numérico reservado para atlas-runtime fixture: " SERVICE_GID
+read -r -p "UID numérico reservado para peer alternativo: " OTHER_UID
+read -r -p "GID numérico reservado para peer alternativo: " OTHER_GID
+
 PYTHONPATH=src python3 tests/integration/private_unix_listener/run_mutual_auth_capacity_probe.py \
-  --service-uid <unused-service-uid> \
-  --service-gid <unused-service-gid> \
-  --other-uid <unused-alternate-uid> \
-  --other-gid <unused-alternate-gid> \
+  --service-uid "$SERVICE_UID" \
+  --service-gid "$SERVICE_GID" \
+  --other-uid "$OTHER_UID" \
+  --other-gid "$OTHER_GID" \
   --confirm-disposable-vm \
   --confirm-fixture-ids
 ```
