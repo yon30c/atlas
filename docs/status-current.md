@@ -730,3 +730,10 @@ en `Atlas-VM-test` desechable; nunca en `greed` producción.
 El propietario ejecutó `cbfe0e20a79ae3ee8fd901ba43ea6df360962398` en `Atlas-VM-test`: MA-01..MA-10 y CP-01..CP-09 PASS; CP-10 terminó en FAIL con `ProbeFailure: CP-10 procfs status omitted Max open files`. El cleanup de ambos sandboxes `/run` fue correcto. Este fallo no contiene una medición de exceso de recursos: el escenario se detuvo al no localizar el campo.
 
 La revisión estática encontró que `Max open files` se buscaba erróneamente en `/proc/<pid>/status`; Linux lo expone en `/proc/<pid>/limits`. Runner corregido en `47b9ed94c21d26b18c415bedd2f1d352894f2620`, manteniendo FD/thread snapshots y la comprobación soft/hard 64/64. **CP-10 corregido estáticamente, pendiente de repetición por el propietario**. CP-11/12 siguen pendientes. No se ejecutaron pruebas, builds ni workflows desde GitHub. Repetir solo en `Atlas-VM-test`, nunca en `greed` producción.
+
+
+## A-IPC-02 — CP-10 contador de accepts: sincronización y diagnóstico (2026-11-21)
+
+En commit `892d934267684fc8d5a179993f71c2b11c614c7e`, MA-01..MA-10 y CP-01..CP-09 PASS; CP-10 falló al comparar el contador de accepts durante saturación. El mensaje no contenía valores suficientes para distinguir una aceptación real de un baseline incompleto.
+
+Revisión estática: `Server` recibe eventos stdout en una cola alimentada por un reader thread; CP-10 calculaba `accepted_before` sin drenar esa cola. Se corrigió en `7c009dac7fd7c4270ea6edf8bc1a004a8fb8f898`: drenar eventos previos antes del baseline y añadir baseline/expected/observed/pending/workers al error. La aserción estricta permanece. **No marcar CP-10 PASS** hasta una nueva ejecución; no se ha confirmado aún si hubo aceptación real o desincronización del baseline. CP-11/12 pendientes. Sin pruebas/builds/workflows desde GitHub; ejecutar solo en `Atlas-VM-test`.
