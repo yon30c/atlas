@@ -102,7 +102,7 @@ Las decisiones siguientes están incorporadas en el runner. Son decisiones del h
 4. **Segundo network namespace:** la VM permitió unshare --net true y el propietario confirmó una tabla AF_UNIX visible solo en el namespace del listener. SR-03 ahora crea un listener fixture real en un namespace adicional y exige detectarlo desde el inventario procfs del proceso padre. La ejecución del runner sigue pendiente.
 5. **Token de aprobación:** SR-10 usa un dataclass inmutable de fixture ligado al pathname y a st_dev, st_ino, tipo, UID, GID y modo observados. El challenge es una constante exclusiva del escenario. No es aprobación humana real, no es una API reutilizable y no autoriza mantenimiento fuera del sandbox.
 
-El runner está implementado y revisado estáticamente; no se ejecutó desde GitHub. Las decisiones anteriores deberán revisarse si la ejecución del propietario descubre diferencias del formato procfs o del comportamiento del kernel.
+El runner está implementado y revisado estáticamente; no se ejecutó desde GitHub. La identidad de cada namespace se obtiene manteniendo abierto brevemente un descriptor O_PATH y leyendo su enlace /proc/self/fd; el PID representativo se comprueba antes y después de leer su tabla para detectar cambios de namespace durante la lectura. SR-10 también demuestra que un token con inode distinto se rechaza sin mutar el residual. Las decisiones anteriores deberán revisarse si la ejecución del propietario descubre diferencias del formato procfs o del comportamiento del kernel.
 ## 8. No objetivos
 
 - No implementar recuperación automática al iniciar el servicio.
