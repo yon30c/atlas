@@ -189,13 +189,13 @@ def _connect(path: Path, timeout: float = 1.0) -> socket.socket:
     return client
 
 
-def _ping_exchange(listener: socket.socket, path: Path) -> None:
+def _ping_exchange(listener: socket.socket, path: Path) -> dict[str, int]:
     request_id, packet = _ping_packet()
     with _connect(path) as client:
         client.sendall(packet)
         connection, _ = listener.accept()
         with connection:
-            _peer, request = _serve_one(connection)
+            peer, request = _serve_one(connection)
         response = json.loads(client.recv(MAX_RESPONSE_BYTES).decode("utf-8"))
     if (
         response.get("protocol") != "atlas-admin/1"
@@ -206,6 +206,7 @@ def _ping_exchange(listener: socket.socket, path: Path) -> None:
         or response.get("result", {}).get("handler_status") != "available"
     ):
         raise ProbeFailure(f"unexpected atlas-admin/1 ping response: {response!r}")
+    return {"pid": peer.pid, "uid": peer.uid, "gid": peer.gid}
 
 
 def _scenario_a01(root: Path) -> None:
@@ -374,13 +375,13 @@ def _scenario_a07(root: Path) -> None:
             raise ProbeFailure("; ".join(errors))
 
 
-def _scenario_a08(root: Path) -> None:
+def _scenario_a08(root: Path) -> dict[str, int]:
     box = CaseSandbox(root, "a08")
     listener = OwnedListener(box.path / "s")
     try:
         listener.bind_listen()
         box.track(listener.path)
-        _ping_exchange(listener.socket, listener.path)
+        return _ping_exchange(listener.socket, listener.path)
     finally:
         listener.socket.close()
         errors = box.cleanup()
@@ -394,6 +395,22 @@ def _scenario_a09(root: Path) -> None:
         "or assume a second pre-existing identity"
     )
 
+
+def _scenario_a10(root: Path) -> dict[str, int]:
+    box = CaseSandbox(root, "a10")
+    listener = OwnedListener(box.path / "s")
+    try:
+        listener.bind_listen()
+        box.track(listener.path)
+        peer = _ping_exchange(listener.socket, listener.path)
+        if peer["uid"] != os.getuid():
+            raise ProbeFailure("kernel-reported peer UID did not match the authorized UID")
+        return peer
+    finally:
+        listener.socket.close()
+        errors = box.cleanup()
+        if errors:
+            raise ProbeFailure("; ".join(errors))
 
 def _scenario_a11(root: Path) -> None:
     from atlas.platform_admin_ipc import AdminPeerDisconnected
@@ -718,6 +735,7 @@ SCENARIOS = [
     ("A07", "cleanup removes the unchanged owned socket", _scenario_a07),
     ("A08", "allowed peer completes atlas-admin/1 ping", _scenario_a08),
     ("A09", "different-UID peer rejection (conditional)", _scenario_a09),
+    ("A10", "allowed peer identity is read from kernel credentials", _scenario_a10),
     ("A11", "disconnect before request is controlled", _scenario_a11),
     ("A12", "truncation and ancillary data are rejected silently", _scenario_a12),
     ("A13", "idle peer is released by read timeout", _scenario_a13),
@@ -785,26 +803,30 @@ def main() -> int:
         print(json.dumps({"overall": "INCOMPLETE", "reason": str(exc)}, indent=2))
         return 2
 
-    results: list[dict[str, str]] = []
+    results: list[dict[str, object]] = []
     started = time.monotonic()
     try:
         for case_id, description, function in SCENARIOS:
             case_started = time.monotonic()
+            observations = None
             try:
-                function(root)
+                observations = function(root)
             except ProbeSkip as exc:
                 status, detail = "SKIP", str(exc)
             except Exception as exc:
                 status, detail = "FAIL", f"{type(exc).__name__}: {exc}"
             else:
                 status, detail = "PASS", "completed"
-            results.append({
+            scenario_result = {
                 "id": case_id,
                 "description": description,
                 "status": status,
                 "detail": detail,
                 "duration_seconds": f"{time.monotonic() - case_started:.3f}",
-            })
+            }
+            if observations is not None:
+                scenario_result["observations"] = observations
+            results.append(scenario_result)
             if status == "FAIL":
                 break
     finally:
