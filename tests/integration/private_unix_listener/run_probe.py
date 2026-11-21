@@ -16,6 +16,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import selectors
 import socket
 import stat
 import subprocess
@@ -649,6 +650,71 @@ def _remove_a09_helper(path: Path, identity: tuple[int, int, int]) -> None:
     path.unlink()
 
 
+def _bounded_a09_communicate(
+    process: subprocess.Popen[bytes],
+    instruction: bytes,
+) -> tuple[bytes, bytes]:
+    """Exchange bounded stdin/stdout/stderr with the local SSH child."""
+    selector = selectors.DefaultSelector()
+    output = {"stdout": bytearray(), "stderr": bytearray()}
+    limits = {"stdout": 4096, "stderr": 4096}
+    streams = {"stdout": process.stdout, "stderr": process.stderr}
+    input_stream = process.stdin
+    if input_stream is None or streams["stdout"] is None or streams["stderr"] is None:
+        raise ProbeFailure("A09 SSH child pipes were not created")
+
+    for name, stream in streams.items():
+        os.set_blocking(stream.fileno(), False)
+        selector.register(stream, selectors.EVENT_READ, ("read", name))
+    os.set_blocking(input_stream.fileno(), False)
+    selector.register(input_stream, selectors.EVENT_WRITE, ("write", None))
+
+    remaining = memoryview(instruction)
+    deadline = time.monotonic() + A09_SSH_TIMEOUT_SECONDS
+    try:
+        while selector.get_map():
+            now = time.monotonic()
+            if now >= deadline:
+                raise TimeoutError("A09 SSH communication timed out")
+            events = selector.select(min(0.1, deadline - now))
+            for key, _mask in events:
+                action, name = key.data
+                stream = key.fileobj
+                if action == "write":
+                    try:
+                        written = os.write(stream.fileno(), remaining)
+                    except BrokenPipeError as exc:
+                        raise ProbeFailure("A09 SSH child closed stdin before the instruction was delivered") from exc
+                    if written <= 0:
+                        raise ProbeFailure("A09 SSH stdin made no forward progress")
+                    remaining = remaining[written:]
+                    if not remaining:
+                        selector.unregister(stream)
+                        stream.close()
+                else:
+                    buffer = output[name]
+                    chunk = os.read(stream.fileno(), min(1024, limits[name] + 1 - len(buffer)))
+                    if not chunk:
+                        selector.unregister(stream)
+                        stream.close()
+                        continue
+                    if len(buffer) + len(chunk) > limits[name]:
+                        raise ProbeFailure(f"A09 SSH {name} exceeded the {limits[name]}-byte output limit")
+                    buffer.extend(chunk)
+
+            if process.poll() is not None and input_stream in selector.get_map():
+                selector.unregister(input_stream)
+                input_stream.close()
+
+        process.wait(timeout=max(0.0, deadline - time.monotonic()))
+        return bytes(output["stdout"]), bytes(output["stderr"])
+    finally:
+        selector.close()
+        for stream in (input_stream, streams["stdout"], streams["stderr"]):
+            if stream is not None and not stream.closed:
+                stream.close()
+
+
 def _start_a09_ssh(
     config: dict[str, object],
     scenario: str,
@@ -711,21 +777,32 @@ def _start_a09_ssh(
 
     def communicate() -> None:
         try:
-            stdout, stderr = process.communicate(instruction, timeout=A09_SSH_TIMEOUT_SECONDS)
+            stdout, stderr = _bounded_a09_communicate(process, instruction)
             outcome.update({"stdout": stdout, "stderr": stderr, "returncode": process.returncode})
-        except subprocess.TimeoutExpired:
+        except TimeoutError:
             try:
                 process.kill()
             except OSError:
                 pass
-            stdout, stderr = process.communicate()
+            try:
+                process.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                outcome["exception"] = "SSH child did not exit after timeout kill"
             outcome.update({
-                "stdout": stdout,
-                "stderr": stderr,
+                "stdout": b"",
+                "stderr": b"",
                 "returncode": process.returncode,
                 "timeout": True,
             })
         except BaseException as exc:
+            try:
+                process.kill()
+            except OSError:
+                pass
+            try:
+                process.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                outcome["exception"] = "SSH child did not exit after communication failure"
             outcome["exception"] = f"{type(exc).__name__}: {exc}"
 
     worker = threading.Thread(target=communicate, name=f"{scenario}-ssh", daemon=True)
