@@ -1,11 +1,34 @@
 # Estado vigente de Atlas
 
-> Corte documental: 18 de noviembre de 2026.
-> Rama de código revisada: `main` (`5deb6bf`; PR #21 integrado). La composición compartida de almacenamiento de autoridad está implementada; aún no está conectada a un runtime ni a una base desplegada.
-> Commit de código evaluado en la suite completa reportada: `5deb6bf1cf1a53a1eb905d5c23e61f4f027c5fee` (squash de PR #21).
-> Suite completa más reciente reportada por el propietario en Debian: **1,547 tests — OK**; `python -m compileall -q src tests`: **exit code 0**.
-> Validación focalizada de 7B.6B en Debian: **37 tests — OK**; `python -m compileall -q src tests`: **exit code 0**. 7B.6B queda cerrada en el alcance validado.
-> Este documento diferencia implementación publicada, validación local reportada y capacidades conectadas al runtime.
+> **Corte documental:** 20 de noviembre de 2026.
+> **Rama de código base validada:** `main` — `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552` (PR #28 integrado).
+> **Rama de trabajo documental/probe:** `work/systemd-socket-activation-probe-contract-alignment` — HEAD observado `12bf6b045a1e9286857e043eb5dc43f0dc7393d5`.
+> **PR en curso:** [#29](https://github.com/yon30c/atlas/pull/29), abierto como draft contra `main`; sus cambios siguen pendientes de validación local.
+> **Última suite completa reportada por el propietario:** en Debian, sobre `main` en `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`: **1,590 tests — OK (skipped=1)**, 34.895 s, Python 3.13.5. Esta suite **no valida PR #29**.
+> **Validación de PR #29:** pendiente. No se ejecutaron pruebas, compilaciones ni workflows remotos durante este ciclo documental.
+> **Estado IPC:** handler/prototipo para conexiones ya aceptadas; solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
+> **Estado de transporte:** ninguno aprobado para producción. Listener propio en filesystem privado: candidato para probe aislado; socket activation systemd sobre filesystem: suspendida por colisión destructiva observada; AF_UNIX abstracto: alternativa experimental con riesgos de preclaim/DoS y sin DAC.
+> **Este documento diferencia** implementación publicada, cambios en PR, validación local reportada y capacidades conectadas al runtime.
+
+
+
+
+## Autoridad administrativa local e IPC — estado al 2026-11-20
+
+- PR #28 integró el alineamiento del contrato administrativo y `authority.ping` en `main`.
+- PR #29 corrige el probe opt-in para intercambiar `atlas-admin/1` y comprobar `completed/OK`; también registra las puertas de diseño del listener. Permanece abierto como draft y sin validación local reportada.
+- El handler recibe conexiones ya aceptadas; no crea ni gestiona un listener persistente. No existe daemon administrativo ni acceso administrativo real a SQLite.
+- `authority.ping` es la única operación administrativa funcional. Las otras seis operaciones siguen bloqueadas/no implementadas.
+- La observación destructiva de colisión de pathname en Debian systemd 257.13 mantiene suspendida la socket activation sobre filesystem. No repetir el escenario destructivo.
+- Alternativas:
+  - **A — Listener creado por proceso en filesystem privado:** próximo probe aislado recomendado; requiere demostrar colisiones no destructivas, exclusión de stale cleanup automático, concurrencia y cleanup condicionado por identidad.
+  - **B — systemd socket activation filesystem:** suspendida; no usar como baseline ni desplegar.
+  - **C — AF_UNIX abstracto:** probe separado; no tiene controles DAC de filesystem y requiere evaluar preclaim, exposición local y DoS.
+- Los probes deben ser opt-in, temporales, con recursos únicos bajo directorios temporales privados, sin `sudo`, sin `/run` ni `/var/lib`, y sin tocar recursos o unidades Atlas existentes.
+- Próximo paso único: el propietario valida localmente en Debian el probe corregido de PR #29; después se preparan probes independientes para A y C con sus criterios de aceptación documentados.
+
+**No autorizado:** merge, listener persistente, selección de transporte de producción, unidades systemd, cambios del host, usuarios/grupos, permisos/privilegios, acceso SQLite, provisioning o ejecución de operaciones administrativas.
+
 
 ## Posicionamiento
 
