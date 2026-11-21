@@ -603,3 +603,19 @@ ejecución y validación del propietario. Requiere `ss` root-owned y no
 escribible por grupo/otros; si no está disponible o no puede observarse el
 listener, el runner declara INCOMPLETE. No se han ejecutado pruebas,
 compilaciones ni workflows desde GitHub. CP-05..CP-12 continúan pendientes.
+
+
+## A-IPC-02 — backlog AF_UNIX: resultado y corrección (2026-11-21)
+
+El propietario ejecutó el commit `1ebf930` en Debian 13/kernel
+`6.12.117+deb13-amd64`. MA-01..MA-10 y CP-01/CP-04 PASS. CP-02/CP-03
+falló porque, tras observar Recv-Q=8/Send-Q=8, la conexión adicional devolvió
+`connect_ex=0`; cleanup de sandboxes correcto.
+
+La revisión del kernel Linux AF_UNIX muestra comparación `queue_len > backlog`.
+Con `listen(8)`, Linux admite nueve conexiones pendientes: la novena debe
+conectar y la décima debe obtener EAGAIN si no se liberó ningún slot. El runner
+fue corregido en commit `634e19decce2322e94ca0d1fe410b259f23dcb67` para
+medir 8/8, luego 9/8, y exigir EAGAIN en la décima, sin accepts/workers extra.
+La corrección está pendiente de ejecución local; no atribuir PASS a CP-02/03
+hasta recibir el nuevo JSON.
