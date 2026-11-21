@@ -3,14 +3,14 @@
 > **Corte documental:** 21 de noviembre de 2026.
 > **Rama de código base validada:** `main` — `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552` (PR #28 integrado).
 > **Rama de trabajo documental/probe:** `work/systemd-socket-activation-probe-contract-alignment`; consultar la cabecera del PR #29 para el HEAD vigente.
-> **PR en curso:** [#29](https://github.com/yon30c/atlas/pull/29), abierto como draft contra `main`; sus cambios siguen pendientes de validación local.
+> **PR en curso:** [#29](https://github.com/yon30c/atlas/pull/29), abierto como draft contra `main`; cambios validados localmente por el propietario en Debian 13 sobre el HEAD indicado.
 > **Última suite completa reportada por el propietario:** en Debian, sobre `main` en `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`: **1,590 tests — OK (skipped=1)**, 34.895 s, Python 3.13.5. Esta suite **no valida PR #29**.
 > **Validación local de PR #29:** en Debian 13, HEAD `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, árbol limpio y sincronizado con origin. Probe user-manager: `PASS` (descriptor, dos activaciones, ownership/mode privados y `RemoveOnStop=no`). Suite completa: `Ran 1590 tests in 34.753s`, `OK (skipped=1)`. Esta evidencia cubre ese HEAD y no demuestra system-manager, separación de privilegios ni despliegue. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub.
 > **Estado IPC:** handler/prototipo para conexiones ya aceptadas; solo `authority.ping` está implementado. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
 > **Estado de transporte:** ninguno aprobado para producción. Listener propio en filesystem privado: candidato para probe aislado; socket activation systemd sobre filesystem: suspendida por colisión destructiva observada; AF_UNIX abstracto: alternativa experimental con riesgos de preclaim/DoS y sin DAC.
 > **Este documento diferencia** implementación publicada, cambios en PR, validación local reportada y capacidades conectadas al runtime.
 
-## Autoridad administrativa local e IPC — estado al 2026-11-20
+## Autoridad administrativa local e IPC — estado al 2026-11-21
 
 - PR #28 integró el alineamiento del contrato administrativo y `authority.ping` en `main`.
 - PR #29 corrige el probe opt-in para intercambiar `atlas-admin/1` y comprobar `completed/OK`; también registra las puertas de diseño del listener. Su probe y suite completa fueron validados localmente por el propietario en Debian sobre HEAD `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6` (detalles arriba). El PR sigue abierto como draft.
