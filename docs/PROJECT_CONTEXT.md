@@ -1,6 +1,6 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-21 (A-IPC-02 validado por el propietario hasta MA-05; MA-06 implementado y pendiente).
+> **Última actualización:** 2026-11-21 (A-IPC-02: MA-01..MA-06 y CP-01/04 validados por el propietario; MA-07/08 implementados, pendientes de ejecución).
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
@@ -13,7 +13,7 @@
 - **Rama activa:** `experiment/a-ipc-01-private-unix-listener-probe`; separada de `main`, sin PR propio. PR #30 sigue abierto en Draft en su rama original de diseño.
 - **IPC existente:** contrato `atlas-admin/1` y handler para conexiones ya aceptadas. Solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
 - **A-IPC-01:** el propietario reportó en Debian 13, commit `1d5bdb122a8480c36b445be7dd961b93806de74b`, resultado 16 PASS, 0 SKIP, 0 FAIL. Registro: `docs/status-aipc01-validation-2026-11-21.md`. No demuestra despliegue.
-- **A-IPC-02:** ejecución del propietario en `Atlas-VM-test`, Debian 13, commit `069dbb9520f9e640955d9122f3a8012b2f55ba1a`: MA-01..MA-05 y CP-01/04 PASS; global INCOMPLETE; 1.339 s; cleanup de sandboxes `/run` completado. MA-03 rechazó EUID 2006 antes de connect. Fixtures 2005/2005 y 2006/2006. Backlog 8 configurado, no saturado. MA-06 se añadió en `9a8380e` y espera validación local.
+- **A-IPC-02:** ejecución del propietario en `Atlas-VM-test`, Debian 13, commit `b4eda57d36338f065adb2cb4e00d19a8ade58069`: MA-01..MA-06 y CP-01/04 PASS; global INCOMPLETE; 1.431 s; cleanup de sandboxes `/run` completado. Fixtures 2005/2005 y 2006/2006. Backlog 8 configurado, no saturado. MA-07/08 están implementados en el runner mediante `probe_config.py`, pendientes de validación local.
 - **Alternativa A:** elegida como línea principal de evaluación, no aprobada para producción. Alternativa B suspendida por colisión destructiva en systemd; C no priorizada.
 - **TCB-1 aceptada:** todos los procesos bajo la cuenta dedicada `atlas-runtime` pertenecen a la TCB; no se exige aislamiento intra-UID. La exclusividad operativa de esa cuenta aún debe definirse/verificarse.
 - **Identidad del cliente aceptada:** el frontend administrativo debe conectar con **EUID 0**; la política de diseño del servicio es exactamente `client_uids={0}`. No se admiten otros consumidores sin nueva decisión. El entrypoint IPC real aún no existe/revisado; la decisión no es evidencia operativa.
@@ -26,8 +26,8 @@
 - **A-THREAT-07:** el perfil aprobado para probes aislados es 4 conexiones/workers, backlog 8, cola 0, read/write 5 s, deadline global 15 s y `RLIMIT_NOFILE=64`. CP-01/CP-04 pasaron en la ejecución del propietario sobre `fbc8c68`; backlog exacto, adversarios de timeout, contabilidad de FDs, memoria/CPU/TasksMax y drenaje siguen pendientes. No es configuración de producción.
 - **A-THREAT-08:** máquina de estados de readiness/shutdown, drenaje, deadlines y ownership de FDs pendiente.
 - **A-THREAT-09:** A09 usó runner UID 1000 y peer UID 1001; no valida cliente UID 0, servicio `atlas-runtime` ni permisos finales del despliegue.
-- **Próximo paso:** ejecutar MA-06 del commit actual `9a8380e` o posterior exclusivamente en `Atlas-VM-test`; después avanzar con MA-07..MA-10 y cobertura CP pendiente. Path-walk, colisiones y stale recovery permanecen como fases separadas. Nunca ejecutar en `greed` de producción ni crear cuentas/grupos.
-- **Estado de cambios:** A-IPC-02 añadió el escenario MA-03 en el runner de la rama experimental; el resto de cambios de este ciclo son documentales. No se modificó handler, contrato, runtime, SQLite, `main` ni host. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. La validación reportada hasta MA-05 pertenece al commit `069dbb9`; MA-06 en `9a8380e` está pendiente de ejecución. No se creó PR ni se aprobó listener persistente o despliegue.
+- **Próximo paso:** actualizar `Atlas-VM-test` al HEAD actual de la rama y ejecutar MA-07/08 exclusivamente en esa VM; después avanzar con MA-09/10 y cobertura CP pendiente. Path-walk, colisiones y stale recovery permanecen como fases separadas. Nunca ejecutar en `greed` de producción ni crear cuentas/grupos.
+- **Estado de cambios:** la rama experimental contiene el fixture aislado `probe_config.py` y los escenarios MA-07/08. No se modificó handler, contrato normativo, runtime, SQLite, `main` ni host. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. MA-01..MA-06 y CP-01/04 fueron validados por el propietario en `b4eda57`; MA-07/08 están pendientes de ejecución. No se creó PR ni se aprobó listener persistente o despliegue.
 
 **Límites vigentes:** A-IPC-01 valida únicamente los escenarios experimentales ejecutados en el commit/entorno indicados. No demuestra protección frente a root/capabilities suficientes ni procesos maliciosos del mismo UID; no valida separación de privilegios, system-manager, listener persistente, daemon, integración systemd, acceso/autorización SQLite ni operaciones mutantes. No autoriza cambios del host, usuarios, grupos, permisos, privilegios, servicios, provisioning o despliegue.
 
@@ -852,3 +852,10 @@ No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. El
 propietario ejecutó el probe localmente en la VM indicada. `main` no se
 modificó, no se creó PR y no se aprobó listener persistente, transporte de
 producción ni despliegue.
+
+
+## A-IPC-02 — implementación MA-07/MA-08 (2026-11-21)
+
+El runner incorpora \`probe_config.py\`, código temporal exclusivo de \`tests/integration/private_unix_listener/\`. Su gramática cerrada \`clave=valor\` es deliberadamente un formato de fixture, no una decisión para producción. La carga usa un descriptor de directorio del sandbox privado y valida archivo regular, root:root, modo 0644, hardlink único y tamaño máximo. MA-07 cubre archivo ausente, duplicados, claves desconocidas/ausentes, identidad alterada, symlink, FIFO, owner/mode inseguros, tamaño excesivo y hardlink. MA-08 comprueba que el reemplazo atómico del archivo no modifica el snapshot congelado en memoria.
+
+La prueba no lee ni crea \`/etc/atlas/admin-ipc.conf\`, no cambia el handler y no implementa el recorrido de ancestros desde \`/\`; ese recorrido sigue siendo una etapa PA separada. MA-07/08 están implementados, pero **pendientes de ejecución del propietario** en \`Atlas-VM-test\`.
