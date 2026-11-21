@@ -1759,12 +1759,13 @@ def _process_resource_snapshot(pid: int) -> dict[str, int]:
     if nofile_line is None:
         raise ProbeFailure("CP-10 procfs status omitted Max open files")
     fields = nofile_line.split()
-    if len(fields) < 4 or fields[-1] != "64":
-        raise ProbeFailure(f"CP-10 fixture RLIMIT_NOFILE is not 64: {nofile_line}")
+    if len(fields) < 6 or fields[3] != "64" or fields[4] != "64":
+        raise ProbeFailure(f"CP-10 fixture RLIMIT_NOFILE is not 64/64: {nofile_line}")
     return {
         "open_fds": fd_count,
         "threads": thread_count,
-        "rlimit_nofile": int(fields[-1]),
+        "rlimit_nofile_soft": int(fields[3]),
+        "rlimit_nofile_hard": int(fields[4]),
     }
 
 
