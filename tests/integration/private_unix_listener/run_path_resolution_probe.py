@@ -130,7 +130,7 @@ def open_directory_path(
 def _mkdir(path: Path, *, uid: int = 0, gid: int = 0, mode: int = 0o700) -> None:
     path.mkdir(mode=mode)
     os.chown(path, uid, gid, follow_symlinks=False)
-    os.chmod(path, mode, follow_symlinks=False)
+    os.chmod(path, mode)
 
 
 def _write_file(path: Path, data: bytes, *, uid: int = 0, gid: int = 0, mode: int = 0o644) -> None:
@@ -411,14 +411,14 @@ def _scenario_12_other_uid_dac(
     destination = sandbox / "dac-destination"
     _mkdir(source)
     command = (
-        "import json,os,sys\\n"
-        "src,dst=sys.argv[1:]\\n"
-        "def attempt(label, operation):\\n"
-        " try:\\n"
-        "  operation()\\n"
-        "  return [label,0]\\n"
-        " except OSError as exc:\\n"
-        "  return [label,exc.errno]\\n"
+        "import json,os,sys\n"
+        "src,dst=sys.argv[1:]\n"
+        "def attempt(label, operation):\n"
+        " try:\n"
+        "  operation()\n"
+        "  return [label,0]\n"
+        " except OSError as exc:\n"
+        "  return [label,exc.errno]\n"
         "print(json.dumps([attempt('rename', lambda: os.rename(src,dst)), "
         "attempt('symlink', lambda: os.symlink('target',dst))]))"
     )
