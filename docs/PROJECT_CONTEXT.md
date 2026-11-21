@@ -721,3 +721,12 @@ Registro completo y límites: [docs/status-aipc01-validation-2026-11-21.md](stat
 El propietario informó que actualizó únicamente la entrada temporal de `authorized_keys` para forzar `/usr/bin/python3 -I /tmp/atlas-a09-client.py`, conservando `from="127.0.0.1",restrict`, la clave y modo 0600; creó respaldo. Los archivos de inicio fueron revisados de forma read-only. No se reportaron cambios en sshd_config, PAM ni firewall. No asumir que la identidad temporal, clave, respaldo o artefactos temporales ya fueron eliminados.
 
 La validación fue ejecutada por el propietario en Debian. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. `main` no se modificó; no se creó PR ni se seleccionó transporte de producción.
+
+
+## Decisiones de diseño — identidad cliente y rutas IPC (2026-11-21)
+
+El propietario confirmó que el frontend administrativo debe ejecutarse con **EUID 0**. La política de diseño para el listener alternativo A queda fijada en `client_uids={0}`: el frontend valida su EUID antes de conectar, el servicio valida `SO_PEERCRED.uid == 0` antes de leer, y el frontend valida el UID de `atlas-runtime` antes de enviar cualquier byte. Esto identifica dominios UID, no un ejecutable concreto. El entrypoint IPC real aún no existe/revisado, por lo que la decisión no equivale a evidencia operativa.
+
+Se publicó `docs/design/local-authority-admin-private-listener-path-resolution.md`, que especifica resolución de todos los componentes desde `/` mediante descriptores y `openat`/`dir_fd`, `O_DIRECTORY|O_NOFOLLOW`, validación `fstat`, lectura de configuración desde descriptor y cleanup relativo. A-THREAT-06 queda especificado a nivel de diseño, pero no cerrado: el pathname de `bind()` no admite `dir_fd` en la API Python estándar y falta probar la correspondencia entre directorio validado y ruta usada por bind. La ventana TOCTOU de unlink permanece; bajo TCB-1 se confía en los procesos de `atlas-runtime` y root, mientras UIDs externos deben quedar excluidos por ownership/modos.
+
+Siguiente trabajo: resolver el método seguro de bind/pathname, definir recuperación manual de socket stale (A-THREAT-05) y preparar un probe aislado de resolución de rutas/autenticación mutua. No modificar handler, contrato, runtime, SQLite ni host; no crear listener persistente, usuarios, grupos, permisos, servicios o archivos `/etc`. No se ejecutaron pruebas, compilaciones ni workflows; `main` permanece intacta y no hay PR.
