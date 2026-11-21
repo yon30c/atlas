@@ -321,6 +321,7 @@ def _client_child(socket_path: str) -> int:
     finally:
         client.close()
 
+
 def _negative_euid_client_child(socket_path: str) -> int:
     """Exercise the privileged-client EUID guard before any socket is created."""
     euid = os.geteuid()
