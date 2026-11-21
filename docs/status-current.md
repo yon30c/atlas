@@ -13,20 +13,19 @@
 ## Autoridad administrativa local e IPC — estado al 2026-11-21
 
 - PR #28 integró el alineamiento del contrato administrativo y `authority.ping` en `main`.
-- PR #29 corrigió el probe opt-in para intercambiar `atlas-admin/1` y comprobar `completed/OK`; también registra las puertas de diseño del listener. Fue integrado en `main` mediante `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`. El propietario validó localmente en Debian el HEAD de código del PR `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6` (detalles arriba).
+- PR #29 corrigió el probe opt-in del contrato y fue integrado en `main` mediante `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`. La suite completa reportada para su HEAD de código `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6` fue 1,590 tests, `OK (skipped=1)`; no afirmar que esa ejecución se hizo sobre el merge commit.
 - El handler recibe conexiones ya aceptadas; no crea ni gestiona un listener persistente. No existe daemon administrativo ni acceso administrativo real a SQLite.
-- `authority.ping` es la única operación administrativa funcional. Las otras seis operaciones siguen bloqueadas/no implementadas.
-- La observación destructiva de colisión de pathname en Debian systemd 257.13 mantiene suspendida la socket activation sobre filesystem. No repetir el escenario destructivo.
-- Alternativas:
-  - **A — Listener creado por proceso en filesystem privado:** próximo probe aislado recomendado; requiere demostrar colisiones no destructivas, exclusión de stale cleanup automático, concurrencia y cleanup condicionado por identidad.
-  - **B — systemd socket activation filesystem:** suspendida; no usar como baseline ni desplegar.
-  - **C — AF_UNIX abstracto:** probe separado; no tiene controles DAC de filesystem y requiere evaluar preclaim, exposición local y DoS.
-- Los probes deben ser opt-in, temporales, con recursos únicos bajo directorios temporales privados, sin `sudo`, sin `/run` ni `/var/lib`, y sin tocar recursos o unidades Atlas existentes.
-- Próximo paso: diseñar y ejecutar, por separado, los probes A y C; comparar evidencia antes de seleccionar transporte. Ninguno queda aprobado por el merge de PR #29.
+- `authority.ping` es la única operación administrativa funcional. Las otras seis operaciones del catálogo siguen bloqueadas/no implementadas.
+- **Dirección elegida por el propietario:** continuar con **A — listener AF_UNIX/SOCK_SEQPACKET creado por proceso bajo un directorio filesystem privado**. Es la línea principal de evaluación y desarrollo. No equivale a aprobación del transporte para producción.
+- **A-IPC-01 validado:** el propietario reportó en Debian 13, commit `1d5bdb122a8480c36b445be7dd961b93806de74b`, resultado `overall=PASS`: A01–A16, 16 PASS, 0 SKIP, 0 FAIL. A09a probó aislamiento DAC desde UID distinto; A09b probó rechazo real del handler mediante SO_PEERCRED. Entorno y evidencias detalladas: [registro A-IPC-01](status-aipc01-validation-2026-11-21.md).
+- El probe usa sandbox temporal sin privilegios, directorio 0700/socket 0600, colisiones no destructivas, no elimina sockets stale para forzar bind, cleanup condicionado por identidad, límites y carrera de dos binds. A09b utiliza un fixture separado 0711/0666 exclusivamente para alcanzar el handler; esos permisos no pertenecen al endpoint candidato.
+- **Riesgos no cubiertos:** root/capabilities suficientes y procesos maliciosos del mismo UID; comparación `lstat`/`unlink` no atómica; ciclo de vida persistente; arranque/parada de servicio; system-manager; separación de privilegios; autorización SQLite; despliegue y operaciones mutantes.
+- **B — systemd socket activation filesystem:** suspendida por la colisión destructiva de pathname observada en Debian systemd 257.13. No repetir el escenario destructivo.
+- **C — AF_UNIX abstract namespace:** alternativa no priorizada mientras se desarrolla A. Podrá reabrirse si el análisis de A identifica una brecha que lo justifique o por decisión del propietario.
+- **Próximo paso:** revisión estática del diseño A como arquitectura de listener, no solo del probe: modelo de amenazas, identidad y autorización, lifecycle, permisos, ownership, concurrencia, recuperación, cleanup, observabilidad y criterios de aceptación. No integrar todavía un listener persistente ni conectar SQLite.
+- No se ejecutaron pruebas, compilaciones ni workflows desde GitHub en este ciclo; la validación 16/16 fue realizada por el propietario en Debian.
 
-**Límite de esta validación:** el probe user-manager no valida system-manager, separación de privilegios ni despliegue. No autoriza listener persistente, selección de transporte de producción, unidades systemd de producción, cambios del host, usuarios/grupos, permisos/privilegios, acceso SQLite, provisioning o ejecución de operaciones administrativas. Socket activation sobre filesystem permanece suspendida.
-
-
+**Límites de autorización:** el PASS experimental no selecciona por sí solo un transporte de producción ni autoriza listener persistente, daemon, unidades systemd de producción, cambios del host, usuarios/grupos, permisos/privilegios, acceso SQLite, provisioning o despliegue. No habilita operaciones administrativas distintas del ping no mutante usado como fixture.
 ## Posicionamiento
 
 Atlas es software funcional en desarrollo incremental. Dispone de una experiencia conversacional local con Ollama, persistencia SQLite de conversaciones, administración, exportación y backup cifrado. En paralelo, el repositorio contiene una base creciente de Identity, Authentication, CAM, Project/Environment, Workspace y delegación AGENT.
