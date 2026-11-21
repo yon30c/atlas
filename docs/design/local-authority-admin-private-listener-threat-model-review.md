@@ -70,7 +70,7 @@ El lifecycle menciona una cuenta dedicada sin login y prohíbe ejecución arbitr
 
 **Severidad: ALTA — bloqueante para conectar el listener.**
 
-`handle_admin_connection()` recibe `allowed_peer_uids` como argumento y valida que sea un conjunto no vacío de UIDs válidos. Esto es correcto para un handler reutilizable, pero no fija la política del servicio. El diseño propone UID 0 como candidato para el frontend privilegiado y aclara que no es universal ni está aprobado.
+`handle_admin_connection()` recibe `allowed_peer_uids` como argumento y valida que sea un conjunto no vacío de UIDs válidos. Esto es correcto para un handler reutilizable, pero no fija la política del servicio. El propietario ya fijó EUID 0 como requisito del frontend y `client_uids={0}` para esta configuración; no es una autorización universal para otros consumidores. El entrypoint real aún no existe/revisado.
 
 **Requisito antes de implementar:** definir una única política de UID del cliente en configuración de confianza del servicio; no permitir que el cliente, variables de entorno no confiables o una solicitud alteren esa política. Verificarla al arrancar y mantenerla inmutable durante la vida del listener. La prueba A09b valida rechazo de UID 1001 en un fixture, no la política real UID 0 ↔ `atlas-runtime`.
 
