@@ -222,7 +222,7 @@ La integración no habilita listener persistente, system-manager, separación de
 
 **Estado de Git:** `main` no fue modificado y no se abrió PR. La rama de implementación contiene únicamente el probe y las actualizaciones documentales de este incremento; la comparación exacta y HEAD deben consultarse en GitHub antes de continuar.
 
-**Siguiente paso:** revisión final del diff en GitHub y entrega del commit exacto/comando para validación local; después analizar el JSON reportado. A no queda seleccionado como transporte definitivo.
+**Siguiente paso:** el propietario revisa el HEAD exacto y ejecuta el comando opt-in en Debian; después comparte el JSON completo para analizar PASS/FAIL/SKIP/INCOMPLETE. A no queda seleccionado como transporte definitivo.
 
 **Límites vigentes:** la implementación del probe no autoriza listener persistente, daemon, systemd, unidades de producción, cambios del host, usuarios, grupos, permisos, privilegios, acceso SQLite, provisioning, operaciones administrativas ni despliegue. La colisión destructiva de systemd no debe repetirse.
 
