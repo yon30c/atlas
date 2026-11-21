@@ -615,13 +615,13 @@ def _main_parent(args: argparse.Namespace) -> int:
         )
         servers.append(server)
         auth = _scenario_mutual_auth(root, args, script)
-        results.append({"id": "MA-01..MA-05", "status": "PASS", "observations": auth})
+        results.append({"id": "MA-01,MA-02,MA-04,MA-05", "status": "PASS", "observations": auth})
         capacity = _scenario_capacity(server, service_socket)
-        results.append({"id": "CP-01..CP-07", "status": "PASS", "observations": capacity})
+        results.append({"id": "CP-01,CP-04", "status": "PASS", "observations": capacity})
         results.append({
-            "id": "CP-08..CP-12",
+            "id": "MA-03,MA-06..MA-10,CP-02..CP-03,CP-05..CP-12",
             "status": "INCOMPLETE",
-            "detail": "payload/depth boundaries, response-size adversary, exact backlog saturation and full FD accounting are deferred to the next harness increment",
+            "detail": "EUID-negative pre-connect, forged identity fields, config immutability, disconnect/transport variants, exact backlog saturation, read/write/global deadline adversaries, exception recovery, payload/depth boundaries and full FD accounting remain unimplemented",
         })
         overall = "INCOMPLETE"
     except ProbeIncomplete as exc:
