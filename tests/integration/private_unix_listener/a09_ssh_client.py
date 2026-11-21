@@ -16,7 +16,6 @@ import uuid
 MAX_CONTROL_BYTES = 4096
 MAX_SOCKET_PATH_BYTES = 100
 MAX_REQUEST_BYTES = 16 * 1024
-MAX_RESPONSE_BYTES = 64 * 1024
 
 
 def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -103,6 +102,7 @@ def _run(instruction: dict[str, object]) -> dict[str, object]:
         if len(packet) > MAX_REQUEST_BYTES:
             raise ValueError("generated request exceeds protocol limit")
         client.sendall(packet)
+        result["request_bytes_sent"] = len(packet)
         try:
             response = client.recv(1)
         except (ConnectionResetError, ConnectionAbortedError):
