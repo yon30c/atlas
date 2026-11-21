@@ -894,3 +894,26 @@ y compartir JSON completo. SR-01/SR-11 siguen sin causa confirmada;
 A-THREAT-05 permanece abierta. No ejecutar en `greed`, no usar
 recuperación real. El asistente no ejecutó pruebas, builds, workflows ni
 probes.
+
+
+## A-IPC-04 — segunda ejecución del propietario (2026-11-21)
+
+El propietario ejecutó `bd3b0e0a1379c7b034e10a33b9b45b329e6e807a`
+en `Atlas-VM-test`: 10 PASS / 2 FAIL / 0 INCOMPLETE; 201 procesos
+visibles, seis namespaces inventariados y sandbox eliminado.
+
+SR-06 y SR-07 pasan tras corregir sus fixtures. SR-03 sigue detectando
+un listener en un namespace distinto. SR-01 y SR-11 siguen sin encontrar
+los listeners locales; `candidate_rows=[]` en ambas ejecuciones.
+Esto no demuestra que estén inactivos ni que sus sockets sean stale.
+
+Commit `a7bf92d07d12012d20822b64a57ee0ab17c953e1` añade diagnóstico
+solo en caso de fallo: PID y namespace del inspector, inode del FD del
+listener, namespaces del snapshot, filas candidatas por pathname o inode
+y lectura directa de `/proc/self/net/unix`. No modifica la decisión,
+no conecta al socket y no relaja matching.
+
+**Siguiente paso:** ejecutar el HEAD actual exclusivamente en
+`Atlas-VM-test` y compartir JSON. A-THREAT-05 sigue abierta; no usar
+recuperación real ni ejecutar en `greed`. No se ejecutaron pruebas,
+builds, workflows ni probes desde GitHub.
