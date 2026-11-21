@@ -576,3 +576,10 @@ El preflight del observador `ss` se endureció en commit
 ejecutable y valida también todos sus directorios ancestros como root-owned
 y no escribibles por grupo/otros. La medición usa la ruta resuelta. Esta
 corrección también está pendiente de validación local.
+
+
+Corrección estática adicional en commit
+`4ab6a1b7762f4d45a745ea2c36f7289411a9c848`: declaración explícita de
+`global SS_BIN` para que el preflight pueda conservar la ruta resuelta del
+observador sin sombrear el nombre global. Pendiente de validación junto con
+CP-02/CP-03.
