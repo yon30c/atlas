@@ -360,7 +360,7 @@ or the baseline run to the newer commit.
 The probe verifies the service child's real/effective/saved UID/GID, empty
 supplementary groups, socket ownership/mode and `RLIMIT_NOFILE=64`; it records
 the configured backlog, read/write timeout and global deadline. Behavioral
-tests for timeout expiry and exact backlog saturation remain incomplete.
+tests for timeout expiry remain incomplete; exact backlog saturation is implemented but pending owner validation.
 
 **Not yet implemented/validated:** full open-FD accounting; idle/read/write
 deadline adversaries; exception-path worker recovery; request/response boundary
