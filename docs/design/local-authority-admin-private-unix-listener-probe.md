@@ -317,6 +317,8 @@ La clave de prueba tendría un comando forzado fijo:
 
 El helper acepta exclusivamente un mensaje JSON de tamaño limitado por stdin, con esquema estricto y campos permitidos para `scenario`, `socket_path` y nonce aleatorio de ejecución. Rechaza campos adicionales, datos excesivos, escenarios desconocidos y cualquier `SSH_ORIGINAL_COMMAND` no vacío. No ejecuta shell, no acepta comandos ni argumentos remotos, no cambia UID/GID y no lee el repositorio.
 
+**Preflight del shell remoto:** antes de sustituir el comando forzado, inspeccionar de forma read-only los archivos de inicio que puedan ejecutarse para `atlas-a09-test` (en particular `.bashrc`, `.bash_profile`, `.profile` y cualquier configuración indicada por el entorno). El login de identidad ya probado no demuestra por sí solo que esos archivos carezcan de efectos secundarios. No añadir ni modificar archivos de inicio como parte de este experimento. Si no se puede demostrar que el comando forzado se ejecutará sin salida lateral ni procesos adicionales, mantener A09 en SKIP y diseñar una alternativa; no cambiar el shell de la cuenta ni la configuración global.
+
 El runner envía una instrucción por conexión SSH y valida una única respuesta JSON por stdout, incluyendo nonce, escenario, UID/GID/PID del proceso cliente y resultado de socket. stderr se captura por separado; no se mezcla con el JSON. No se registran rutas de clave privada ni contenido de claves.
 
 ### 16.4 Opciones obligatorias de SSH
