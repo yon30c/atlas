@@ -476,6 +476,34 @@ def _preflight(args: argparse.Namespace) -> Path:
     return root, public_root
 
 
+def _stage_probe_runtime(public_root: Path) -> Path:
+    """Stage read-only source copies reachable by dropped-UID fixture children."""
+    stage_root = public_root / "probe-runtime"
+    package_dir = stage_root / "src" / "atlas"
+    script_dir = stage_root / "tests" / "integration" / "private_unix_listener"
+    for directory in (
+        stage_root,
+        stage_root / "src",
+        package_dir,
+        stage_root / "tests",
+        stage_root / "tests" / "integration",
+        script_dir,
+    ):
+        directory.mkdir(mode=0o755, exist_ok=True)
+        os.chmod(directory, 0o755)
+    source_module_dir = ROOT / "src" / "atlas"
+    shutil.copyfile(source_module_dir / "platform_admin_ipc.py", package_dir / "platform_admin_ipc.py")
+    init_file = source_module_dir / "__init__.py"
+    if init_file.exists():
+        shutil.copyfile(init_file, package_dir / "__init__.py")
+        os.chmod(package_dir / "__init__.py", 0o644)
+    os.chmod(package_dir / "platform_admin_ipc.py", 0o644)
+    staged_script = script_dir / Path(__file__).name
+    shutil.copyfile(Path(__file__).resolve(), staged_script)
+    os.chmod(staged_script, 0o644)
+    return staged_script
+
+
 def _create_fixture_dir(path: Path, uid: int, gid: int, mode: int) -> None:
     path.mkdir(mode=mode)
     os.chown(path, uid, gid)
@@ -647,7 +675,7 @@ def _main_parent(args: argparse.Namespace) -> int:
     overall = "FAIL"
     try:
         root, public_root = _preflight(args)
-        script = Path(__file__).resolve()
+        script = _stage_probe_runtime(public_root)
         service_dir = public_root / "capacity-service"
         _create_fixture_dir(service_dir, args.service_uid, args.service_gid, 0o711)
         service_socket = service_dir / "capacity.sock"
