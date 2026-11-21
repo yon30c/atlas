@@ -1,7 +1,7 @@
 # Plan de probe aislado — autenticación mutua y capacidad IPC
 
 **Fecha:** 2026-11-21  
-**Estado (2026-11-21):** el propietario reportó en `Atlas-VM-test` MA-01..MA-10 y CP-01/CP-04 PASS; global INCOMPLETE en la ejecución de `901c792cb723d920da4970ecce98ea7f871c4f85` (JSON `commit: null`). CP-02/CP-03 se implementaron después para observar y llenar exactamente el backlog AF_UNIX con iproute2 `ss`, y comprobar rechazo EAGAIN del intento excedente; esta nueva implementación está pendiente de ejecución local. CP-05..CP-12 siguen pendientes.  
+**Estado (2026-11-21):** el propietario reportó en `Atlas-VM-test` MA-01..MA-10 y CP-01/CP-04 PASS; global INCOMPLETE en la ejecución de `901c792cb723d920da4970ecce98ea7f871c4f85` (JSON `commit: null`). CP-02/CP-03 tuvieron una primera ejecución fallida en commit `1ebf930a6559c3d6a81965f0f94c28ed8e6eef56`: el backlog 8/8 se observó, pero la novena conexión devolvió connect_ex=0. La revisión del kernel Linux identificó el límite efectivo AF_UNIX como backlog+1 por la comparación `queue_len > sk_max_ack_backlog`; el runner ahora valida esa conexión de frontera y exige EAGAIN en la siguiente. La corrección está en commit `634e19decce2322e94ca0d1fe410b259f23dcb67`, pendiente de ejecución local. CP-05..CP-12 siguen pendientes.  
 **Rama:** experiment/a-ipc-01-private-unix-listener-probe  
 **Decisiones:** TCB-1; frontend EUID 0; client_uids={0}; perfil de capacidad inicial aprobado por el propietario.  
 **Dependencias:** contrato atlas-admin/1, handler IPC, configuración confiable, resolución de rutas, stale recovery y lifecycle.
@@ -98,8 +98,8 @@ El baseline es el descriptor walk desde / y bind al pathname absoluto canónico 
 | ID | Escenario | Resultado requerido |
 |---|---|---|
 | CP-01 | Cuatro conexiones ocupan todos los slots | No existe quinto worker ni cola de aplicación |
-| CP-02 | Más clientes llegan mientras slots están ocupados | El kernel retiene como máximo el backlog configurado |
-| CP-03 | Backlog lleno | El proceso no crea workers, sockets aceptados ni memoria de cola ilimitados |
+| CP-02 | Más clientes llegan mientras slots están ocupados | Medir la cola AF_UNIX real y su límite efectivo para el valor pasado a listen() |
+| CP-03 | Cola AF_UNIX en su límite efectivo | La siguiente conexión no bloqueante recibe EAGAIN; no aparecen accepts/workers adicionales |
 | CP-04 | Se libera un slot | El accept loop recupera capacidad sin reiniciar |
 | CP-05 | Cliente no envía paquete | Conexión termina al alcanzar deadline global de 15 s |
 | CP-06 | Read y write separados | La suma no reinicia ni excede el deadline global |
@@ -353,3 +353,36 @@ La revisión estática posterior detectó y corrigió un detalle de alcance de
 variable al conservar la ruta resuelta de `ss`: `_preflight` declara
 explícitamente `global SS_BIN`. Corrección publicada en
 `4ab6a1b7762f4d45a745ea2c36f7289411a9c848`. Sigue sin validación de ejecución.
+
+
+## 9.5 Ejecución CP-02/CP-03 — fallo de expectativa y corrección (2026-11-21)
+
+El propietario ejecutó el commit `1ebf930a6559c3d6a81965f0f94c28ed8e6eef56`
+en `Atlas-VM-test` (Debian 13, kernel `6.12.117+deb13-amd64`,
+Python 3.13.5, EUID 0). MA-01..MA-10 y CP-01/CP-04 pasaron. El runner
+observó primero `Recv-Q=8`/`Send-Q=8`, pero la conexión no bloqueante
+siguiente devolvió `connect_ex=0`; por tanto la ejecución terminó FAIL antes
+de confirmar CP-02/CP-03. Cleanup de los sandboxes correcto.
+
+La inspección del código del kernel AF_UNIX muestra que la comprobación de
+cola usa `skb_queue_len(...) > sk_max_ack_backlog`, no `>=`. Por ello,
+con `listen(8)`, el kernel permite una conexión pendiente adicional:
+con ocho ya en cola, la novena conecta; cuando la cola alcanza nueve, la
+siguiente debe obtener `EAGAIN` en modo no bloqueante. Esto es comportamiento
+de implementación Linux AF_UNIX, no una garantía portable para otros sistemas
+o familias de sockets.
+
+Corrección del runner en commit
+`634e19decce2322e94ca0d1fe410b259f23dcb67`:
+1. Conserva la comprobación inicial `Recv-Q=8`/`Send-Q=8`.
+2. Exige que la conexión de frontera adicional tenga resultado 0 y mide
+   `Recv-Q=9`/`Send-Q=8`.
+3. Intenta otra conexión no bloqueante y exige `EAGAIN`/`EWOULDBLOCK`.
+4. Comprueba que la cola permanezca 9/8 y que el accept loop no haya creado
+   accepts ni workers adicionales.
+
+**Estado:** corrección revisada estáticamente en GitHub; CP-02/CP-03 siguen
+pendientes de validación local. No se ejecutaron pruebas, builds ni workflows
+desde GitHub. No se debe cambiar el backlog aprobado de 8 basándose en esta
+diferencia de una conexión: se registra el parámetro listen(8) y el límite
+efectivo observado del kernel por separado.
