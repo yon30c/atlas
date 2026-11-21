@@ -4,26 +4,21 @@
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
-## Estado operativo vigente — 2026-11-21
+## Estado operativo vigente — 2026-11-20
 
 > Esta sección es la referencia operativa prioritaria. Las secciones posteriores conservan decisiones y snapshots históricos; cuando un dato histórico contradiga este bloque, prevalece este bloque para el estado actual. No se elimina la historia de decisiones.
 
 - **Repositorio:** `yon30c/atlas`.
-- **Rama de trabajo activa:** `work/systemd-socket-activation-probe-contract-alignment`.
-- **PR #29:** [Alinear probe systemd con atlas-admin/1 y registrar puertas del listener](https://github.com/yon30c/atlas/pull/29), integrado en `main` mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`.
-- **HEAD de código validado en PR #29:** `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`. Los commits documentales posteriores quedaron incluidos en el merge commit indicado arriba.
-- **Base estable:** `main` en `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`; PR #28 ya integrado.
-- **Validación de la base `main`:** el propietario reportó 1.590 tests: `OK (skipped=1)`, 34.895 s, Python 3.13.5, sobre `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`.
-- **Validación local de PR #29:** confirmada por el propietario en Debian 13 sobre HEAD exacto `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, con árbol limpio y sincronizado con `origin`.
-  - Probe `tests/integration/systemd_socket_activation/run_user_manager_test.py`: `PASS` para activación systemd user-manager, validación del descriptor, dos activaciones, ownership/mode privados y limpieza delegada al harness con `RemoveOnStop=no`.
-  - Suite completa: `Ran 1590 tests in 34.753s` / `OK (skipped=1)`.
-  - La evidencia valida ese HEAD de PR #29 en el entorno Debian comunicado; no demuestra system-manager, separación de privilegios, transporte de producción ni despliegue. No se ejecutaron pruebas, compilaciones ni workflows remotos desde GitHub.
-- **Estado IPC:** contrato `atlas-admin/1` y handler/prototipo para conexiones ya aceptadas; la única operación funcional sigue siendo `authority.ping`. No existe listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
-- **Endpoint/transporte:** no hay transporte aprobado para producción. Listener propio sobre directorio privado (A) es únicamente candidato al siguiente probe temporal; socket activation systemd sobre filesystem (B) está suspendida por la colisión destructiva observada en Debian systemd 257.13; AF_UNIX abstracto (C) es experimental y conserva riesgos de preclaim/DoS y ausencia de DAC.
-- **Operaciones restantes:** las seis operaciones administrativas restantes continúan bloqueadas/no implementadas funcionalmente.
-- **Siguiente paso:** diseñar y ejecutar probes separados para A (listener propio) y C (AF_UNIX abstracto), sin asumir aprobación de transporte. No se ejecutaron ni quedan aprobados por la validación/merge de PR #29.
+- **Base estable:** `main` en `1bd73d149dbd98e7ee2e5fdc36880883b6b03d16`; PR #29 está integrado mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`.
+- **Rama activa de este incremento:** `design/isolated-private-unix-listener-probe`, creada desde `main`. No hay PR abierto y `main` no ha sido modificado; la relación ahead/behind y el HEAD deben consultarse en GitHub al iniciar cada sesión, sin congelarlos en este documento.
+- **Validación local más reciente comunicada:** sobre el HEAD de código de PR #29 `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, el propietario reportó en Debian 13 el probe user-manager `PASS` y la suite `Ran 1590 tests in 34.753s`, `OK (skipped=1)`. Esa evidencia no corresponde a esta rama documental ni valida el futuro probe A-IPC-01.
+- **Estado IPC:** contrato `atlas-admin/1` y handler para conexiones ya aceptadas; solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
+- **Transporte:** no hay transporte aprobado para producción. A (listener propio en directorio privado) tiene un diseño de probe aceptado para preparar su implementación experimental. B (socket activation sobre filesystem) permanece suspendida por la colisión destructiva observada en Debian systemd 257.13. C (AF_UNIX abstracto) continúa como alternativa experimental separada.
+- **Diseño A-IPC-01:** `docs/design/local-authority-admin-private-unix-listener-probe.md`. El diseño fija sandbox temporal sin privilegios, directorio `0700`, socket `0600`, colisiones no destructivas, cleanup condicionado por identidad, credenciales peer, límites y carrera de dos binds simultáneos.
+- **Siguiente paso:** preparar la implementación opt-in del probe A-IPC-01 en una rama separada, después revisar el diff y entregar comandos exactos para que el propietario valide en Debian. No existe implementación ni comando de ejecución todavía.
+- **Validación y método:** no se ejecutaron pruebas, compilaciones ni workflows desde GitHub. La validación del probe será realizada por el propietario en Debian.
 
-**Límites vigentes:** la validación del probe user-manager no autoriza system-manager, listener persistente, despliegue, unidades de producción, cambios del host, usuarios, grupos, permisos, privilegios, apertura de SQLite, provisioning ni operaciones administrativas. Socket activation sobre filesystem continúa suspendida por la colisión observada. Las decisiones de transporte y cualquier cambio de autoridad requieren evidencia y aprobación explícita del propietario.
+**Límites vigentes:** la aceptación del diseño no selecciona A como transporte de producción ni autoriza listener persistente, daemon, systemd, unidades de producción, cambios del host, usuarios, grupos, permisos, privilegios, acceso SQLite, provisioning, operaciones administrativas ni despliegue. La colisión destructiva de systemd no debe repetirse. Cualquier decisión posterior de transporte requiere evidencia local y aprobación explícita del propietario.
 
 ---
 
@@ -536,8 +531,34 @@ El propietario confirmó que Debian estaba en `4e84eab1fd03ddd9057525ee18a3c02a1
 Esta evidencia cierra la validación local del alcance de PR #29. No demuestra comportamiento del system-manager, separación real de privilegios, seguridad frente a procesos del mismo UID/root, ni aprueba transporte o despliegue. La activación systemd sobre filesystem permanece suspendida por la colisión destructiva observada previamente. Los probes de alternativas A y C siguen pendientes y separados.
 
 
+### 16.11 Diseño del probe A-IPC-01 — 2026-11-21
+
+Se creó en la rama `design/isolated-private-unix-listener-probe` el documento [Diseño del probe A-IPC-01 — listener Unix propio en directorio privado](design/local-authority-admin-private-unix-listener-probe.md).
+
+- Alcance: experimento opt-in, sin privilegios, en directorio temporal privado, usando AF_UNIX/SOCK_SEQPACKET y el contrato existente `atlas-admin/1`.
+- Casos: pathname libre; colisiones con archivo, symlink, socket activo y stale; propiedad/cleanup condicionado por identidad de inode; lifecycle; SO_PEERCRED y autorización separada; desconexión, truncamiento, ancillary, timeout y límites de recursos.
+- Regla de seguridad: nunca hacer unlink preventivo ni stale cleanup automático; ante colisión, fallar sin modificar el objeto. Si la identidad del pathname no coincide durante cleanup, no eliminarlo.
+- Límites: la comprobación inode + unlink conserva una ventana TOCTOU; el directorio privado no protege frente a root ni procesos del mismo UID. La prueba multi-UID queda condicional y no puede requerir sudo ni cambios del host.
+- Exclusiones: no listener persistente, daemon, systemd, SQLite, operaciones administrativas, cambios del host ni despliegue.
+- Estado: diseño propuesto, pendiente de revisión/aprobación; no implementado ni ejecutado. No hay comandos de prueba todavía.
+- La rama de diseño se creó desde `main`; no se modificó `main` ni se abrió/mergeó un PR.
+
 ### 16.10 Integración de PR #29 — 2026-11-21
 
 PR #29 se marcó Ready for review y se integró en `main` mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`. La validación local reportada por el propietario fue ejecutada sobre el HEAD de código `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, con árbol limpio: probe systemd user-manager `PASS` (descriptor, dos activaciones, ownership/mode privados y `RemoveOnStop=no`) y suite completa `Ran 1590 tests in 34.753s`, `OK (skipped=1)`. Los commits posteriores fueron documentales; no se ha reportado una nueva ejecución de la suite sobre el merge commit.
 
 El merge no habilita listener persistente, system-manager, separación de privilegios, acceso SQLite ni operaciones administrativas. Socket activation sobre filesystem permanece suspendida por la colisión destructiva observada. Las alternativas A y C requieren probes independientes y una decisión explícita posterior.
+
+
+### Decisión del propietario — A-IPC-01 (2026-11-20)
+
+El propietario aceptó avanzar con el diseño del probe A-IPC-01. El documento `docs/design/local-authority-admin-private-unix-listener-probe.md` fue revisado y queda como base para preparar su implementación experimental en una rama separada.
+
+- El experimento se limita a un directorio temporal privado creado por el ejecutor sin privilegios.
+- Los modos fijados para el experimento son directorio `0700` y socket `0600`; no son una política de producción.
+- La matriz incorpora una carrera de dos binds simultáneos: exactamente un ganador y ninguna alteración del listener ganador.
+- No se modifica `src/atlas/platform_admin_ipc.py`, el handler, el contrato `atlas-admin/1`, el runtime ni la autoridad SQLite.
+- No se ejecutan pruebas, compilaciones ni workflows desde GitHub. La validación será realizada por el propietario en Debian.
+- La aceptación del diseño no selecciona A como transporte de producción ni autoriza listener persistente, daemon, systemd, cambios del host, usuarios/grupos, privilegios, acceso SQLite, mutaciones administrativas o despliegue.
+
+**Siguiente paso:** preparar la implementación aislada del probe A-IPC-01 en una rama separada; después revisar el diff y entregar comandos exactos para validación local.
