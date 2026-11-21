@@ -6,7 +6,6 @@ commands, changes credentials, reads the checkout, or mutates socket paths.
 """
 from __future__ import annotations
 
-import errno
 import json
 import os
 import socket
@@ -16,6 +15,7 @@ import uuid
 MAX_CONTROL_BYTES = 4096
 MAX_SOCKET_PATH_BYTES = 100
 MAX_REQUEST_BYTES = 16 * 1024
+CLIENT_SOCKET_TIMEOUT_SECONDS = 2.0
 
 
 def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -73,7 +73,7 @@ def _run(instruction: dict[str, object]) -> dict[str, object]:
         "gid": os.getgid(),
     }
     client = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
-    client.settimeout(2.0)
+    client.settimeout(CLIENT_SOCKET_TIMEOUT_SECONDS)
     try:
         try:
             client.connect(path)
