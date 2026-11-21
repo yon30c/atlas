@@ -1086,3 +1086,6 @@ Static review found the runner looked for `Max open files` in `/proc/<pid>/statu
 Owner run of `892d934267684fc8d5a179993f71c2b11c614c7e`: MA-01..MA-10 and CP-01..CP-09 PASS; CP-10 failed its accepted-count saturation assertion. The error lacked counts, so actual queued-socket acceptance was not established.
 
 Static review found an asynchronous stdout event-reader queue: CP-10 read `server.events` for `accepted_before` without draining pending events first. Commit `7c009dac7fd7c4270ea6edf8bc1a004a8fb8f898` drains before the baseline and reports baseline/expected/observed/pending/workers if the assertion fails again. The assertion itself remains strict. CP-10 awaits owner re-execution; CP-11/12 remain pending. No tests/builds/workflows run by assistant; execute only on disposable `Atlas-VM-test`.
+
+
+Follow-up `664c398a5afdafda313eb81379cbb85a5b71007d` changes `Server.drain(duration)` to wait for the full interval despite temporary queue emptiness, giving the asynchronous stdout reader time to transfer pending child events before CP-10 baseline capture. Strict accepted-count assertion retained; owner re-execution still required.
