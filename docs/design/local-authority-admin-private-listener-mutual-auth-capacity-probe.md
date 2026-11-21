@@ -197,3 +197,52 @@ frente al kernel.
 El runner permanece INCOMPLETE. MA-06 está implementado pero no validado;
 no atribuirle PASS hasta recibir el JSON de una ejecución local del commit
 `9a8380e` o posterior que contenga el cambio.
+
+
+
+## A-IPC-02 — validación del propietario de MA-06 (2026-11-21)
+
+El propietario ejecutó el runner directamente como root en la VM desechable
+`Atlas-VM-test`, Debian 13, kernel `6.12.117+deb13-amd64`, Python
+`3.13.5`, sobre el commit `b4eda57d36338f065adb2cb4e00d19a8ade58069`,
+con fixtures SERVICE UID/GID `2005/2005` y OTHER UID/GID `2006/2006`.
+
+- **MA-01..MA-06: PASS.** Cliente root autenticó el servidor UID 2005 y
+  completó ping. El cliente rechazó el servidor UID 2006 antes de enviar
+  bytes (`bytes_sent_by_client=0`). El servidor rechazó al peer UID 2006
+  antes de leer (`response_bytes=0`). El cliente no-root EUID 2006 fue
+  rechazado antes de connect (`connect_attempted=false`; el servidor no
+  observó conexión).
+- **MA-06:** el envelope ping incluía claims top-level falsos
+  `uid=0`, `gid=0`, `pid=1`. El decoder respondió
+  `INVALID_REQUEST`; la evidencia de identidad conservó
+  `kernel_peer_uid=0`. Los campos aportados por el cliente no se aceptaron
+  como credenciales.
+- **CP-01/CP-04: PASS.** Máximo observado de workers/conexiones activas: 4;
+  después de liberar carga, `active_after_recovery=0`.
+- Backlog del kernel configurado en 8, **sin saturación exacta**.
+- Duración: 1.431 s. Cleanup confirmado: sandboxes privado y de traversal
+  bajo `/run` eliminados después de finalizar los procesos hijos.
+- Resultado global: **INCOMPLETE**, sin escenarios FAIL.
+
+La evidencia aplica al commit y entorno indicados; no se extiende a commits
+posteriores sin repetir la ejecución. Permanecen sin implementar o validar
+MA-07..MA-10 y CP-02..CP-03/CP-05..CP-12: configuración ausente/duplicada/
+desconocida/alterada y snapshot inmutable; desconexión y variantes de
+transporte; saturación exacta del backlog; adversarios de read/write/deadline;
+recuperación ante excepciones; límites de payload/profundidad JSON y
+contabilidad completa de FDs.
+
+**Siguiente incremento propuesto:** revisar y diseñar MA-07/MA-08 antes de
+codificar. El diseño de configuración confiable exige parser cerrado,
+resolución segura desde descriptor, validación de tipo/owner/mode/tamaño,
+fallo cerrado e inmutabilidad en memoria. La propuesta de
+`/etc/atlas/admin-ipc.conf` sigue siendo solo diseño: no existe archivo
+operativo, parser productivo ni entrypoint IPC revisado. Cualquier fixture
+MA-07/08 debe vivir exclusivamente en sandbox temporal y no leer ni crear
+configuración del host.
+
+No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. El
+propietario ejecutó el probe localmente en la VM indicada. `main` no se
+modificó, no se creó PR y no se aprobó listener persistente, transporte de
+producción ni despliegue.
