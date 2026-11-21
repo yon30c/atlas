@@ -471,7 +471,10 @@ def _a09_config(args: argparse.Namespace) -> dict[str, object]:
 
     identity_file = args.a09_identity_file.expanduser().absolute()
     known_hosts = args.a09_known_hosts.expanduser().absolute()
-    key_parent = identity_file.parent.lstat()
+    try:
+        key_parent = identity_file.parent.lstat()
+    except OSError as exc:
+        raise ProbeSkip(f"A09 private-key directory cannot be inspected: {exc}") from exc
     if (
         not stat.S_ISDIR(key_parent.st_mode)
         or key_parent.st_uid != os.geteuid()
@@ -483,7 +486,10 @@ def _a09_config(args: argparse.Namespace) -> dict[str, object]:
     if key_info.st_nlink != 1 or hosts_info.st_nlink != 1:
         raise ProbeSkip("A09 key and known_hosts must not be hard-linked files")
 
-    tmp_info = Path("/tmp").lstat()
+    try:
+        tmp_info = Path("/tmp").lstat()
+    except OSError as exc:
+        raise ProbeSkip(f"/tmp cannot be inspected: {exc}") from exc
     if (
         not stat.S_ISDIR(tmp_info.st_mode)
         or tmp_info.st_uid != 0
@@ -522,7 +528,10 @@ def _a09_config(args: argparse.Namespace) -> dict[str, object]:
 
 
 def _install_a09_helper() -> tuple[Path, tuple[int, int, int]]:
-    tmp_info = Path("/tmp").lstat()
+    try:
+        tmp_info = Path("/tmp").lstat()
+    except OSError as exc:
+        raise ProbeSkip(f"/tmp cannot be inspected: {exc}") from exc
     if (
         not stat.S_ISDIR(tmp_info.st_mode)
         or tmp_info.st_uid != 0
@@ -773,7 +782,10 @@ def _scenario_a09a(root: Path, config: dict[str, object] | None, skip_reason: st
     finally:
         cleanup_errors: list[str] = []
         if process is not None and process.poll() is None:
-            process.kill()
+            try:
+                process.kill()
+            except OSError as exc:
+                cleanup_errors.append(f"cannot terminate A09a SSH child: {exc}")
         if worker is not None:
             worker.join(timeout=2.0)
             if worker.is_alive():
@@ -782,8 +794,8 @@ def _scenario_a09a(root: Path, config: dict[str, object] | None, skip_reason: st
         if helper_path is not None and helper_identity is not None:
             try:
                 _remove_a09_helper(helper_path, helper_identity)
-            except ProbeFailure as exc:
-                cleanup_errors.append(str(exc))
+            except Exception as exc:
+                cleanup_errors.append(f"A09a helper cleanup failed: {type(exc).__name__}: {exc}")
         cleanup_errors.extend(box.cleanup())
         if cleanup_errors:
             raise ProbeFailure("; ".join(cleanup_errors))
@@ -793,14 +805,20 @@ def _scenario_a09b(root: Path, config: dict[str, object] | None, skip_reason: st
     if config is None:
         raise ProbeSkip(skip_reason or "A09 SSH preflight is unavailable")
     tmp = Path("/tmp")
-    tmp_info = tmp.lstat()
+    try:
+        tmp_info = tmp.lstat()
+    except OSError as exc:
+        raise ProbeSkip(f"/tmp cannot be inspected: {exc}") from exc
     if (
         not stat.S_ISDIR(tmp_info.st_mode)
         or tmp_info.st_uid != 0
         or stat.S_IMODE(tmp_info.st_mode) != 0o1777
     ):
         raise ProbeSkip("/tmp is not a verified root-owned sticky directory")
-    fixture = Path(tempfile.mkdtemp(prefix="atlas-a09b-", dir=str(tmp)))
+    try:
+        fixture = Path(tempfile.mkdtemp(prefix="atlas-a09b-", dir=str(tmp)))
+    except OSError as exc:
+        raise ProbeSkip(f"cannot create the isolated A09b fixture under /tmp: {exc}") from exc
     fixture_info = fixture.lstat()
     fixture_identity = (fixture_info.st_dev, fixture_info.st_ino, stat.S_IFMT(fixture_info.st_mode))
     listener = OwnedListener(fixture / "s")
@@ -886,7 +904,10 @@ def _scenario_a09b(root: Path, config: dict[str, object] | None, skip_reason: st
     finally:
         cleanup_errors: list[str] = []
         if process is not None and process.poll() is None:
-            process.kill()
+            try:
+                process.kill()
+            except OSError as exc:
+                cleanup_errors.append(f"cannot terminate A09b SSH child: {exc}")
         if worker is not None:
             worker.join(timeout=2.0)
             if worker.is_alive():
@@ -910,8 +931,8 @@ def _scenario_a09b(root: Path, config: dict[str, object] | None, skip_reason: st
         if helper_path is not None and helper_identity is not None:
             try:
                 _remove_a09_helper(helper_path, helper_identity)
-            except ProbeFailure as exc:
-                cleanup_errors.append(str(exc))
+            except Exception as exc:
+                cleanup_errors.append(f"A09b helper cleanup failed: {type(exc).__name__}: {exc}")
         try:
             current_dir = fixture.lstat()
         except FileNotFoundError:
