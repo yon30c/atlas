@@ -745,3 +745,33 @@ load/recovery after saturation, and startup rejection when the inherited
 must remain INCOMPLETE until all required scenarios are implemented and
 owner-validated. Never run this root-only probe on the `greed` production
 server.
+
+### A-IPC-02 — CP-08/CP-09 owner validation; CP-10 added
+
+The owner ran commit `caf7bbb8c83388a3723b66a7f4060a01c97c171d` on the
+disposable Debian 13 `Atlas-VM-test` (kernel 6.12.117, Python 3.13.5,
+EUID 0; service fixture 2005/2005, alternate fixture 2006/2006):
+
+- MA-01..MA-10 and CP-01..CP-09: PASS.
+- CP-08 confirmed 16 KiB request boundary, 16 KiB+1 rejection,
+  `MESSAGE_TRUNCATED` for a packet beyond the receive buffer, exact 64 KiB
+  response delivery, and rejection of 64 KiB+1 before sending peer bytes.
+- CP-09 confirmed total JSON depth 16 reaches schema validation and depth
+  17 is rejected as `INVALID_JSON`.
+- Cleanup succeeded; overall remained INCOMPLETE because CP-10..CP-12 were
+  not yet implemented in the executed commit.
+
+The runner now includes CP-10 (commits
+`e02bbbb7e3eacb45fbeab620d00cf0463e1c827e` and
+`bf3c62375fd8a3017b332efe406be9d1fd903568`). It samples
+`/proc/<pid>/fd`, `/proc/<pid>/task`, and `/proc/<pid>/status` at
+baseline, with four active workers and nine pending connections, and after
+recovery. It requires no more than 64 open FDs, exactly four worker threads
+plus the main thread at saturation (maximum 5), soft/hard `RLIMIT_NOFILE`
+64/64, active=0 after draining, and a live server process.
+
+CP-10 is implemented but not owner-validated. CP-11/CP-12 remain pending:
+repeated saturation/recovery cycles and startup rejection under an
+insufficient inherited `RLIMIT_NOFILE` without raising it. Run only in the
+disposable `Atlas-VM-test`, never on `greed` production. No tests, builds
+or workflows were run by the assistant.
