@@ -89,7 +89,7 @@ En un sandbox temporal desechable y sin usar rutas Atlas:
 - La herramienta no conecta ni envía datos durante diagnóstico.
 - El registro de auditoría contiene evidencia mínima suficiente y no expone secretos/configuración completa.
 
-El probe no debe borrar objetos fuera de su sandbox ni ejecutar con sudo. No se ha implementado ni ejecutado.
+El runner A-IPC-04 existe como harness separado y el propietario lo validó en `Atlas-VM-test` con 12/12 PASS. No es herramienta de mantenimiento: solo opera sobre fixtures en su sandbox, y no debe ejecutarse contra sockets reales ni fuera de la VM desechable.
 
 ## 7. Estado de A-THREAT-05
 
@@ -101,7 +101,7 @@ El procedimiento de diseño queda especificado como candidato, pero A-THREAT-05 
 - No se modificó código, contrato normativo, runtime, SQLite ni configuración del host.
 - No se ejecutaron pruebas, compilaciones ni workflows.
 - No se creó ni eliminó socket, usuario, grupo, directorio, permiso, servicio o unidad.
-- El runner A-IPC-04 solo fue revisado estáticamente; no se ejecutaron pruebas, compilaciones ni workflows desde GitHub.
+- El runner A-IPC-04 fue revisado estáticamente en GitHub y ejecutado/validado por el propietario en `Atlas-VM-test`; el asistente no ejecutó pruebas, compilaciones ni workflows.
 - No se aprobó listener persistente, systemd, acceso SQLite ni despliegue.
 
 
