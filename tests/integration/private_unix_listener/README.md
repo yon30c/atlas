@@ -151,3 +151,18 @@ The existing `atlas-sandbox` account is excluded because it belongs to the earli
 The peer identity is provisioned. The owner subsequently reported a read-only inactivity check: `ps -u atlas-a09-test` returned no processes; `loginctl show-user` reported that UID 1001 is neither logged in nor lingering; `user@1001.service` is inactive; the linger file is absent; and `sudo -l -U atlas-a09-test` confirmed no sudo permission. This is a point-in-time check and does not prove that no unrelated system unit references the account. SSH preflight found public-key authentication enabled, keyboard-interactive disabled and strict modes enabled; X11, TCP and agent forwarding are globally enabled, so any test key must explicitly use `restrict`, `from=127.0.0.1` and a forced command. The SSH daemon listens on all interfaces and the reported nftables INPUT policies are ACCEPT; this experiment does not establish global SSH isolation and must not modify SSH/PAM/firewall. The loopback ED25519 host-key fingerprint matched the locally inspected host key: `SHA256:txiDPT+/ldcIwnN6BPotbeL7QsofAieAeqF3GKMa9xI`. No key has been generated or installed, and no SSH login has been tested.
 
 A09a and A09b remain separate: A09a tests DAC against the unchanged candidate endpoint (0700/0600); A09b tests real SO_PEERCRED rejection using the separate 0711/0666 fixture. Client/runner coordination still requires design and implementation review. Both scenarios remain SKIP until key installation and SSH access are separately authorized, the client/runner is implemented and reviewed, and the owner validates the scenarios. Creation of the account does not change the current 15 PASS + A09 SKIP + 0 FAIL / INCOMPLETE evidence.
+
+
+## A09 SSH identity — current status (2026-11-21)
+
+The owner installed an ephemeral Ed25519 key for `atlas-a09-test` and confirmed one strict loopback SSH authentication. The authorized key currently uses:
+
+```text
+from="127.0.0.1",restrict,command="/usr/bin/id -u"
+```
+
+The forced command returned UID `1001`. The private key remains under the owner's private runtime directory and is not in the repository. The temporary known_hosts file is owner-only and the ED25519 host key was pinned after fingerprint comparison.
+
+This proves SSH public-key authentication and the forced identity command only. It does not exercise either A09 subscenario. The runner still implements neither A09a nor A09b and retains the prior 15 PASS + A09 SKIP + 0 FAIL / INCOMPLETE evidence.
+
+The proposed orchestration design is recorded in [the A-IPC-01 design](../../../docs/design/local-authority-admin-private-unix-listener-probe.md#16-diseño-de-coordinación-externa-para-a09aa09b--2026-11-21). It uses a fixed, reviewed helper over stdin/stdout and a bounded SSH subprocess; no credential switching is performed by the runner. Implementing the helper is pending static review. Replacing the current forced command in `authorized_keys` is a separate host security change and requires explicit approval. Do not change it or run A09 yet.
