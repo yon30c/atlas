@@ -919,4 +919,4 @@ cleanup is not confirmed, preserve the complete JSON and do not rerun until
 the failure is reviewed. The assistant does not run tests, builds, or workflows.
 
 
-**Next gate:** review and design the separate A-IPC-04 probe for A-THREAT-05 (stale pathname/collision recovery). It must remain fail-closed, must not connect to test liveness, and must model namespace enumeration failures as aborts. Do not turn the maintenance procedure into automatic startup cleanup.
+**Next gate:** A-IPC-04 design plan is published at `docs/design/local-authority-admin-private-listener-stale-recovery-probe.md`. It proposes SR-01..SR-12 and explicitly keeps runner implementation pending until namespace-coverage and procfs parsing questions are resolved. It must remain fail-closed, must not connect to test liveness, and must model namespace enumeration failures as aborts. Do not turn the maintenance procedure into automatic startup cleanup.
