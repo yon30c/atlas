@@ -6,7 +6,7 @@
 
 ## Objetivo y límites
 
-Definir las condiciones de seguridad que debe cumplir un listener Unix persistente antes de implementarlo. Este documento no crea sockets, usuarios, directorios, unidades systemd ni modifica el host. Tampoco selecciona todavía entre un listener creado por el proceso y socket activation de systemd.
+Definir las condiciones de seguridad que debe cumplir un listener Unix persistente antes de implementarlo. El propietario priorizó la alternativa A (listener creado por el proceso bajo un directorio filesystem privado) como línea de evaluación. Esta prioridad no aprueba producción ni autoriza crear sockets persistentes, usuarios, directorios, unidades systemd o modificar el host.
 
 El canal sigue siendo experimental. La única operación implementada continúa siendo authority.ping; no se habilitan SQLite, migraciones, bootstrap, provisioning ni otras mutaciones.
 
@@ -76,7 +76,7 @@ La colisión observada con systemd obliga a separar dos decisiones: quién crea/
 
 ### Alternativa A — Listener creado por el proceso sobre filesystem privado
 
-**Candidato recomendado para el siguiente experimento aislado; no aprobado para producción.**
+**Línea principal elegida por el propietario; probe A-IPC-01 completado 16/16 PASS; listener persistente no aprobado para producción.**
 
 - Un directorio padre debe ser preaprovisionado por el administrador del host con propietario `atlas-runtime:atlas-runtime` y modo `0700`; el servicio no crea ni cambia la propiedad de ese directorio durante el arranque.
 - El proceso `atlas-runtime` crea el socket `AF_UNIX/SOCK_SEQPACKET` con un nombre fijo configurado, sin aceptar rutas del cliente.
@@ -178,3 +178,19 @@ Antes de escribir listener de producción deben aprobarse explícitamente:
 7. Matriz de pruebas y revisión adversarial.
 
 La aprobación de este documento o de los tests temporales no autoriza cambios en el host, despliegue, creación de usuarios, configuración systemd, apertura de SQLite ni ejecución de provisioning.
+
+
+## Revisión estática de amenazas de alternativa A — 2026-11-21
+
+El informe complementario [Revisión estática del modelo de amenazas](local-authority-admin-private-listener-threat-model-review.md) identifica brechas que deben cerrarse antes de implementar un listener persistente:
+
+- El contrato autentica al cliente frente al servicio mediante `SO_PEERCRED`, pero no define cómo el cliente autentica al servidor. Un pathname privado no constituye por sí solo autenticación mutua.
+- El directorio 0700/socket 0600 no separa procesos con el mismo UID propietario. Debe decidirse si todo proceso bajo `atlas-runtime` pertenece a la TCB o si hace falta otra frontera.
+- La allowlist del cliente es argumento del handler; el servicio debe fijar una política de UID confiable e inmutable. UID 0 sigue siendo candidato, no decisión aprobada ni validada por A09.
+- El cleanup por comparación de inode y posterior unlink conserva TOCTOU. La estrategia debe documentar actores capaces de modificar el directorio y riesgo aceptado.
+- No existe procedimiento operativo completo para recuperar un pathname residual tras crash. El arranque seguirá fallando cerrado; no se añadirá stale cleanup automático.
+- La resolución segura debe cubrir todos los componentes de ruta, no solo el componente final. Debe validarse el directorio mediante descriptor y operar relativamente a él.
+- Los límites 2 workers/backlog 8 son del harness A14, no capacidad de producción. El servicio necesita límites de FD, backpressure, deadlines y shutdown.
+- No se ha probado el par de identidades candidato UID 0 ↔ `atlas-runtime`, ni el hardening del proceso de servicio.
+
+**Puerta actual:** continuar diseño de frontera de confianza y autenticación mutua, sin código. No implementar listener persistente hasta cerrar los hallazgos bloqueantes A-THREAT-01 a A-THREAT-05 y fijar criterios de aceptación para los restantes.
