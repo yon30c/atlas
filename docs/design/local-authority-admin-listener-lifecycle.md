@@ -20,14 +20,14 @@ Para un socket creado por el servicio, el modelo inicial a validar es:
 - Nombre fijo y documentado dentro de ese directorio; nunca aceptar una ruta arbitraria desde el cliente.
 - Socket: tipo AF_UNIX/SOCK_SEQPACKET, propietario esperado atlas-runtime, modo inicial objetivo 0600.
 - Sin acceso por grupo ni ACL adicionales en el primer diseño.
-- Cliente administrativo privilegiado: UID esperado explícito (candidato UID 0 para el frontend administrativo), verificado con SO_PEERCRED; no confiar en UID/PID/GID declarados en el paquete.
+- Cliente administrativo privilegiado: EUID 0 como requisito aceptado por el propietario; el servicio autoriza exclusivamente UID kernel 0 mediante SO_PEERCRED. El entrypoint real debe verificar EUID 0 antes de conectar; no confiar en UID/PID/GID declarados en el paquete.
 - El servicio no debe inferir identidad Atlas USER, identidad civil ni autoridad de dominio a partir de las credenciales Linux. La autorización de cada operación deberá ser una capa separada y futura.
 
 Estos valores son una propuesta de mínimo privilegio, no una configuración aprobada. Deben verificarse contra el modelo final del frontend y las unidades systemd antes de codificar.
 
 ## Invariantes del ciclo de vida
 
-1. **Directorio confiable:** antes de usar la ruta, comprobar con operaciones que no sigan symlinks que el directorio esperado existe, es un directorio real, tiene el propietario y modo previstos y no es escribible por usuarios no confiables.
+1. **Directorio confiable:** resolver todos los componentes desde `/` mediante descriptores de directorio y operaciones no-follow; comprobar tipo, propietario, modo y dispositivo/inode de cada componente según [la especificación de resolución segura de rutas](local-authority-admin-private-listener-path-resolution.md). No basta con proteger solo el componente final.
 2. **No reemplazar rutas existentes:** crear/bindear debe fallar si el nombre ya existe. Nunca borrar primero una ruta preexistente para “liberar” el nombre.
 3. **No recuperar sockets stale automáticamente:** un socket existente puede pertenecer a otro proceso, a una instancia activa o ser una ruta colocada deliberadamente. El arranque debe fallar cerrado y requerir diagnóstico administrativo separado. No conectar para decidir si se puede borrar ni hacer unlink preventivo.
 4. **Verificación posterior al bind:** inspeccionar la entrada creada sin seguir symlinks y verificar tipo socket, dispositivo/inode, propietario y modo. Si cualquier condición falla, cerrar el descriptor y aplicar limpieza limitada a la entrada que el proceso pueda demostrar que creó.
@@ -52,7 +52,7 @@ Esta secuencia es una especificación para revisar, no una instrucción de ejecu
 8. En apagado ordenado, dejar de aceptar conexiones, cerrar conexiones activas con plazo limitado, cerrar listener y limpiar solo la ruta propia verificada.
 9. Ante terminación abrupta, no ejecutar un mecanismo de “stale cleanup” automático en el siguiente arranque. Requerir diagnóstico explícito.
 
-La implementación debe preferir operaciones relativas a un descriptor de directorio (dir_fd) y O_NOFOLLOW donde estén disponibles. Python no ofrece una operación portable de unlink condicional por inode: una secuencia stat-then-unlink conserva una ventana TOCTOU. La protección principal debe ser que el directorio no sea modificable por un atacante no confiable; las carreras frente a root y el mecanismo exacto de limpieza necesitan revisión específica antes de implementar.
+La implementación debe preferir operaciones relativas a un descriptor de directorio (`dir_fd`) y `O_NOFOLLOW` donde estén disponibles. Python no ofrece una operación portable de unlink condicional por inode: una secuencia stat-then-unlink conserva una ventana TOCTOU. Bajo TCB-1, el directorio privado propiedad de `atlas-runtime` excluye UIDs externos; root y procesos del mismo UID son parte de la TCB. El mecanismo de resolución completa, la limitación de `bind()` por pathname y el cleanup están desarrollados en [la especificación de rutas](local-authority-admin-private-listener-path-resolution.md); no se declara que unlink sea atómico.
 
 ## Evaluación técnica de socket activation en Debian
 
@@ -210,3 +210,8 @@ La allowlist del servidor sigue siendo configuración local confiable, inmutable
 El propietario aceptó TCB-1: todos los procesos bajo la cuenta dedicada atlas-runtime son parte del mismo dominio de confianza. El transporte no intentará distinguir procesos con el mismo UID. La cuenta deberá mantenerse exclusiva para el servicio y componentes autorizados; no se autoriza todavía su creación ni cambios en el host.
 
 La especificación candidata de configuración está en [identity-config](local-authority-admin-private-listener-identity-config.md). La ruta /etc/atlas/admin-ipc.conf, permisos y UID/GID son propuestas, no estado operativo. Falta identificar el proceso cliente real y confirmar su UID efectivo antes de fijar client_uids.
+
+
+## Actualización — decisión EUID 0 y resolución de rutas (2026-11-21)
+
+El propietario aceptó EUID 0 como requisito del frontend administrativo. El servicio deberá autorizar exclusivamente UID 0 mediante `SO_PEERCRED`; no se ha implementado ni verificado el entrypoint cliente. La resolución de configuración y del directorio del endpoint deberá seguir `local-authority-admin-private-listener-path-resolution.md`: recorrido desde `/` con descriptores, validación de cada componente y operaciones relativas cuando estén disponibles. El pathname de `bind()` no acepta `dir_fd` en la API Python estándar; esa limitación sigue abierta y no debe ocultarse tras una validación previa.
