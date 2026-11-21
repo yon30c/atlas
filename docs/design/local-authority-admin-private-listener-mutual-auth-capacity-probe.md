@@ -428,3 +428,14 @@ El propietario ejecutó el runner en Atlas-VM-test, Debian 13, kernel 6.12.117+d
 - Resultado global INCOMPLETE, sin filas FAIL. CP-07..CP-12 permanecen pendientes.
 
 La espera de CP-06 sigue siendo instrumentación del harness; no representa trabajo del handler productivo ni una escritura bloqueada. La evidencia demuestra que la fase de lectura recibe el presupuesto restante del deadline accept-based. No amplía el alcance a listener productivo, lifecycle persistente, resolución de rutas, systemd, SQLite o despliegue.
+
+
+## 9.9 CP-07 implementado — validación del propietario pendiente
+
+Runner commit: fbd4512d163b31e53b355280e636fb47cf8d66a9.
+
+CP-07 usa un servidor fixture dedicado con una inyección de excepción de un solo uso, activada después de aceptar la conexión y entrar al contexto de ownership del socket. El worker registra el fault y lanza RuntimeError; el bloque except registra worker_error; el contexto with cierra la conexión; y finally reduce active y libera el semáforo del slot.
+
+El escenario exige: (1) el peer de la conexión fallida observa EOF y cero bytes de respuesta; (2) se observa el RuntimeError esperado; (3) el contador active vuelve a cero; (4) el proceso servidor permanece vivo; y (5) una segunda conexión válida completa authority.ping y vuelve a active=0. La segunda petición verifica que el accept loop y el worker pool continúan operativos tras la excepción.
+
+La inyección es exclusivamente test-only y no modifica handler productivo. CP-07 está implementado y revisado estáticamente en GitHub, pero no está validado hasta la ejecución del propietario en Atlas-VM-test. CP-08..CP-12 siguen pendientes; overall debe permanecer INCOMPLETE. No se ejecutaron pruebas, builds ni workflows desde GitHub.
