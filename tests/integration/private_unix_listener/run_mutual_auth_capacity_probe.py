@@ -1142,7 +1142,10 @@ def _assert_no_protocol_response(peer: socket.socket, scenario: str) -> None:
     except BlockingIOError:
         return
     except OSError as exc:
-        raise ProbeFailure(f"{scenario}: peer socket failed while checking response (errno={exc.errno}, {exc.strerror})") from exc
+        raise ProbeFailure(
+            f"{scenario}: peer socket failed while checking response "
+            f"(exception={type(exc).__name__}, errno={exc.errno}, {exc.strerror})"
+        ) from exc
     if response:
         raise ProbeFailure(f"{scenario}: handler emitted protocol bytes for rejected transport")
 
@@ -1213,6 +1216,11 @@ def _scenario_transport() -> dict:
         sockets.append(tcp_peer)
         tcp_peer.settimeout(2.0)
         tcp_peer.connect(listener.getsockname())
+        # The timeout is only needed for connect. Reset Python's socket
+        # timeout mode before MSG_DONTWAIT checks; otherwise Python may
+        # implement recv through select() and raise socket.timeout instead
+        # of the expected BlockingIOError when no response is queued.
+        tcp_peer.settimeout(None)
         tcp_connection, _address = listener.accept()
         sockets.append(tcp_connection)
         tcp_peer.sendall(packet)
