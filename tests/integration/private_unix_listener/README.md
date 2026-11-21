@@ -792,3 +792,12 @@ Static review found that `Server` receives stdout through an asynchronous reader
 
 
 Follow-up commit `664c398a5afdafda313eb81379cbb85a5b71007d` makes `Server.drain(duration)` observe for the full requested interval instead of returning at the first temporarily empty queue. This allows the asynchronous stdout reader to transfer already-emitted events before CP-10 captures its accepted-count baseline. The saturation assertion remains strict; CP-10 still requires owner execution.
+
+### CP-10 — owner validation (2026-11-21)
+
+The owner ran commit `75929e1f9f3a17e2a19bb9a98d30e7cd86b26a0a` as root on the disposable Debian 13 `Atlas-VM-test` (kernel `6.12.117+deb13-amd64`, Python 3.13.5; service fixture 2005/2005, alternate fixture 2006/2006). MA-01..MA-10 and CP-01..CP-10 all passed; overall remains INCOMPLETE only because CP-11/CP-12 are not implemented.
+
+CP-10 observations: four active workers and nine pending connections; accepted count remained stable at saturation (22); process snapshots were baseline 4 FDs/5 threads, saturation 8 FDs/5 threads, and recovery 4 FDs/5 threads. Soft/hard `RLIMIT_NOFILE` remained 64/64, active workers returned to zero, and the server remained alive. Cleanup removed both private and traversal `/run` sandboxes after child exit. Total duration: 22.725 s.
+
+This validates the resource-accounting scenario on the stated commit and VM only. It does not establish production resource policy or authorize a persistent listener/deployment. CP-11 repeated saturation/recovery and CP-12 low-`RLIMIT_NOFILE` startup rejection remain outstanding. No tests, builds, or workflows were run by the assistant.
+
