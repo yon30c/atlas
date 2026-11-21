@@ -112,7 +112,19 @@ def _serve_authenticated(
         emit(event="truncated_rejected", peer_uid=peer.uid)
         return
 
-    request = decode_admin_request(packet)
+    try:
+        request = decode_admin_request(packet)
+    except Exception as exc:
+        from atlas.platform_admin_ipc import AdminProtocolRejected
+        if isinstance(exc, AdminProtocolRejected):
+            emit(
+                event="request_rejected",
+                peer_uid=peer.uid,
+                code=exc.code,
+                request_id=exc.request_id,
+            )
+            return
+        raise
     if request.operation != "authority.ping":
         raise ProbeFailure("fixture received an operation other than authority.ping")
 
@@ -320,6 +332,23 @@ def _client_child(socket_path: str) -> int:
         return 0 if not response else 1
     finally:
         client.close()
+
+
+def _forged_identity_packet() -> bytes:
+    """Build a valid ping envelope with untrusted identity claims added."""
+    request_id = str(uuid.uuid4())
+    return json.dumps(
+        {
+            "protocol": "atlas-admin/1",
+            "request_id": request_id,
+            "operation": "authority.ping",
+            "payload": {},
+            "uid": 0,
+            "gid": 0,
+            "pid": 1,
+        },
+        separators=(",", ":"),
+    ).encode("utf-8")
 
 
 def _negative_euid_client_child(socket_path: str) -> int:
@@ -688,6 +717,35 @@ def _scenario_mutual_auth(
             "server_observed_connection": False,
         }
 
+        forged_packet = _forged_identity_packet()
+        forged_client = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+        forged_client.settimeout(2.0)
+        try:
+            forged_client.connect(str(service_socket))
+            sent = forged_client.send(forged_packet)
+            if sent != len(forged_packet):
+                raise ProbeFailure("forged-identity packet was not sent atomically")
+            forged_client.shutdown(socket.SHUT_WR)
+        finally:
+            forged_client.close()
+        forged_rejection = server.wait_event(
+            "request_rejected",
+            predicate=lambda item: (
+                item.get("peer_uid") == 0
+                and item.get("code") == "INVALID_REQUEST"
+            ),
+            timeout=3.0,
+        )
+        if forged_rejection.get("request_id") is None:
+            raise ProbeFailure("forged identity rejection did not retain the canonical request ID")
+        forged_identity = {
+            "claimed_uid": 0,
+            "claimed_gid": 0,
+            "claimed_pid": 1,
+            "kernel_peer_uid": forged_rejection["peer_uid"],
+            "rejection_code": forged_rejection["code"],
+        }
+
         peer, response = _connect_as_root(service_socket, args.service_uid, send_request=True)
         if peer.uid != args.service_uid or response is None:
             raise ProbeFailure("valid root client did not authenticate the service")
@@ -740,6 +798,7 @@ def _scenario_mutual_auth(
         )
         return {
             "nonroot_client_rejected_before_connect": negative_euid,
+            "forged_identity_fields_rejected": forged_identity,
             "valid_root_client": valid,
             "wrong_server_rejected_before_send": rejected_server,
             "wrong_client_rejected_before_recv": {
@@ -901,13 +960,13 @@ def _main_parent(args: argparse.Namespace) -> int:
             script, service_socket, args.service_uid, args.service_gid, 0o666, 0, servers
         )
         auth = _scenario_mutual_auth(public_root, args, script, servers)
-        results.append({"id": "MA-01,MA-02,MA-03,MA-04,MA-05", "status": "PASS", "observations": auth})
+        results.append({"id": "MA-01,MA-02,MA-03,MA-04,MA-05,MA-06", "status": "PASS", "observations": auth})
         capacity = _scenario_capacity(server, service_socket)
         results.append({"id": "CP-01,CP-04", "status": "PASS", "observations": capacity})
         results.append({
-            "id": "MA-06..MA-10,CP-02..CP-03,CP-05..CP-12",
+            "id": "MA-07..MA-10,CP-02..CP-03,CP-05..CP-12",
             "status": "INCOMPLETE",
-            "detail": "forged identity fields, config immutability, disconnect/transport variants, exact backlog saturation, read/write/global deadline adversaries, exception recovery, payload/depth boundaries and full FD accounting remain unimplemented",
+            "detail": "config immutability, disconnect/transport variants, exact backlog saturation, read/write/global deadline adversaries, exception recovery, payload/depth boundaries and full FD accounting remain unimplemented",
         })
         overall = "INCOMPLETE"
     except ProbeIncomplete as exc:
