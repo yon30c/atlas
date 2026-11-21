@@ -380,7 +380,7 @@ La observación previa de credenciales por el runner es únicamente evidencia; e
 El helper y la coordinación A09a/A09b están implementados en la rama experimental, pero aún no se han ejecutado ni validado.
 
 1. **Implementación en GitHub:** completada en `tests/integration/private_unix_listener/a09_ssh_client.py` y `run_probe.py`. A09a/A09b son filas independientes; el runner mantiene A09 deshabilitado por defecto y exige confirmaciones explícitas de preflight.
-2. **Revisión estática:** revisar helper, serialización stdin/stdout, subprocess SSH, validación de archivos, límites, credenciales, cleanup e invariantes de cada escenario antes de considerar el código listo para Debian.
+2. **Revisión estática:** completada en GitHub para helper, serialización stdin/stdout, subprocess SSH, validación de archivos, límites, credenciales, cleanup e invariantes de ambos escenarios. Esta revisión no sustituye la ejecución local ni valida comportamiento del host.
 3. **Preflight del shell remoto:** el propietario debe inspeccionar de forma read-only `.bashrc`, `.bash_profile`, `.profile` y comportamiento de inicio del shell de `atlas-a09-test`. No modificar esos archivos.
 4. **Cambio host pendiente:** sustituir la opción de comando forzado actual `/usr/bin/id -u` por `/usr/bin/python3 -I /tmp/atlas-a09-client.py`. Este cambio en `authorized_keys` es una modificación de seguridad del host y requiere autorización explícita específica. No se ha hecho.
 5. **Ejecución:** requiere aprobación explícita independiente después de la revisión estática y del cambio host aprobado. El runner no usa sudo ni cambia credenciales.
@@ -404,4 +404,4 @@ La implementación de código se publicó en la rama experimental:
 - El runner requiere `--enable-a09`, rutas explícitas y confirmaciones `--a09-forced-command-confirmed` y `--a09-shell-startup-reviewed`. Sin el opt-in, A09a/A09b permanecen SKIP.
 - Si el proceso SSH local no termina tras kill, los recursos relacionados se preservan y el escenario falla; no se hace cleanup potencialmente concurrente.
 
-**Estado de validación:** revisión estática de implementación en GitHub en curso; no se ejecutaron pruebas, compilaciones ni workflows. La clave instalada todavía fuerza `/usr/bin/id -u`; no se ha cambiado `authorized_keys`. El owner debe inspeccionar shell startup files y solicitar autorización específica antes del cambio host. No ejecutar A09 todavía.
+**Estado de validación:** revisión estática de implementación en GitHub completada; no se ejecutaron pruebas, compilaciones ni workflows. La clave instalada todavía fuerza `/usr/bin/id -u`; no se ha cambiado `authorized_keys`. El owner debe inspeccionar shell startup files y solicitar autorización específica antes del cambio host. No ejecutar A09 todavía.
