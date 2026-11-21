@@ -26,7 +26,7 @@
 - **A-THREAT-07:** el perfil aprobado para probes aislados es 4 conexiones/workers, backlog 8, cola 0, read/write 5 s, deadline global 15 s y `RLIMIT_NOFILE=64`. CP-01/CP-04 pasaron en la ejecución del propietario sobre `fbc8c68`; backlog exacto, adversarios de timeout, contabilidad de FDs, memoria/CPU/TasksMax y drenaje siguen pendientes. No es configuración de producción.
 - **A-THREAT-08:** máquina de estados de readiness/shutdown, drenaje, deadlines y ownership de FDs pendiente.
 - **A-THREAT-09:** A09 usó runner UID 1000 y peer UID 1001; no valida cliente UID 0, servicio `atlas-runtime` ni permisos finales del despliegue.
-- **Próximo paso:** actualizar `Atlas-VM-test` al commit `aff7eb694dbabb6725947e3f2179aef3fa566fbf` y ejecutar MA-09/10 exclusivamente en esa VM; después avanzar con CP-02/03 y CP-05..12. Path-walk, colisiones y stale recovery permanecen como fases separadas. Nunca ejecutar en `greed` de producción ni crear cuentas/grupos.
+- **Próximo paso:** actualizar `Atlas-VM-test` al commit `f41df94d0f87d288bfc7e3df45c66295fa19d570` y ejecutar MA-09/10 exclusivamente en esa VM; después avanzar con CP-02/03 y CP-05..12. Path-walk, colisiones y stale recovery permanecen como fases separadas. Nunca ejecutar en `greed` de producción ni crear cuentas/grupos.
 - **Estado de cambios:** la rama experimental contiene el fixture aislado `probe_config.py` y los escenarios MA-07/08. No se modificó handler, contrato normativo, runtime, SQLite, `main` ni host. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub. El propietario validó MA-01..MA-08 y CP-01/04 en `585dd3d`; MA-09/10 están implementados pero pendientes de ejecución. No se creó PR ni se aprobó listener persistente o despliegue.
 
 **Límites vigentes:** A-IPC-01 valida únicamente los escenarios experimentales ejecutados en el commit/entorno indicados. No demuestra protección frente a root/capabilities suficientes ni procesos maliciosos del mismo UID; no valida separación de privilegios, system-manager, listener persistente, daemon, integración systemd, acceso/autorización SQLite ni operaciones mutantes. No autoriza cambios del host, usuarios, grupos, permisos, privilegios, servicios, provisioning o despliegue.
@@ -874,7 +874,7 @@ La evidencia solo aplica al commit indicado. Permanecen MA-09..MA-10 y CP-02..CP
 
 ## A-IPC-02 — MA-09/MA-10 implementados (2026-11-21)
 
-Commit `aff7eb694dbabb6725947e3f2179aef3fa566fbf` añade escenarios del handler real:
+Commit `f41df94d0f87d288bfc7e3df45c66295fa19d570` añade escenarios del handler real:
 
 - MA-09: cierre de la dirección de escritura del peer autorizado antes de enviar una petición; se exige `PEER_DISCONNECTED`, cero bytes de respuesta y ninguna petición aceptada.
 - MA-10: AF_UNIX/SOCK_STREAM y AF_INET/SOCK_STREAM son rechazados con `INVALID_REQUEST` antes de consumir un paquete ping encolado; se comprueba con `MSG_PEEK` y ausencia de respuesta.
