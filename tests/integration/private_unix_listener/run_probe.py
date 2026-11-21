@@ -378,7 +378,7 @@ def _scenario_a06(root: Path) -> dict[str, object]:
             raise ProbeFailure("cleanup claimed ownership of a replacement pathname")
         if _identity(path) != replacement_id or path.read_bytes() != b"replacement-must-survive":
             raise ProbeFailure("cleanup modified the replacement object")
-        return {"original_socket_identity": list(original_id), "replacement_identity": list(replacement_id), "replacement_preserved": True}
+        return {"original_socket_identity": list(original_id), "replacement_identity": list(replacement_id), "replacement_preserved": True, "cleanup_reason": "CLEANUP_SKIPPED_OWNERSHIP_MISMATCH"}
     finally:
         listener.socket.close()
         errors = box.cleanup()
@@ -595,10 +595,12 @@ class BoundedAcceptHarness:
             except Exception:
                 pass
         finally:
-            connection.close()
-            with self.lock:
-                self.active -= 1
-            self.slots.release()
+            try:
+                connection.close()
+            finally:
+                with self.lock:
+                    self.active -= 1
+                self.slots.release()
 
     def wait_idle(self, timeout: float = 2.0) -> bool:
         deadline = time.monotonic() + timeout
