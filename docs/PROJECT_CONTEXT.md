@@ -11,7 +11,7 @@
 - **Repositorio:** `yon30c/atlas`.
 - **Rama de trabajo activa:** `work/systemd-socket-activation-probe-contract-alignment`.
 - **PR activo:** [#29 — Alinear probe systemd con atlas-admin/1 y registrar puertas del listener](https://github.com/yon30c/atlas/pull/29), abierto como draft, base `main`.
-- **HEAD observado de la rama del PR:** `ca80330b298e516846bce7ba0bffe80982bf1a60` (12 commits sobre `main`, incluidos los tres commits de este ciclo documental).
+- **HEAD de la rama del PR:** variable por cada commit documental; consultar la cabecera de [PR #29](https://github.com/yon30c/atlas/pull/29) para el SHA vigente. La base de comparación es `main` en `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`.
 - **Base estable:** `main` en `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`; PR #28 ya integrado.
 - **Última validación local reportada:** sobre `main` en ese SHA, el propietario ejecutó 1.590 tests: `OK (skipped=1)`, 34.895 s, Python 3.13.5. Esta evidencia valida esa base, **no** los cambios del PR #29.
 - **Validación de PR #29:** pendiente de ejecución local en Debian. No se han ejecutado pruebas, compilaciones ni workflows remotos para este PR en este ciclo documental.
