@@ -1,6 +1,6 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-21 (A-IPC-01 A09a/A09b ejecutados por el propietario: 16/16 PASS en Debian 13; detalle en `docs/status-aipc01-validation-2026-11-21.md`).
+> **Última actualización:** 2026-11-21 (auditoría estática inicial del modelo de amenazas de alternativa A; detalle en `docs/design/local-authority-admin-private-listener-threat-model-review.md`).
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
@@ -11,7 +11,7 @@
 - **Repositorio:** `yon30c/atlas`.
 - **Base estable:** `main` HEAD `1bd73d149dbd98e7ee2e5fdc36880883b6b03d16`; contiene el merge de PR #29 (`c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`). Este incremento no modifica `main`.
 - **Rama activa:** `experiment/a-ipc-01-private-unix-listener-probe`.
-- **HEAD de esta rama tras la actualización documental:** `1561b66f24b83c4b915bc96dfbe9437daad293b9`. La comparación inicial contra `main` (`1bd73d149dbd98e7ee2e5fdc36880883b6b03d16`) mostró 132 commits por delante y 0 por detrás; los commits de este ciclo son documentales. No hacer merge directo ni asumir que es una rama corta de documentación.
+- **HEAD de esta rama tras la auditoría documental:** `ee7968bc692eb4c5649b065c0f7081bcccae6216` (commit de creación del informe; puede haber commits documentales adicionales posteriores en este mismo ciclo). La rama se mantiene basada en `main` `1bd73d149dbd98e7ee2e5fdc36880883b6b03d16`; no hacer merge directo ni asumir que es una rama corta de documentación.
 - **PR relacionado:** PR #30 (`design/isolated-private-unix-listener-probe`) permanece abierto y Draft; es el PR de diseño original, no la rama experimental actual. La rama `experiment/a-ipc-01-private-unix-listener-probe` no es el head de PR #30 y no tiene PR propio identificado. No se ha solicitado merge.
 - **IPC existente:** contrato `atlas-admin/1` y handler para conexiones ya aceptadas. Solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
 - **Decisión de dirección del propietario (2026-11-21):** continuar el desarrollo y la evaluación técnica con la **alternativa A — listener AF_UNIX/SOCK_SEQPACKET creado por el proceso bajo un directorio filesystem privado**. A pasa a ser la línea principal de trabajo; esto **no** constituye selección/aprobación del transporte de producción.
@@ -20,7 +20,8 @@
 - **Revisión de código:** revisión estática del runner/helper realizada en GitHub. La ejecución local fue realizada por el propietario; no se ejecutaron pruebas, compilaciones ni workflows desde GitHub en este trabajo.
 - **Alternativa B:** socket activation sobre filesystem permanece suspendida por la colisión destructiva observada en Debian systemd 257.13. No repetir el escenario destructivo.
 - **Alternativa C:** AF_UNIX abstract namespace queda fuera de la línea principal mientras se desarrolla A; puede retomarse si una brecha demostrada de A lo requiere o si el propietario decide reabrir la comparación.
-- **Siguiente etapa:** revisión estática de la arquitectura A más allá del probe: modelo de amenazas, identidad/autorización, lifecycle del listener, propiedad y permisos, arranque/parada, concurrencia, recuperación, observabilidad y límites de cleanup. Definir brechas y criterios de aceptación antes de implementar un listener integrado.
+- **Auditoría estática inicial completada:** `docs/design/local-authority-admin-private-listener-threat-model-review.md`. Identifica nueve hallazgos; son bloqueantes el mecanismo de autenticación del servidor frente al cliente privilegiado, el alcance de confianza del UID `atlas-runtime`, la allowlist fija del cliente y la recuperación tras caída. También quedan por cerrar TOCTOU de cleanup, resolución segura de ruta, límites reales y lifecycle persistente.
+- **Siguiente etapa:** diseñar la frontera de confianza y autenticación mutua de A, sin código; decidir si todos los procesos bajo `atlas-runtime` pertenecen a la TCB y cómo el cliente verifica que el endpoint corresponde al servicio legítimo.
 
 **Límites vigentes:** A-IPC-01 valida solo los escenarios experimentales ejecutados en el commit/entorno indicados. No demuestra protección frente a root/capabilities suficientes ni procesos maliciosos del mismo UID; no valida separación de privilegios, system-manager, listener persistente, daemon, integración systemd, acceso/autorización SQLite ni operaciones mutantes. No autoriza cambios del host, usuarios, grupos, permisos, privilegios, servicios, provisioning o despliegue. Cualquier transición a implementación persistente o producción requiere diseño, revisión y aprobación explícitos del propietario.
 
