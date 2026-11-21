@@ -321,6 +321,28 @@ def _client_child(socket_path: str) -> int:
     finally:
         client.close()
 
+def _negative_euid_client_child(socket_path: str) -> int:
+    """Exercise the privileged-client EUID guard before any socket is created."""
+    euid = os.geteuid()
+    if euid == 0:
+        emit(event="negative_client_fixture_error", reason="fixture unexpectedly has EUID 0")
+        return 3
+    try:
+        _connect_as_root(Path(socket_path), expected_server_uid=0, send_request=False)
+    except ProbeFailure as exc:
+        expected = "privileged client fixture must have EUID 0"
+        if str(exc) != expected:
+            emit(event="negative_client_unexpected_rejection", euid=euid, reason=str(exc))
+            return 1
+        emit(
+            event="euid_rejected_before_connect",
+            euid=euid,
+            connect_attempted=False,
+        )
+        return 0
+    emit(event="euid_guard_bypassed", euid=euid)
+    return 1
+
 
 class Server:
     def __init__(self, process: subprocess.Popen[str], socket_path: Path) -> None:
@@ -624,6 +646,47 @@ def _scenario_mutual_auth(
         script, service_socket, args.service_uid, args.service_gid, 0o666, 0, registry
     )
     try:
+        negative_client = subprocess.run(
+            [
+                sys.executable, str(script), "--negative-client-child",
+                "--socket", str(service_socket),
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=5.0,
+            check=False,
+            user=args.other_uid,
+            group=args.other_gid,
+            extra_groups=[],
+        )
+        if negative_client.returncode != 0:
+            raise ProbeFailure(
+                f"non-root client did not reject before connect: {negative_client.stderr}"
+            )
+        try:
+            negative_result = json.loads(negative_client.stdout.strip().splitlines()[-1])
+        except (IndexError, json.JSONDecodeError) as exc:
+            raise ProbeFailure("non-root client emitted no valid EUID-guard evidence") from exc
+        if (
+            negative_result.get("event") != "euid_rejected_before_connect"
+            or negative_result.get("euid") != args.other_uid
+            or negative_result.get("connect_attempted") is not False
+        ):
+            raise ProbeFailure(f"unexpected EUID-negative client evidence: {negative_result}")
+        server.drain(0.25)
+        if any(
+            item.get("event") in {"accepted", "unauthorized_peer"}
+            for item in server.events
+        ):
+            raise ProbeFailure("server observed a connection from the EUID-negative client")
+        negative_euid = {
+            "client_euid": negative_result["euid"],
+            "connect_attempted": False,
+            "server_observed_connection": False,
+        }
+
         peer, response = _connect_as_root(service_socket, args.service_uid, send_request=True)
         if peer.uid != args.service_uid or response is None:
             raise ProbeFailure("valid root client did not authenticate the service")
@@ -675,6 +738,7 @@ def _scenario_mutual_auth(
             timeout=3.0,
         )
         return {
+            "nonroot_client_rejected_before_connect": negative_euid,
             "valid_root_client": valid,
             "wrong_server_rejected_before_send": rejected_server,
             "wrong_client_rejected_before_recv": {
@@ -836,13 +900,13 @@ def _main_parent(args: argparse.Namespace) -> int:
             script, service_socket, args.service_uid, args.service_gid, 0o666, 0, servers
         )
         auth = _scenario_mutual_auth(public_root, args, script, servers)
-        results.append({"id": "MA-01,MA-02,MA-04,MA-05", "status": "PASS", "observations": auth})
+        results.append({"id": "MA-01,MA-02,MA-03,MA-04,MA-05", "status": "PASS", "observations": auth})
         capacity = _scenario_capacity(server, service_socket)
         results.append({"id": "CP-01,CP-04", "status": "PASS", "observations": capacity})
         results.append({
-            "id": "MA-03,MA-06..MA-10,CP-02..CP-03,CP-05..CP-12",
+            "id": "MA-06..MA-10,CP-02..CP-03,CP-05..CP-12",
             "status": "INCOMPLETE",
-            "detail": "EUID-negative pre-connect, forged identity fields, config immutability, disconnect/transport variants, exact backlog saturation, read/write/global deadline adversaries, exception recovery, payload/depth boundaries and full FD accounting remain unimplemented",
+            "detail": "forged identity fields, config immutability, disconnect/transport variants, exact backlog saturation, read/write/global deadline adversaries, exception recovery, payload/depth boundaries and full FD accounting remain unimplemented",
         })
         overall = "INCOMPLETE"
     except ProbeIncomplete as exc:
@@ -910,6 +974,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--confirm-fixture-ids", action="store_true")
     parser.add_argument("--server-child", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--client-child", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--negative-client-child", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--socket", help=argparse.SUPPRESS)
     parser.add_argument("--socket-mode", type=lambda value: int(value, 0), default=0o600, help=argparse.SUPPRESS)
     parser.add_argument("--allowed-uid", type=int, default=0, help=argparse.SUPPRESS)
@@ -926,6 +991,10 @@ def main() -> int:
         if not args.socket:
             return 3
         return _client_child(args.socket)
+    if args.negative_client_child:
+        if not args.socket:
+            return 3
+        return _negative_euid_client_child(args.socket)
     required = (args.service_uid, args.service_gid, args.other_uid, args.other_gid)
     if any(value is None for value in required):
         print(json.dumps({
