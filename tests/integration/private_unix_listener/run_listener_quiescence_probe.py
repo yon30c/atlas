@@ -393,6 +393,145 @@ def wait_inactive(name: str, deadline: float) -> dict:
     )
 
 
+class _ScmpArgCmp(__import__("ctypes").Structure):
+    _fields_ = [("arg", __import__("ctypes").c_uint),
+                ("op", __import__("ctypes").c_uint),
+                ("datum_a", __import__("ctypes").c_uint64),
+                ("datum_b", __import__("ctypes").c_uint64)]
+
+
+def install_seccomp_denials(*, deny_fork: bool = False, deny_fd_escape: bool = False) -> None:
+    import ctypes
+    library_name = ctypes.util.find_library("seccomp")
+    if not library_name:
+        raise Incomplete("libseccomp is unavailable in fixture")
+    lib = ctypes.CDLL(library_name, use_errno=True)
+    lib.seccomp_init.argtypes = [ctypes.c_uint32]
+    lib.seccomp_init.restype = ctypes.c_void_p
+    lib.seccomp_syscall_resolve_name.argtypes = [ctypes.c_char_p]
+    lib.seccomp_syscall_resolve_name.restype = ctypes.c_int
+    lib.seccomp_rule_add.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_int, ctypes.c_uint]
+    lib.seccomp_rule_add.restype = ctypes.c_int
+    lib.seccomp_rule_add_array.argtypes = [
+        ctypes.c_void_p, ctypes.c_uint32, ctypes.c_int, ctypes.c_uint,
+        ctypes.POINTER(_ScmpArgCmp),
+    ]
+    lib.seccomp_rule_add_array.restype = ctypes.c_int
+    lib.seccomp_load.argtypes = [ctypes.c_void_p]
+    lib.seccomp_load.restype = ctypes.c_int
+    lib.seccomp_release.argtypes = [ctypes.c_void_p]
+    lib.seccomp_release.restype = None
+    action_allow = 0x7FFF0000
+    action_deny = 0x00050000 | errno.EPERM
+    context = lib.seccomp_init(action_allow)
+    if not context:
+        raise Incomplete("seccomp_init failed")
+    try:
+        names = []
+        if deny_fork:
+            names.extend((b"fork", b"vfork", b"clone", b"clone3"))
+        if deny_fd_escape:
+            names.extend((b"dup", b"dup2", b"dup3", b"sendmsg", b"recvmsg", b"sendmmsg", b"recvmmsg"))
+        for name in names:
+            number = lib.seccomp_syscall_resolve_name(name)
+            if number < 0 or lib.seccomp_rule_add(context, action_deny, number, 0) != 0:
+                raise Incomplete(f"cannot install seccomp denial for {name.decode()}")
+        if deny_fd_escape:
+            fcntl_number = lib.seccomp_syscall_resolve_name(b"fcntl")
+            if fcntl_number < 0:
+                raise Incomplete("cannot resolve fcntl for seccomp")
+            for command in (fcntl.F_DUPFD, fcntl.F_DUPFD_CLOEXEC):
+                comparison = _ScmpArgCmp(1, 4, command, 0)  # SCMP_CMP_EQ
+                if lib.seccomp_rule_add_array(
+                    context, action_deny, fcntl_number, 1, ctypes.byref(comparison)
+                ) != 0:
+                    raise Incomplete("cannot install argument-scoped fcntl seccomp rule")
+        if lib.seccomp_load(context) != 0:
+            raise Incomplete("seccomp_load failed")
+    finally:
+        lib.seccomp_release(context)
+
+
+def _raw_syscall_errno(libc, number: int, *arguments) -> int:
+    ctypes.set_errno(0)
+    result = libc.syscall(ctypes.c_long(number), *arguments)
+    if result != -1:
+        return 0
+    return ctypes.get_errno()
+
+
+def run_fd_policy_checks(listener: socket.socket, *, deny_fork: bool, deny_fd_escape: bool) -> dict:
+    if platform.machine() != "x86_64":
+        raise Incomplete("syscall fault-injection numbers are defined only for x86_64")
+    import ctypes
+    libc = ctypes.CDLL(None, use_errno=True)
+    observations = {}
+    install_seccomp_denials(deny_fork=deny_fork, deny_fd_escape=deny_fd_escape)
+    if deny_fork:
+        results = {}
+        try:
+            child = os.fork()
+        except OSError as exc:
+            results["fork"] = exc.errno
+        else:
+            if child == 0:
+                os._exit(91)
+            os.kill(child, signal.SIGKILL)
+            os.waitpid(child, 0)
+            results["fork"] = 0
+        try:
+            child = libc.vfork()
+        except OSError as exc:
+            results["vfork"] = exc.errno
+        else:
+            if child == 0:
+                os._exit(92)
+            if child > 0:
+                os.waitpid(child, 0)
+                results["vfork"] = 0
+            else:
+                results["vfork"] = ctypes.get_errno()
+        results["clone"] = _raw_syscall_errno(
+            libc, 56, ctypes.c_ulong(0), ctypes.c_void_p(0),
+            ctypes.c_void_p(0), ctypes.c_void_p(0), ctypes.c_ulong(0),
+        )
+        results["clone3"] = _raw_syscall_errno(
+            libc, 435, ctypes.c_void_p(0), ctypes.c_size_t(0),
+        )
+        observations["fork_denials"] = results
+        if any(value != errno.EPERM for value in results.values()):
+            raise Incomplete("QP-08 syscall denial did not return EPERM for every fork path")
+    if deny_fd_escape:
+        fd = listener.fileno()
+        results = {
+            "dup": _raw_syscall_errno(libc, 32, ctypes.c_int(fd)),
+            "dup2": _raw_syscall_errno(libc, 33, ctypes.c_int(fd), ctypes.c_int(10000)),
+            "dup3": _raw_syscall_errno(libc, 292, ctypes.c_int(fd), ctypes.c_int(10001), ctypes.c_int(0)),
+            "fcntl_dupfd": _raw_syscall_errno(libc, 72, ctypes.c_int(fd), ctypes.c_int(fcntl.F_DUPFD), ctypes.c_int(10002)),
+            "fcntl_dupfd_cloexec": _raw_syscall_errno(libc, 72, ctypes.c_int(fd), ctypes.c_int(fcntl.F_DUPFD_CLOEXEC), ctypes.c_int(10003)),
+            "sendmsg": _raw_syscall_errno(libc, 46, ctypes.c_int(-1), ctypes.c_void_p(0), ctypes.c_int(0)),
+            "recvmsg": _raw_syscall_errno(libc, 47, ctypes.c_int(-1), ctypes.c_void_p(0), ctypes.c_int(0)),
+            "sendmmsg": _raw_syscall_errno(libc, 307, ctypes.c_int(-1), ctypes.c_void_p(0), ctypes.c_uint(0), ctypes.c_uint(0)),
+            "recvmmsg": _raw_syscall_errno(libc, 299, ctypes.c_int(-1), ctypes.c_void_p(0), ctypes.c_uint(0), ctypes.c_uint(0), ctypes.c_void_p(0)),
+        }
+        if fcntl.fcntl(fd, fcntl.F_GETFD) < 0:
+            raise Incomplete("non-dup fcntl operation was unexpectedly blocked")
+        read_fd, write_fd = os.pipe()
+        try:
+            os.write(write_fd, b"ok")
+            if os.read(read_fd, 2) != b"ok":
+                raise Incomplete("read/write control channel failed under FD policy")
+        finally:
+            os.close(read_fd)
+            os.close(write_fd)
+        observations["fd_escape_denials"] = results
+        observations["fcntl_getfd_allowed"] = True
+        observations["read_write_control_allowed"] = True
+        if any(value != errno.EPERM for value in results.values()):
+            raise Incomplete("QP-09 FD escape syscall denial did not return EPERM")
+    return observations
+
+
 def fixture_main(args: argparse.Namespace) -> int:
     """Unprivileged systemd service fixture; never used against Atlas."""
     listener = None
@@ -422,6 +561,11 @@ def fixture_main(args: argparse.Namespace) -> int:
                 "accepting": listener.getsockopt(socket.SOL_SOCKET, socket.SO_ACCEPTCONN),
                 "cloexec": not os.get_inheritable(listener.fileno()),
             })
+            if args.deny_fork or args.deny_fd_escape:
+                ready["fd_policy"] = run_fd_policy_checks(
+                    listener, deny_fork=args.deny_fork,
+                    deny_fd_escape=args.deny_fd_escape,
+                )
         fd = os.open(
             args.ready, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC,
             0o600,
@@ -560,7 +704,8 @@ def update_gate_marker(marker: Path, run_id: str, name: str, snapshot: dict, pha
 
 
 def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=False,
-                   delegate=False, no_listener=False, uid=SERVICE_UID, gid=SERVICE_GID) -> tuple[dict, Path | None, Path]:
+                   delegate=False, no_listener=False, uid=SERVICE_UID, gid=SERVICE_GID,
+                   deny_fork=False, deny_fd_escape=False) -> tuple[dict, Path | None, Path]:
     assert_unit_absent(name)
     socket_path = run_dir / f"{name}.sock"
     ready_path = run_dir / f"{name}.ready"
@@ -580,6 +725,10 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
         command.append("--ignore-term")
     if no_listener:
         command.append("--no-listener")
+    if deny_fork:
+        command.append("--deny-fork")
+    if deny_fd_escape:
+        command.append("--deny-fd-escape")
     if _ACTIVE_SUPERVISOR is None or _ACTIVE_RUN_ID is None:
         raise Incomplete("no active test lifecycle supervisor")
     _ACTIVE_SUPERVISOR.request("start", command, actor_run_id=_ACTIVE_RUN_ID)
@@ -902,6 +1051,36 @@ def run_probe(args: argparse.Namespace) -> dict:
                              "adapter_mismatch_rejected": mismatch_rejected},
         })
 
+        # QP-08: install seccomp after bind/listen and deny all fork-family paths.
+        name8 = f"atlas-qp-{secrets.token_hex(6)}.service"
+        initial8, endpoint8, ready8 = _start_fixture(name8, run_dir, deny_fork=True)
+        report["unit_identity"][name8] = initial8
+        policy8 = json.loads(ready8.read_text(encoding="ascii"))["fd_policy"]
+        cleanup8 = _stop_and_cleanup(name8, initial8, endpoint8, ready8, run_dir_fd, report)
+        report["cleanup"]["resources"].append(cleanup8)
+        if not cleanup8["unit_inactive"] or not cleanup8["cgroup_empty"]:
+            raise Incomplete("QP-08 fixture cleanup failed")
+        report["scenarios"].append({
+            "id": "QP-08", "status": "PASS",
+            "reason": "fork/vfork/clone/clone3 all returned EPERM after listener bind/listen",
+            "observations": policy8,
+        })
+
+        # QP-09: deny duplication and ancillary-data transfer; read/write remain usable.
+        name9 = f"atlas-qp-{secrets.token_hex(6)}.service"
+        initial9, endpoint9, ready9 = _start_fixture(name9, run_dir, deny_fd_escape=True)
+        report["unit_identity"][name9] = initial9
+        policy9 = json.loads(ready9.read_text(encoding="ascii"))["fd_policy"]
+        cleanup9 = _stop_and_cleanup(name9, initial9, endpoint9, ready9, run_dir_fd, report)
+        report["cleanup"]["resources"].append(cleanup9)
+        if not cleanup9["unit_inactive"] or not cleanup9["cgroup_empty"]:
+            raise Incomplete("QP-09 fixture cleanup failed")
+        report["scenarios"].append({
+            "id": "QP-09", "status": "PASS",
+            "reason": "duplication and SCM_RIGHTS-capable syscalls returned EPERM; fcntl F_GETFD and read/write remained available",
+            "observations": policy9,
+        })
+
         # QP-06: Delegate=yes must be rejected; no cgroup writes or migration.
         name6 = f"atlas-qp-{secrets.token_hex(6)}.service"
         initial6, endpoint6, ready6 = _start_fixture(name6, run_dir, delegate=True)
@@ -1185,6 +1364,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--hold-child", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--ignore-term", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--no-listener", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--deny-fork", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--deny-fd-escape", action="store_true", help=argparse.SUPPRESS)
     return parser.parse_args()
 
 
