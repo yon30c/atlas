@@ -215,3 +215,12 @@ La especificación candidata de configuración está en [identity-config](local-
 ## Actualización — decisión EUID 0 y resolución de rutas (2026-11-21)
 
 El propietario aceptó EUID 0 como requisito del frontend administrativo. El servicio deberá autorizar exclusivamente UID 0 mediante `SO_PEERCRED`; no se ha implementado ni verificado el entrypoint cliente. La resolución de configuración y del directorio del endpoint deberá seguir `local-authority-admin-private-listener-path-resolution.md`: recorrido desde `/` con descriptores, validación de cada componente y operaciones relativas cuando estén disponibles. El pathname de `bind()` no acepta `dir_fd` en la API Python estándar; esa limitación sigue abierta y no debe ocultarse tras una validación previa.
+
+
+## Contrato propuesto de quiescencia y exclusividad — 2026-11-21
+
+Se publicó `docs/contracts/local-authority-admin-listener-quiescence-1.md` (listener-quiescence/1, v1.0-draft). Para alternativa A propone una unidad service dedicada, cgroup exclusivo no delegado, terminación del grupo (`KillMode=control-group` como candidato), verificación conjunta de unidad `inactive` y `cgroup.events` con `populated 0`, puerta de mantenimiento contra start/restart concurrente y propiedad no delegable del listener FD (sin fork posterior a bind, herencia ni `SCM_RIGHTS`).
+
+El cgroup vacío solo acredita ausencia de procesos dentro de ese cgroup; no prueba ausencia de FD fuera de él si el descriptor pudo transferirse. Por ello las invariantes de no transferencia y no escape son condiciones obligatorias. El contrato excluye systemd socket activation: el system manager podría retener el listener FD fuera del cgroup del servicio, y el incidente de colisión filesystem de systemd 257.13 sigue suspendiendo esa alternativa.
+
+**Estado:** borrador para revisión del propietario, no aprobado ni validado. No crear unidades/cgroups ni modificar el host. A-THREAT-05 sigue abierta hasta aprobación, probe aislado QP-01..QP-15, evidencia de lifecycle/FD y autorización humana real.
