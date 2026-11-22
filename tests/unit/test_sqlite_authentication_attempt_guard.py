@@ -66,6 +66,21 @@ class SQLiteAuthenticationAttemptGuardTests(unittest.TestCase):
         self.assertIn("native_authentication_attempt_reservations", names)
         self.assertIn("native_authentication_attempt_failures", names)
 
+
+    def test_login_handle_case_variants_share_one_account_limit(self):
+        first = self.guard.begin_attempt(
+            self.issuer_id, "atlas.owner", at=self.now
+        )
+        second = self.guard.begin_attempt(
+            self.issuer_id, "ATLAS.OWNER", at=self.now
+        )
+        with self.assertRaises(AuthenticationAttemptDenied):
+            self.guard.begin_attempt(
+                self.issuer_id, "Atlas.Owner", at=self.now
+            )
+        self.guard.abandon_attempt(first)
+        self.guard.abandon_attempt(second)
+
     def test_two_concurrent_reservations_are_allowed_but_third_is_denied(self):
         barrier = threading.Barrier(3)
 
