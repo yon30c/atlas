@@ -1502,10 +1502,10 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
         raise Incomplete("systemd Delegate property differs from requested fixture")
     if not delegate:
         require_no_delegation(snap)
-    expected_user = pwd.getpwuid(uid).pw_name
-    expected_group = grp.getgrgid(gid).gr_name
+    expected_users = {pwd.getpwuid(uid).pw_name, str(uid)}
+    expected_groups = {grp.getgrgid(gid).gr_name, str(gid)}
     if (
-        snap["User"] != expected_user or snap["Group"] != expected_group
+        snap["User"] not in expected_users or snap["Group"] not in expected_groups
         or snap["UID"] != uid or snap["GID"] != gid
     ):
         raise Incomplete("systemd fixture User/Group/UID/GID identity differs from requested identity")
