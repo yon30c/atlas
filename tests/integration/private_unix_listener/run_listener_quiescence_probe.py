@@ -1892,10 +1892,20 @@ def run_probe(args: argparse.Namespace) -> dict:
             time.sleep(0.05)
         if changed is None:
             raise Incomplete("QP-12 restart did not produce a distinct InvocationID")
+        old_observer12 = _ACTIVE_FIXTURES[name12]["cgroup_observer"]
+        old_cgroup_after_restart12 = read_cgroup_observer(old_observer12)
+        new_observer12 = open_cgroup_observer(mount, changed["ControlGroup"])
+        new_cgroup_before_stop12 = read_cgroup_observer(new_observer12)
+        if new_cgroup_before_stop12["values"]["populated"] != 1:
+            close_cgroup_observer(new_observer12)
+            raise Incomplete("QP-12 replacement invocation did not populate its correlated cgroup")
+        _ACTIVE_FIXTURES[name12]["cgroup_observer"] = new_observer12
         _ACTIVE_FIXTURES[name12]["initial"] = changed
+        update_gate_marker(marker, run_id, name12, changed, "replacement-invocation")
+        close_cgroup_observer(old_observer12)
         systemd_stop(name12)
         stopped12 = wait_inactive(name12, time.monotonic() + STOP_TIMEOUT + 3, expected_invocation=changed["InvocationID"], control_group=changed["ControlGroup"])
-        empty12 = read_cgroup_observer(_ACTIVE_FIXTURES[name12]["cgroup_observer"])
+        empty12 = read_cgroup_observer(new_observer12)
         # QP-12 is fully stopped and collected before QP-11 creates its
         # independent active fixture for the sticky-marker gate exercise.
         cleanup12 = _stop_and_cleanup(
@@ -1912,7 +1922,16 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["scenarios"].append({
             "id": "QP-12", "status": "PASS",
             "decision": "ABORT_NOT_QUIESCENT",
-            "reason": "direct root restart changed InvocationID; snapshots were not combined",
+            "reason": "direct root restart changed InvocationID; old and replacement cgroup observers were kept separate",
+            "observations": {
+                "old_invocation": initial12["InvocationID"],
+                "replacement_invocation": changed["InvocationID"],
+                "old_cgroup_identity": old_observer12["identity"],
+                "replacement_cgroup_identity": new_observer12["identity"],
+                "old_cgroup_populated_after_restart": old_cgroup_after_restart12["values"]["populated"],
+                "replacement_cgroup_populated_before_stop": new_cgroup_before_stop12["values"]["populated"],
+                "replacement_cgroup_populated_after_stop": empty12["values"]["populated"],
+            },
         })
 
         # QP-11: second actor is rejected; after simulated supervisor/orchestrator
