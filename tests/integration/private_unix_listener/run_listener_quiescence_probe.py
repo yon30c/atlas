@@ -1192,6 +1192,9 @@ def preflight() -> dict:
             raise Incomplete(f"{label} fixture UID/GID is not provisioned") from exc
         if account.pw_gid != gid:
             raise Incomplete(f"{label} account primary GID differs from fixture GID")
+        supplementary_groups = sorted(set(os.getgrouplist(account.pw_name, gid)))
+        if supplementary_groups != [gid]:
+            raise Incomplete(f"{label} fixture identity has supplementary groups")
         if uid == 0 or gid == 0:
             raise Incomplete("fixture identities must be non-root")
     runner_path = Path(__file__).resolve()
