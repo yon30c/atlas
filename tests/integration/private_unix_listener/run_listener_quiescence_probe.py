@@ -211,6 +211,8 @@ def assert_unit_absent(name: str) -> None:
 def wait_unit_absent(name: str, deadline: float) -> None:
     while time.monotonic() < deadline:
         if unit_is_absent(name):
+            if list_jobs_for_unit(name):
+                raise Incomplete("Manager.ListJobs still reports a job for an unloaded fixture")
             return
         time.sleep(0.05)
     raise Incomplete("systemd retained a reference to the stopped transient fixture")
