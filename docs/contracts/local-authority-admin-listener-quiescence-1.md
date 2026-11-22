@@ -2,7 +2,7 @@
 
 **Identificador:** ATLAS-CONTRACT-LOCAL-AUTHORITY-LISTENER-QUIESCENCE  
 **Versión:** 1.0-draft  
-**Estado:** R1–R7 aprobadas expresamente por el propietario como baseline de diseño (2026-11-21); contrato v1.0-draft, pendiente de validación experimental y sin autorización operativa, implementación ni despliegue.  
+**Estado:** R1–R7 aprobadas expresamente por el propietario como baseline de diseño (2026-11-21); implementación del harness QP experimental autorizada en la rama de experimento (2026-11-22), aún sin validar. Contrato v1.0-draft, sin autorización operativa, listener persistente ni despliegue.  
 **Fecha:** 21 de noviembre de 2026.  
 **Ámbito:** alternativa A — listener AF_UNIX/SOCK_SEQPACKET creado y poseído por el proceso del servicio bajo `atlas-runtime`.  
 **Dependencias:** TCB-1; `atlas-admin/1`; `local-authority-admin-listener-lifecycle.md`; `local-authority-admin-private-listener-stale-recovery.md`; A-IPC-04.
@@ -31,7 +31,7 @@ El propietario aprobó R1–R7 como baseline de diseño el 2026-11-21. Esta apro
 - el arranque normal debe seguir fallando cerrado ante cualquier pathname preexistente;
 - el token de SR-10 continúa siendo fixture-only y no representa aprobación humana.
 
-El diseño detallado del probe QP-01..QP-15 está en `docs/design/local-authority-admin-listener-quiescence-probe.md`. Su existencia tampoco autoriza implementar ni ejecutar el probe.
+El diseño detallado del probe QP-01..QP-15 está en `docs/design/local-authority-admin-listener-quiescence-probe.md`. El propietario autorizó implementar el harness experimental en GitHub; esa autorización no permite ejecutarlo en un host ni convierte sus resultados no validados en evidencia del contrato.
 
 ## 3. Modelo de confianza y supuestos
 
@@ -224,11 +224,11 @@ La validación debe ejecutarse únicamente en una VM desechable y con fixtures; 
 | QP-06 | Cgroup delegado o posibilidad de migración | ABORT |
 | QP-07 | Lectura `cgroup.events` parcial, inaccesible o malformada | ABORT |
 | QP-08 | Intento de fork después de bind | Rechazado por diseño/política o contenido dentro del cgroup y terminado; nunca escapar |
-| QP-09 | Intento de enviar/recibir listener FD mediante `SCM_RIGHTS` | Rechazado; no aparece descriptor externo |
+| QP-09 | Intento de duplicar/transferir listener FD mediante `SCM_RIGHTS`, `fcntl/dup*` o `io_uring` | Rechazado por política; no aparece descriptor externo |
 | QP-10 | Intento de exec con FD | El descriptor no sobrevive exec por CLOEXEC |
-| QP-11 | Start/restart concurrente durante mantenimiento | Bloqueado por puerta exclusiva |
+| QP-11 | Start/restart concurrente durante mantenimiento | El test double del harness rechaza segundo actor y conserva marcador tras caída simulada; no valida un supervisor productivo |
 | QP-12 | Unidad reiniciada/sustituida entre snapshots | ABORT por discrepancia de invocación |
-| QP-13 | FD retenido por systemd socket unit | Caso fuera de alcance; no declarar QUIESCENT con este contrato |
+| QP-13 | FD retenido por proceso externo OTHER mediante SCM_RIGHTS (fixture negativo) | ABORT; cgroup del servicio vacío no basta mientras OTHER conserva el FD. No es socket activation |
 | QP-14 | Fallo del supervisor o pérdida de conexión al manager | ABORT; pathname preservado |
 | QP-15 | Evidencia completa seguida de cambio de cgroup antes de cierre | Detectar discrepancia o ABORT; no avanzar a pathname mutation |
 
@@ -240,7 +240,7 @@ A-THREAT-05 no puede declararse cerrada hasta que:
 
 1. el propietario apruebe este contrato o una revisión corregida;
 2. el lifecycle del servicio garantice y demuestre Q-01..Q-08;
-3. se implemente un probe aislado que valide QP-01..QP-15 en el entorno objetivo;
+3. se ejecute y valide el runner aislado QP-01..QP-15 en el entorno objetivo;
 4. se demuestre la ausencia de listener FD fuera del cgroup bajo el modelo TCB-1;
 5. la puerta de mantenimiento impida reinicio concurrente durante la decisión;
 6. se defina la autorización humana real y auditable para la retirada;
@@ -266,15 +266,15 @@ Este borrador recomienda:
 ## 12. Límites del trabajo actual
 
 - No existe todavía listener persistente ni unidad de servicio Atlas.
-- No se creó ni modificó ninguna unidad systemd, cgroup, usuario, grupo, ruta, permiso o servicio.
+- No se creó ni modificó ninguna unidad systemd, cgroup, usuario, grupo, ruta, permiso o servicio en un host durante esta sesión.
 - No se modificó el handler IPC ni el contrato `atlas-admin/1`.
-- No se implementó herramienta de mantenimiento ni recuperación. El runner QP es un harness experimental parcial, no una herramienta operativa.
-- A-IPC-04 valida el harness SR-01..SR-12, no este contrato ni la propiedad del descriptor de un servicio real.
-- R1–R7 están aprobadas como baseline de diseño, pero no se han implementado ni validado.
-- El diseño QP-01..QP-15 y la resolución documental de sus seis dependencias previas a implementación están en `docs/design/local-authority-admin-listener-quiescence-probe.md` §9; existe un runner parcial en `tests/integration/private_unix_listener/run_listener_quiescence_probe.py`; no se ha ejecutado y no valida todavía el contrato completo.
-- La puerta propuesta serializa actores autorizados, pero no puede impedir que root invoque PID 1 directamente; root permanece dentro del TCB.
-- El cleanup del probe futuro podrá retirar solo el endpoint fixture creado por esa ejecución y validado por `st_dev/st_ino`; no es stale recovery ni modifica la autorización de `unlinkat` para Atlas.
-- El asistente solo preparó documentación en GitHub; no ejecutó pruebas, builds, workflows ni probes.
+- El runner QP-01..QP-15 está implementado en `tests/integration/private_unix_listener/run_listener_quiescence_probe.py`, pero es un harness experimental, no una herramienta operativa; no se ha ejecutado ni validado.
+- R1–R7 están aprobadas como baseline de diseño, pero sus requisitos de servicio siguen sin implementación/validación.
+- El runner usa supervisor temporal interno para QP-11, cgroup observers fijados, cleanup bifásico por identidad y ausencia de unidad/jobs; QP-11 simula la caída y no demuestra un supervisor independiente. QP-12 confirma que root puede eludir la puerta.
+- QP-13 usa un holder OTHER que recibe el FD por SCM_RIGHTS; no implementa ni valida socket activation.
+- A-IPC-04 valida SR-01..SR-12, no este contrato ni la propiedad del descriptor de un servicio real.
+- El cleanup del runner puede retirar solo endpoint/archivos fixture creados por esa ejecución y validados por identidad; no es stale recovery ni modifica la autorización de `unlinkat` para Atlas.
+- No se ejecutaron pruebas, builds, workflows ni probes. La validación futura será solo en `Atlas-VM-test`, nunca en `greed`.
 - No se debe ejecutar ninguna parte de este borrador en el host `greed`.
 
 ## 13. Referencias relacionadas
