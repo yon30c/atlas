@@ -51,7 +51,7 @@ Atlas todavía no es la plataforma autónoma completa de la visión. La presenci
 
 - Consola conversacional local mediante `python -m atlas`, integración con Ollama, streaming y modo offline informativo.
 - Persistencia SQLite de conversaciones, recuperación de conversación activa, administración, exportación JSON y backup cifrado con verificación/restauración.
-- Interpretación y planificación funcional F1 aislada en `main`; la rama `work/atlas-mvp-runtime` añade `/plan` como vista previa. El incremento está validado localmente con 14 pruebas focalizadas y `compileall`; la suite completa de la rama sigue pendiente.
+- Interpretación y planificación funcional F1 aislada en `main`; la rama `work/atlas-mvp-runtime` añade `/plan` como vista previa. El incremento está validado localmente con 14 pruebas focalizadas y también quedó incluido en la suite completa de 1,611 tests aprobada en la rama.
 - Capacidades locales de Workspace para listar y leer archivos; protocolo controlado de escritura disponible como componente, pero no habilitado en el catálogo/runtime.
 - Gate CAM local de solo lectura para `workspace.list` y `workspace.read`, con identidad canónica, Project/Environment, Grant y UoW compartida; no conectado a CLI/runtime.
 - Persistencia canónica de Identity(USER), Project, Environment, Grants, asociaciones Project–Environment y Workspaces.
@@ -259,7 +259,7 @@ También ejecutó:
 
 sin errores reportados.
 
-**Conclusión:** las pruebas focalizadas del servicio y del adaptador SQLite pasan y el árbol compila. La suite completa de la rama `work/atlas-mvp-runtime` sigue pendiente. No se han validado aún migración sobre una base de datos persistente real, pruebas de integración del flujo de login ni composición operativa. Mantener login, bootstrap, Workspace y CAM deshabilitados.
+**Conclusión:** las pruebas focalizadas del servicio y del adaptador SQLite pasan y el árbol compila. En ese checkpoint histórico la suite completa de la rama `work/atlas-mvp-runtime` seguía pendiente; posteriormente fue validada con 1,611 tests (1 omitido), como consta en el encabezado vigente. No se han validado migración sobre una base de datos persistente real, pruebas E2E del login ni composición operativa. Mantener login, bootstrap, Workspace y CAM deshabilitados.
 
 **Siguiente paso:** ejecutar la suite unitaria completa en Debian; revisar el resultado antes de decidir si se integra o si hacen falta correcciones. No modificar `main`.
 
