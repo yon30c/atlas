@@ -19,6 +19,7 @@ from pathlib import Path
 import platform
 import pwd
 import secrets
+import selectors
 import signal
 import socket
 import stat
@@ -66,19 +67,62 @@ def emit(event: dict) -> None:
 
 
 def bounded_run(argv: list[str], timeout: float = 5.0, limit: int = MAX_DBUS) -> bytes:
-    result = subprocess.run(
+    """Run a fixed argv with streaming output bounds and process-group timeout."""
+    if not argv or timeout <= 0 or limit < 1:
+        raise Incomplete("invalid bounded subprocess request")
+    process = subprocess.Popen(
         argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE, timeout=timeout, check=False,
+        stderr=subprocess.PIPE, start_new_session=True, close_fds=True,
         env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"},
     )
-    if len(result.stdout) > limit or len(result.stderr) > limit:
-        raise Incomplete(f"subprocess output exceeded {limit} bytes: {argv[0]}")
-    if result.returncode:
+    selector = selectors.DefaultSelector()
+    buffers = {"stdout": bytearray(), "stderr": bytearray()}
+    streams = ((process.stdout, "stdout"), (process.stderr, "stderr"))
+    try:
+        for stream, label in streams:
+            os.set_blocking(stream.fileno(), False)
+            selector.register(stream, selectors.EVENT_READ, label)
+        deadline = time.monotonic() + timeout
+        while selector.get_map():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise Incomplete(f"{argv[0]} exceeded {timeout:.1f}s timeout")
+            for key, _mask in selector.select(min(remaining, 0.1)):
+                chunk = os.read(key.fileobj.fileno(), 4096)
+                if not chunk:
+                    selector.unregister(key.fileobj)
+                    key.fileobj.close()
+                    continue
+                target = buffers[key.data]
+                target.extend(chunk)
+                if len(target) > limit:
+                    raise Incomplete(
+                        f"{argv[0]} {key.data} exceeded {limit}-byte output limit"
+                    )
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise Incomplete(f"{argv[0]} exceeded {timeout:.1f}s timeout")
+        returncode = process.wait(timeout=remaining)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise Incomplete(f"{argv[0]} subprocess supervision failed: {type(exc).__name__}") from exc
+    except BaseException:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait()
+        raise
+    finally:
+        selector.close()
+        for stream, _label in streams:
+            if not stream.closed:
+                stream.close()
+    if returncode:
         raise Incomplete(
-            f"{argv[0]} exited {result.returncode}; "
-            f"stderr={result.stderr[:512].decode('utf-8', 'replace')}"
+            f"{argv[0]} exited {returncode}; "
+            f"stderr={bytes(buffers['stderr'][:512]).decode('utf-8', 'replace')}"
         )
-    return result.stdout
+    return bytes(buffers["stdout"])
 
 
 def busctl_json(*args: str, timeout: float = 5.0) -> dict:
