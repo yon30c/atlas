@@ -1,6 +1,6 @@
 # Protocolo de prueba para autenticación y decisión directa del bootstrap LOCAL
 
-**Estado:** contrato de protocolo propuesto; pendiente de revisión antes de implementar.
+**Estado:** contrato de protocolo propuesto; arquitectura de origen de prueba resuelta; formato binario, custodia y frontera privilegiada todavía pendientes.
 **Relacionado:** local-pam-bootstrap-authenticator.md, ME-D4O-A-authenticated-domain-bootstrap.md.
 **Alcance:** enlazar una reautenticación PAM reciente y una decisión interactiva del operador con una única solicitud de bootstrap LOCAL.
 
@@ -32,9 +32,11 @@ La solicitud de bootstrap debe originarse en un coordinador confiable y en estad
 
 **Decisión pendiente:** arquitectura concreta del emisor de desafíos y su clave. No se acepta que Assistant firme desafíos, que el caller invente un desafío válido o que el helper firme ciegamente bytes proporcionados por el caller. El emisor debe consultar/validar el estado protegido de bootstrap pendiente y solo emitir desafíos para la única operación inicial LOCAL permitida.
 
-## 3. Contrato lógico de desafío
+## 3. Descriptor protegido y datos de invocación
 
-El desafío autenticado contiene exactamente:
+No existe un challenge firmado ni un emisor separado. El helper lee el descriptor desde configuración protegida del host. El caller no suministra descriptor, action, profile, epoch, sujeto, host, timestamp ni IDs aleatorios.
+
+El descriptor protegido contiene exactamente los campos definidos por `local-bootstrap-coordination-architecture.md` §2 y ME-D4O-A §3. La revisión y el digest de esa configuración se fijan antes de la interacción. Los siguientes valores de la prueba se generan dentro del helper después de validar la configuración:
 
 | Campo | Tipo lógico | Regla |
 |---|---|---|
@@ -55,7 +57,7 @@ El desafío autenticado contiene exactamente:
 
 El desafío se autentica mediante un mecanismo que el helper verifica sin compartir con el caller la clave privada del emisor. Campos desconocidos, duplicados, omitidos, fuera de rango o no canónicos se rechazan.
 
-El helper verifica que el desafío está destinado al host y sujeto configurados, corresponde a un bootstrap inicial aún pendiente y que no existe ya un dominio activo o una génesis previa. La autoridad de ese estado debe ser una fuente protegida independiente del caller.
+El helper verifica la integridad, canonicalización, permisos, sujeto local y host de la configuración. No determina si el bootstrap continúa pendiente: esa condición solo puede decidirla el coordinador CAM dentro de la UoW de génesis.
 
 ## 4. Presentación y decisión del operador
 
@@ -78,12 +80,15 @@ Después de confirmar, el helper realiza PAM para el sujeto local configurado. T
 
 ## 5. Contrato lógico de prueba
 
-Tras verificar el desafío, capturar la decisión y completar PAM (incluida la comprobación de cuenta), el helper emite una prueba con:
+Tras validar la configuración protegida, capturar la decisión y completar PAM (incluida la comprobación de cuenta), el helper genera request_id, nonce y proof_id criptográficamente aleatorios y emite una prueba con:
 
 | Campo | Tipo lógico | Regla |
 |---|---|---|
 | proof_version | entero | Versión admitida |
-| issuer_id | ID opaco | Identidad de emisor de helper |
+| issuer_id | ID opaco | Identidad de emisor de helper, fijada en configuración protegida |
+| key_id | ID opaco | Clave Ed25519 autorizada, fijada en configuración protegida |
+| config_revision | entero/ID opaco | Revisión exacta de configuración protegida |
+| config_digest | 32 bytes | SHA-256 de la configuración canónica versionada |
 | proof_id | 128 bits | Aleatorio, único |
 | request_id | 128 bits | Igual al desafío |
 | nonce | 256 bits | Igual al desafío |
@@ -117,7 +122,7 @@ No se firmará JSON libre ni concatenaciones ambiguas. La representación de tra
 
 El digest del descriptor se calcula sobre la canonicalización versionada que define ME-D4O-A §3. No se crea una segunda canonicalización independiente del descriptor dentro del helper.
 
-**Pendiente antes de código:** fijar layout binario definitivo, límites máximos, endianness, codificación de IDs y vectores de prueba.
+**Pendiente antes de código:** fijar layout binario definitivo, límites máximos, endianness, codificación de IDs y vectores de prueba. La estructura debe incluir los campos de configuración/revisión anteriores y usar el mismo digest de descriptor que valida CAM; no se serializará un challenge.
 
 ## 7. Algoritmo criptográfico
 
@@ -135,12 +140,12 @@ El verificador realiza, en orden:
 2. Selección de clave pública por key_id de una lista local confiable; nunca por ruta o URL del payload.
 3. Verificación de firma y dominio de separación.
 4. Validación de ventana temporal, skew permitido y duración máxima.
-5. Comparación exacta con el desafío pendiente: request_id, nonce, acción, perfil, dominio, época, digest, sujeto, host y confirmation commitment.
-6. Validación de emisor, sujeto local configurado, binding aprobado y estado bootstrap todavía pendiente.
-7. Consumo atómico de request_id, nonce y proof_id en la autoridad protegida.
+5. Comparación exacta con la configuración protegida vigente: revisión/digest, acción, perfil, dominio, época, descriptor, sujeto, host, binding y confirmation commitment.
+6. Validación del emisor/key_id autorizados, sujeto local configurado, binding aprobado y estado bootstrap todavía pendiente dentro de la UoW de génesis.
+7. Consumo atómico de request_id, nonce y proof_id en la misma UoW que la génesis.
 8. Solo después de consumo confirmado, producir un objeto interno de evidencia verificada para la operación de génesis.
 
-El almacenamiento de consumo debe tener restricciones únicas para nonce, request_id y proof_id. La transacción serializa intentos concurrentes: como máximo uno puede consumir la prueba. El consumo y la admisión a génesis deben coordinarse según el protocolo de bootstrap y su UoW; no se confirma consumo en una DB distinta y se asume que la génesis ocurrió. Si hay resultado ambiguo por caída, el estado queda bloqueado y requiere reconciliación explícita.
+El almacenamiento de consumo debe tener restricciones únicas para nonce, request_id y proof_id. La transacción serializa intentos concurrentes: como máximo uno puede consumir la prueba. El consumo, el binding, la identidad, el evento DOMAIN_BOOTSTRAPPED y la proyección Recovery Gate se confirman o revierten juntos. No hay tabla de challenges pendientes ni consumo previo en otra DB. Si hay resultado ambiguo por caída, la idempotencia exacta resuelve el mismo request; cualquier discrepancia mantiene el gate cerrado.
 
 La firma válida sin registro de desafío pendiente y sin consumo atómico no es suficiente. Un OwnerDecisionProof interno solo puede construirse por el verificador confiable, nunca mediante deserialización directa desde el caller.
 
@@ -159,11 +164,11 @@ El reloj de pared sirve para expiración y auditoría, no para impedir replay; e
 
 ## 10. Fallos y recuperación
 
-- Firma inválida, challenge desconocido, expiración, descriptor distinto, sujeto distinto, TTY no confiable o PAM fallido: no emitir prueba.
+- Firma inválida, configuración desconocida/alterada, expiración, descriptor distinto, sujeto distinto, TTY no confiable o PAM fallido: no admitir génesis.
 - Error de persistencia o consumo: no devolver evidencia verificada.
-- Caída tras emisión pero antes del consumo: la prueba puede verificarse solo mientras el desafío siga pendiente y no expirado.
-- Caída durante consumo: resolver mediante transacción durable; resultado ambiguo mantiene Recovery Gate cerrado.
-- Reintento de la misma prueba: rechazo como ya consumida.
+- Caída tras emisión y antes de la génesis: la prueba solo se admite si sigue vigente y el dominio continúa sin génesis.
+- Caída durante la transacción: SQLite revierte consumo y génesis juntos; si el resultado del commit es ambiguo, resolver por request_id y descriptor exactos, sin crear otra identidad.
+- Reintento exacto después de commit: devolver el resultado histórico de esa misma operación; reuso para una operación distinta o descriptor distinto: rechazo.
 - Descriptor diferente: requiere una nueva solicitud y una nueva decisión interactiva.
 - Bootstrap ya completado: rechazo; no hay ruta de rebootstrap por este protocolo.
 
@@ -175,7 +180,7 @@ El perfil LOCAL acepta explícitamente la limitación anti-rollback descrita por
 
 ## 12. Decisiones que deben cerrarse antes de implementación
 
-1. **Resuelto a nivel de arquitectura:** no existe emisor separado de desafíos. El helper C lee el descriptor desde configuración protegida, recoge la decisión y PAM, y emite directamente la prueba firmada; CAM verifica el estado pendiente y consume la prueba junto con la génesis. Siguen pendientes la implementación y las pruebas de esta frontera.
+1. **Resuelto a nivel de arquitectura:** no existe emisor separado de desafíos ni challenge firmado. El helper C lee el descriptor desde configuración protegida, genera request_id/nonce/proof_id, recoge la decisión y PAM, y emite directamente la prueba firmada; CAM verifica el estado pendiente y consume la prueba junto con la génesis. Siguen pendientes la implementación y las pruebas de esta frontera.
 2. Layout binario final y vectores de serialización/canonicalización.
 3. Disponibilidad real de OpenSSL EVP headers/libs en Debian.
 4. Custodia de clave, key_id, rotación y permisos de helper/configuración.
@@ -204,13 +209,13 @@ Esta lista es una meta de composición, no una afirmación de que las tablas, pu
 
 ### Bloqueadores que permanecen abiertos
 
-1. No existe un emisor separado de desafíos ni debe añadirse: la arquitectura de coordinación §14 y `local-bootstrap-coordination-architecture.md` sustituyen esta propuesta anterior. El helper es el emisor de la prueba; el estado pendiente se verifica dentro de CAM al consumirla. La implementación del helper, su configuración protegida y el coordinador CAM siguen pendientes.
+1. No existe ni debe añadirse un emisor separado de desafíos. El helper genera los identificadores aleatorios y firma la prueba tras leer la configuración protegida; CAM valida el estado pendiente dentro de la UoW de génesis. La implementación del helper, su configuración protegida y el coordinador CAM siguen pendientes.
 2. No existe todavía un binding persistente y verificable entre el sujeto Linux greed y el UserId/Identity(USER) que se creará. No derivar el ID canónico del UID ni del nombre.
 3. No existe el evento DOMAIN_BOOTSTRAPPED ni su coordinador transaccional integrado.
 4. No está decidido cómo el helper demuestra que su TTY y su invocación privilegiada son confiables.
 5. No se han comprobado OpenSSL EVP headers/libs ni la custodia viable de la clave privada en el host.
 
-Por estos bloqueadores, el protocolo queda documentado como diseño propuesto, pero no está listo para implementación del helper. El próximo incremento debe resolver el modelo de emisor/desafío y el binding del propietario antes de fijar el layout binario.
+Por estos bloqueadores, el protocolo queda documentado como diseño propuesto, pero no está listo para implementación del helper. El modelo de emisor/challenge ya quedó resuelto por §14. El binding persistente del propietario, el layout binario, la custodia de clave, la invocación/TTY y la coordinación transaccional siguen pendientes antes de implementar el helper.
 
 ## 14. Resolución de arquitectura: sin emisor de desafíos separado
 
