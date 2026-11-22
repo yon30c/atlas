@@ -572,9 +572,19 @@ def systemd_stop(name: str) -> None:
     )
 
 
-def wait_inactive(name: str, deadline: float) -> dict:
+def wait_inactive(name: str, deadline: float, *,
+                  expected_invocation: list | None = None,
+                  control_group: str | None = None) -> dict:
     last = None
     while time.monotonic() < deadline:
+        if expected_invocation is not None and unit_is_absent(name):
+            if list_jobs_for_unit(name):
+                raise Incomplete("unit unloaded while Manager.ListJobs still reports a job")
+            return {
+                "Id": name, "InvocationID": expected_invocation,
+                "ControlGroup": control_group, "ActiveState": "inactive",
+                "MainPID": 0, "Job": [0, "/"], "manager_unloaded": True,
+            }
         last = unit_snapshot(name)
         if last["ActiveState"] == "inactive" and last["Job"][0] == 0:
             return last
@@ -1203,7 +1213,7 @@ def _stop_and_cleanup(name: str, initial: dict, socket_path: Path | None, ready_
                 raise Incomplete("InvocationID changed before cleanup; refusing to stop replacement")
             systemd_stop(name)
             cleanup["stop_requested"] = True
-            final = wait_inactive(name, time.monotonic() + STOP_TIMEOUT + 3)
+            final = wait_inactive(name, time.monotonic() + STOP_TIMEOUT + 3, expected_invocation=initial["InvocationID"], control_group=initial["ControlGroup"])
             cleanup["unit_inactive"] = final["ActiveState"] == "inactive"
         if not cleanup["unit_inactive"]:
             raise Incomplete("fixture unit is not confirmed inactive")
@@ -1378,7 +1388,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["snapshots"].append({"scenario": "QP-01", "phase": "before-stop",
                                     "monotonic_ns": mono(), "unit": initial, "cgroup": before})
         systemd_stop(name)
-        stopped = wait_inactive(name, time.monotonic() + STOP_TIMEOUT + 3)
+        stopped = wait_inactive(name, time.monotonic() + STOP_TIMEOUT + 3, expected_invocation=initial["InvocationID"], control_group=initial["ControlGroup"])
         after1 = read_cgroup_observer(observer01)
         time.sleep(0.05)
         stable = observe_stopped_unit(name, initial["InvocationID"], initial["ControlGroup"])
@@ -1424,7 +1434,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         if before2["values"]["populated"] != 1:
             raise Incomplete("QP-02 did not observe the helper in a populated service cgroup")
         systemd_stop(name2)
-        stopped2 = wait_inactive(name2, time.monotonic() + STOP_TIMEOUT + 3)
+        stopped2 = wait_inactive(name2, time.monotonic() + STOP_TIMEOUT + 3, expected_invocation=initial2["InvocationID"], control_group=initial2["ControlGroup"])
         after2_first = read_cgroup_observer(observer02)
         time.sleep(0.05)
         stable2 = observe_stopped_unit(name2, initial2["InvocationID"], initial2["ControlGroup"])
@@ -1467,7 +1477,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         )
         if populated3["values"]["populated"] != 1 or transitional3["Job"][0] == 0:
             raise Incomplete("QP-03 failed to observe deactivation, a pending stop job and a live cgroup")
-        stopped3 = wait_inactive(name3, time.monotonic() + STOP_TIMEOUT + 5)
+        stopped3 = wait_inactive(name3, time.monotonic() + STOP_TIMEOUT + 5, expected_invocation=initial3["InvocationID"], control_group=initial3["ControlGroup"])
         empty3 = read_cgroup_observer(_ACTIVE_FIXTURES[name3]["cgroup_observer"])
         cleanup3 = _stop_and_cleanup(
             name3, initial3, endpoint3, ready3, run_dir_fd, report,
@@ -1491,7 +1501,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         )
         if transitional4["Job"][0] == 0 or populated4["values"]["populated"] != 1:
             raise Incomplete("QP-04 did not observe a pending stop job with a populated cgroup")
-        stopped4 = wait_inactive(name4, time.monotonic() + STOP_TIMEOUT + 5)
+        stopped4 = wait_inactive(name4, time.monotonic() + STOP_TIMEOUT + 5, expected_invocation=initial4["InvocationID"], control_group=initial4["ControlGroup"])
         empty4 = read_cgroup_observer(_ACTIVE_FIXTURES[name4]["cgroup_observer"])
         cleanup4 = _stop_and_cleanup(
             name4, initial4, endpoint4, ready4, run_dir_fd, report,
@@ -1724,7 +1734,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         if holder_evidence13.get("socket_type") != socket.SOCK_SEQPACKET or holder_evidence13.get("accepting") != 1 or not holder_evidence13.get("fd_open"):
             raise Incomplete("QP-13 external holder did not retain the active listener FD")
         systemd_stop(name13_service)
-        stopped13 = wait_inactive(name13_service, time.monotonic() + STOP_TIMEOUT + 3)
+        stopped13 = wait_inactive(name13_service, time.monotonic() + STOP_TIMEOUT + 3, expected_invocation=initial13_service["InvocationID"], control_group=initial13_service["ControlGroup"])
         empty13 = read_cgroup_observer(_ACTIVE_FIXTURES[name13_service]["cgroup_observer"])
         holder_still_active13 = unit_snapshot(name13_holder)
         holder_cgroup13 = read_cgroup_observer(_ACTIVE_FIXTURES[name13_holder]["cgroup_observer"])
@@ -1739,7 +1749,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         ):
             raise Incomplete("QP-13 did not demonstrate empty service cgroup with external FD holder")
         systemd_stop(name13_holder)
-        stopped13_holder = wait_inactive(name13_holder, time.monotonic() + STOP_TIMEOUT + 3)
+        stopped13_holder = wait_inactive(name13_holder, time.monotonic() + STOP_TIMEOUT + 3, expected_invocation=initial13_holder["InvocationID"], control_group=initial13_holder["ControlGroup"])
         empty13_holder = read_cgroup_observer(_ACTIVE_FIXTURES[name13_holder]["cgroup_observer"])
         cleanup13_holder = _stop_and_cleanup(
             name13_holder, initial13_holder, control13, ready13_holder,
@@ -1858,7 +1868,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             raise Incomplete("QP-12 restart did not produce a distinct InvocationID")
         _ACTIVE_FIXTURES[name12]["initial"] = changed
         systemd_stop(name12)
-        stopped12 = wait_inactive(name12, time.monotonic() + STOP_TIMEOUT + 3)
+        stopped12 = wait_inactive(name12, time.monotonic() + STOP_TIMEOUT + 3, expected_invocation=changed["InvocationID"], control_group=changed["ControlGroup"])
         empty12 = read_cgroup_observer(_ACTIVE_FIXTURES[name12]["cgroup_observer"])
         # QP-12 unit remains referenced through QP-11 so its inactive state can
         # be observed; release the manager reference only after the gate test.
@@ -1958,7 +1968,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["gate"]["qp11_sticky_marker_blocked_after_crash"] = True
         report["gate"]["qp11_harness_reacquired_for_evidence_cleanup"] = True
         systemd_stop(name11)
-        stopped11 = wait_inactive(name11, time.monotonic() + STOP_TIMEOUT + 3)
+        stopped11 = wait_inactive(name11, time.monotonic() + STOP_TIMEOUT + 3, expected_invocation=initial11["InvocationID"], control_group=initial11["ControlGroup"])
         empty11 = read_cgroup_observer(_ACTIVE_FIXTURES[name11]["cgroup_observer"])
         cleanup11 = _stop_and_cleanup(
             name11, initial11, None, ready11, run_dir_fd, report,
@@ -2031,7 +2041,9 @@ def run_probe(args: argparse.Namespace) -> dict:
                         if current_fixture["Job"][0] == 0:
                             systemd_stop(fixture_name)
                         final_fixture = wait_inactive(
-                            fixture_name, time.monotonic() + STOP_TIMEOUT + 5
+                            fixture_name, time.monotonic() + STOP_TIMEOUT + 5,
+                            expected_invocation=initial_fixture["InvocationID"],
+                            control_group=initial_fixture["ControlGroup"],
                         )
                     else:
                         final_fixture = current_fixture
