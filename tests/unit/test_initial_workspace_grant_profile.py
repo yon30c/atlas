@@ -104,6 +104,18 @@ class InitialWorkspaceGrantProfileTests(unittest.TestCase):
                 issued_at=NOW,
             )
 
+    def test_rejects_wildcard_workspace_id(self):
+        with self.assertRaises(ContractError):
+            InitialWorkspaceGrantDescriptor(
+                project_id="project",
+                environment_id="environment",
+                workspace_id="workspace*",
+                list_grant_id=str(uuid4()),
+                read_grant_id=None,
+                selected_file_paths=(),
+                issued_at=NOW,
+            )
+
     def test_rejects_duplicate_grant_ids(self):
         grant_id = str(uuid4())
         with self.assertRaises(ContractError):

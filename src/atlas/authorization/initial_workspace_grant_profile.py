@@ -49,6 +49,8 @@ class InitialWorkspaceGrantDescriptor:
                 or value.strip() != value
             ):
                 raise ContractError(f"{field} debe ser texto no vacío y normalizado")
+        if "*" in self.workspace_id or "?" in self.workspace_id:
+            raise ContractError("workspace_id no admite wildcards")
         validate_canonical_uuid4(self.list_grant_id, "list_grant_id")
         if self.read_grant_id is not None:
             validate_canonical_uuid4(self.read_grant_id, "read_grant_id")
