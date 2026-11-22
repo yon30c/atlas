@@ -22,14 +22,14 @@
 | Demora tras el 1.er fallo | 1 minuto |
 | Demora tras el 2.º fallo | 2 minutos |
 | Demora tras el 3.er fallo | 4 minutos |
-| Demora tras el 4.º fallo | 8 minutos |
+| Demora tras el 4.º fallo | 7 minutos |
 | Demora tras el 5.º y siguientes | 15 minutos |
 | Reservas simultáneas máximas por cuenta | 2 |
 | TTL de cada reserva | 120 segundos |
 | Éxito confirmado | elimina el historial de fallos de esa cuenta |
 | Reserva abandonada/expirada | no cuenta como fallo |
 
-La demora se calcula al completar un fallo: se cuenta el fallo recién completado junto con los fallos anteriores aún dentro de la ventana. El bloqueo vigente es el mayor `blocked_until` entre esos fallos. Los fallos fuera de la ventana dejan de contribuir. No existe bloqueo permanente.
+La demora se calcula al completar un fallo: se cuenta el fallo recién completado junto con los fallos anteriores aún dentro de la ventana. El bloqueo vigente respeta cualquier `blocked_until` futuro, aunque el fallo que lo originó alcance el límite de antigüedad de la ventana antes de que termine el bloqueo. Los fallos fuera de la ventana dejan de contribuir al cálculo de la siguiente demora. Al llegar exactamente a `blocked_until`, el bloqueo expira; no existe bloqueo permanente. La secuencia 1+2+4+7 permite que el quinto fallo ocurra a los 14 minutos, todavía dentro de la ventana de 15 minutos.
 
 Las reservas activas no son fallos. Una reserva expirada se elimina durante la siguiente operación atómica del guard. Una reserva no puede completarse después de su vencimiento; ese resultado es indisponibilidad y nunca puede producir un proof.
 
@@ -51,8 +51,8 @@ La clave persistida de cuenta será un digest determinista SHA-256 de una codifi
 1. Validar LoginHandle y contraseña.
 2. Abrir una UoW breve, resolver issuer por realm confiable y cerrar la UoW.
 3. Reservar intento mediante el guard; denegar antes de Argon2id si no hay cupo.
-4. Abrir una UoW breve para leer el autenticador por issuer + handle; cerrarla.
-5. Ejecutar Argon2id fuera de la UoW. Para handle desconocido se conserva la verificación dummy. Un mismatch, handle desconocido o autenticador inactivo completa el fallo en el guard y devuelve error genérico.
+4. Abrir una UoW breve para leer el autenticador por issuer + handle; cerrarla. La consulta de credenciales ocurre después de reservar el intento.
+5. Ejecutar Argon2id fuera de cualquier UoW y transacción SQLite de escritura. Para handle desconocido se conserva la verificación dummy. Un mismatch, handle desconocido o autenticador inactivo completa el fallo en el guard y devuelve error genérico.
 6. Preparar fuera de transacción el rehash si corresponde.
 7. Abrir una UoW breve; volver a resolver issuer y autenticador y comprobar estado, subject y `credential_revision`. Si cambió cualquier dato, denegar y abandonar la reserva, sin contarlo como contraseña incorrecta.
 8. Aplicar rehash con CAS si procede, crear proof y confirmar la UoW.
@@ -90,6 +90,6 @@ No se introducen tablas de secretos, sesiones, tokens, IPs ni contenido de crede
 - migración histórica checksum-safe y base ya migrada;
 - regresión de todos los tests existentes del servicio de autenticación.
 
-## 7. Límites
+## 7. Estado de implementación publicado — 2026-11-22\n\nSe publicaron en la rama de trabajo el puerto de reservas, la migración SQLite V28, el adaptador `SQLiteAuthenticationAttemptGuard`, la reestructuración de `NativeAuthenticationService` y pruebas unitarias del servicio y del adaptador. La migración V28 forma parte de `SQLITE_MIGRATIONS`. El servicio resuelve el issuer, reserva, consulta el autenticador, ejecuta Argon2id fuera de UoW y revalida issuer/autenticador/estado/subject/revisión antes de persistir el proof.\n\n**Estado:** implementación publicada, pendiente de revisión estática final y validación local por el propietario. No se han ejecutado pruebas ni compilaciones desde GitHub. No se habilitó composición operativa, login, Workspace ni CAM.\n\n## 8. Límites
 
 Este incremento no configura la clave HMAC, no provisiona issuer/owner/Grant, no habilita bootstrap, no conecta consola/Workspace/CAM, no crea endpoints ni sesiones y no modifica el host. El guard no ofrece por sí solo límites por IP/origen; cualquier límite de origen futuro deberá usar datos confiables del servidor/proxy, nunca un valor declarado por el cliente.
