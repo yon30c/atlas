@@ -1085,9 +1085,11 @@ def preflight() -> dict:
     for executable in ("busctl", "systemd-run", "systemctl", "git", "sleep"):
         if not __import__("shutil").which(executable):
             raise Incomplete(f"required executable missing: {executable}")
-    if not ctypes.util.find_library("seccomp"):
+    seccomp_library = ctypes.util.find_library("seccomp")
+    systemd_library = ctypes.util.find_library("systemd")
+    if not seccomp_library:
         raise Incomplete("libseccomp.so.2 is unavailable")
-    if not ctypes.util.find_library("systemd"):
+    if not systemd_library:
         raise Incomplete("libsystemd.so.0 is unavailable for persistent RefUnit references")
     for uid, gid, label in (
         (SERVICE_UID, SERVICE_GID, "SERVICE"),
@@ -1138,6 +1140,8 @@ def preflight() -> dict:
         "cgroup2_root": str(root), "cgroup2_mount": str(mount),
         "service_uid_gid": [SERVICE_UID, SERVICE_GID],
         "other_uid_gid": [OTHER_UID, OTHER_GID],
+        "libseccomp": seccomp_library,
+        "libsystemd": systemd_library,
         "effective_uid": os.geteuid(),
         "mutating_preflight": False,
     }
