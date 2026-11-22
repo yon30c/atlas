@@ -343,34 +343,69 @@ def read_bounded_chunks(read_call, limit: int) -> bytes:
     return b"".join(chunks)
 
 
-def cgroup_events(mount_root: Path, control_group: str) -> dict:
+_OPEN_CGROUP_OBSERVERS: list[dict] = []
+
+
+def open_cgroup_observer(mount_root: Path, control_group: str) -> dict:
     if not control_group.startswith("/") or ".." in Path(control_group).parts:
         raise Incomplete("systemd returned an unsafe ControlGroup path")
-    path = mount_root / control_group.lstrip("/") / "cgroup.events"
-    flags = os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0)
+    directory = mount_root / control_group.lstrip("/")
+    dir_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
     try:
-        fd = os.open(path, flags)
-        try:
-            raw = read_bounded_chunks(lambda size: os.read(fd, size), MAX_CGROUP)
-        finally:
-            os.close(fd)
+        directory_info = os.fstat(dir_fd)
+        if not stat.S_ISDIR(directory_info.st_mode):
+            raise Incomplete("ControlGroup does not resolve to a directory")
+        events_fd = os.open(
+            "cgroup.events", os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW,
+            dir_fd=dir_fd,
+        )
+    except Exception:
+        os.close(dir_fd)
+        raise
+    identity = {
+        "control_group": control_group,
+        "st_dev": directory_info.st_dev,
+        "st_ino": directory_info.st_ino,
+    }
+    observer = {
+        "dir_fd": dir_fd, "events_fd": events_fd,
+        "path": str(directory / "cgroup.events"), "identity": identity,
+    }
+    _OPEN_CGROUP_OBSERVERS.append(observer)
+    return observer
+
+
+def read_cgroup_observer(observer: dict) -> dict:
+    try:
+        os.lseek(observer["events_fd"], 0, os.SEEK_SET)
+        raw = read_bounded_chunks(
+            lambda size: os.read(observer["events_fd"], size), MAX_CGROUP
+        )
     except OSError as exc:
-        raise Incomplete(f"cannot read cgroup.events: errno={exc.errno}") from exc
+        raise Incomplete(f"cannot read pinned cgroup.events: errno={exc.errno}") from exc
+    parsed = _parse_cgroup_events_bytes(raw)
+    return {
+        "path": observer["path"], "raw": raw.decode("ascii"),
+        "values": parsed, "identity": dict(observer["identity"]),
+    }
+
+
+def close_cgroup_observer(observer: dict) -> None:
+    for key in ("events_fd", "dir_fd"):
+        fd = observer.get(key)
+        if fd is not None:
+            os.close(fd)
+            observer[key] = None
+    if observer in _OPEN_CGROUP_OBSERVERS:
+        _OPEN_CGROUP_OBSERVERS.remove(observer)
+
+
+def cgroup_events(mount_root: Path, control_group: str) -> dict:
+    observer = open_cgroup_observer(mount_root, control_group)
     try:
-        text = raw.decode("ascii", "strict")
-    except UnicodeError as exc:
-        raise Incomplete("cgroup.events is not ASCII") from exc
-    parsed = {}
-    for line in text.splitlines():
-        fields = line.split()
-        if len(fields) != 2 or fields[0] in parsed or fields[0] not in {"populated", "frozen"}:
-            raise Incomplete("cgroup.events contains malformed, duplicate or unknown keys")
-        if fields[1] not in {"0", "1"}:
-            raise Incomplete("cgroup.events contains a non-boolean value")
-        parsed[fields[0]] = int(fields[1])
-    if "populated" not in parsed:
-        raise Incomplete("cgroup.events lacks populated")
-    return {"path": str(path), "raw": text, "values": parsed}
+        return read_cgroup_observer(observer)
+    finally:
+        close_cgroup_observer(observer)
 
 
 def _json_no_duplicate_keys(pairs):
@@ -1220,6 +1255,7 @@ def run_probe(args: argparse.Namespace) -> dict:
     _CLEANED_FIXTURES.clear()
     _SANDBOX_DIRS.clear()
     _OPEN_DIR_FDS.clear()
+    _OPEN_CGROUP_OBSERVERS.clear()
     started_ns = mono()
     run_id = str(uuid.uuid4())
     report = {
