@@ -1606,13 +1606,28 @@ def run_probe(args: argparse.Namespace) -> dict:
                                     "monotonic_ns": mono(), "unit": stable, "cgroup": after2})
         if not quiescent:
             raise Incomplete("QP-01 did not satisfy the complete quiescence predicate")
-        policy01 = read_bounded_json_file(ready_path, expected_uid=SERVICE_UID, expected_gid=SERVICE_GID)["fd_policy"]
+        ready01_data = read_bounded_json_file(
+            ready_path, expected_uid=SERVICE_UID, expected_gid=SERVICE_GID
+        )
+        policy01 = ready01_data["fd_policy"]
+        if (
+            ready01_data.get("cap_eff") != 0
+            or ready01_data.get("cap_sys_admin") is not False
+            or ready01_data.get("cgroup_dir_write_access") is not False
+        ):
+            raise Incomplete("QP-01 fixture retained cgroup authority")
         cleanup = _stop_and_cleanup(name, initial, endpoint, ready_path, run_dir_fd, report, already_stopped=True, cgroup_empty_confirmed=True)
         report["cleanup"]["resources"].append(cleanup)
         record_scenario(report, {"id": "QP-01", "status": "PASS",
                                     "decision": "QUIESCENT",
-                                    "reason": "listener closed by service; fork/duplication/SCM_RIGHTS/io_uring paths denied; manager inactive and two correlated cgroup snapshots populated=0",
-                                    "observations": {"fd_policy": policy01, "stable_invocation": stable["InvocationID"] == initial["InvocationID"],
+                                    "reason": "listener closed by service; no CAP_SYS_ADMIN/cgroup write; fork/duplication/SCM_RIGHTS/io_uring paths denied; manager inactive and two correlated cgroup snapshots populated=0",
+                                    "observations": {"fd_policy": policy01,
+                                                     "capability_evidence": {
+                                                         "cap_eff": ready01_data["cap_eff"],
+                                                         "cap_sys_admin": ready01_data["cap_sys_admin"],
+                                                         "cgroup_dir_write_access": ready01_data["cgroup_dir_write_access"],
+                                                     },
+                                                     "stable_invocation": stable["InvocationID"] == initial["InvocationID"],
                                                      "cgroup_identity": before_identity,
                                                      "manager_unloaded": stable["manager_unloaded"]}})
         if not cleanup["endpoint_removed"] or not cleanup["cgroup_empty"] or not cleanup.get("unit_unloaded"):
@@ -1649,14 +1664,26 @@ def run_probe(args: argparse.Namespace) -> dict:
             ready2, expected_uid=SERVICE_UID, expected_gid=SERVICE_GID
         )
         policy02 = ready2_data["fd_policy"]
+        if (
+            ready2_data.get("cap_eff") != 0
+            or ready2_data.get("cap_sys_admin") is not False
+            or ready2_data.get("cgroup_dir_write_access") is not False
+        ):
+            raise Incomplete("QP-02 fixture retained cgroup authority")
         cleanup2 = _stop_and_cleanup(name2, initial2, endpoint2, ready2, run_dir_fd, report, already_stopped=True, cgroup_empty_confirmed=True)
         report["cleanup"]["resources"].append(cleanup2)
         if not passed2 or not cleanup2["endpoint_removed"] or not cleanup2.get("unit_unloaded"):
             raise Incomplete("QP-02 failed its pre-stop helper or post-stop empty-cgroup check")
         record_scenario(report, {"id": "QP-02", "status": "PASS",
                                     "decision": "QUIESCENT",
-                                    "reason": "pre-listener child was contained in the service cgroup; post-listener fork/duplication/SCM_RIGHTS/io_uring paths denied; stop emptied the correlated cgroup",
-                                    "observations": {"fd_policy": policy02, "helper_preexisted_listener": True,
+                                    "reason": "pre-listener child was contained in the service cgroup; no CAP_SYS_ADMIN/cgroup write; post-listener fork/duplication/SCM_RIGHTS/io_uring paths denied; stop emptied the correlated cgroup",
+                                    "observations": {"fd_policy": policy02,
+                                                     "capability_evidence": {
+                                                         "cap_eff": ready2_data["cap_eff"],
+                                                         "cap_sys_admin": ready2_data["cap_sys_admin"],
+                                                         "cgroup_dir_write_access": ready2_data["cgroup_dir_write_access"],
+                                                     },
+                                                     "helper_preexisted_listener": True,
                                                      "child_pid": ready2_data["child_pid"],
                                                      "child_filter_confirmed": ready2_data["child_filter_confirmed"],
                                                      "invocation_unchanged": stable2["InvocationID"] == initial2["InvocationID"],
