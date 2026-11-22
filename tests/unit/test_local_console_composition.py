@@ -79,7 +79,7 @@ class LocalConsoleCompositionTests(unittest.TestCase):
         self.assertIn("no puedo interpretar solicitudes", content)
 
     def test_main_runs_a_complete_local_terminal_session(self):
-        inputs = iter(["Hola, Atlas", "salir"])
+        inputs = iter(["/plan lista el workspace demo", "Hola, Atlas", "salir"])
         output = []
         written = []
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -93,6 +93,7 @@ class LocalConsoleCompositionTests(unittest.TestCase):
                     conversation_db_path=database_path,
                 )
         self.assertEqual(output[0], "Atlas está listo. Escribe '/help' para ver los comandos.")
+        self.assertIn("modo offline", "\n".join(output))
         self.assertIn("modelo de lenguaje", "".join(written))
         self.assertEqual(output[-1], "Atlas: hasta luego.")
 
