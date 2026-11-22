@@ -106,3 +106,93 @@ OK (skipped=1)
 También confirmó `.venv/bin/python -m compileall -q src tests` sin errores reportados. Esta evidencia valida la suite unitaria de la rama, no una migración sobre una base persistente real, un login desplegado, el bootstrap de propietario, el consumo E2E del proof ni Workspace/CAM.
 
 No se ejecutaron pruebas, compilaciones, migraciones ni workflows desde GitHub. No se modificó código ejecutable, `main`, el host ni una base real.
+
+
+## 8. Revisión ampliada: bootstrap, claves y frontera de privilegios
+
+### 8.1 Separación de génesis y provisión inicial
+
+El contrato `initial-owner-authority-provisioning-contract.md` propone dos operaciones no delegables:
+
+- **A — génesis:** crea la identidad canónica USER y el binding sujeto local → propietario. No crea Project, Environment ni Grant.
+- **B — provisión:** requiere una nueva reautenticación y confirmación directa, y crea un Project, Environment y primer Grant con scope exacto. La prueba A no se reutiliza.
+
+La separación es correcta como diseño propuesto, pero el contrato sigue marcado **no aprobado para implementación**. La lista exacta de recursos, tipos, acciones, IDs, expiración y sujeto destinatario del primer Grant no está decidida. No existe permiso implícito por ser el primer usuario o el propietario.
+
+**Corrección de consistencia normativa:** el borrador de provisión decía que Identity Authority generaría UUIDv4 para ambos IDs. B1-B-03A §3.3 deja pendiente el formato y mecanismo de generación de UserId. El borrador se corrigió para no fijar UUIDv4 para UserId por inferencia.
+
+### 8.2 Project/Environment: actualización del hallazgo físico
+
+La auditoría anterior citaba el esquema V9, donde Project y Environment se creaban como tablas separadas. La revisión del HEAD actual confirma que V18 añadió `atlas_project_environments` con claves foráneas a Project y Environment, clave primaria compuesta y una referencia compuesta desde `atlas_workspaces`. `SQLiteLocalAuthorityUnitOfWork` expone un lector de asociaciones.
+
+Esto corrige el hallazgo histórico de que no existía ninguna relación canónica. No demuestra que el bootstrap pueda crear esa asociación de forma autorizada: el repositorio expuesto en la UoW es de lectura; la escritura corresponde al lifecycle específico. El flujo B debe usar esa capacidad y coordinarla con Project, Environment, Grant, evidencia y journal.
+
+### 8.3 Atomicidad real disponible
+
+La UoW actual incluye Identity, Native Identity, Native Authentication, Project/Environment, asociaciones Project–Environment, Workspace y Grants, compartiendo una instancia SQLite. La composición `SQLiteLocalAuthorityStorageComposition` verifica que la fábrica UoW usa exactamente la misma instancia `SQLiteDatabase`.
+
+No se encontró en esa UoW la composición del `SQLiteConsistencyJournal`, Recovery Gate ni un repositorio de bootstrap_binding_id para el sujeto local. Por tanto, no está demostrado el commit atómico exigido para consumir la prueba PAM, crear UserId/Identity, persistir binding, registrar DOMAIN_BOOTSTRAPPED, actualizar head/proyección/gate y dejar la autoridad en estado coherente. No se debe presentar la UoW actual como solución completa de génesis.
+
+### 8.4 PAM y frontera privilegiada
+
+El diseño aprobado selecciona un helper C separado con libpam como proveedor local candidato y a `greed` como sujeto operativo inicial. Esto no aprueba la invocación privilegiada ni instala el helper.
+
+- El servicio PAM dedicado `atlas-bootstrap` no existe todavía; no se debe modificar el stack PAM general.
+- La política exacta de `pam_faillock` y sus valores sigue pendiente.
+- La alternativa A (helper root-owned invocado mediante sudo) es preferida, pero no aprobada. El contrato de validación V3 está implementado como observador diagnóstico y sigue pendiente de validación local; sus resultados no son autorización.
+- La alternativa B (servicio root con socket y SO_PEERCRED/SCM_RIGHTS) permanece como reserva, no seleccionada.
+- setuid/capabilities y privilegios generales del runtime están rechazados.
+- El diseño permite SSH interactivo con PTY, pero un PTY no prueba presencia física; SSH sin PTY y ejecución no interactiva deben rechazarse.
+
+El siguiente paso de esta rama no debe ser escribir el helper. Primero debe cerrarse el contrato de invocación/TTY y el estado pendiente de V3 con evidencia local; después el propietario debe aprobar expresamente la implementación privilegiada.
+
+### 8.5 Claves: dos usos HMAC que no deben confundirse
+
+Se revisaron `me-03k-local-key-custody-design.md` y `HmacVerifiedIdentityContextAttestor`.
+
+- ME-03K implementa una ruta de custodia de clave HMAC de 32 bytes mediante systemd credentials para firmar/verificar envelopes de Local Consistency. El documento aún declara no provisionadas las credenciales reales ni activada la unidad systemd.
+- `HmacVerifiedIdentityContextAttestor` recibe directamente bytes de clave de al menos 256 bits en su constructor. No carga secretos ni decide referencias, rotación o custodia.
+- No existe una composición productiva del attestor con un proveedor secreto. Tampoco debe reutilizarse la clave de Consistency: dominio, propósito, autoridad y ciclo de vida son distintos.
+
+La infraestructura de systemd credentials podría evaluarse como mecanismo de entrega de un secreto distinto, con referencia y política independientes; eso sería una decisión nueva y requeriría permisos, rotación, fail-closed y pruebas propias. No equivale a que la provisión de la clave del attestor esté resuelta.
+
+### 8.6 Consumidores I-3: evidencia y carreras
+
+Se inspeccionaron los servicios actuales, no solo el documento histórico de I-3:
+
+| Consumidor | Resultado estático | Consecuencia |
+|---|---|---|
+| `GrantRenewalService.request_renewal` | Exige contextos verificados de AGENT y delegación y los revalida dentro de la UoW; aprobación/rechazo del propietario también usa verificación dentro de UoW. | Mejor alineado con la frontera de evidencia; no implica que AGENT esté habilitado en runtime ni que el ciclo entero esté cerrado. |
+| `GrantManagementService.issue` | `require_verified_owner_context` llama a `verifier.verify()` antes de abrir la UoW de inserción del Grant. | Existe una ventana TOCTOU entre revalidar identidad y escribir el Grant. Antes de uso operativo debe revalidarse dentro de la misma UoW de mutación o demostrarse un fencing equivalente. |
+| `GrantManagementService.revoke` | La evidencia del propietario se verifica antes de iniciar la coordinación de revocación. | La autenticidad de la solicitud no sustituye el fencing de Identity/Grant/Consistency; mantener la ruta bloqueada si no puede cerrarse la carrera. |
+| `MemoryAuthorizationService` | Usa el binding legacy `AuthenticatedUserSubject`; no recibe ni verifica `VerifiedIdentityContext`. | No habilitar Memory protegido desde un contexto sintético o nativo por inferencia. |
+| `WorkspaceCapabilityExecutionService` | Comprueba actor USER, busca identidad canónica y evalúa Grant dentro de `BEGIN IMMEDIATE`, pero solo recibe `OperationContext`; no recibe/verifica `VerifiedIdentityContext`. | La UoW protege cambios SQLite concurrentes, pero no autentica al caller. Un contexto fabricado puede pasar la comprobación canónica. Mantener Workspace desconectado. |
+| `LocalConsoleRequestFactory` | Construye `Identity` y `user_id` sintéticos desde el usuario Unix. | No puede ser fuente de identidad ni alcanzar ningún consumidor protegido. |
+
+El servicio Workspace mantiene checks útiles de workspace ACTIVE, propietario, Project/Environment, asociación V18, Grant exacto y mount registrado. Esos checks no sustituyen la evidencia de identidad. Tampoco se debe afirmar que `BEGIN IMMEDIATE` ofrece fencing distribuido o de filesystem.
+
+### 8.7 Estado documental reconciliado
+
+Se corrigieron las siguientes contradicciones de documentos heredados:
+
+- El protocolo PAM ya no declara como pendiente un emisor separado de desafíos: la arquitectura posterior establece que el helper emite la prueba y CAM comprueba el estado pendiente.
+- El borrador de provisión inicial ya no fija UUIDv4 para UserId contra B1-B-03A §3.3.
+- El contrato I-2 ahora refleja que el guard SQLite V28 existe y fue validado en la suite local, aunque no está compuesto en login operativo.
+- El contrato de provisión inicial refleja la asociación Project–Environment V18, sin declarar resuelta su provisión ni la atomicidad global.
+
+## 9. Orden de cierre recomendado
+
+No hay una única tarea de código que cierre todo. El orden seguro es:
+
+1. **Decisión CAM B:** definir el descriptor mínimo del primer Project, Environment, Workspace (si se incluye), recurso, acciones, sujeto y expiración. Mantener separadas génesis A y provisión B.
+2. **Decisión de clave I-2:** aprobar proveedor de secreto independiente para el attestor HMAC, referencia, permisos, rotación y recuperación. No reutilizar la clave ME-03K.
+3. **Cierre de protocolo PAM:** terminar layout binario/vectores, firma Ed25519 y límites, key_id, expiración/skew, binding protegido y prueba de consumo/replay.
+4. **Cierre de privilegios:** validar V3 en Debian, decidir A/B con pruebas negativas y obtener aprobación explícita antes de cualquier helper privilegiado/PAM.
+5. **Diseño de transacción de génesis:** incorporar binding de bootstrap, consumo one-shot, Identity, Native Identity/Authentication, evento/journal y Recovery Gate en una UoW real o diseñar una saga durable fail-closed. No aceptar la UoW actual como si ya lo hiciera.
+6. **Cierre de I-3:** corregir la verificación fuera de UoW de `GrantManagementService.issue/revoke`, exigir evidencia en Workspace y Memory, y demostrar invalidación/fencing. Mantener todos los consumidores sin wiring operativo hasta cerrar sus contratos.
+7. **Composition root aislado:** solo después de lo anterior, componer Authentication Authority, guard V28, attestor, Identity Authority y CAM sobre recursos canónicos. La provisión de schema debe seguir siendo explícita y administrativa.
+8. **Validación local y gate:** pruebas focalizadas, fallos/concurrencia/replay/rollback, migración sobre DB temporal persistente, suite completa y compileall en Debian. No activar login ni Workspace hasta un gate de seguridad explícito.
+
+## 10. Evidencia y límites de esta revisión
+
+Esta revisión fue estática sobre archivos de la rama `work/atlas-mvp-runtime` en GitHub. No se ejecutaron pruebas, compilaciones, migraciones, PAM, comandos del host ni cambios de servicios. Los hallazgos describen el código y los contratos revisados; no constituyen autorización para desplegar, inicializar CAM ni cambiar el host.
