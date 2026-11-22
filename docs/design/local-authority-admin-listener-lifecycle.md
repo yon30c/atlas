@@ -223,7 +223,7 @@ Se publicó `docs/contracts/local-authority-admin-listener-quiescence-1.md` (lis
 
 El cgroup vacío solo acredita ausencia de procesos dentro de ese cgroup; no prueba ausencia de FD fuera de él si el descriptor pudo transferirse. Por ello las invariantes de no transferencia y no escape son condiciones obligatorias. El contrato excluye systemd socket activation: el system manager podría retener el listener FD fuera del cgroup del servicio, y el incidente de colisión filesystem de systemd 257.13 sigue suspendiendo esa alternativa.
 
-**Estado:** borrador para revisión del propietario, no aprobado ni validado. No crear unidades/cgroups ni modificar el host. A-THREAT-05 sigue abierta hasta aprobación, probe aislado QP-01..QP-15, evidencia de lifecycle/FD y autorización humana real.
+**Estado actualizado (2026-11-21):** R1–R7 aprobadas como baseline de diseño; los seis puntos previos a implementación de QP están resueltos documentalmente en el plan del probe. El contrato y el probe siguen sin validación experimental; A-THREAT-05 permanece abierta hasta revisión/aprobación del diseño, ejecución autorizada de QP-01..QP-15, evidencia lifecycle/FD y decisión humana real. No crear unidades/cgroups ni modificar el host en esta fase.
 
 
 ## Quiescencia del servicio y validación QP — 2026-11-21
