@@ -20,7 +20,6 @@ from atlas.ports.authentication_attempt_guard import (
     AuthenticationAttemptDenied,
     AuthenticationAttemptGuardPort,
     AuthenticationAttemptReservation,
-    AuthenticationAttemptReservationError,
 )
 from atlas.ports.clock import Clock
 
@@ -146,8 +145,8 @@ class NativeAuthenticationService:
         validate_password_for_verification(password)
         now = self._now(self._clock)
 
-        # Resolve the configured realm in a short, read-only UoW. The guard and
-        # Argon2id must never run while this SQLite BEGIN IMMEDIATE is held.
+        # Resolve only the configured issuer before reserving. No guard call or
+        # Argon2id work may occur while this UoW is open.
         try:
             with self._unit_of_work_factory() as unit:
                 issuer = unit.native_identity.get_native_issuer(self._config.realm)
@@ -157,9 +156,6 @@ class NativeAuthenticationService:
                     or getattr(issuer.profile, "value", None) != "NATIVE_AUTHORITY_PROOF"
                 ):
                     raise AuthenticationFailed("autenticación no válida")
-                authenticator = unit.native_authentication.get_native_authenticator_by_login_handle(
-                    issuer.issuer_id, handle.value
-                )
         except (AuthenticationFailed, ContractError):
             raise
         except Exception as exc:
@@ -175,6 +171,19 @@ class NativeAuthenticationService:
             raise AuthenticationUnavailable("control de intentos no disponible") from exc
 
         try:
+            # Read the credential only after an atomic reservation exists.
+            try:
+                with self._unit_of_work_factory() as unit:
+                    authenticator = (
+                        unit.native_authentication.get_native_authenticator_by_login_handle(
+                            issuer.issuer_id, handle.value
+                        )
+                    )
+            except Exception as exc:
+                raise AuthenticationUnavailable(
+                    "autoridad de autenticación no disponible"
+                ) from exc
+
             encoded_hash = (
                 self._dummy_phc if authenticator is None
                 else authenticator.password_hash_phc
@@ -217,8 +226,8 @@ class NativeAuthenticationService:
             reference = NativeProofReference.generate()
             proof_id = str(uuid4())
 
-            # Re-read all mutable authority state after Argon2id. The final
-            # transaction is short and contains only CAS/hash metadata + proof.
+            # Re-read all mutable authority state after Argon2id. This short
+            # transaction contains only CAS/hash metadata and proof persistence.
             with self._unit_of_work_factory() as unit:
                 current_issuer = unit.native_identity.get_native_issuer(
                     self._config.realm
@@ -264,12 +273,11 @@ class NativeAuthenticationService:
                 unit.native_authentication.create_native_authentication_proof(proof)
                 unit.commit()
 
-            # A persisted proof is not returned unless the guard also commits
-            # the success/reset. If this fails, the raw reference stays private.
+            # Never reveal the raw proof unless both durable commits succeed.
             try:
                 self._guard.complete_success(reservation, at=authenticated_at)
                 reservation = None
-            except (AuthenticationAttemptReservationError, Exception) as exc:
+            except Exception as exc:
                 raise AuthenticationUnavailable(
                     "control de intentos no disponible"
                 ) from exc
@@ -280,10 +288,8 @@ class NativeAuthenticationService:
                 expires_at=expires_at,
             )
         except (AuthenticationFailed, AuthenticationUnavailable, ContractError):
-            self._abandon(reservation)
             raise
         except Exception as exc:
-            self._abandon(reservation)
             raise AuthenticationUnavailable(
                 "servicio de autenticación no disponible"
             ) from exc
