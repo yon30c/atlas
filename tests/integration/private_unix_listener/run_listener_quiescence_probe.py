@@ -2099,6 +2099,9 @@ def run_probe(args: argparse.Namespace) -> dict:
             raise Incomplete("QP-11 did not reject the concurrent authorized actor")
 
         _ACTIVE_SUPERVISOR.crash()
+        if _SYSTEMD_BUS_REF is not None:
+            _SYSTEMD_BUS_REF.close()
+            _SYSTEMD_BUS_REF = None
         fcntl.flock(lock_fd, fcntl.LOCK_UN)
         os.close(lock_fd)
         lock_fd = None
@@ -2136,6 +2139,9 @@ def run_probe(args: argparse.Namespace) -> dict:
         # explicitly scoped cleanup; this is not a production recovery path.
         lock_fd = os.open(lock_path, os.O_RDWR | os.O_CLOEXEC | os.O_NOFOLLOW)
         fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _SYSTEMD_BUS_REF = PersistentSystemdBusRef()
+        _SYSTEMD_BUS_REF.ref_unit(name11)
+        _ACTIVE_FIXTURES[name11]["unit_ref"] = True
         _ACTIVE_SUPERVISOR = _TestLifecycleSupervisor(
             lock_fd, marker, run_id, units=set(_ACTIVE_SUPERVISOR.units)
         )
