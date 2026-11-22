@@ -194,14 +194,26 @@ def list_jobs_for_unit(name: str) -> list[dict]:
     return matches
 
 
-def assert_unit_absent(name: str) -> None:
+def unit_is_absent(name: str) -> bool:
     result = manager_call(
         busctl_json, "call", BUS, MANAGER, MANAGER_IFACE, "ListUnitsByNames", "as", "1", name
     )
     if result["type"] != "a(ssssssouso)" or not isinstance(result["data"], list):
         raise Incomplete("ListUnitsByNames returned an unexpected signature or shape")
-    if result["data"]:
+    return not result["data"]
+
+
+def assert_unit_absent(name: str) -> None:
+    if not unit_is_absent(name):
         raise Incomplete(f"random fixture unit name already exists: {name}")
+
+
+def wait_unit_absent(name: str, deadline: float) -> None:
+    while time.monotonic() < deadline:
+        if unit_is_absent(name):
+            return
+        time.sleep(0.05)
+    raise Incomplete("systemd retained a reference to the stopped transient fixture")
 
 
 def git_commit() -> str:
@@ -930,7 +942,7 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
     _ACTIVE_FIXTURES[name] = {
         "name": name, "run_dir": run_dir, "dir_fd": fixture_dir_fd,
         "socket_path": fixture_socket_path, "ready_path": ready_path,
-        "uid": uid, "gid": gid, "initial": None,
+        "uid": uid, "gid": gid, "initial": None, "unit_ref": False,
     }
     deadline = time.monotonic() + 8.0
     while time.monotonic() < deadline:
@@ -947,6 +959,8 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
     if snap["MainPID"] <= 0 or ready.get("pid") != snap["MainPID"]:
         raise Incomplete("fixture readiness PID differs from systemd MainPID")
     _ACTIVE_FIXTURES[name]["initial"] = snap
+    manager_call(busctl_json, "call", BUS, MANAGER, MANAGER_IFACE, "RefUnit", "s", name)
+    _ACTIVE_FIXTURES[name]["unit_ref"] = True
     if snap["Delegate"] != delegate:
         raise Incomplete("systemd Delegate property differs from requested fixture")
     expected_user = pwd.getpwuid(uid).pw_name
@@ -1020,6 +1034,10 @@ def _stop_and_cleanup(name: str, initial: dict, socket_path: Path | None, ready_
                 os.unlink(ready_path.name, dir_fd=run_dir_fd)
             except FileNotFoundError:
                 pass
+        manager_call(busctl_json, "call", BUS, MANAGER, MANAGER_IFACE, "UnrefUnit", "s", name)
+        wait_unit_absent(name, time.monotonic() + 3.0)
+        cleanup["unit_unref_confirmed"] = True
+        cleanup["unit_unloaded"] = True
         if (
             cleanup["unit_inactive"] and cleanup["cgroup_empty"]
             and (socket_path is None or cleanup["endpoint_removed"])
