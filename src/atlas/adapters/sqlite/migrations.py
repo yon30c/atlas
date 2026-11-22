@@ -5,6 +5,7 @@ intentionally has no memory-content, embedding, snippet, or content-hash table.
 """
 from atlas.adapters.sqlite.database import SQLiteMigration
 from atlas.adapters.sqlite.association_provisioning_migration import CORE_SCHEMA_V27
+from atlas.adapters.sqlite.authentication_attempt_migration import CORE_SCHEMA_V28
 
 
 CORE_SCHEMA_V1 = SQLiteMigration(
