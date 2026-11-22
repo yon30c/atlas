@@ -1091,7 +1091,11 @@ def _stop_and_cleanup(name: str, initial: dict, socket_path: Path | None, ready_
         if socket_path is not None:
             if ready_path is None:
                 raise Incomplete("fixture endpoint has no identity record; preserving it")
-            ready = read_bounded_json_file(ready_path)
+            fixture_record = _ACTIVE_FIXTURES.get(name, {})
+            ready = read_bounded_json_file(
+                ready_path, expected_uid=fixture_record.get("uid"),
+                expected_gid=fixture_record.get("gid"),
+            )
             name_only = socket_path.name
             current_info = os.stat(name_only, dir_fd=run_dir_fd, follow_symlinks=False)
             if (
