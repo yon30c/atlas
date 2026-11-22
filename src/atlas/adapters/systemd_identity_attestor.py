@@ -55,17 +55,33 @@ class SystemdCredentialVerifiedIdentityContextAttestor(
 
     @staticmethod
     def _read_identity_key(directory: Path, credential_name: str) -> bytes:
-        directory_flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
-        directory_flags |= getattr(os, "O_DIRECTORY", 0)
-        directory_flags |= getattr(os, "O_NOFOLLOW", 0)
-        credential_flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
-        credential_flags |= getattr(os, "O_NOFOLLOW", 0)
+        required_flags = ("O_DIRECTORY", "O_NOFOLLOW")
+        if any(not hasattr(os, flag) for flag in required_flags):
+            raise ContractError("el sistema no ofrece primitivas seguras de apertura")
+
+        directory_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW
+        credential_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
         credential_flags |= getattr(os, "O_NONBLOCK", 0)
 
         directory_fd = -1
         credential_fd = -1
         try:
-            directory_fd = os.open(directory, directory_flags)
+            # Walk from / one component at a time. O_NOFOLLOW on only the final
+            # path would leave parent-directory symlinks unresolved.
+            directory_fd = os.open("/", directory_flags)
+            if ".." in directory.parts:
+                raise ContractError("credentials_directory no admite traversal")
+            for component in directory.parts[1:]:
+                if component in ("", ".", ".."):
+                    raise ContractError("credentials_directory no es canónico")
+                next_fd = os.open(
+                    component,
+                    directory_flags,
+                    dir_fd=directory_fd,
+                )
+                os.close(directory_fd)
+                directory_fd = next_fd
+
             credential_fd = os.open(
                 credential_name,
                 credential_flags,
