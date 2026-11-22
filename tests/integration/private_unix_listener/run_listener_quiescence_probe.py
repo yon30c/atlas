@@ -1073,7 +1073,7 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
     _ACTIVE_FIXTURES[name] = {
         "name": name, "run_dir": run_dir, "dir_fd": fixture_dir_fd,
         "socket_path": fixture_socket_path, "ready_path": ready_path,
-        "uid": uid, "gid": gid, "initial": None, "unit_ref": False,
+        "uid": uid, "gid": gid, "initial": None,
     }
     deadline = time.monotonic() + 8.0
     while time.monotonic() < deadline:
@@ -1095,8 +1095,6 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
     if snap["MainPID"] <= 0 or ready.get("pid") != snap["MainPID"]:
         raise Incomplete("fixture readiness PID differs from systemd MainPID")
     _ACTIVE_FIXTURES[name]["initial"] = snap
-    manager_call(busctl_json, "call", BUS, MANAGER, MANAGER_IFACE, "RefUnit", "s", name)
-    _ACTIVE_FIXTURES[name]["unit_ref"] = True
     if snap["Delegate"] != delegate:
         raise Incomplete("systemd Delegate property differs from requested fixture")
     if not delegate:
@@ -1188,11 +1186,6 @@ def _stop_and_cleanup(name: str, initial: dict, socket_path: Path | None, ready_
                 run_dir_fd, ready_path.name, ready_identity_now,
                 fixture_record["uid"], fixture_record["gid"],
             )
-        fixture_record = _ACTIVE_FIXTURES.get(name, {})
-        if fixture_record.get("unit_ref"):
-            manager_call(busctl_json, "call", BUS, MANAGER, MANAGER_IFACE, "UnrefUnit", "s", name)
-            fixture_record["unit_ref"] = False
-            cleanup["unit_unref_confirmed"] = True
         wait_unit_absent(name, time.monotonic() + 3.0)
         cleanup["unit_unloaded"] = True
         if (
