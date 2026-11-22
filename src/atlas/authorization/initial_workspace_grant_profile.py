@@ -7,7 +7,10 @@ Those responsibilities belong to the future bootstrap coordinator.
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-import json
+from atlas.workspace.resource_ids import (
+    is_canonical_relative_file_path,
+    workspace_file_resource_id,
+)
 
 from atlas.authorization.models import Grant, GrantResourceScope
 from atlas.core.errors import ContractError
@@ -54,7 +57,7 @@ class InitialWorkspaceGrantDescriptor:
         if not isinstance(self.selected_file_paths, tuple):
             raise ContractError("selected_file_paths debe ser una tupla")
         if any(
-            not isinstance(path, str) or not _is_canonical_relative_file_path(path)
+            not isinstance(path, str) or not is_canonical_relative_file_path(path)
             for path in self.selected_file_paths
         ):
             raise ContractError("la allowlist contiene una ruta no permitida")
@@ -71,40 +74,6 @@ class InitialWorkspaceGrantDescriptor:
         ):
             raise ContractError("issued_at debe ser un datetime UTC")
 
-
-def _is_canonical_relative_file_path(path: str) -> bool:
-    if (
-        not path
-        or path.strip() != path
-        or "\x00" in path
-        or "\\" in path
-        or path.startswith("/")
-        or (len(path) >= 2 and path[1] == ":")
-        or "*" in path
-        or "?" in path
-    ):
-        return False
-    parts = path.split("/")
-    return (
-        all(part not in ("", ".", "..") for part in parts)
-        and parts[0] != ".atlas-staging"
-    )
-
-
-def workspace_file_resource_id(workspace_id: str, path: str) -> str:
-    """Canonical resource ID shared by bootstrap grants and Workspace CAM."""
-    if (
-        not isinstance(workspace_id, str)
-        or not workspace_id
-        or workspace_id.strip() != workspace_id
-        or not _is_canonical_relative_file_path(path)
-    ):
-        raise ContractError("workspace_id/path no forman un recurso canónico")
-    return json.dumps(
-        [workspace_id, path],
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
 
 
 def build_initial_workspace_grants(

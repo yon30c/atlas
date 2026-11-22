@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-import json
 from pathlib import Path
 
 from atlas.adapters.local_workspace import LocalWorkspaceAdapter
@@ -31,6 +30,7 @@ from atlas.authorization.identity_evidence import require_verified_owner_context
 from atlas.ports.verified_identity_context_verifier import VerifiedIdentityContextVerifierPort
 from atlas.memory.models import EnvironmentId, ProjectId
 from atlas.ports.workspace_mounts import WorkspaceMountResolver
+from atlas.workspace.resource_ids import workspace_file_resource_id as canonical_workspace_file_resource_id
 from atlas.workspace.models import (
     ProjectEnvironmentStatus,
     WorkspaceStatus,
@@ -110,11 +110,7 @@ class WorkspaceCapabilityExecutionService:
             raise ContractError("workspace_id debe ser texto no vacío")
         if not isinstance(path, str) or not path.strip():
             raise ContractError("path debe ser texto no vacío")
-        return json.dumps(
-            [workspace_id, path],
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
+        return canonical_workspace_file_resource_id(workspace_id, path)
 
     @staticmethod
     def _validate_now(now: datetime) -> None:
