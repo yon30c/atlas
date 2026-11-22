@@ -1,10 +1,42 @@
 # Atlas funcional de prueba — plan de trabajo
 
 > Prioridad acordada: 16 de noviembre de 2026.
-> Corte de estado: 18 de noviembre de 2026.
-> Rama de trabajo actual: `design/verified-agent-delegation-i3-2b`.
+> Corte de estado: 22 de noviembre de 2026.
+ > Rama de trabajo actual: `work/atlas-mvp-runtime` (derivada de `main`).
 > Objetivo: convertir la base conversacional existente en un asistente local capaz de completar flujos útiles de principio a fin en un entorno de prueba.
 > Este plan no declara Atlas listo para producción.
+
+
+## Avance y reordenamiento del MVP — 22 de noviembre de 2026
+
+El objetivo inmediato se reduce a una primera versión local que sea útil sin esperar a que todos los subsistemas estén completos.
+
+### Incremento actual: vista previa de planes
+
+En `work/atlas-mvp-runtime` se conectó el planificador F1 a la consola mediante `/plan <solicitud>`. El comando:
+
+- usa el intérprete de intenciones Ollama con salida JSON;
+- reconoce únicamente las capacidades declaradas actualmente (`workspace.list` y `workspace.read`);
+- muestra objetivo, parámetros y resultado esperado;
+- pide aclaración o rechaza solicitudes fuera del catálogo;
+- no ejecuta capacidades ni toca archivos;
+- informa que el runtime protegido aún no está habilitado.
+
+Pruebas focalizadas añadidas, todavía **pendientes de ejecución local**:
+`python -m unittest tests.unit.test_console_planning tests.unit.test_local_console_composition -v`
+
+No se ejecutaron pruebas ni compilaciones desde GitHub.
+
+### Secuencia acelerada para llegar al primer uso con archivos
+
+1. **F1 — Planificación en consola:** completar revisión y validación local de `/plan`.
+2. **3.2-C — Autenticación local confiable:** completar bootstrap del propietario, control de intentos, clave de attestation y admisión de proof. No usar `getuser()`, UID/GID ni contexto sintético como identidad Atlas.
+3. **3.2-C4 — Frontera de consola:** construir contexto de operación desde evidencia USER verificada; revalidar dentro de la misma UoW.
+4. **F2 — Workspace read-only:** conectar exclusivamente `workspace.list` y `workspace.read` mediante el gate CAM ya existente, con Project/Environment/association activos, mount confiable y Grant exacto.
+5. **MVP 0.1:** conversación persistente, planes visibles y lectura controlada de un Workspace de prueba. Escritura, shell, Docker, Skills, Broker, agentes y tareas autónomas quedan fuera.
+
+**Dependencia crítica:** el servicio de Workspace no se conectará directamente a la consola actual porque `LocalConsoleRequestFactory` fabrica una identidad sintética. La infraestructura CAM/Workspace ya existe, pero no sustituye la autenticación de la frontera.
+
 
 ## 1. Dirección del producto
 
