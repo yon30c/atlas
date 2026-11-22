@@ -221,21 +221,38 @@ def wait_unit_absent(name: str, deadline: float) -> None:
     raise Incomplete("systemd retained a reference to the stopped transient fixture")
 
 
-def git_commit() -> str:
+def git_commit() -> dict:
     repository = Path(__file__).resolve().parents[3]
-    result = subprocess.run(
-        ["git", "-c", f"safe.directory={repository}", "rev-parse", "HEAD"],
-        cwd=repository,
+    git = ["git", "-c", f"safe.directory={repository}"]
+    environment = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"}
+    branch_result = subprocess.run(
+        [*git, "branch", "--show-current"], cwd=repository,
         stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        timeout=2.0, check=False,
-        env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"},
+        timeout=2.0, check=False, env=environment,
+    )
+    if branch_result.returncode or len(branch_result.stdout) > 256:
+        raise Incomplete("cannot identify the current checkout branch")
+    branch = branch_result.stdout.decode("ascii", "strict").strip()
+    if branch != "experiment/a-ipc-01-private-unix-listener-probe":
+        raise Incomplete("runner must execute from the approved listener-quiescence experiment branch")
+    status_result = subprocess.run(
+        [*git, "status", "--porcelain=v1", "--untracked-files=all"], cwd=repository,
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        timeout=3.0, check=False, env=environment,
+    )
+    if status_result.returncode or status_result.stdout:
+        raise Incomplete("checkout must be clean; report cannot identify uncommitted runner contents")
+    result = subprocess.run(
+        [*git, "rev-parse", "HEAD"], cwd=repository,
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        timeout=2.0, check=False, env=environment,
     )
     if result.returncode or len(result.stdout) > 128:
         raise Incomplete("cannot identify the exact checkout commit")
     value = result.stdout.decode("ascii", "strict").strip()
     if len(value) != 40 or any(ch not in "0123456789abcdef" for ch in value):
         raise Incomplete("git rev-parse returned an invalid commit identifier")
-    return value
+    return {"branch": branch, "commit": value, "worktree_clean": True}
 
 
 def unit_snapshot(name: str) -> dict:
@@ -1273,9 +1290,11 @@ def preflight() -> dict:
     ):
         raise Incomplete("system manager D-Bus Version is outside the pinned 257.13 profile")
     manager_version = manager_version_result["data"]
-    checkout_commit = git_commit()
+    checkout_identity = git_commit()
     return {
-        "git_commit": checkout_commit,
+        "git_branch": checkout_identity["branch"],
+        "git_commit": checkout_identity["commit"],
+        "git_worktree_clean": checkout_identity["worktree_clean"],
         "debian": debian, "kernel": platform.release(),
         "python": platform.python_version(), "busctl": bus_version.decode("utf-8", "replace").strip(),
         "systemd_manager_version": manager_version,
