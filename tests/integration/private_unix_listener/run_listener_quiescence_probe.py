@@ -172,11 +172,17 @@ def unit_path(name: str) -> str:
     result = manager_call(
         busctl_json, "call", BUS, MANAGER, MANAGER_IFACE, "GetUnit", "s", name
     )
-    if result["type"] != "o" or not isinstance(result["data"], str):
-        raise Incomplete("GetUnit did not return one object path")
-    if not result["data"].startswith("/org/freedesktop/systemd1/unit/"):
+    if (
+        result["type"] != "o"
+        or not isinstance(result["data"], list)
+        or len(result["data"]) != 1
+        or not isinstance(result["data"][0], str)
+    ):
+        raise Incomplete("GetUnit returned an unexpected typed object-path output")
+    path = result["data"][0]
+    if not path.startswith("/org/freedesktop/systemd1/unit/"):
         raise Incomplete("GetUnit returned an unexpected object path")
-    return result["data"]
+    return path
 
 
 def dbus_array_output(result: dict, signature: str, method: str) -> list:
