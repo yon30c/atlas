@@ -58,6 +58,7 @@ La consola local y las conversaciones persistentes siguen siendo funcionales. El
 ## Documentación del proyecto
 
 - [Estado vigente de Atlas](docs/status-current.md)\n- [Diseño aprobado del guard de intentos de autenticación](docs/design/native-authentication-attempt-guard-approved-design.md)\n- [Auditoría del guard de autenticación](docs/design/native-authentication-attempt-guard-storage-audit.md)
+- [Auditoría de brecha de composición de autenticación nativa](docs/design/native-authentication-composition-gap-audit.md)
 - [Plan de Atlas funcional de prueba](docs/functional-test-roadmap.md)
 - [Mapa de composición funcional F0](docs/functional-architecture-map.md)
 - [Atlas Workstation — entorno operativo aislado](docs/design/atlas-workstation.md)
