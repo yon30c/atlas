@@ -550,11 +550,34 @@ La rama de trabajo actual es `work/atlas-mvp-runtime`. El último estado de GitH
 
 - `/plan` está integrado como vista previa no ejecutora. El propietario validó localmente 14 pruebas focalizadas y `.venv/bin/python -m compileall -q src tests` sin errores. La suite completa de la rama MVP no está validada.
 - El propietario aprobó el diseño del guard persistente de autenticación. La especificación es `docs/design/native-authentication-attempt-guard-approved-design.md`; la auditoría de hallazgos y aprobación es `docs/design/native-authentication-attempt-guard-storage-audit.md`.
-- Política aprobada: ventana móvil de 15 minutos; demoras 1/2/4/8/15 minutos según fallos dentro de la ventana; máximo de dos reservas simultáneas por cuenta; TTL de reserva 120 segundos; éxito confirmado reinicia fallos; abandono/expiración no cuenta como fallo.
+- Política aprobada: ventana móvil de 15 minutos; demoras 1/2/4/7/15 minutos según fallos dentro de la ventana; máximo de dos reservas simultáneas por cuenta; TTL de reserva 120 segundos; éxito confirmado reinicia fallos; abandono/expiración no cuenta como fallo.
 - El guard compartirá el archivo SQLite canónico, pero cada transición tendrá su propia transacción breve `BEGIN IMMEDIATE`, fuera de la UoW de autenticación. Argon2id se ejecutará fuera de transacciones SQLite de escritura.
 - El servicio deberá volver a leer issuer, autenticador, estado y `credential_revision` después del hash y antes de crear el proof. Si el guard no confirma el resultado, no se devuelve proof.
-- **Estado de implementación:** decisiones y documentación aprobadas; adaptador persistente, migración, nuevo contrato de reservas, reestructuración del servicio y pruebas aún pendientes de implementación y validación local.
+- **Estado de implementación:** puerto, adaptador SQLite, migración V28, reestructuración del servicio y pruebas unitarias están publicados en la rama; la validación local sigue pendiente.
 - No habilitar login operativo ni conectar la consola sintética con CAM/Workspace. La clave HMAC sigue necesitando provisión secreta confiable; bootstrap sigue bloqueado por la decisión sobre el perfil CAM del Grant inicial.
 - El trabajo se mantiene en la rama MVP; no modificar `main`, no ejecutar pruebas desde GitHub y no tocar la DB/host reales.
 
-**Siguiente paso único:** implementar el guard SQLite y el flujo de reservas de autenticación conforme al diseño aprobado, manteniendo la composición operativa deshabilitada.
+**Siguiente paso único:** completar la revisión estática de composición/instanciación y cobertura del guard; después solicitar validación local en Debian, manteniendo la composición operativa deshabilitada.
+
+
+## 10. Implementación inicial del guard de autenticación — 2026-11-22
+
+Esta sección prevalece sobre el estado de implementación descrito en §9. La rama sigue siendo `work/atlas-mvp-runtime`; consultar GitHub para obtener el HEAD vivo. El propietario aprobó cambiar la cuarta demora de 8 a 7 minutos. Política vigente: ventana móvil 15 minutos, demoras 1/2/4/7/15 minutos, máximo dos reservas simultáneas, TTL 120 segundos, éxito confirmado limpia fallos y abandono/expiración no suma fallo.
+
+### Código publicado
+
+- Puerto `AuthenticationAttemptGuardPort` con `begin_attempt`, `complete_failure`, `complete_success` y `abandon_attempt`.
+- Migración SQLite V28, con tablas separadas para reservas y fallos e índices por cuenta/expiración/ventana; registrada en `SQLITE_MIGRATIONS`.
+- Adaptador `SQLiteAuthenticationAttemptGuard` sobre el archivo canónico, cada operación con `BEGIN IMMEDIATE` propio.
+- Servicio reordenado: resolver issuer en UoW breve; reservar; leer autenticador; verificar/hash Argon2id fuera de UoW; volver a leer issuer/autenticador y comparar estado, subject y `credential_revision`; persistir proof; confirmar éxito del guard antes de devolver referencia raw.
+- Tests del servicio adaptados y nueva suite unitaria del adaptador para migración, concurrencia de reservas, backoff, ventana, expiración, abandono, reset y consumo único.
+
+### Revisión estática y límites
+
+Se corrigieron el registro/exportación de V28, la limpieza durable de reservas expiradas, el orden de reserva antes de leer la credencial y un import de tests que contenía secuencias literales `\\n`. La demora máxima se mantiene activa hasta su `blocked_until`, aunque el fallo origen llegue al límite de antigüedad de la ventana; los fallos fuera de ventana no contribuyen al siguiente cálculo de demora.
+
+**No validado:** no se ejecutaron pruebas, compileall, migraciones ni workflows desde GitHub. El código publicado puede requerir correcciones tras la ejecución local. No afirmar que el guard funciona hasta que el propietario valide en Debian.
+
+**No habilitado:** composición de login, endpoints, bootstrap, Workspace, CAM ni consola autenticada. La provisión de clave HMAC y la decisión sobre el perfil CAM del Grant inicial siguen pendientes y separadas.
+
+**Próximo paso:** revisión estática de todas las instanciaciones de `NativeAuthenticationService`, dependencias/imports y coherencia de tests; después entregar comandos de validación focalizada al propietario. No modificar `main`.
