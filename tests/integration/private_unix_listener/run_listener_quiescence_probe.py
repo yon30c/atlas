@@ -518,6 +518,84 @@ def read_bounded_json_file(path: Path, *, expected_uid: int | None = None,
     return value
 
 
+class PersistentSystemdBusRef:
+    """One persistent system-bus connection owns RefUnit references for this run."""
+
+    def __init__(self):
+        library = ctypes.util.find_library("systemd")
+        if not library:
+            raise Incomplete("libsystemd is unavailable for persistent unit references")
+        self.lib = ctypes.CDLL(library)
+        self.lib.sd_bus_open_system.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
+        self.lib.sd_bus_open_system.restype = ctypes.c_int
+        self.lib.sd_bus_message_new_method_call.argtypes = [
+            ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p),
+            ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p,
+        ]
+        self.lib.sd_bus_message_new_method_call.restype = ctypes.c_int
+        self.lib.sd_bus_message_append_basic.argtypes = [
+            ctypes.c_void_p, ctypes.c_char, ctypes.c_void_p,
+        ]
+        self.lib.sd_bus_message_append_basic.restype = ctypes.c_int
+        self.lib.sd_bus_call.argtypes = [
+            ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint64,
+            ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p),
+        ]
+        self.lib.sd_bus_call.restype = ctypes.c_int
+        self.lib.sd_bus_message_unref.argtypes = [ctypes.c_void_p]
+        self.lib.sd_bus_message_unref.restype = ctypes.c_void_p
+        self.lib.sd_bus_unref.argtypes = [ctypes.c_void_p]
+        self.lib.sd_bus_unref.restype = ctypes.c_void_p
+        self.bus = ctypes.c_void_p()
+        result = self.lib.sd_bus_open_system(ctypes.byref(self.bus))
+        if result < 0 or not self.bus:
+            raise Incomplete(f"sd_bus_open_system failed: {result}")
+
+    def _call_unit_method(self, method: str, name: str) -> None:
+        if not self.bus:
+            raise Incomplete("persistent system-bus reference connection is closed")
+        message = ctypes.c_void_p()
+        reply = ctypes.c_void_p()
+        result = self.lib.sd_bus_message_new_method_call(
+            self.bus, ctypes.byref(message),
+            b"org.freedesktop.systemd1", b"/org/freedesktop/systemd1",
+            b"org.freedesktop.systemd1.Manager", method.encode("ascii"),
+        )
+        if result < 0:
+            raise Incomplete(f"cannot create D-Bus {method} message: {result}")
+        try:
+            value = ctypes.c_char_p(name.encode("ascii"))
+            result = self.lib.sd_bus_message_append_basic(
+                message, b"s", ctypes.byref(value)
+            )
+            if result < 0:
+                raise Incomplete(f"cannot append unit name to {method}: {result}")
+            result = self.lib.sd_bus_call(
+                self.bus, message, ctypes.c_uint64(5_000_000),
+                None, ctypes.byref(reply),
+            )
+            if result < 0:
+                raise Incomplete(f"D-Bus {method} failed: {result}")
+        finally:
+            if reply:
+                self.lib.sd_bus_message_unref(reply)
+            if message:
+                self.lib.sd_bus_message_unref(message)
+
+    def ref_unit(self, name: str) -> None:
+        self._call_unit_method("RefUnit", name)
+
+    def unref_unit(self, name: str) -> None:
+        self._call_unit_method("UnrefUnit", name)
+
+    def close(self) -> None:
+        if self.bus:
+            self.bus = self.lib.sd_bus_unref(self.bus)
+
+
+_SYSTEMD_BUS_REF: PersistentSystemdBusRef | None = None
+
+
 class _TestLifecycleSupervisor:
     """Harness-only lifecycle gate; never imported by the Atlas runtime."""
 
