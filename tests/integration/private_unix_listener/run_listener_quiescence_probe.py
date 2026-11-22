@@ -1169,7 +1169,7 @@ def run_probe(args: argparse.Namespace) -> dict:
                                     "reason": "pending Unit.Job and populated=1 observed before manager termination"})
 
         # QP-05: distinct SERVICE/OTHER fixtures and an adapter-only identity mismatch.
-        other_dir = run_dir / "other"
+        other_dir = BASE / f"{run_id}-other"
         os.mkdir(other_dir, 0o730)
         os.chown(other_dir, 0, OTHER_GID)
         os.chmod(other_dir, 0o730)
@@ -1338,10 +1338,10 @@ def run_probe(args: argparse.Namespace) -> dict:
                                     "observations": parser_results})
 
         # QP-13: deliberately transfer one listener FD to an OTHER-cgroup holder.
-        other_dir13 = run_dir / "other-qp13"
-        os.mkdir(other_dir13, 0o730)
-        os.chown(other_dir13, 0, OTHER_GID)
-        os.chmod(other_dir13, 0o730)
+        other_dir13 = BASE / f"{run_id}-qp13-shared"
+        os.mkdir(other_dir13, 0o733)
+        os.chown(other_dir13, 0, 0)
+        os.chmod(other_dir13, 0o733)
         other_dir13_fd = os.open(other_dir13, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
         name13_service = f"atlas-qp-{secrets.token_hex(6)}.service"
         name13_holder = f"atlas-qp-{secrets.token_hex(6)}.service"
