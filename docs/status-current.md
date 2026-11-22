@@ -1,32 +1,28 @@
 # Estado vigente de Atlas
 
 > **Corte documental:** 22 de noviembre de 2026.
-> **Main actual:** PR #29 integrado mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b` (21-11-2026). La suite comunicada fue ejecutada sobre el HEAD de PR `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, antes de los commits documentales y del merge; no se ha reportado una nueva ejecución sobre el merge commit.
-> **PR #29:** cerrado e integrado en `main`; HEAD probado `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`.
-> **PR integrado:** [#29](https://github.com/yon30c/atlas/pull/29), merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`.
-> **Suite completa reportada:** sobre el HEAD de PR #29 `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`: **1,590 tests — OK (skipped=1)**, 34.753 s, Python 3.13.5. La validación precede al merge commit; no afirmar que se ejecutó sobre `main` después del merge.
-> **Validación local de PR #29:** en Debian 13, HEAD `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, árbol limpio y sincronizado con origin. Probe user-manager: `PASS` (descriptor, dos activaciones, ownership/mode privados y `RemoveOnStop=no`). Suite completa: `Ran 1590 tests in 34.753s`, `OK (skipped=1)`. Esta evidencia cubre ese HEAD y no demuestra system-manager, separación de privilegios ni despliegue. No se ejecutaron pruebas, compilaciones ni workflows desde GitHub.
-> **Estado IPC:** handler/prototipo para conexiones ya aceptadas; solo `authority.ping` está implementado. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
-> **Estado de transporte:** ninguno aprobado para producción. Listener propio en filesystem privado: candidato para probe aislado; socket activation systemd sobre filesystem: suspendida por colisión destructiva observada; AF_UNIX abstracto: alternativa experimental con riesgos de preclaim/DoS y sin DAC.
-> **Este documento diferencia** implementación publicada, cambios en PR, validación local reportada y capacidades conectadas al runtime.
-
+> **Main:** HEAD `a89e96cc4e5d9555e28a7ea5d9f3788654fe7268`; PR #29 integrado mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`.
+> **Rama MVP activa:** `work/atlas-mvp-runtime`, HEAD `29e900a1129efbb83c8e4b867c99d37d66473c55`; 96 commits por delante y 0 por detrás de `main`. No integrada.
+> **Validación local de la rama MVP:** suite completa `Ran 1611 tests in 40.322s — OK (skipped=1)`; `compileall -q src tests` sin errores reportados. Validación comunicada por el propietario desde Debian 13 / `Atlas-VM-test`, no ejecutada desde GitHub.
+> **Límite de validación:** la suite unitaria no demuestra migración sobre una base persistente real, login desplegado, composición autenticada, bootstrap, Workspace ni CAM operativo.
+> **IPC:** el handler sigue siendo un prototipo para conexiones ya aceptadas; solo `authority.ping` está implementado. No hay listener persistente ni transporte aprobado para producción. Socket activation systemd sobre filesystem permanece suspendida por la colisión destructiva observada.
 
 ## Prioridad actual — MVP local limitado (2026-11-22)
 
-La rama `work/atlas-mvp-runtime` fue creada desde `main` para priorizar una versión local utilizable sin mezclar el trabajo con el experimento IPC.
+La rama `work/atlas-mvp-runtime` prioriza un MVP local que permita conversar y preparar planes sin conceder autoridad de ejecución.
 
-- Se conectó el planificador F1 a la consola mediante `/plan <solicitud>`.
-- El proveedor de planificación usa Ollama en loopback con salida JSON y `think=false`; la conversación normal conserva su proveedor y comportamiento.
-- El comando muestra el objetivo, capacidad, parámetros y resultado esperado. Aclara que es una vista previa y que no se ejecutó ninguna operación.
-- Las solicitudes no soportadas y las que requieren aclaración se informan sin convertirlas en planes.
-- En modo offline, `/plan` informa que necesita Ollama.
-- Se añadieron `tests/unit/test_console_planning.py` y cobertura de composición en `tests/unit/test_local_console_composition.py`.
+- **Consola:** conversación persistente con Ollama y comando `/plan <solicitud>` conectado al planificador F1. Presenta objetivo, capacidad, parámetros y resultado esperado; no ejecuta operaciones ni accede al filesystem.
+- **Guard de autenticación:** implementación SQLite V28 publicada y validada en la suite completa. Usa el mismo archivo SQLite canónico, transacciones breves e independientes `BEGIN IMMEDIATE`, reservas por intento con TTL de 120 s, máximo dos reservas simultáneas por cuenta, ventana móvil de 15 min y demoras 1/2/4/7/15 min. Argon2id ocurre fuera de transacciones SQLite de escritura; el proof solo se devuelve tras revalidar estado/revisión y confirmar el éxito del guard.
+- **Validación local:** además de la suite completa (1611 tests, 1 omitido), el propietario había validado 14 pruebas focalizadas de planificación, 21 pruebas focalizadas del guard y `compileall`. La evidencia de suite completa incluye las pruebas de ambos incrementos y las regresiones V28.
+- **Composición revisada:** `src/atlas/cli.py` solo compone conversación/planificación; `src/atlas/bootstrap.py` solo construye el planificador. La composición SQLite de autoridad enlaza base y fábrica UoW, y la UoW expone repositorios nativos; los puntos revisados no instancian `NativeAuthenticationService` ni `SQLiteAuthenticationAttemptGuard`. Login no está conectado al runtime.
+- **Bloqueos previos a login:** falta una fuente/proveedor secreto confiable para la clave HMAC y su política de ciclo de vida; el perfil CAM del Grant inicial para bootstrap de propietario sigue pendiente de decisión explícita. No inferir ninguno.
+- **Bloqueo de identidad:** `LocalConsoleRequestFactory` continúa creando un `OperationContext` sintético basado en el usuario del sistema operativo. No debe alcanzar Workspace, CAM, Memory, Broker ni capacidades protegidas.
+- **Alcance temporal:** conversación persistente + vista previa de planes. Workspace read-only será posterior a autenticación USER verificable, bootstrap y autorización CAM exacta. No habilitar escritura, shell, Docker, Skills, Broker, runtime AGENT ni ejecución multi-paso.
 
-**Validación local focalizada completada por el propietario en Debian 13:** `Ran 14 tests in 0.029s — OK` para `tests.unit.test_console_planning` y `tests.unit.test_local_console_composition`. `.venv/bin/python -m compileall -q src tests` terminó sin errores. La suite completa de la rama no se ha ejecutado. No se ejecutaron pruebas ni compilaciones desde GitHub.
+**Siguiente paso único:** acordar explícitamente las decisiones faltantes de provisión de clave HMAC y perfil CAM del Grant inicial; con ellas definidas, diseñar la composición de autenticación aislada y su validación local. No conectar todavía Workspace ni la consola sintética a capacidades protegidas.
 
-**Decisión aprobada por el propietario (2026-11-22):** guard persistente en el mismo archivo SQLite, con reservas explícitas de 120 s, máximo 2 intentos simultáneos por cuenta, ventana móvil de 15 min y demoras 1/2/4/7/15 min; éxito confirmado reinicia fallos y abandono/expiración no cuenta como fallo. Argon2id debe ejecutarse fuera de transacciones SQLite de escritura; la emisión del proof requiere relectura de issuer/autenticador/revisión y finalización exitosa de la reserva. La especificación normativa de este incremento es [`native-authentication-attempt-guard-approved-design.md`](design/native-authentication-attempt-guard-approved-design.md). **Implementación inicial publicada en la rama:** puerto de reservas, migración V28/adaptador SQLite, reestructuración de `NativeAuthenticationService`, corrección de imports y pruebas unitarias del servicio y del guard. La migración está registrada en `SQLITE_MIGRATIONS`. Esta implementación todavía no ha sido validada localmente. La provisión secreta de la clave HMAC y el bootstrap siguen siendo dependencias posteriores. El bootstrap de propietario sigue bloqueado por la decisión pendiente sobre el perfil CAM del Grant inicial. Las sesiones C2 y la reconciliación I-3 de consumidores CAM tampoco están integradas. La consola actual sigue produciendo un `OperationContext` sintético: no conectar Workspace hasta cerrar la cadena de identidad USER canónica, revalidación y autorización CAM exacta.
+**Nota de lectura:** las secciones posteriores conservan snapshots históricos y decisiones previas. Cuando contradigan este bloque operativo, prevalece este bloque; no deben confundirse resultados históricos con el estado actual.
 
-**Alcance temporal del MVP:** conversación persistente + vista previa de planes; el siguiente hito será Workspace read-only bajo CAM. No se habilitan escritura, shell, Docker, Skills, Broker, runtime AGENT ni ejecución multi-paso.
 
 ## Autoridad administrativa local e IPC — estado al 2026-11-21
 
