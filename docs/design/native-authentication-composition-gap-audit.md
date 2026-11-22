@@ -242,3 +242,19 @@ Commit 0315d52db9505998244dace068828723bb5b424f modifica `WorkspaceCapabilityExe
 - Los tests incorporan un fake local explícito; no simulan ni prueban la custodia HMAC productiva.
 
 **Pendiente:** pruebas focalizadas y suite completa en Debian. No existe todavía un composition root productivo para el verificador HMAC, y Workspace no está conectado a la CLI. Este cambio endurece el servicio, pero no habilita su uso operativo.
+
+
+## 11. Perfil mínimo de autoridad inicial aprobado (2026-11-22)
+
+El propietario aprobó el perfil descrito en `initial-owner-authority-provisioning-contract.md`:
+
+- un Project, un Environment, una asociación canónica y un Workspace;
+- Grant dirigido exclusivamente a la Identity(USER) canónica del propietario;
+- `workspace.list` sobre el ID exacto del Workspace;
+- `workspace.read` solo sobre IDs canónicos de archivos seleccionados explícitamente;
+- vigencia de siete días y renovación solo tras nueva autenticación/decisión directa del propietario;
+- sin delegación, wildcard, escritura, borrado, shell ni ejecución de comandos;
+- helper dedicado C/libpam, sin shell ni privilegios generales para Atlas;
+- clave HMAC de Identity separada de Local Consistency y entregada por systemd credentials.
+
+La aprobación fija el perfil funcional, no declara terminada la implementación. La selección concreta del helper privileged invocation (A/B), el formato de prueba, el binding persistente, la transacción de génesis con journal/gate, la custodia/rotación de la clave Identity y la composición productiva siguen siendo gates de implementación. No se debe activar Workspace ni login hasta cerrar esos gates y ejecutar la validación local.
