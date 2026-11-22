@@ -1080,9 +1080,9 @@ def run_probe(args: argparse.Namespace) -> dict:
                                     "monotonic_ns": mono(), "unit": stable, "cgroup": after2})
         if not quiescent:
             raise Incomplete("QP-01 did not satisfy the complete quiescence predicate")
+        policy01 = json.loads(ready_path.read_text(encoding="ascii"))["fd_policy"]
         cleanup = _stop_and_cleanup(name, initial, endpoint, ready_path, run_dir_fd, report, already_stopped=True, cgroup_empty_confirmed=True)
         report["cleanup"]["resources"].append(cleanup)
-        policy01 = json.loads(ready_path.read_text(encoding="ascii"))["fd_policy"]
         report["scenarios"].append({"id": "QP-01", "status": "PASS",
                                     "decision": "QUIESCENT",
                                     "reason": "listener closed by service; fork/duplication/SCM_RIGHTS paths denied; manager inactive and two correlated cgroup snapshots populated=0",
@@ -1109,11 +1109,11 @@ def run_probe(args: argparse.Namespace) -> dict:
             and stable2["InvocationID"] == initial2["InvocationID"]
             and stable2["Job"][0] == 0
         )
+        policy02 = json.loads(ready2.read_text(encoding="ascii"))["fd_policy"]
         cleanup2 = _stop_and_cleanup(name2, initial2, endpoint2, ready2, run_dir_fd, report, already_stopped=True, cgroup_empty_confirmed=True)
         report["cleanup"]["resources"].append(cleanup2)
         if not passed2 or not cleanup2["endpoint_removed"]:
             raise Incomplete("QP-02 failed its pre-stop helper or post-stop empty-cgroup check")
-        policy02 = json.loads(ready2.read_text(encoding="ascii"))["fd_policy"]
         report["scenarios"].append({"id": "QP-02", "status": "PASS",
                                     "decision": "QUIESCENT",
                                     "reason": "pre-listener child was contained in the service cgroup; post-listener fork/duplication/SCM_RIGHTS paths denied; stop emptied the correlated cgroup",
