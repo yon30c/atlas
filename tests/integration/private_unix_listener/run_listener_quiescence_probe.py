@@ -2672,8 +2672,12 @@ def run_probe(args: argparse.Namespace) -> dict:
                 report_identity = _safe_json_file(report_path, report, MAX_REPORT)
                 persisted = True
                 report["evidence_persisted_before_gate_release"] = True
-                if not (report["cleanup"]["safe_to_release_gate"] and marker_created):
-                    _rewrite_json_file(report_path, report, MAX_REPORT, expected_identity=report_identity)
+                if marker_created and report["cleanup"]["safe_to_release_gate"]:
+                    report["gate"]["marker_release_authorized_after_evidence_persisted"] = True
+                # Persist the final decision before removing the sticky marker.
+                # Marker removal is the final filesystem mutation; no report
+                # rewrite is required after the maintenance gate is released.
+                _rewrite_json_file(report_path, report, MAX_REPORT, expected_identity=report_identity)
             except Exception as exc:
                 report["cleanup"]["report_persist_error"] = f"{type(exc).__name__}: {exc}"
                 report["cleanup"]["safe_to_release_gate"] = False
@@ -2687,29 +2691,20 @@ def run_probe(args: argparse.Namespace) -> dict:
         # The sticky marker is retained on any uncertainty. The lock file and
         # /run/atlas-qp parent remain for audit and future invocations.
         if persisted and report["cleanup"]["safe_to_release_gate"] and marker_created and marker is not None:
+            base_fd = None
             try:
                 base_fd = os.open(BASE, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
-                try:
-                    base_info = os.fstat(base_fd)
-                    if (
-                        not stat.S_ISDIR(base_info.st_mode)
-                        or base_info.st_uid != 0 or base_info.st_gid != 0
-                        or stat.S_IMODE(base_info.st_mode) != 0o711
-                    ):
-                        raise Incomplete("maintenance base directory identity changed before marker removal")
-                    if marker_identity is None:
-                        raise Incomplete("sticky marker identity evidence is unavailable")
-                    unlink_verified_regular_file(base_fd, marker.name, marker_identity, 0, 0)
-                finally:
-                    os.close(base_fd)
+                base_info = os.fstat(base_fd)
+                if (
+                    not stat.S_ISDIR(base_info.st_mode)
+                    or base_info.st_uid != 0 or base_info.st_gid != 0
+                    or stat.S_IMODE(base_info.st_mode) != 0o711
+                ):
+                    raise Incomplete("maintenance base directory identity changed before marker removal")
+                if marker_identity is None:
+                    raise Incomplete("sticky marker identity evidence is unavailable")
+                unlink_verified_regular_file(base_fd, marker.name, marker_identity, 0, 0)
                 report["gate"]["marker_removed_after_cleanup"] = True
-                report["overall"] = (
-                    "PASS" if len(statuses) == 15 and all(value == "PASS" for value in statuses)
-                    and report["cleanup"]["safe_to_release_gate"]
-                    else "FAIL" if "FAIL" in statuses or "harness_error" in report
-                    else "INCOMPLETE"
-                )
-                _rewrite_json_file(report_path, report, MAX_REPORT, expected_identity=report_identity)
             except Exception as exc:
                 report["cleanup"]["safe_to_release_gate"] = False
                 report["overall"] = "INCOMPLETE"
@@ -2727,6 +2722,9 @@ def run_probe(args: argparse.Namespace) -> dict:
                     report["gate"]["marker_recovery_error"] = (
                         f"{type(recovery_exc).__name__}: {recovery_exc}"
                     )
+            finally:
+                if base_fd is not None:
+                    os.close(base_fd)
         if lock_fd is not None:
             if report["cleanup"]["safe_to_release_gate"]:
                 fcntl.flock(lock_fd, fcntl.LOCK_UN)
