@@ -1110,9 +1110,11 @@ to remove real socket pathnames.
   HEAD before execution. The runner rejects another branch or a dirty checkout.
 - Run as root with Python 3.13.5, Debian 13, systemd 257.13 and the expected
   kernel `6.12.117+deb13-amd64`.
-- The reserved fixture identities must already exist:
-  SERVICE UID/GID 2005:2005 and OTHER UID/GID 2006:2006. The runner does not
-  create users or groups.
+- The approved fixture identities are reserved numeric IDs:
+  SERVICE UID/GID 2005:2005 and OTHER UID/GID 2006:2006. They do not require
+  NSS account/group entries. The runner configures numeric `User=`/`Group=`
+  values and verifies the fixture process's real/effective UID/GID and
+  supplementary groups. It does not create, modify, or query system users/groups.
 - `libseccomp`, `libsystemd`, `busctl`, `systemd-run` and `systemctl`
   must already be installed. The preflight does not install packages or alter
   host configuration.
