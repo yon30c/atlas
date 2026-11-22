@@ -545,6 +545,31 @@ def run_fd_policy_checks(listener: socket.socket, *, deny_fork: bool, deny_fd_es
 
 def fixture_main(args: argparse.Namespace) -> int:
     """Unprivileged systemd service fixture; never used against Atlas."""
+    if args.exec_helper:
+        fd_closed = False
+        try:
+            os.fstat(args.listener_fd)
+        except OSError as exc:
+            if exc.errno != errno.EBADF:
+                raise
+            fd_closed = True
+        info = os.stat(args.socket, follow_symlinks=False)
+        ready = {
+            "pid": os.getpid(), "original_pid": args.original_pid,
+            "fd": args.listener_fd, "listener_fd_closed": fd_closed,
+            "exec_same_pid": os.getpid() == args.original_pid,
+            "device": info.st_dev, "inode": info.st_ino,
+            "uid": info.st_uid, "gid": info.st_gid,
+            "mode": stat.S_IMODE(info.st_mode), "exec_helper": True,
+        }
+        fd = os.open(args.ready, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC, 0o600)
+        try:
+            os.write(fd, json.dumps(ready, sort_keys=True).encode("ascii"))
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        while True:
+            signal.pause()
     listener = None
     child = None
     try:
@@ -564,6 +589,17 @@ def fixture_main(args: argparse.Namespace) -> int:
             listener.bind(args.socket)
             listener.listen(1)
             info = os.stat(args.socket, follow_symlinks=False)
+            if args.exec_check:
+                original_pid = os.getpid()
+                original_fd = listener.detach()
+                exec_fd = fcntl.fcntl(original_fd, fcntl.F_DUPFD_CLOEXEC, 200)
+                os.close(original_fd)
+                os.execve(sys.executable, [
+                    sys.executable, "-I", str(Path(__file__).resolve()),
+                    "--fixture", "--exec-helper", "--listener-fd", str(exec_fd),
+                    "--original-pid", str(original_pid), "--socket", args.socket,
+                    "--ready", args.ready,
+                ], {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"})
             ready.update({
                 "fd": listener.fileno(), "device": info.st_dev, "inode": info.st_ino,
                 "uid": info.st_uid, "gid": info.st_gid,
@@ -716,7 +752,7 @@ def update_gate_marker(marker: Path, run_id: str, name: str, snapshot: dict, pha
 
 def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=False,
                    delegate=False, no_listener=False, uid=SERVICE_UID, gid=SERVICE_GID,
-                   deny_fork=False, deny_fd_escape=False) -> tuple[dict, Path | None, Path]:
+                   deny_fork=False, deny_fd_escape=False, exec_check=False) -> tuple[dict, Path | None, Path]:
     assert_unit_absent(name)
     socket_path = run_dir / f"{name}.sock"
     ready_path = run_dir / f"{name}.ready"
@@ -740,6 +776,8 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
         command.append("--deny-fork")
     if deny_fd_escape:
         command.append("--deny-fd-escape")
+    if exec_check:
+        command.append("--exec-check")
     if _ACTIVE_SUPERVISOR is None or _ACTIVE_RUN_ID is None:
         raise Incomplete("no active test lifecycle supervisor")
     _ACTIVE_SUPERVISOR.request("start", command, actor_run_id=_ACTIVE_RUN_ID)
@@ -763,6 +801,11 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
         raise Incomplete("systemd fixture User/Group identity differs from requested UID/GID")
     if snap["ControlGroup"] == "":
         raise Incomplete("systemd returned an empty ControlGroup")
+    if exec_check and (
+        not ready.get("exec_helper") or not ready.get("exec_same_pid")
+        or not ready.get("listener_fd_closed")
+    ):
+        raise Incomplete("QP-10 exec helper did not confirm same PID and closed listener FD")
     if no_listener:
         if ready.get("fd") is not None:
             raise Incomplete("control-only fixture unexpectedly reported a listener FD")
@@ -1079,6 +1122,27 @@ def run_probe(args: argparse.Namespace) -> dict:
             "id": "QP-08", "status": "PASS",
             "reason": "fork/vfork/clone/clone3 all returned EPERM after listener bind/listen",
             "observations": policy8,
+        })
+
+        # QP-10: execve in the same process closes the CLOEXEC listener descriptor.
+        name10 = f"atlas-qp-{secrets.token_hex(6)}.service"
+        initial10, endpoint10, ready10 = _start_fixture(name10, run_dir, exec_check=True)
+        report["unit_identity"][name10] = initial10
+        exec_evidence = json.loads(ready10.read_text(encoding="ascii"))
+        cleanup10 = _stop_and_cleanup(name10, initial10, endpoint10, ready10, run_dir_fd, report)
+        report["cleanup"]["resources"].append(cleanup10)
+        if (
+            not exec_evidence.get("exec_helper")
+            or not exec_evidence.get("exec_same_pid")
+            or not exec_evidence.get("listener_fd_closed")
+            or not cleanup10["unit_inactive"] or not cleanup10["cgroup_empty"]
+            or not cleanup10["endpoint_removed"]
+        ):
+            raise Incomplete("QP-10 exec/CLOEXEC evidence or cleanup failed")
+        report["scenarios"].append({
+            "id": "QP-10", "status": "PASS",
+            "reason": "execve replaced the same process and the helper observed EBADF for the listener FD",
+            "observations": exec_evidence,
         })
 
         # QP-09: deny duplication and ancillary-data transfer; read/write remain usable.
@@ -1435,6 +1499,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-listener", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--deny-fork", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--deny-fd-escape", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--exec-check", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--exec-helper", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--listener-fd", type=int, help=argparse.SUPPRESS)
+    parser.add_argument("--original-pid", type=int, help=argparse.SUPPRESS)
     return parser.parse_args()
 
 
