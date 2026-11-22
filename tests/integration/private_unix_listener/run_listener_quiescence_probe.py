@@ -1261,8 +1261,13 @@ def preflight() -> dict:
         if not path_accessible_by(python_path, uid, gid, file_permission=0o1):
             raise Incomplete(f"Python interpreter path is not traversable/executable by {label}")
     bus_version = bounded_run(["busctl", "--version"], timeout=3.0, limit=4096)
-    if b"systemd 257.13" not in bus_version:
-        raise Incomplete("systemd/busctl version is outside the pinned 257.13 profile")
+    try:
+        client_version_line = bus_version.decode("ascii", "strict").splitlines()[0]
+    except (UnicodeError, IndexError) as exc:
+        raise Incomplete("cannot parse busctl version output") from exc
+    client_version = client_version_line.removeprefix("systemd ")
+    if not (client_version == "257.13" or client_version.startswith("257.13-")):
+        raise Incomplete("systemd/busctl client version is outside the pinned 257.13 profile")
     root, mount = cgroup_mount()
     if root != Path("/"):
         raise Incomplete("cgroup v2 mount does not expose the unified hierarchy root")
@@ -1286,7 +1291,10 @@ def preflight() -> dict:
     if (
         manager_version_result.get("type") != "s"
         or not isinstance(manager_version_result.get("data"), str)
-        or not manager_version_result["data"].startswith("257.13")
+        or not (
+            manager_version_result["data"] == "257.13"
+            or manager_version_result["data"].startswith("257.13-")
+        )
     ):
         raise Incomplete("system manager D-Bus Version is outside the pinned 257.13 profile")
     manager_version = manager_version_result["data"]
