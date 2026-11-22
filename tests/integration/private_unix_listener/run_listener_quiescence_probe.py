@@ -2341,7 +2341,8 @@ def run_probe(args: argparse.Namespace) -> dict:
         )
         report["gate"]["qp11_second_actor_rejected"] = True
         report["gate"]["qp11_lock_released_after_simulated_crash"] = True
-        report["gate"]["qp11_sticky_marker_blocked_after_crash"] = True
+        report["gate"]["qp11_sticky_marker_persisted_after_crash"] = True
+        report["gate"]["qp11_post_crash_supervisor_denied_without_owner_authorization"] = True
         report["gate"]["qp11_harness_reacquired_for_evidence_cleanup"] = True
         systemd_stop(name11)
         stopped11 = wait_inactive(name11, time.monotonic() + STOP_TIMEOUT + 3, expected_invocation=initial11["InvocationID"], control_group=initial11["ControlGroup"])
