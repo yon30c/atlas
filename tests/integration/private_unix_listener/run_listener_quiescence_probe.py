@@ -1506,8 +1506,8 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
         ready.get("uid") != uid or ready.get("euid") != uid
         or ready.get("gid") != gid or ready.get("egid") != gid
         or not isinstance(expected_supplementary, list)
-        or expected_supplementary != sorted(set(expected_supplementary))
         or any(not isinstance(value, int) or isinstance(value, bool) for value in expected_supplementary)
+        or expected_supplementary != sorted(set(expected_supplementary))
         or any(value != gid for value in expected_supplementary)
     ):
         raise Incomplete("fixture process credentials differ from the approved numeric identity")
