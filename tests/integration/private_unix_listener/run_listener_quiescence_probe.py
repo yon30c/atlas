@@ -800,6 +800,7 @@ def run_fd_policy_checks(listener: socket.socket, *, deny_fork: bool, deny_fd_es
             if duplicate_before_filter < 0:
                 raise Incomplete("pidfd_getfd baseline was not permitted before seccomp")
             os.close(duplicate_before_filter)
+            observations["pidfd_getfd_baseline_success"] = True
         finally:
             os.close(pidfd)
     install_seccomp_denials(deny_fork=deny_fork, deny_fd_escape=deny_fd_escape)
