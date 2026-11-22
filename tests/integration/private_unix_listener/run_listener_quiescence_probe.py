@@ -1479,7 +1479,7 @@ def unlink_verified_regular_file(dir_fd: int, name: str, expected: dict,
 def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=False,
                    delegate=False, no_listener=False, uid=SERVICE_UID, gid=SERVICE_GID,
                    deny_fork=False, deny_fd_escape=False, exec_check=False,
-                   no_new_privs=False, protect_cgroups=False, drop_caps=False,
+                   no_new_privs=False, protect_cgroups=False,
                    fd_holder=False, control_path: Path | None = None,
                    received_path: Path | None = None,
                    transfer_fd_to: Path | None = None) -> tuple[dict, Path | None, Path]:
@@ -1578,7 +1578,7 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
         or snap["CapabilityBoundingSet"] != LAUNCHER_CAPS
         or snap["AmbientCapabilities"] != 0
     ):
-        raise Incomplete("systemd fixture User/Group/UID/GID identity differs from requested identity")
+        raise Incomplete("systemd fixture root launcher identity or bootstrap capability profile differs")
     if snap["ControlGroup"] == "":
         raise Incomplete("systemd returned an empty ControlGroup")
     _cg_root, fixture_mount = cgroup_mount()
@@ -2197,7 +2197,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         name6good = f"atlas-qp-{secrets.token_hex(6)}.service"
         initial6good, endpoint6good, ready6good = _start_fixture(
             name6good, run_dir, delegate=False, no_new_privs=True,
-            protect_cgroups=True, drop_caps=True,
+            protect_cgroups=True,
         )
         report["unit_identity"][name6good] = initial6good
         ready6good_data = read_bounded_json_file(ready6good, expected_uid=SERVICE_UID, expected_gid=SERVICE_GID)
