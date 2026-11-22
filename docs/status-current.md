@@ -1064,3 +1064,32 @@ El propietario ejecutó el runner en `Atlas-VM-test` desde el checkout limpio de
 Se corrigió únicamente la normalización del formato parentizado de Debian en `run_listener_quiescence_probe.py`: extrae la versión upstream/paquete entre paréntesis y conserva la exigencia estricta de 257.13. No se amplió el perfil a systemd 257 genérico ni se modificó la VM. Commit: `0f767347d50936195def9139605bdc45c30bfd0a`.
 
 La primera ejecución no inició escenarios (`scenarios=[]`, `systemd_socket_activation_tested=false`) y no realizó mutación de pathname. No hubo evidencia de fallo del listener. La corrección solo tiene revisión estática; no se ejecutaron pruebas, builds, workflows ni probes desde GitHub. Pendiente: actualizar el checkout de `Atlas-VM-test`, revisar rama/HEAD/worktree y ejecutar las pruebas locales antes de repetir el probe. A-THREAT-05 permanece abierta; no hay aprobación de stale recovery, listener persistente, cleanup automático ni despliegue.
+
+### A-IPC-05 — corrección de la detección de unidades no cargadas (2026-11-22)
+
+La segunda ejecución del propietario pasó el preflight, pero abortó antes de
+QP-01: ListUnitsByNames devolvió un registro para
+atlas-qp-8c8b2df5a8d6.service con LoadState=not-found,
+ActiveState=inactive, SubState=dead. La consulta independiente GetUnit
+respondió Unit ... not loaded; systemctl show/status, list-units,
+list-jobs y la inspección de rutas transient no encontraron una unidad
+cargada, un job ni archivos transient.
+
+**Causa confirmada:** el runner interpretaba cualquier array no vacío de
+Manager.ListUnitsByNames como colisión. systemd 257 devuelve un registro
+placeholder también para nombres no cargados; la señal correcta es
+LoadState=not-found, no un array vacío.
+
+Se corrigió unit_is_absent() para exigir exactamente un registro tipado
+correspondiente al nombre solicitado y considerar ausente solo
+LoadState=not-found. Respuestas con forma inesperada, nombre distinto,
+registro malformado o cualquier otro LoadState continúan fallando de forma
+cerrada. Commit: 16899dc1faf99bd5a930150011cfe373b602e71b.
+
+La ejecución anterior terminó con 0 PASS / 0 FAIL / 15 INCOMPLETE y
+overall=FAIL por aborto del harness; no inició escenarios, no produjo
+snapshots, no probó socket activation ni mutó pathname. La corrección es
+solo estática: falta actualizar el checkout y ejecutar primero la suite
+local y luego el probe en Atlas-VM-test. No ejecutar en greed.
+A-THREAT-05 permanece abierta; no se autoriza stale recovery, listener
+persistente, cleanup automático ni despliegue.
