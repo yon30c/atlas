@@ -96,7 +96,7 @@ No se introducen tablas de secretos, sesiones, tokens, IPs ni contenido de crede
 
 Se publicaron en la rama de trabajo el puerto de reservas, la migración SQLite V28, el adaptador `SQLiteAuthenticationAttemptGuard`, la reestructuración de `NativeAuthenticationService` y pruebas unitarias del servicio y del adaptador. La migración V28 forma parte de `SQLITE_MIGRATIONS`. El servicio resuelve el issuer, reserva, consulta el autenticador, ejecuta Argon2id fuera de UoW y revalida issuer/autenticador/estado/subject/revisión antes de persistir el proof.
 
-**Estado:** implementación publicada, pendiente de revisión estática final y validación local por el propietario. No se han ejecutado pruebas ni compilaciones desde GitHub. No se habilitó composición operativa, login, Workspace ni CAM.
+**Estado:** implementación publicada y revisada estáticamente en los archivos del incremento; validación local por el propietario pendiente. No se han ejecutado pruebas ni compilaciones desde GitHub. No se habilitó composición operativa, login, Workspace ni CAM.
 
 ## 8. Límites
 
