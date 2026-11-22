@@ -399,6 +399,20 @@ class _TestLifecycleSupervisor:
 
 _ACTIVE_SUPERVISOR: _TestLifecycleSupervisor | None = None
 _ACTIVE_RUN_ID: str | None = None
+_ACTIVE_FIXTURES: dict[str, dict] = {}
+_CLEANED_FIXTURES: set[str] = set()
+_SANDBOX_DIRS: list[dict] = []
+
+
+def register_sandbox_dir(path: Path) -> None:
+    info = os.stat(path, follow_symlinks=False)
+    if not stat.S_ISDIR(info.st_mode):
+        raise Incomplete("sandbox registration target is not a directory")
+    _SANDBOX_DIRS.append({
+        "path": path, "device": info.st_dev, "inode": info.st_ino,
+        "uid": info.st_uid, "gid": info.st_gid,
+        "mode": stat.S_IMODE(info.st_mode),
+    })
 
 
 def systemd_stop(name: str) -> None:
@@ -903,6 +917,13 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
     if _ACTIVE_SUPERVISOR is None or _ACTIVE_RUN_ID is None:
         raise Incomplete("no active test lifecycle supervisor")
     _ACTIVE_SUPERVISOR.request("start", command, actor_run_id=_ACTIVE_RUN_ID)
+    fixture_socket_path = control_path if fd_holder else (None if no_listener else socket_path)
+    fixture_dir_fd = os.open(run_dir, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
+    _ACTIVE_FIXTURES[name] = {
+        "name": name, "run_dir": run_dir, "dir_fd": fixture_dir_fd,
+        "socket_path": fixture_socket_path, "ready_path": ready_path,
+        "uid": uid, "gid": gid, "initial": None,
+    }
     deadline = time.monotonic() + 8.0
     while time.monotonic() < deadline:
         try:
@@ -917,6 +938,7 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
     snap = unit_snapshot(name)
     if snap["MainPID"] <= 0 or ready.get("pid") != snap["MainPID"]:
         raise Incomplete("fixture readiness PID differs from systemd MainPID")
+    _ACTIVE_FIXTURES[name]["initial"] = snap
     if snap["Delegate"] != delegate:
         raise Incomplete("systemd Delegate property differs from requested fixture")
     expected_user = pwd.getpwuid(uid).pw_name
@@ -992,6 +1014,11 @@ def _stop_and_cleanup(name: str, initial: dict, socket_path: Path | None, ready_
                 os.unlink(ready_path.name, dir_fd=run_dir_fd)
             except FileNotFoundError:
                 pass
+        if (
+            cleanup["unit_inactive"] and cleanup["cgroup_empty"]
+            and (socket_path is None or cleanup["endpoint_removed"])
+        ):
+            _CLEANED_FIXTURES.add(name)
     except Exception as exc:
         cleanup["error"] = f"{type(exc).__name__}: {exc}"
         report["cleanup"]["safe_to_release_gate"] = False
@@ -1012,6 +1039,12 @@ def _wait_for_deactivation(name: str, mount: Path, control_group: str, deadline:
 
 
 def run_probe(args: argparse.Namespace) -> dict:
+    global _ACTIVE_SUPERVISOR, _ACTIVE_RUN_ID
+    _ACTIVE_SUPERVISOR = None
+    _ACTIVE_RUN_ID = None
+    _ACTIVE_FIXTURES.clear()
+    _CLEANED_FIXTURES.clear()
+    _SANDBOX_DIRS.clear()
     started_ns = mono()
     run_id = str(uuid.uuid4())
     report = {
@@ -1056,6 +1089,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         os.chmod(run_dir, 0o730)
         run_dir_fd = os.open(run_dir, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
         run_dir_info = os.fstat(run_dir_fd)
+        register_sandbox_dir(run_dir)
         report["sandbox"] = {
             "path": str(run_dir), "device": run_dir_info.st_dev,
             "inode": run_dir_info.st_ino, "uid": run_dir_info.st_uid,
@@ -1203,6 +1237,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         os.mkdir(other_dir, 0o730)
         os.chown(other_dir, 0, OTHER_GID)
         os.chmod(other_dir, 0o730)
+        register_sandbox_dir(other_dir)
         name5a = f"atlas-qp-{secrets.token_hex(6)}.service"
         name5b = f"atlas-qp-{secrets.token_hex(6)}.service"
         initial5a, _endpoint5a, ready5a = _start_fixture(name5a, run_dir, no_listener=True)
@@ -1373,6 +1408,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         os.mkdir(other_dir13, 0o1733)
         os.chown(other_dir13, 0, 0)
         os.chmod(other_dir13, 0o1733)
+        register_sandbox_dir(other_dir13)
         other_dir13_fd = os.open(other_dir13, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
         name13_service = f"atlas-qp-{secrets.token_hex(6)}.service"
         name13_holder = f"atlas-qp-{secrets.token_hex(6)}.service"
