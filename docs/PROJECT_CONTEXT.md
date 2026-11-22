@@ -1396,3 +1396,29 @@ QP-11 sigue siendo una simulación dentro del proceso; QP-12 demuestra el límit
 Primera ejecución comunicada por el propietario en `Atlas-VM-test`: `INCOMPLETE` durante preflight, antes de cualquier escenario. `systemd --version` y `busctl --version` informaron `systemd 257 (257.13-1~deb13u1)`; la propiedad D-Bus del manager informó `257.13-1~deb13u1`. El parser de `busctl` solo aceptaba una línea con `systemd 257.13`, por lo que rechazó erróneamente el formato Debian aunque el upstream version fuese 257.13.
 
 Se corrigió el parser para extraer el valor parentizado específico de Debian y luego aplicar la misma comprobación estricta de versión 257.13. No se acepta cualquier systemd 257. Commit de corrección en la rama experimental: `0f767347d50936195def9139605bdc45c30bfd0a`. La primera ejecución no probó systemd socket activation, no ejecutó escenarios ni mutó pathname. La corrección aún requiere validación local del propietario en `Atlas-VM-test`; no se ejecutaron pruebas/probes desde GitHub. Mantener A-THREAT-05 abierta y no habilitar stale recovery, listener persistente, cleanup automático ni despliegue.
+
+### A-IPC-05 — corrección de ListUnitsByNames y estado de validación (2026-11-22)
+
+En la segunda ejecución del propietario, el preflight pasó pero el harness
+abortó antes de QP-01 porque interpretó como colisión un registro devuelto
+por Manager.ListUnitsByNames. La consulta D-Bus directa mostró el registro
+de atlas-qp-8c8b2df5a8d6.service con LoadState=not-found,
+ActiveState=inactive, SubState=dead. GetUnit respondió que la unidad
+no estaba cargada; las consultas de solo lectura con systemctl y la
+inspección de archivos transient tampoco encontraron unidad ni jobs.
+
+La causa es semántica: systemd 257 devuelve un placeholder por cada nombre
+solicitado aunque no esté cargado. El runner confundía un array no vacío con
+una unidad existente. El cambio en unit_is_absent() valida que exista
+exactamente un registro, que corresponda al nombre solicitado y que sus
+campos tengan los tipos esperados; devuelve ausencia solo para
+LoadState=not-found. Cualquier otra respuesta permanece fail-closed.
+Commit: 16899dc1faf99bd5a930150011cfe373b602e71b.
+
+Resultado previo: 0 PASS / 0 FAIL / 15 INCOMPLETE; el harness terminó
+overall=FAIL antes de ejecutar escenarios. No hubo snapshots, prueba de
+socket activation ni mutación de pathname. La corrección no está validada
+todavía: el propietario debe actualizar el checkout, ejecutar suite local
+y después el probe exclusivamente en Atlas-VM-test. No ejecutar en
+greed. A-THREAT-05 sigue abierta; no se aprueba stale recovery, listener
+persistente, cleanup automático ni despliegue.
