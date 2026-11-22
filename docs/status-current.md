@@ -230,8 +230,39 @@ El propietario aprobó ajustar la cuarta demora de 8 a **7 minutos**, manteniend
 - `NativeAuthenticationService`: issuer en UoW breve, reserva antes de leer el autenticador, Argon2id fuera de UoW, revalidación de issuer/autenticador/status/subject/revisión antes del proof y confirmación del guard antes de devolver la referencia.
 - Pruebas unitarias del servicio y nuevo archivo de pruebas del adaptador SQLite, incluyendo concurrencia multiproceso y recolección acotada de registros vencidos de cuentas inactivas.
 
-**Revisión y validación:** se corrigieron durante la revisión el registro/exportación de V28, la limpieza durable de reservas expiradas, el orden reserva→lectura de credencial y un import de pruebas con secuencias literales escapadas. La revisión es estática. **No se ejecutaron pruebas, compilaciones ni migraciones desde GitHub; no existe todavía validación local de este incremento.**
+**Revisión y validación:** se corrigieron durante la revisión el registro/exportación de V28, la limpieza durable de reservas expiradas, el orden reserva→lectura de credencial y un import de pruebas con secuencias literales escapadas. El propietario ejecutó localmente `tests.unit.test_native_authentication_service` y `tests.unit.test_sqlite_authentication_attempt_guard`: `Ran 21 tests in 2.968s — OK`. También ejecutó `.venv/bin/python -m compileall -q src tests` sin errores. **El incremento focalizado del guard queda validado localmente; la suite completa de la rama aún no está validada.**
 
 **No habilitado:** login operativo, bootstrap, endpoints, Workspace, CAM y composición autenticada de consola. La clave HMAC y la decisión del perfil CAM del Grant inicial siguen siendo dependencias independientes.
 
 **Siguiente paso:** cerrar revisión estática de todos los puntos de construcción/instanciación de `NativeAuthenticationService`, revisar el contrato de SQLite y las pruebas, y luego pedir al propietario que ejecute la validación focalizada en Debian. No modificar `main`.
+
+
+### Resultado de validación local del guard — 2026-11-22
+
+El propietario confirmó en `Atlas-VM-test`, checkout `/opt/atlas-dev`:
+
+```text
+Ran 21 tests in 2.968s
+
+OK
+```
+
+Comando utilizado:
+
+```bash
+.venv/bin/python -m unittest -v \
+  tests.unit.test_native_authentication_service \
+  tests.unit.test_sqlite_authentication_attempt_guard
+```
+
+También ejecutó:
+
+```bash
+.venv/bin/python -m compileall -q src tests
+```
+
+sin errores reportados.
+
+**Conclusión:** las pruebas focalizadas del servicio y del adaptador SQLite pasan y el árbol compila. La suite completa de la rama `work/atlas-mvp-runtime` sigue pendiente. No se han validado aún migración sobre una base de datos persistente real, pruebas de integración del flujo de login ni composición operativa. Mantener login, bootstrap, Workspace y CAM deshabilitados.
+
+**Siguiente paso:** ejecutar la suite unitaria completa en Debian; revisar el resultado antes de decidir si se integra o si hacen falta correcciones. No modificar `main`.
