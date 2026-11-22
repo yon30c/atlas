@@ -152,3 +152,19 @@ Esta sección actualiza el estado de §§1–9, que documentan la auditoría bas
 - La clave HMAC sigue sin proveedor/provisión secreta confiable y el perfil CAM del Grant inicial continúa pendiente.
 
 **Siguiente paso:** terminar la revisión estática de consistencia de imports, contratos y cobertura; después entregar al propietario los comandos focalizados para validar en Debian. Cualquier ajuste posterior se publicará primero en esta rama y requerirá nueva validación local.
+
+
+## 11. Segunda pasada estática: normalización, retención y multiproceso — 2026-11-22
+
+La revisión adicional del adaptador y sus pruebas produjo estos ajustes:
+
+- El adaptador construye el digest usando `LoginHandle(login_handle).value`, de modo que variantes de mayúsculas no generen buckets de throttling separados aunque un caller omita la normalización previa del servicio.
+- La recolección oportunista es global y acotada: cada `begin_attempt` elimina como máximo 256 reservas expiradas y 256 fallos cuyo tiempo de retención terminó. Índices dedicados cubren vencimiento y retención; no se requiere un daemon.
+- Una fila de fallo con `blocked_until` futuro no se elimina por salir de la ventana de conteo. El bloqueo se respeta hasta su vencimiento exacto; después, el registro puede limpiarse. Los fallos fuera de ventana no influyen en el cálculo del siguiente backoff.
+- Se añadió prueba de concurrencia con procesos separados, además de la prueba entre threads, y prueba de limpieza de registros pertenecientes a cuentas inactivas.
+- Se añadieron regresiones del servicio para demostrar que la indisponibilidad al completar fallo no emite proof y que la indisponibilidad al completar éxito nunca devuelve la referencia raw, aunque la metadata del proof ya se haya confirmado.
+- El instante de reserva se toma después de resolver el issuer, evitando consumir TTL durante la UoW inicial.
+
+**Revisión:** lectura estática de los archivos de puerto, adaptador, migración, servicio, exportaciones SQLite y pruebas nuevas/actualizadas. La comparación GitHub confirma que la rama de trabajo está 69 commits por delante y 0 por detrás de `main`; los cambios de este incremento permanecen únicamente en `work/atlas-mvp-runtime`.
+
+**Validación local pendiente:** no se ejecutaron tests, compileall, migraciones ni workflows desde GitHub. La prueba multiproceso usa el contexto `spawn` y debe comprobarse en el entorno Debian del propietario. No se debe considerar aprobada la implementación hasta recibir sus resultados.
