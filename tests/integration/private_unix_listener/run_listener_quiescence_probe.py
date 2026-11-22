@@ -1166,7 +1166,7 @@ def validate_report_bounds(report: dict) -> None:
         raise Incomplete("complete evidence report exceeds 1 MiB")
 
 
-def _safe_json_file(path: Path, value: dict, limit: int) -> None:
+def _safe_json_file(path: Path, value: dict, limit: int) -> dict:
     raw = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
     if len(raw) > limit:
         raise Incomplete(f"JSON evidence exceeds {limit} bytes")
@@ -1175,6 +1175,11 @@ def _safe_json_file(path: Path, value: dict, limit: int) -> None:
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_gid != 0 or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) != 0o600:
             raise Incomplete("new JSON evidence file identity/mode is invalid")
+        identity = {
+            "device": info.st_dev, "inode": info.st_ino,
+            "uid": info.st_uid, "gid": info.st_gid,
+            "mode": stat.S_IMODE(info.st_mode),
+        }
         view = memoryview(raw)
         while view:
             written = os.write(fd, view)
@@ -1182,19 +1187,31 @@ def _safe_json_file(path: Path, value: dict, limit: int) -> None:
                 raise OSError(errno.EIO, "short evidence write")
             view = view[written:]
         os.fsync(fd)
+        return identity
     finally:
         os.close(fd)
 
 
-def _rewrite_json_file(path: Path, value: dict, limit: int) -> None:
+def _rewrite_json_file(path: Path, value: dict, limit: int,
+                       expected_identity: dict | None = None) -> None:
     raw = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
     if len(raw) > limit:
         raise Incomplete(f"JSON evidence exceeds {limit} bytes")
     fd = os.open(path, os.O_WRONLY | os.O_TRUNC | os.O_CLOEXEC | os.O_NOFOLLOW)
     try:
         info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_gid != 0 or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) != 0o600:
-            raise Incomplete("report file identity/mode changed before final rewrite")
+        actual_identity = {
+            "device": info.st_dev, "inode": info.st_ino,
+            "uid": info.st_uid, "gid": info.st_gid,
+            "mode": stat.S_IMODE(info.st_mode),
+        }
+        if (
+            not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+            or info.st_uid != 0 or info.st_gid != 0
+            or stat.S_IMODE(info.st_mode) != 0o600
+            or (expected_identity is not None and actual_identity != expected_identity)
+        ):
+            raise Incomplete("JSON file identity/mode changed before rewrite")
         view = memoryview(raw)
         while view:
             written = os.write(fd, view)
@@ -1206,11 +1223,12 @@ def _rewrite_json_file(path: Path, value: dict, limit: int) -> None:
         os.close(fd)
 
 
-def update_gate_marker(marker: Path, run_id: str, name: str, snapshot: dict, phase: str) -> None:
+def update_gate_marker(marker: Path, run_id: str, name: str, snapshot: dict,
+                       marker_identity: dict, phase: str) -> None:
     _rewrite_json_file(marker, {
         "schema": SCHEMA, "run_id": run_id, "unit": name,
         "invocation_id": snapshot["InvocationID"], "phase": phase,
-    }, 4096)
+    }, 4096, expected_identity=marker_identity)
 
 
 def unlink_verified_regular_file(dir_fd: int, name: str, expected: dict,
