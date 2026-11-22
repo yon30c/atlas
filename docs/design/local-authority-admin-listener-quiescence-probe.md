@@ -265,7 +265,7 @@ Preflight obligatorio:
 - system bus y PID 1 accesibles; systemd y busctl dentro del perfil fijado; interfaces D-Bus y propiedades requeridas presentes.
 - cgroup v2 unificado: mount de tipo cgroup2, raíz y mountpoint inequívocos, `cgroup.events` legible, sin fallback a cgroup v1.
 - `/run` montado como tmpfs, espacio suficiente y permisos para un sandbox privado de ejecución.
-- identidades fixture numéricas reservadas SERVICE 2005:2005 y OTHER 2006:2006, aprobadas para la VM desechable `Atlas-VM-test`; no requieren entradas NSS ni cuentas/grupos del sistema. El runner configura `User=`/`Group=` con los valores numéricos y verifica las propiedades UID/GID efectivas reportadas por systemd y la propiedad de los archivos fixture. No crea, modifica ni consulta cuentas/grupos.
+- identidades fixture numéricas reservadas SERVICE 2005:2005 y OTHER 2006:2006, aprobadas para la VM desechable `Atlas-VM-test`; no requieren entradas NSS ni cuentas/grupos del sistema. El runner configura `User=`/`Group=` con los valores numéricos y verifica `User`/`Group`/`UID`/`GID` en systemd, `uid`/`euid`/`gid`/`egid` y grupos suplementarios observados por el propio proceso fixture, y la propiedad de los archivos fixture. No crea, modifica ni consulta cuentas/grupos.
 - intérprete Python 3.13.5, `busctl`, `systemd-run`, `systemctl` y biblioteca `libseccomp.so.2` disponibles. No instalar paquetes ni compilar componentes durante preflight.
 - ausencia de colisión para los nombres aleatorios que se van a usar; una colisión implica generar otro nombre o abortar, nunca reutilizar el objeto existente.
 - disponibilidad de syscalls/funciones requeridas para dirfd, no-follow, monotonic clock y seccomp.
