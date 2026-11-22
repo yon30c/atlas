@@ -111,7 +111,7 @@ El propietario aprobó:
 - almacenamiento en el mismo archivo SQLite canónico;
 - transacciones breves e independientes del guard, fuera de la UoW de autenticación;
 - reservas explícitas por intento con ID opaco y TTL de 120 segundos;
-- ventana móvil de 15 minutos y demoras 1/2/4/8/15 minutos;
+- ventana móvil de 15 minutos y demoras 1/2/4/7/15 minutos;
 - máximo de dos intentos simultáneos por cuenta;
 - éxito confirmado reinicia fallos; abandono/expiración no cuenta como fallo;
 - Argon2id fuera de transacciones SQLite de escritura;
@@ -120,3 +120,35 @@ El propietario aprobó:
 La interpretación exacta, el algoritmo de reserva/finalización, el pseudónimo de cuenta y los criterios de aceptación están fijados en `docs/design/native-authentication-attempt-guard-approved-design.md`.
 
 **Siguiente paso:** implementar el contrato y adaptador SQLite, reestructurar `NativeAuthenticationService`, añadir pruebas unitarias y multiproceso, y actualizar la composición sin habilitar login operativo.
+
+
+## 10. Revisión estática de la implementación inicial — 2026-11-22
+
+Esta sección actualiza el estado de §§1–9, que documentan la auditoría base y las decisiones anteriores a la implementación. Se revisó la rama `work/atlas-mvp-runtime` después de publicar el primer incremento.
+
+### Cambios publicados
+
+- Puerto explícito `AuthenticationAttemptGuardPort` con reserva opaca, expiración, finalización de fallo/éxito y abandono.
+- Migración `CORE_SCHEMA_V28` con tablas separadas para reservas y fallos, índices por cuenta/expiración/ventana.
+- Registro de V28 en `SQLITE_MIGRATIONS` y exportación del símbolo desde el paquete SQLite.
+- Adaptador `SQLiteAuthenticationAttemptGuard` con transacciones independientes `BEGIN IMMEDIATE`, digest de cuenta con separación de dominio, TTL de 120 s, máximo de dos reservas y política 1/2/4/7/15.
+- Servicio reordenado: issuer en UoW breve → reserva → lectura de autenticador en otra UoW → Argon2id fuera de UoW → relectura y validación de estado/revisión → persistencia del proof → confirmación de éxito del guard antes de devolver la referencia.
+- Pruebas unitarias del servicio corregidas y nuevo archivo de pruebas para migración, concurrencia, backoff, ventana, expiración, abandono, reset y consumo único.
+
+### Hallazgos corregidos durante la revisión
+
+1. La cuarta demora se cambió a 7 minutos conforme a la aprobación del propietario. Esto sitúa el quinto fallo a los 14 minutos en el caso secuencial límite, dentro de la ventana de 15 minutos.
+2. Se corrigió la limpieza de una reserva vencida en `_consume`: la eliminación se confirma antes de informar que la reserva no puede completarse, evitando que el rollback restaure la fila expirada.
+3. La limpieza de reservas/fallos vencidos en `begin_attempt` se confirma incluso cuando la nueva reserva es denegada por bloqueo o concurrencia.
+4. Se corrigió la secuencia del servicio para reservar antes de leer el autenticador. La lectura de issuer ocurre primero porque es necesaria para delimitar la cuenta; el acceso a credenciales y Argon2id ocurren después de reservar.
+5. Se corrigió un bloque de importación roto en `test_native_authentication_service.py` que contenía secuencias literales `\\n`.
+6. Se incorporó V28 a la tupla ordenada de migraciones y a las exportaciones del paquete SQLite.
+
+### Límites de esta revisión
+
+- Revisión estática de los archivos publicados; no se ejecutaron tests, compileall, migraciones, probes ni workflows.
+- Los tests nuevos no constituyen evidencia de que la implementación pase. La suite focalizada y la suite completa deben ejecutarse en Debian por el propietario.
+- La implementación no está conectada a una composición de login de producción. No se habilitan endpoints, bootstrap, Workspace, CAM ni consola autenticada.
+- La clave HMAC sigue sin proveedor/provisión secreta confiable y el perfil CAM del Grant inicial continúa pendiente.
+
+**Siguiente paso:** terminar la revisión estática de consistencia de imports, contratos y cobertura; después entregar al propietario los comandos focalizados para validar en Debian. Cualquier ajuste posterior se publicará primero en esta rama y requerirá nueva validación local.
