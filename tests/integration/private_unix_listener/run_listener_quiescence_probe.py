@@ -1510,8 +1510,11 @@ def run_probe(args: argparse.Namespace) -> dict:
         holder_cgroup13 = cgroup_events(mount, initial13_holder["ControlGroup"])
         if (
             stopped13["ActiveState"] != "inactive" or stopped13["Job"][0] != 0
+            or stopped13["InvocationID"] != initial13_service["InvocationID"]
             or empty13["values"]["populated"] != 0
             or holder_still_active13["ActiveState"] != "active"
+            or holder_still_active13["InvocationID"] != initial13_holder["InvocationID"]
+            or holder_evidence13["pid"] != initial13_holder["MainPID"]
             or holder_cgroup13["values"]["populated"] != 1
         ):
             raise Incomplete("QP-13 did not demonstrate empty service cgroup with external FD holder")
@@ -1529,7 +1532,14 @@ def run_probe(args: argparse.Namespace) -> dict:
             cgroup_empty_confirmed=empty13["values"]["populated"] == 0,
         )
         report["cleanup"]["resources"].extend([cleanup13_holder, cleanup13_service])
-        if not stopped13_holder["ActiveState"] == "inactive" or not cleanup13_holder["endpoint_removed"] or not cleanup13_service["endpoint_removed"]:
+        if (
+            stopped13_holder["ActiveState"] != "inactive"
+            or stopped13_holder["Job"][0] != 0
+            or stopped13_holder["InvocationID"] != initial13_holder["InvocationID"]
+            or empty13_holder["values"]["populated"] != 0
+            or not cleanup13_holder["endpoint_removed"]
+            or not cleanup13_service["endpoint_removed"]
+        ):
             raise Incomplete("QP-13 holder/service cleanup failed")
         other_dir13_cleanup_fd = os.open(other_dir13, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
         try:
