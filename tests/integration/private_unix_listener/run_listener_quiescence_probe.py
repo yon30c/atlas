@@ -364,6 +364,58 @@ def cgroup_events(mount_root: Path, control_group: str) -> dict:
     return {"path": str(path), "raw": text, "values": parsed}
 
 
+def _json_no_duplicate_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON object key")
+        result[key] = value
+    return result
+
+
+def _json_reject_constant(value):
+    raise ValueError(f"non-finite JSON number: {value}")
+
+
+def read_bounded_json_file(path: Path, *, expected_uid: int | None = None,
+                           expected_gid: int | None = None, limit: int = 4096) -> dict:
+    fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+    try:
+        info = os.fstat(fd)
+        if (
+            not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+            or stat.S_IMODE(info.st_mode) != 0o600
+            or (expected_uid is not None and info.st_uid != expected_uid)
+            or (expected_gid is not None and info.st_gid != expected_gid)
+            or info.st_size > limit
+        ):
+            raise Incomplete("JSON evidence file identity, mode or size is invalid")
+        chunks = []
+        total = 0
+        while True:
+            chunk = os.read(fd, min(1024, limit + 1 - total))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > limit:
+                raise Incomplete("JSON evidence file exceeds its byte limit")
+        raw = b"".join(chunks)
+    finally:
+        os.close(fd)
+    try:
+        value = json.loads(
+            raw.decode("utf-8", "strict"),
+            object_pairs_hook=_json_no_duplicate_keys,
+            parse_constant=_json_reject_constant,
+        )
+    except (UnicodeError, json.JSONDecodeError, ValueError) as exc:
+        raise Incomplete("JSON evidence file is malformed or ambiguous") from exc
+    if not isinstance(value, dict):
+        raise Incomplete("JSON evidence root must be an object")
+    return value
+
+
 class _TestLifecycleSupervisor:
     """Harness-only lifecycle gate; never imported by the Atlas runtime."""
 
@@ -383,7 +435,7 @@ class _TestLifecycleSupervisor:
             raise Incomplete("test lifecycle supervisor received an unsupported action")
         try:
             fcntl.flock(self.lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            marker_data = json.loads(self.marker.read_text(encoding="utf-8"))
+            marker_data = read_bounded_json_file(self.marker, expected_uid=0, expected_gid=0)
         except (OSError, json.JSONDecodeError) as exc:
             raise Incomplete("test lifecycle supervisor cannot verify its gate") from exc
         if marker_data.get("schema") != SCHEMA or marker_data.get("run_id") != self.run_id:
@@ -970,7 +1022,7 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
     deadline = time.monotonic() + 8.0
     while time.monotonic() < deadline:
         try:
-            ready = json.loads(ready_path.read_text(encoding="ascii"))
+            ready = read_bounded_json_file(ready_path, expected_uid=uid, expected_gid=gid)
             break
         except FileNotFoundError:
             time.sleep(0.05)
@@ -1039,7 +1091,7 @@ def _stop_and_cleanup(name: str, initial: dict, socket_path: Path | None, ready_
         if socket_path is not None:
             if ready_path is None:
                 raise Incomplete("fixture endpoint has no identity record; preserving it")
-            ready = json.loads(ready_path.read_text(encoding="ascii"))
+            ready = read_bounded_json_file(ready_path)
             name_only = socket_path.name
             current_info = os.stat(name_only, dir_fd=run_dir_fd, follow_symlinks=False)
             if (
@@ -1200,7 +1252,7 @@ def run_probe(args: argparse.Namespace) -> dict:
                                     "monotonic_ns": mono(), "unit": stable, "cgroup": after2})
         if not quiescent:
             raise Incomplete("QP-01 did not satisfy the complete quiescence predicate")
-        policy01 = json.loads(ready_path.read_text(encoding="ascii"))["fd_policy"]
+        policy01 = read_bounded_json_file(ready_path, expected_uid=SERVICE_UID, expected_gid=SERVICE_GID)["fd_policy"]
         cleanup = _stop_and_cleanup(name, initial, endpoint, ready_path, run_dir_fd, report, already_stopped=True, cgroup_empty_confirmed=True)
         report["cleanup"]["resources"].append(cleanup)
         report["scenarios"].append({"id": "QP-01", "status": "PASS",
@@ -1234,7 +1286,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             and stable2["InvocationID"] == initial2["InvocationID"]
             and stable2["Job"][0] == 0
         )
-        policy02 = json.loads(ready2.read_text(encoding="ascii"))["fd_policy"]
+        policy02 = read_bounded_json_file(ready2, expected_uid=SERVICE_UID, expected_gid=SERVICE_GID)["fd_policy"]
         cleanup2 = _stop_and_cleanup(name2, initial2, endpoint2, ready2, run_dir_fd, report, already_stopped=True, cgroup_empty_confirmed=True)
         report["cleanup"]["resources"].append(cleanup2)
         if not passed2 or not cleanup2["endpoint_removed"]:
@@ -1341,7 +1393,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         name8 = f"atlas-qp-{secrets.token_hex(6)}.service"
         initial8, endpoint8, ready8 = _start_fixture(name8, run_dir, deny_fork=True)
         report["unit_identity"][name8] = initial8
-        policy8 = json.loads(ready8.read_text(encoding="ascii"))["fd_policy"]
+        policy8 = read_bounded_json_file(ready8, expected_uid=SERVICE_UID, expected_gid=SERVICE_GID)["fd_policy"]
         cleanup8 = _stop_and_cleanup(name8, initial8, endpoint8, ready8, run_dir_fd, report)
         report["cleanup"]["resources"].append(cleanup8)
         if not cleanup8["unit_inactive"] or not cleanup8["cgroup_empty"] or not cleanup8["endpoint_removed"]:
@@ -1356,7 +1408,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         name10 = f"atlas-qp-{secrets.token_hex(6)}.service"
         initial10, endpoint10, ready10 = _start_fixture(name10, run_dir, exec_check=True)
         report["unit_identity"][name10] = initial10
-        exec_evidence = json.loads(ready10.read_text(encoding="ascii"))
+        exec_evidence = read_bounded_json_file(ready10, expected_uid=SERVICE_UID, expected_gid=SERVICE_GID)
         cleanup10 = _stop_and_cleanup(name10, initial10, endpoint10, ready10, run_dir_fd, report)
         report["cleanup"]["resources"].append(cleanup10)
         if (
@@ -1378,7 +1430,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         name9 = f"atlas-qp-{secrets.token_hex(6)}.service"
         initial9, endpoint9, ready9 = _start_fixture(name9, run_dir, deny_fd_escape=True)
         report["unit_identity"][name9] = initial9
-        policy9 = json.loads(ready9.read_text(encoding="ascii"))["fd_policy"]
+        policy9 = read_bounded_json_file(ready9, expected_uid=SERVICE_UID, expected_gid=SERVICE_GID)["fd_policy"]
         cleanup9 = _stop_and_cleanup(name9, initial9, endpoint9, ready9, run_dir_fd, report)
         report["cleanup"]["resources"].append(cleanup9)
         if not cleanup9["unit_inactive"] or not cleanup9["cgroup_empty"] or not cleanup9["endpoint_removed"]:
@@ -1405,7 +1457,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             protect_cgroups=True, drop_caps=True,
         )
         report["unit_identity"][name6good] = initial6good
-        ready6good_data = json.loads(ready6good.read_text(encoding="ascii"))
+        ready6good_data = read_bounded_json_file(ready6good, expected_uid=SERVICE_UID, expected_gid=SERVICE_GID)
         if (
             initial6good["Delegate"] is not False
             or initial6good["User"] != pwd.getpwuid(SERVICE_UID).pw_name
@@ -1500,7 +1552,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             time.sleep(0.02)
         if not received13.exists():
             raise Incomplete("QP-13 external holder did not publish FD receipt")
-        holder_evidence13 = json.loads(received13.read_text(encoding="ascii"))
+        holder_evidence13 = read_bounded_json_file(received13, expected_uid=OTHER_UID, expected_gid=OTHER_GID)
         if holder_evidence13.get("socket_type") != socket.SOCK_SEQPACKET or holder_evidence13.get("accepting") != 1 or not holder_evidence13.get("fd_open"):
             raise Incomplete("QP-13 external holder did not retain the active listener FD")
         systemd_stop(name13_service)
@@ -1684,7 +1736,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         )
         try:
             fcntl.flock(post_crash_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            sticky = json.loads(marker.read_text(encoding="utf-8"))
+            sticky = read_bounded_json_file(marker, expected_uid=0, expected_gid=0)
             post_crash_supervisor = _TestLifecycleSupervisor(
                 post_crash_fd, marker, run_id, allow_owner=False
             )
