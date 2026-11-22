@@ -1093,3 +1093,30 @@ solo estática: falta actualizar el checkout y ejecutar primero la suite
 local y luego el probe en Atlas-VM-test. No ejecutar en greed.
 A-THREAT-05 permanece abierta; no se autoriza stale recovery, listener
 persistente, cleanup automático ni despliegue.
+
+### A-IPC-05 — normalización de argumentos de salida busctl JSON (2026-11-22)
+
+Tras corregir la semántica de LoadState, la suite del propietario volvió a
+pasar: 1594 tests, OK (1 skipped). El probe pasó el preflight, pero abortó
+antes de QP-01 con "ListUnitsByNames returned a malformed typed unit record";
+los 15 escenarios quedaron INCOMPLETE, sin snapshots ni prueba de socket
+activation y sin mutación de pathname.
+
+La inspección del resultado D-Bus previamente compartido mostró el segundo
+nivel del problema: busctl --json=short representa los argumentos de salida
+de una llamada de método dentro de un array externo data. Para un método que
+devuelve un único argumento array, la colección de registros está en
+data[0], y cada registro struct es a su vez una lista. El parser estaba
+tratando data como la colección de registros directamente.
+
+Se añadió dbus_array_output() para validar y extraer exactamente ese único
+argumento array. Se aplica tanto a Manager.ListUnitsByNames como a
+Manager.ListJobs; esto último también evita interpretar incorrectamente
+las filas de jobs cuando existan. Se mantiene validación estricta de
+signature, cardinalidad del argumento, estructura y tipos de cada registro.
+Commit: a0d90189895db5799b5031c271d81989e501bb0d.
+
+Cambio solo revisado estáticamente; pendiente actualizar checkout, suite
+local y probe en Atlas-VM-test. No ejecutar en greed. A-THREAT-05 sigue
+abierta; no se autoriza stale recovery, listener persistente, cleanup
+automático ni despliegue.
