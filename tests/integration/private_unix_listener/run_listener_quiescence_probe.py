@@ -1318,10 +1318,6 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
         raise Incomplete("systemd fixture User/Group/UID/GID identity differs from requested identity")
     if snap["ControlGroup"] == "":
         raise Incomplete("systemd returned an empty ControlGroup")
-    if _SYSTEMD_BUS_REF is None:
-        raise Incomplete("persistent system-bus reference connection is unavailable")
-    _SYSTEMD_BUS_REF.ref_unit(name)
-    _ACTIVE_FIXTURES[name]["unit_ref"] = True
     _cg_root, fixture_mount = cgroup_mount()
     observer = open_cgroup_observer(fixture_mount, snap["ControlGroup"])
     _ACTIVE_FIXTURES[name]["cgroup_observer"] = observer
@@ -1329,6 +1325,10 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
     if initial_cgroup["values"]["populated"] != 1:
         raise Incomplete("fixture cgroup did not become populated")
     _ACTIVE_FIXTURES[name]["initial_cgroup_events"] = initial_cgroup
+    if _SYSTEMD_BUS_REF is None:
+        raise Incomplete("persistent system-bus reference connection is unavailable")
+    _SYSTEMD_BUS_REF.ref_unit(name)
+    _ACTIVE_FIXTURES[name]["unit_ref"] = True
     if exec_check and (
         not ready.get("exec_helper") or not ready.get("exec_same_pid")
         or not ready.get("listener_fd_closed")
