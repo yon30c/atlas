@@ -295,7 +295,7 @@ Preflight no ejecuta stop/restart de unidades preexistentes, no consulta ni enum
 
 Propiedades mínimas de la unidad fixture: `Type=exec`, `User=2005`, `Group=2005`, `KillMode=control-group`, `Delegate=no`, `Restart=no`, sin activadores, y límites de inicio/parada acotados. QP-03 ajusta solo su fixture negativo y su deadline para observar el aborto antes de la terminación final del manager.
 
-El sandbox usa `/run/atlas-qp` root:root 0711 (sin permiso de listado para otros) y un subdirectorio aleatorio por ejecución root:2005 modo 0730, de forma que SERVICE 2005:2005 pueda crear el endpoint conocido sin conceder acceso a otros UIDs. OTHER solo recibe un FD en el escenario negativo QP-13 y no necesita acceso al pathname. Todos los nombres se generan por ejecución; cada directorio se abre y conserva mediante dirfd y se registra su st_dev/st_ino. El servicio no recibe rutas arbitrarias del usuario.
+El sandbox usa `/run/atlas-qp` root:root 0711 (sin permiso de listado para otros) y un subdirectorio aleatorio por ejecución root:2005 modo 0730, de forma que SERVICE 2005:2005 pueda crear el endpoint conocido sin conceder acceso a otros UIDs. QP-05 usa un subdirectorio hermano root:OTHER modo 0730 para probar separación de acceso. QP-13 crea una excepción controlada: un directorio compartido root:root modo 01733, sin listado, donde OTHER publica un socket de control modo 0666 y sus archivos ready/received permanecen 0600; SERVICE conecta al socket únicamente para transferir el listener FD mediante SCM_RIGHTS. Todos los nombres se generan por ejecución; cada directorio se abre y conserva mediante dirfd y se registra su st_dev/st_ino. El servicio no recibe rutas arbitrarias del usuario.
 
 Orden de cleanup:
 
@@ -304,7 +304,7 @@ Orden de cleanup:
 3. Confirmar que no queda holder externo del escenario; QP-13 debe cerrar su FD y terminar el proceso OTHER antes de seguir.
 4. Verificar el endpoint fixture con `fstatat(AT_SYMLINK_NOFOLLOW)` y comparar tipo, owner, mode, st_dev y st_ino con la identidad registrada al crearlo.
 5. Retirar únicamente ese nombre mediante `unlinkat(dirfd, nombre, 0)`; después retirar directorios fixture vacíos mediante dirfd. Nunca usar `rm -rf`, glob, path reconstruido o recorrido recursivo.
-6. Liberar referencia de la unidad transitoria y comprobar que systemd ya no la mantiene cargada. Si la unidad o cgroup persisten de forma inesperada, no forzar cleanup global.
+6. Cerrar el observer FD de cgroup después de confirmar `populated=0`; esperar que `ListUnitsByNames` no devuelva la unidad y que `ListJobs` no contenga jobs para ella. El runner no usa `RefUnit`/`UnrefUnit` mediante conexiones `busctl` efímeras. Si la unidad persiste, no forzar cleanup global.
 7. Persistir resultado final, retirar el marcador sticky y liberar flock. Si algo falla, conservar marcador/sandbox y reportar INCOMPLETE.
 
 Esta retirada del socket fixture es exclusivamente cleanup de un objeto creado en esta ejecución y validado por identidad. No es stale recovery, no prueba `unlinkat` productivo y no autoriza retirar ningún endpoint Atlas. La bandera de recuperación debe permanecer siempre `recovery_pathname_mutation_performed=false`.
