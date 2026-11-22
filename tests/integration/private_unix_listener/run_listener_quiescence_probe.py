@@ -380,6 +380,7 @@ def open_cgroup_observer(mount_root: Path, control_group: str) -> dict:
         raise Incomplete("systemd returned an unsafe ControlGroup path")
     directory = mount_root / control_group.lstrip("/")
     dir_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
+    events_fd = None
     try:
         directory_info = os.fstat(dir_fd)
         if not stat.S_ISDIR(directory_info.st_mode):
@@ -388,10 +389,12 @@ def open_cgroup_observer(mount_root: Path, control_group: str) -> dict:
             "cgroup.events", os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW,
             dir_fd=dir_fd,
         )
+        events_info = os.fstat(events_fd)
     except Exception:
+        if events_fd is not None:
+            os.close(events_fd)
         os.close(dir_fd)
         raise
-    events_info = os.fstat(events_fd)
     identity = {
         "control_group": control_group,
         "st_dev": directory_info.st_dev,
