@@ -1037,7 +1037,7 @@ workflows ni probes.
 ## A-IPC-05 — runner QP-01..QP-15 implementado, pendiente de validación (2026-11-22)
 
 - Archivo: `tests/integration/private_unix_listener/run_listener_quiescence_probe.py`.
-- Rama: `experiment/a-ipc-01-private-unix-listener-probe`; permanece separada de `main`.
+- Rama: `experiment/a-ipc-01-private-unix-listener-probe`; permanece separada de `main`. El runner exige esta rama y un worktree limpio para que el SHA reportado identifique el código ejecutado.
 - Preflight: Debian 13, `busctl` y versión D-Bus `Manager.Version` del PID 1 fijados a systemd 257.13, kernel/Python fijados, cgroup v2 unificado, tmpfs en `/run`, SERVICE 2005:2005 y OTHER 2006:2006; valida acceso de ambas identidades al script y al intérprete, y rechaza rutas/archivos fuente que puedan modificar o reemplazar.
 - D-Bus: `GetUnit`, propiedades tipadas, `Unit.Job`, `Manager.ListJobs`, `ListUnitsByNames`; propiedades genéricas por `org.freedesktop.systemd1.Unit` y propiedades de servicio/cgroup (`ControlGroup`, `Delegate*`, `MainPID`) por `org.freedesktop.systemd1.Service`. Se corrigió una consulta previa a la interfaz inexistente `ResourceControl`. Tras stop, se exige unidad ausente y ningún job; `RefUnit/UnrefUnit` se ejecutan mediante una conexión persistente libsystemd; las observaciones permanecen en busctl.
 - Cgroups: observer FD de directorio y `cgroup.events` abierto antes de stop, identidad dev/inode fijada, lecturas repetibles después de stop; se cierra tras confirmar `populated=0`.
