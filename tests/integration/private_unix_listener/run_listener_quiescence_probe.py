@@ -864,21 +864,24 @@ def process_authority_evidence() -> dict:
             if line.startswith(("CapEff:", "CapBnd:")):
                 key, value = line.split(":", 1)
                 status[key] = int(value.strip(), 16)
-            elif line.startswith("NoNewPrivs:"):
-                _key, value = line.split(":", 1)
-                status["NoNewPrivs"] = int(value.strip(), 10)
+            elif line.startswith(("NoNewPrivs:", "Seccomp:", "Seccomp_filters:")):
+                key, value = line.split(":", 1)
+                status[key] = int(value.strip(), 10)
         _cg_root, cg_mount = cgroup_mount()
         cgroup_line = next(
             line for line in Path("/proc/self/cgroup").read_text(encoding="ascii").splitlines()
             if line.startswith("0::")
         )
         own_cgroup_path = cg_mount / cgroup_line[3:].lstrip("/")
-        if "CapEff" not in status or "CapBnd" not in status or "NoNewPrivs" not in status:
-            raise Incomplete("required process capability fields are missing")
+        required_status = {"CapEff", "CapBnd", "NoNewPrivs", "Seccomp", "Seccomp_filters"}
+        if not required_status.issubset(status):
+            raise Incomplete("required process capability/seccomp fields are missing")
         return {
             "cap_eff": status["CapEff"],
             "cap_bnd": status["CapBnd"],
             "no_new_privs": status["NoNewPrivs"],
+            "seccomp": status["Seccomp"],
+            "seccomp_filters": status["Seccomp_filters"],
             "cap_sys_admin": bool((status["CapEff"] >> 21) & 1),
             "cgroup_dir_write_access": os.access(
                 own_cgroup_path, os.W_OK, effective_ids=True
@@ -1016,6 +1019,11 @@ def fixture_main(args: argparse.Namespace) -> int:
                 isinstance(child_policy_evidence, dict)
                 and child_policy_evidence.get("pid") == child
                 and child_policy_evidence.get("no_new_privs") == 1
+                and child_policy_evidence.get("seccomp") == 2
+                and child_policy_evidence.get("seccomp_filters", 0) >= 1
+                and child_policy_evidence.get("cap_eff") == 0
+                and child_policy_evidence.get("cap_sys_admin") is False
+                and child_policy_evidence.get("cgroup_dir_write_access") is False
             )
             if not child_filter_confirmed:
                 raise Incomplete("QP-02 child did not confirm pre-listener seccomp and NNP")
