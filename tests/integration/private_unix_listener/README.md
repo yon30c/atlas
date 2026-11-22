@@ -1105,8 +1105,9 @@ to remove real socket pathnames.
 ### Preconditions
 
 - Run only inside the disposable VM `Atlas-VM-test`; never run on `greed`.
-- Check out branch `experiment/a-ipc-01-private-unix-listener-probe` and
-  record its exact HEAD before execution.
+- Check out branch `experiment/a-ipc-01-private-unix-listener-probe`, ensure
+  the worktree is clean (including no untracked files), and record its exact
+  HEAD before execution. The runner rejects another branch or a dirty checkout.
 - Run as root with Python 3.13.5, Debian 13, systemd 257.13 and the expected
   kernel `6.12.117+deb13-amd64`.
 - The reserved fixture identities must already exist:
