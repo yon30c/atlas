@@ -570,7 +570,7 @@ Esta sección prevalece sobre el estado de implementación descrito en §9. La r
 - Migración SQLite V28, con tablas separadas para reservas y fallos e índices por cuenta/expiración/ventana; registrada en `SQLITE_MIGRATIONS`.
 - Adaptador `SQLiteAuthenticationAttemptGuard` sobre el archivo canónico, cada operación con `BEGIN IMMEDIATE` propio y recolección oportunista acotada a 256 reservas vencidas y 256 fallos ya vencidos por operación de inicio.
 - Servicio reordenado: resolver issuer en UoW breve; reservar; leer autenticador; verificar/hash Argon2id fuera de UoW; volver a leer issuer/autenticador y comparar estado, subject y `credential_revision`; persistir proof; confirmar éxito del guard antes de devolver referencia raw.
-- Tests del servicio adaptados y nueva suite unitaria del adaptador para migración, concurrencia entre threads y procesos, backoff, ventana, expiración, limpieza acotada de cuentas inactivas, abandono, reset y consumo único.
+- Tests del servicio adaptados y nueva suite unitaria del adaptador para migración, concurrencia entre threads y procesos, normalización de LoginHandle, backoff, ventana, expiración, limpieza acotada de cuentas inactivas, abandono, reset y consumo único.
 
 ### Revisión estática y límites
 
