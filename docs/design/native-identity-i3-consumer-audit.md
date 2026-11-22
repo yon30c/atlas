@@ -376,9 +376,13 @@ Esto corrige el checkpoint histórico donde la ruta AGENT se describía como com
 
 ### 20.2 Emisión y revocación directa de Grants
 
-La revisión de `GrantManagementService` confirma que `issue` y `revoke` llaman a `require_verified_owner_context` antes de abrir la UoW de mutación/coordinación. Ese helper llama a `verifier.verify()`, que abre su propia UoW.
+**Actualización tras commit 1f43d29:**
 
-Por tanto, la evidencia de identidad se verifica, pero no se revalida dentro de la misma UoW que inserta el Grant o inicia la revocación. Una suspensión/revocación de Identity o binding concurrente puede ocurrir entre ambas fronteras. Antes de habilitar estas operaciones en runtime se requiere revalidación dentro de la UoW de mutación o un mecanismo de fencing/consistencia cuya garantía esté demostrada. No sustituirlo por una lectura puntual adicional.
+- `GrantManagementService.issue` ya llama a `require_verified_owner_context_in_unit_of_work` dentro de la misma UoW que comprueba unicidad e inserta el Grant. El propietario canónico y su par Identity/UserId se resuelven dentro de la transacción de escritura. La ruta falla cerrada si el verificador no ofrece `verify_in_unit_of_work`.
+- Se añadió una prueba que comprueba que la emisión no usa `verify()` fuera de la transacción y que el verificador recibe exactamente la UoW de inserción. La prueba está publicada, pero **pendiente de ejecución local**.
+- `GrantManagementService.revoke` todavía llama a `require_verified_owner_context` antes de la coordinación durable de revocación. Su reserva/aplicación atraviesa un coordinador separado; no se debe envolver ingenuamente en la UoW SQLite de grants ni afirmar atomicidad global. Requiere un contrato de fencing que ate la evidencia de identidad a la reserva y al commit de cambio.
+
+El cambio de `issue` reduce la ventana TOCTOU en la emisión, pero no cierra toda la superficie I-3 ni autoriza conectar Grant Management al runtime.
 
 ### 20.3 Memory y Workspace
 

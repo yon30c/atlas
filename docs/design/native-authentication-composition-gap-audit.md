@@ -218,3 +218,15 @@ No hay una única tarea de código que cierre todo. El orden seguro es:
 ## 10. Evidencia y límites de esta revisión
 
 Esta revisión fue estática sobre archivos de la rama `work/atlas-mvp-runtime` en GitHub. No se ejecutaron pruebas, compilaciones, migraciones, PAM, comandos del host ni cambios de servicios. Los hallazgos describen el código y los contratos revisados; no constituyen autorización para desplegar, inicializar CAM ni cambiar el host.
+
+
+## 9. Actualización de implementación — emisión transaccional de Grants (2026-11-22)
+
+Commit 1f43d29c531a04c745394ce0f80af710841a55ae modifica GrantManagementService.issue:
+
+- La verificación de VerifiedIdentityContext pasa a ejecutarse mediante require_verified_owner_context_in_unit_of_work dentro de la misma UoW que comprueba el ID y persiste el Grant.
+- La comparación grant.owner_user_id == canonical.user_id también ocurre dentro de esa transacción.
+- El puerto transaccional existente verify_in_unit_of_work es obligatorio en esta ruta; ausencia o fallo produce DENY.
+- Se añadió una prueba que comprueba que no se invoca el verificador autónomo y que la UoW de inserción se pasa al verificador.
+
+**Pendiente:** ejecutar la prueba focalizada y la suite completa en Debian. Este cambio solo afecta emisión directa de Grants. No corrige la frontera de revoke, no habilita bootstrap, no compone login y no habilita Workspace. La revisión estática de la composición de autenticación sigue vigente en las secciones anteriores.
