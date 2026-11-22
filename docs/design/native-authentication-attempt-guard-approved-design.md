@@ -35,7 +35,7 @@ Las reservas activas no son fallos. Una reserva expirada se elimina durante la s
 
 ## 3. Contrato de reserva
 
-El puerto sustituirá la secuencia ambigua `is_allowed → record_failure/record_success` por operaciones explícitas:
+El puerto sustituye la secuencia ambigua `is_allowed → record_failure/record_success` por operaciones explícitas:
 
 1. `begin_attempt(issuer_id, login_handle, at) → AttemptReservation`: reserva atómicamente un cupo; devuelve reserva opaca con ID y expiración, o deniega si existe demora activa o se alcanzó el máximo de concurrencia.
 2. `complete_failure(reservation, at)`: consume una reserva vigente, registra un fallo y calcula su demora.
@@ -68,7 +68,7 @@ La migración añadirá tablas separadas para reservas y fallos, con claves comp
 Cada operación del guard:
 - abre una conexión propia desde la misma `SQLiteDatabase`;
 - inicia `BEGIN IMMEDIATE`;
-- elimina reservas expiradas de forma acotada;
+- elimina hasta 256 reservas expiradas y hasta 256 fallos ya vencidos mediante índices de retención;
 - calcula bloqueo/concurrencia y aplica la transición;
 - confirma o revierte íntegramente;
 - nunca se ejecuta anidada dentro de `SQLiteLocalAuthorityUnitOfWork`.
