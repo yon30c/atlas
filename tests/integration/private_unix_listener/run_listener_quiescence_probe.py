@@ -1174,13 +1174,24 @@ def _mode_allows(info, uid: int, gid: int, required: int) -> bool:
 
 
 def path_accessible_by(path: Path, uid: int, gid: int, *, file_permission: int) -> bool:
+    """Require traversal/read access without allowing fixture identities to alter the path."""
     resolved = path.resolve(strict=True)
     for parent in reversed(resolved.parents):
         info = os.stat(parent, follow_symlinks=False)
-        if not stat.S_ISDIR(info.st_mode) or not _mode_allows(info, uid, gid, 0o1):
+        if (
+            not stat.S_ISDIR(info.st_mode)
+            or not _mode_allows(info, uid, gid, 0o1)
+            or info.st_uid == uid
+            or _mode_allows(info, uid, gid, 0o2)
+        ):
             return False
     info = os.stat(resolved, follow_symlinks=False)
-    return stat.S_ISREG(info.st_mode) and _mode_allows(info, uid, gid, file_permission)
+    return (
+        stat.S_ISREG(info.st_mode)
+        and info.st_uid != uid
+        and _mode_allows(info, uid, gid, file_permission)
+        and not _mode_allows(info, uid, gid, 0o2)
+    )
 
 
 def preflight() -> dict:
