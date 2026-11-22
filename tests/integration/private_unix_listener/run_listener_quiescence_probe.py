@@ -1839,6 +1839,8 @@ def run_probe(args: argparse.Namespace) -> dict:
             or initial6good["ProtectControlGroups"] is not True
             or initial6good["CapabilityBoundingSet"] != 0
             or initial6good["AmbientCapabilities"] != 0
+            or ready6good_data.get("cap_bnd") != 0
+            or ready6good_data.get("cap_eff") != 0
             or ready6good_data.get("cap_sys_admin") is not False
             or ready6good_data.get("cgroup_dir_write_access") is not False
         ):
