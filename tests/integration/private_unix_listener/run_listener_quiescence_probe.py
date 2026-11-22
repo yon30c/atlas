@@ -866,6 +866,23 @@ def run_fd_policy_checks(listener: socket.socket, *, deny_fork: bool, deny_fd_es
             os.close(pidfd)
         if fcntl.fcntl(fd, fcntl.F_GETFD) < 0:
             raise Incomplete("non-dup fcntl operation was unexpectedly blocked")
+        # Linux exposes socket descriptors as /proc/<pid>/fd symlinks, but
+        # opening the socket inode is not a dup operation: socket file
+        # operations reject ->open with ENXIO. Keep this explicit so the
+        # procfs representation is not mistaken for an untested escape path.
+        try:
+            procfd_copy = os.open(
+                f"/proc/self/fd/{fd}", os.O_RDONLY | os.O_CLOEXEC
+            )
+        except OSError as exc:
+            if exc.errno != errno.ENXIO:
+                raise Incomplete(
+                    "opening the listener through /proc/self/fd did not fail with ENXIO"
+                ) from exc
+            observations["proc_self_fd_reopen_errno"] = exc.errno
+        else:
+            os.close(procfd_copy)
+            raise Incomplete("listener socket was unexpectedly reopened through /proc/self/fd")
         read_fd, write_fd = os.pipe()
         try:
             os.write(write_fd, b"ok")
@@ -1457,11 +1474,15 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
         return snap, None, ready_path
     info = os.stat(socket_path, follow_symlinks=False)
     if (
-        not stat.S_ISSOCK(info.st_mode) or info.st_uid != SERVICE_UID
-        or info.st_gid != SERVICE_GID or stat.S_IMODE(info.st_mode) != 0o600
+        not stat.S_ISSOCK(info.st_mode) or info.st_uid != uid
+        or info.st_gid != gid or stat.S_IMODE(info.st_mode) != 0o600
         or info.st_dev != ready["device"] or info.st_ino != ready["inode"]
+        or ready.get("socket_type") != socket.SOCK_SEQPACKET
+        or ready.get("accepting") != 1
+        or ready.get("cloexec") is not True
+        or not isinstance(ready.get("fd"), int) or ready["fd"] < 0
     ):
-        raise Incomplete("fixture endpoint identity/mode differs from readiness record")
+        raise Incomplete("fixture endpoint identity, socket type, listen state, CLOEXEC or owner differs from readiness record")
     return snap, socket_path, ready_path
 
 
