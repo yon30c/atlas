@@ -1213,10 +1213,10 @@ def run_probe(args: argparse.Namespace) -> dict:
         os.mkdir(run_dir, 0o730)
         os.chown(run_dir, 0, SERVICE_GID)
         os.chmod(run_dir, 0o730)
+        register_sandbox_dir(run_dir)
         run_dir_fd = os.open(run_dir, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
         _OPEN_DIR_FDS.append(run_dir_fd)
         run_dir_info = os.fstat(run_dir_fd)
-        register_sandbox_dir(run_dir)
         report["sandbox"] = {
             "path": str(run_dir), "device": run_dir_info.st_dev,
             "inode": run_dir_info.st_ino, "uid": run_dir_info.st_uid,
@@ -1284,7 +1284,7 @@ def run_probe(args: argparse.Namespace) -> dict:
                                     "reason": "listener closed by service; fork/duplication/SCM_RIGHTS paths denied; manager inactive and two correlated cgroup snapshots populated=0",
                                     "observations": {"fd_policy": policy01, "stable_invocation": stable["InvocationID"] == initial["InvocationID"],
                                                      "cgroup_identity": before_identity}})
-        if not cleanup["endpoint_removed"] or not cleanup["cgroup_empty"]:
+        if not cleanup["endpoint_removed"] or not cleanup["cgroup_empty"] or not cleanup.get("unit_unloaded"):
             raise Incomplete("QP-01 cleanup was not confirmed")
 
         # QP-02: child exists in the same service cgroup before listener creation.
@@ -1319,7 +1319,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         policy02 = ready2_data["fd_policy"]
         cleanup2 = _stop_and_cleanup(name2, initial2, endpoint2, ready2, run_dir_fd, report, already_stopped=True, cgroup_empty_confirmed=True)
         report["cleanup"]["resources"].append(cleanup2)
-        if not passed2 or not cleanup2["endpoint_removed"]:
+        if not passed2 or not cleanup2["endpoint_removed"] or not cleanup2.get("unit_unloaded"):
             raise Incomplete("QP-02 failed its pre-stop helper or post-stop empty-cgroup check")
         report["scenarios"].append({"id": "QP-02", "status": "PASS",
                                     "decision": "QUIESCENT",
@@ -1348,7 +1348,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             already_stopped=True, cgroup_empty_confirmed=empty3["values"]["populated"] == 0
         )
         report["cleanup"]["resources"].append(cleanup3)
-        if stopped3["ActiveState"] != "inactive" or empty3["values"]["populated"] != 0 or not cleanup3["endpoint_removed"]:
+        if stopped3["ActiveState"] != "inactive" or empty3["values"]["populated"] != 0 or not cleanup3["endpoint_removed"] or not cleanup3.get("unit_unloaded"):
             raise Incomplete("QP-03 did not reach manager-controlled final termination")
         report["scenarios"].append({"id": "QP-03", "status": "PASS",
                                     "decision": "ABORT_NOT_QUIESCENT",
@@ -1372,7 +1372,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             already_stopped=True, cgroup_empty_confirmed=empty4["values"]["populated"] == 0
         )
         report["cleanup"]["resources"].append(cleanup4)
-        if stopped4["ActiveState"] != "inactive" or empty4["values"]["populated"] != 0 or not cleanup4["endpoint_removed"]:
+        if stopped4["ActiveState"] != "inactive" or empty4["values"]["populated"] != 0 or not cleanup4["endpoint_removed"] or not cleanup4.get("unit_unloaded"):
             raise Incomplete("QP-04 cleanup after pending stop job failed")
         report["scenarios"].append({"id": "QP-04", "status": "PASS",
                                     "decision": "ABORT_NOT_QUIESCENT",
@@ -1412,7 +1412,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             os.rmdir(other_dir)
         except OSError as exc:
             raise Incomplete("QP-05 OTHER fixture directory was not empty") from exc
-        if not mismatch_rejected or not cleanup5a["unit_inactive"] or not cleanup5b["unit_inactive"]:
+        if not mismatch_rejected or not cleanup5a["unit_inactive"] or not cleanup5b["unit_inactive"] or not cleanup5a.get("unit_unloaded") or not cleanup5b.get("unit_unloaded"):
             raise Incomplete("QP-05 identity mismatch or fixture cleanup was not confirmed")
         report["scenarios"].append({
             "id": "QP-05", "status": "PASS",
@@ -1428,7 +1428,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         policy8 = read_bounded_json_file(ready8, expected_uid=SERVICE_UID, expected_gid=SERVICE_GID)["fd_policy"]
         cleanup8 = _stop_and_cleanup(name8, initial8, endpoint8, ready8, run_dir_fd, report)
         report["cleanup"]["resources"].append(cleanup8)
-        if not cleanup8["unit_inactive"] or not cleanup8["cgroup_empty"] or not cleanup8["endpoint_removed"]:
+        if not cleanup8["unit_inactive"] or not cleanup8["cgroup_empty"] or not cleanup8["endpoint_removed"] or not cleanup8.get("unit_unloaded"):
             raise Incomplete("QP-08 fixture cleanup failed")
         report["scenarios"].append({
             "id": "QP-08", "status": "PASS",
@@ -1448,7 +1448,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             or not exec_evidence.get("exec_same_pid")
             or not exec_evidence.get("listener_fd_closed")
             or exec_evidence.get("pid") != initial10["MainPID"]
-            or not cleanup10["unit_inactive"] or not cleanup10["cgroup_empty"]
+            or not cleanup10["unit_inactive"] or not cleanup10["cgroup_empty"] or not cleanup10.get("unit_unloaded")
             or not cleanup10["endpoint_removed"]
         ):
             raise Incomplete("QP-10 exec/CLOEXEC evidence or cleanup failed")
@@ -1465,7 +1465,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         policy9 = read_bounded_json_file(ready9, expected_uid=SERVICE_UID, expected_gid=SERVICE_GID)["fd_policy"]
         cleanup9 = _stop_and_cleanup(name9, initial9, endpoint9, ready9, run_dir_fd, report)
         report["cleanup"]["resources"].append(cleanup9)
-        if not cleanup9["unit_inactive"] or not cleanup9["cgroup_empty"] or not cleanup9["endpoint_removed"]:
+        if not cleanup9["unit_inactive"] or not cleanup9["cgroup_empty"] or not cleanup9["endpoint_removed"] or not cleanup9.get("unit_unloaded"):
             raise Incomplete("QP-09 fixture cleanup failed")
         report["scenarios"].append({
             "id": "QP-09", "status": "PASS",
@@ -1481,7 +1481,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             raise Incomplete("QP-06 negative fixture did not expose Delegate=yes")
         cleanup6 = _stop_and_cleanup(name6, initial6, endpoint6, ready6, run_dir_fd, report)
         report["cleanup"]["resources"].append(cleanup6)
-        if not cleanup6["unit_inactive"] or not cleanup6["cgroup_empty"] or not cleanup6["endpoint_removed"]:
+        if not cleanup6["unit_inactive"] or not cleanup6["cgroup_empty"] or not cleanup6["endpoint_removed"] or not cleanup6.get("unit_unloaded"):
             raise Incomplete("QP-06 negative fixture cleanup failed")
         name6good = f"atlas-qp-{secrets.token_hex(6)}.service"
         initial6good, endpoint6good, ready6good = _start_fixture(
@@ -1507,7 +1507,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             raise Incomplete("QP-06 Delegate=no fixture retains unexpected cgroup authority")
         cleanup6good = _stop_and_cleanup(name6good, initial6good, endpoint6good, ready6good, run_dir_fd, report)
         report["cleanup"]["resources"].append(cleanup6good)
-        if not cleanup6good["unit_inactive"] or not cleanup6good["cgroup_empty"] or not cleanup6good["endpoint_removed"]:
+        if not cleanup6good["unit_inactive"] or not cleanup6good["cgroup_empty"] or not cleanup6good["endpoint_removed"] or not cleanup6good.get("unit_unloaded"):
             raise Incomplete("QP-06 positive fixture cleanup failed")
         report["scenarios"].append({
             "id": "QP-06", "status": "PASS", "decision": "ABORT_NOT_QUIESCENT",
@@ -1621,8 +1621,8 @@ def run_probe(args: argparse.Namespace) -> dict:
             or stopped13_holder["Job"][0] != 0
             or stopped13_holder["InvocationID"] != initial13_holder["InvocationID"]
             or empty13_holder["values"]["populated"] != 0
-            or not cleanup13_holder["endpoint_removed"]
-            or not cleanup13_service["endpoint_removed"]
+            or not cleanup13_holder["endpoint_removed"] or not cleanup13_holder.get("unit_unloaded")
+            or not cleanup13_service["endpoint_removed"] or not cleanup13_service.get("unit_unloaded")
         ):
             raise Incomplete("QP-13 holder/service cleanup failed")
         other_dir13_cleanup_fd = os.open(other_dir13, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
@@ -1854,6 +1854,9 @@ def run_probe(args: argparse.Namespace) -> dict:
                             or not initial_fixture["Transient"]
                             or initial_fixture["User"] != pwd.getpwuid(fixture["uid"]).pw_name
                             or initial_fixture["Group"] != grp.getgrgid(fixture["gid"]).gr_name
+                            or initial_fixture["UID"] != fixture["uid"]
+                            or initial_fixture["GID"] != fixture["gid"]
+                            or fixture_name not in initial_fixture["ControlGroup"]
                         ):
                             raise Incomplete("cannot establish ownership of partially started fixture")
                         fixture["initial"] = initial_fixture
@@ -1949,9 +1952,12 @@ def run_probe(args: argparse.Namespace) -> dict:
                 _safe_json_file(report_path, report, MAX_REPORT)
                 persisted = True
                 report["evidence_persisted_before_gate_release"] = True
+                if not (report["cleanup"]["safe_to_release_gate"] and marker_created):
+                    _rewrite_json_file(report_path, report, MAX_REPORT)
             except Exception as exc:
                 report["cleanup"]["report_persist_error"] = f"{type(exc).__name__}: {exc}"
                 report["cleanup"]["safe_to_release_gate"] = False
+                report["overall"] = "INCOMPLETE"
 
         # The sticky marker is retained on any uncertainty. The lock file and
         # /run/atlas-qp parent remain for audit and future invocations.
