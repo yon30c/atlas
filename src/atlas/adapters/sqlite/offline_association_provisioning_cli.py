@@ -15,7 +15,7 @@ import sqlite3
 import sys
 from uuid import UUID, uuid4
 
-from atlas.adapters.sqlite.association_provisioning_migration import CORE_SCHEMA_V27
+from atlas.adapters.sqlite.authentication_attempt_migration import CORE_SCHEMA_V28
 from atlas.adapters.sqlite.database import SQLiteDatabase
 from atlas.adapters.sqlite.migrations import SQLITE_MIGRATIONS
 from atlas.adapters.sqlite.project_environment_association_provisioning_writer import (
@@ -71,8 +71,8 @@ def _require_current_schema(database: SQLiteDatabase) -> None:
             "SELECT version, name, checksum FROM schema_migrations ORDER BY version"
         ).fetchall()
     actual = tuple((row["version"], row["name"], row["checksum"]) for row in rows)
-    if actual != expected or not expected or expected[-1][0] != CORE_SCHEMA_V27.version:
-        raise ContractError("la base no tiene exactamente el historial de migraciones esperado hasta V27")
+    if actual != expected or not expected or expected[-1][0] != CORE_SCHEMA_V28.version:
+        raise ContractError("la base no tiene exactamente el historial de migraciones esperado hasta V28")
 
 
 def _parse_operation_id(value: str) -> str:
