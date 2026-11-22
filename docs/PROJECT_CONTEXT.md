@@ -1372,10 +1372,20 @@ queda aprobada recuperación de sockets reales, limpieza automática,
 listener persistente, activación systemd ni despliegue. No ejecutar en
 greed producción. El resultado fue ejecutado por el propietario;
 el asistente no ejecutó pruebas, builds, workflows ni probes.
-## A-IPC-05 — runner de quiescencia, estado de implementación (2026-11-22)
+## A-IPC-05 — runner QP-01..QP-15 implementado, pendiente de validación (2026-11-22)
 
-El propietario autorizó implementar el runner en la rama `experiment/a-ipc-01-private-unix-listener-probe` y aprobó después un supervisor temporal exclusivamente de prueba para QP-11. Archivo: `tests/integration/private_unix_listener/run_listener_quiescence_probe.py`. Incluye preflight estricto, unidades systemd transitorias, D-Bus tipado (propiedades y `ListJobs`), cgroup v2, gate `flock`/marcador, parser de `cgroup.events`, cleanup por identidad y reporte JSON acotado bajo `/run/atlas-qp`.
+El propietario autorizó implementar el runner en la rama experiment/a-ipc-01-private-unix-listener-probe y aprobó un supervisor temporal de prueba para QP-11. Archivo: tests/integration/private_unix_listener/run_listener_quiescence_probe.py. El runner implementa preflight estricto, unidades .service transitorias, D-Bus tipado (GetUnit, propiedades, Unit.Job, Manager.ListJobs, ListUnitsByNames), cgroup v2 con observers FD fijados, gate flock/marcador sticky, parser estricto y cleanup bifásico por identidad. El reporte JSON es acotado por escenario/total y registra timestamps monotónicos.
 
-QP-03/QP-04/QP-06/QP-07/QP-11/QP-12 tienen lógica inicial. QP-11 usa `_TestLifecycleSupervisor`, una clase interna del runner: start/stop del harness pasan por ella; valida lock, marcador y token de ejecución; rechaza segundo actor; simula caída, verifica liberación del lock y confirma que el marcador sticky bloquea un supervisor nuevo. El harness reacquire el lock solo para persistencia y cleanup de sus propios fixtures. QP-12 conserva un restart directo de root como bypass intencional para probar detección de cambio de `InvocationID`. Este test double no es un servicio Atlas ni una frontera contra root.
+Cobertura implementada:
+- QP-01/02: seccomp anti-fork/clone/vfork/clone3, duplicación, SCM_RIGHTS e io_uring; QP-02 filtra también el auxiliar creado antes del listener. Dos lecturas cgroup separadas por 50 ms y correlación de invocación, jobs, MainPID, ControlGroup e identidad.
+- QP-03/04: transición y job stop pendiente con proceso que ignora SIGTERM; ABORT hasta vaciar el cgroup.
+- QP-05/06/07: separación de ControlGroup; rechazo de Delegate=yes y control Delegate=no con NNP, ProtectControlGroups, capabilities vacías, CAP_SYS_ADMIN y permisos; parser cgroup.events con lecturas parciales/errores.
+- QP-08/09/10: denegación de creación de procesos y FD escape (incluido io_uring); execve mismo PID con CLOEXEC.
+- QP-11: _TestLifecycleSupervisor interno valida token, flock, segundo actor, caída simulada, marcador sticky y restart bloqueado. No es un proceso supervisor independiente ni producto Atlas.
+- QP-12: restart directo de root fuera del supervisor; detecta InvocationID sustituto y mantiene separados los observers cgroup antiguo/nuevo. Root permanece en TCB.
+- QP-13: proceso OTHER recibe el listener FD por SCM_RIGHTS; demuestra que cgroup del servicio vacío no basta mientras el holder conserva el FD. No es socket activation.
+- QP-14/15: fallo inyectado del manager/supervisor, timeout acotado y discrepancias ControlGroup/dev/inode.
 
-QP-01/QP-02 permanecen INCOMPLETE y nunca QUIESCENT hasta demostrar la política de FD; QP-05/QP-06/QP-07/QP-08/QP-09/QP-10/QP-13/QP-14/QP-15 también siguen INCOMPLETE. QP-11 está implementado y revisado estáticamente, no validado. No se han ejecutado pruebas, builds, workflows ni el runner. A-THREAT-05 sigue abierta; no existe aprobación de stale recovery, listener persistente ni despliegue.
+El cleanup detiene primero todos los fixtures y solo después retira endpoints/archivos ready/received tras verificar tipo, owner, mode, dev/inode mediante dirfd. Los JSON de fixture usan O_NOFOLLOW, límites, UTF-8 estricto y rechazo de claves duplicadas. Tras cerrar observers cgroup, el runner espera ausencia de unidad en ListUnitsByNames y ausencia de jobs en ListJobs; no usa RefUnit/UnrefUnit con conexiones busctl efímeras.
+
+QP-11 sigue siendo una simulación dentro del proceso; QP-12 demuestra el límite root; QP-13 es un holder externo controlado. El runner no se ha ejecutado ni validado. No se ejecutaron pruebas, builds ni workflows; no se crearon unidades/cgroups/usuarios/grupos/rutas en hosts durante esta sesión. La siguiente puerta es completar la revisión estática y pasar a las pruebas del propietario exclusivamente en Atlas-VM-test. A-THREAT-05 sigue abierta; no hay aprobación de stale recovery, listener persistente, cleanup automático de endpoints Atlas ni despliegue.
