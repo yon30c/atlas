@@ -246,6 +246,6 @@ El harness está implementado en tests/integration/private_unix_listener/run_lis
 
 El supervisor QP-11 sigue siendo una clase interna del runner y la caída se simula liberando flock; no prueba un proceso supervisor independiente ni protege frente a root. QP-12 demuestra el bypass directo de root. QP-13 es un holder OTHER mediante SCM_RIGHTS, no socket activation. Root sigue en TCB-1 y los procesos del mismo UID dedicado siguen siendo un único dominio confiable.
 
-El cleanup usa observers FD de cgroup, verificación de unidad ausente y cero jobs, y retirada solo de endpoints/archivos fixture cuya identidad exacta se revalida mediante dirfd. Si hay incertidumbre, preserva sandbox y marcador sticky. No usa RefUnit/UnrefUnit mediante conexiones busctl efímeras.
+El cleanup usa observers FD de cgroup, verificación de unidad ausente y cero jobs, y retirada solo de endpoints/archivos fixture cuya identidad exacta se revalida mediante dirfd. Si hay incertidumbre, preserva sandbox y marcador sticky. Mantiene RefUnit/UnrefUnit sobre una conexión persistente libsystemd y usa busctl para las observaciones tipadas.
 
 No se ha ejecutado el runner, pruebas, builds ni workflows. No se han creado unidades/cgroups/usuarios/grupos/rutas en hosts. La revisión estática final precede a la validación del propietario, exclusivamente en Atlas-VM-test; nunca en greed. A-THREAT-05 permanece abierta y no hay aprobación de stale recovery, listener persistente, cleanup automático Atlas ni despliegue.
