@@ -233,7 +233,13 @@ def unit_snapshot(name: str) -> dict:
         "Restart": dbus_property(path, SERVICE_IFACE, "Restart", "s"),
         "User": dbus_property(path, SERVICE_IFACE, "User", "s"),
         "Group": dbus_property(path, SERVICE_IFACE, "Group", "s"),
+        "UID": dbus_property(path, SERVICE_IFACE, "UID", "u"),
+        "GID": dbus_property(path, SERVICE_IFACE, "GID", "u"),
+        "CapabilityBoundingSet": dbus_property(path, SERVICE_IFACE, "CapabilityBoundingSet", "t"),
+        "AmbientCapabilities": dbus_property(path, SERVICE_IFACE, "AmbientCapabilities", "t"),
         "Delegate": dbus_property(path, RESOURCE_IFACE, "Delegate", "b"),
+        "DelegateControllers": dbus_property(path, RESOURCE_IFACE, "DelegateControllers", "as"),
+        "DelegateSubgroup": dbus_property(path, RESOURCE_IFACE, "DelegateSubgroup", "s"),
         "Transient": dbus_property(path, UNIT_IFACE, "Transient", "b"),
         "Job": dbus_property(path, UNIT_IFACE, "Job", "(uo)"),
         "Triggers": dbus_property(path, UNIT_IFACE, "Triggers", "as"),
@@ -945,8 +951,11 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
         raise Incomplete("systemd Delegate property differs from requested fixture")
     expected_user = pwd.getpwuid(uid).pw_name
     expected_group = grp.getgrgid(gid).gr_name
-    if snap["User"] != expected_user or snap["Group"] != expected_group:
-        raise Incomplete("systemd fixture User/Group identity differs from requested UID/GID")
+    if (
+        snap["User"] != expected_user or snap["Group"] != expected_group
+        or snap["UID"] != uid or snap["GID"] != gid
+    ):
+        raise Incomplete("systemd fixture User/Group/UID/GID identity differs from requested identity")
     if snap["ControlGroup"] == "":
         raise Incomplete("systemd returned an empty ControlGroup")
     if exec_check and (
@@ -1344,6 +1353,9 @@ def run_probe(args: argparse.Namespace) -> dict:
             initial6good["Delegate"] is not False
             or initial6good["User"] != pwd.getpwuid(SERVICE_UID).pw_name
             or initial6good["Group"] != grp.getgrgid(SERVICE_GID).gr_name
+            or initial6good["DelegateControllers"]
+            or initial6good["DelegateSubgroup"] != ""
+            or initial6good["UID"] != SERVICE_UID or initial6good["GID"] != SERVICE_GID
             or ready6good_data.get("cap_sys_admin") is not False
             or ready6good_data.get("cgroup_dir_write_access") is not False
         ):
