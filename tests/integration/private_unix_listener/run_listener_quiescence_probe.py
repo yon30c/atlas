@@ -1790,21 +1790,6 @@ def run_probe(args: argparse.Namespace) -> dict:
         systemd_stop(name12)
         stopped12 = wait_inactive(name12, time.monotonic() + STOP_TIMEOUT + 3)
         empty12 = cgroup_events(mount, changed["ControlGroup"])
-        cleanup12 = _stop_and_cleanup(
-            name12, changed, None, ready12, run_dir_fd, report,
-            already_stopped=True, cgroup_empty_confirmed=empty12["values"]["populated"] == 0
-        )
-        report["cleanup"]["resources"].append(cleanup12)
-        if (
-            stopped12["ActiveState"] != "inactive"
-            or stopped12["InvocationID"] != changed["InvocationID"]
-            or not cleanup12["cgroup_empty"] or not cleanup12["unit_unloaded"]
-        ):
-            raise Incomplete("QP-12 cleanup failed after detected replacement")
-        report["scenarios"].append({"id": "QP-12", "status": "PASS",
-                                    "decision": "ABORT_NOT_QUIESCENT",
-                                    "reason": "direct root restart changed InvocationID; snapshots were not combined"})
-
         # QP-11: second actor is rejected; after simulated supervisor/orchestrator
         # crash the lock becomes available but the sticky marker still denies
         # lifecycle requests until this harness performs explicit test cleanup.
@@ -1890,6 +1875,25 @@ def run_probe(args: argparse.Namespace) -> dict:
                 "unit_remained_inactive": unchanged_after["ActiveState"] == "inactive",
                 "pending_jobs": unchanged_after["Job"][0],
             },
+        })
+
+        # QP-12 unit remains referenced through QP-11 so its inactive state can
+        # be observed; release the manager reference only after the gate test.
+        cleanup12 = _stop_and_cleanup(
+            name12, changed, None, ready12, run_dir_fd, report,
+            already_stopped=True, cgroup_empty_confirmed=empty12["values"]["populated"] == 0
+        )
+        report["cleanup"]["resources"].append(cleanup12)
+        if (
+            stopped12["ActiveState"] != "inactive"
+            or stopped12["InvocationID"] != changed["InvocationID"]
+            or not cleanup12["cgroup_empty"] or not cleanup12.get("unit_unloaded")
+        ):
+            raise Incomplete("QP-12 cleanup failed after detected replacement")
+        report["scenarios"].append({
+            "id": "QP-12", "status": "PASS",
+            "decision": "ABORT_NOT_QUIESCENT",
+            "reason": "direct root restart changed InvocationID; snapshots were not combined",
         })
 
         implemented = {item["id"] for item in report["scenarios"]}
