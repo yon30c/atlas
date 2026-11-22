@@ -1713,15 +1713,20 @@ def run_probe(args: argparse.Namespace) -> dict:
             time.sleep(0.05)
         if changed is None:
             raise Incomplete("QP-12 restart did not produce a distinct InvocationID")
+        _ACTIVE_FIXTURES[name12]["initial"] = changed
         systemd_stop(name12)
         stopped12 = wait_inactive(name12, time.monotonic() + STOP_TIMEOUT + 3)
-        empty12 = cgroup_events(mount, initial12["ControlGroup"])
+        empty12 = cgroup_events(mount, changed["ControlGroup"])
         cleanup12 = _stop_and_cleanup(
             name12, changed, None, ready12, run_dir_fd, report,
             already_stopped=True, cgroup_empty_confirmed=empty12["values"]["populated"] == 0
         )
         report["cleanup"]["resources"].append(cleanup12)
-        if stopped12["ActiveState"] != "inactive" or not cleanup12["cgroup_empty"]:
+        if (
+            stopped12["ActiveState"] != "inactive"
+            or stopped12["InvocationID"] != changed["InvocationID"]
+            or not cleanup12["cgroup_empty"] or not cleanup12["unit_unloaded"]
+        ):
             raise Incomplete("QP-12 cleanup failed after detected replacement")
         report["scenarios"].append({"id": "QP-12", "status": "PASS",
                                     "decision": "ABORT_NOT_QUIESCENT",
