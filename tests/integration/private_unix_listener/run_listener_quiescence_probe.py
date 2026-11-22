@@ -1501,6 +1501,7 @@ def _stop_and_cleanup(name: str, initial: dict, socket_path: Path | None, ready_
         if not cleanup["unit_inactive"]:
             raise Incomplete("fixture unit is not confirmed inactive")
         fixture_record = _ACTIVE_FIXTURES.get(name, {})
+        observer = fixture_record.get("cgroup_observer")
         final_snapshot, events = _verify_fixture_quiescent(name, initial, fixture_record)
         cleanup["cgroup_empty"] = True
         cleanup["final_invocation_id"] = final_snapshot["InvocationID"]
