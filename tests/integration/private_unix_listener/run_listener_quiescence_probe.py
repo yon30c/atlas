@@ -1880,8 +1880,21 @@ def run_probe(args: argparse.Namespace) -> dict:
         transitional4, populated4 = _wait_for_deactivation(
             name4, old_observer4, time.monotonic() + 1.5
         )
-        if transitional4["Job"][0] == 0 or populated4["values"]["populated"] != 1:
-            raise Incomplete("QP-04 did not observe a pending restart job with the old cgroup populated")
+        restart_jobs4 = [
+            job for job in transitional4["ListJobs"]
+            if job["id"] == transitional4["Job"][0]
+        ]
+        if (
+            transitional4["Job"][0] == 0
+            or len(restart_jobs4) != 1
+            or restart_jobs4[0]["type"] != "restart"
+            or populated4["values"]["populated"] != 1
+        ):
+            raise Incomplete("QP-04 did not observe the exact pending restart job with the old cgroup populated")
+        report["snapshots"].append({
+            "scenario": "QP-04", "phase": "restart-pending",
+            "monotonic_ns": mono(), "unit": transitional4, "cgroup": populated4,
+        })
         replacement4 = None
         deadline4 = time.monotonic() + STOP_TIMEOUT + 8
         while time.monotonic() < deadline4:
@@ -1900,12 +1913,14 @@ def run_probe(args: argparse.Namespace) -> dict:
         new_observer4 = open_cgroup_observer(mount, replacement4["ControlGroup"])
         new_populated4 = read_cgroup_observer(new_observer4)
         if (
-            old_empty4["values"]["populated"] != 0
-            or new_populated4["values"]["populated"] != 1
-            or old_observer4["identity"] == new_observer4["identity"]
+            new_populated4["values"]["populated"] != 1
+            or old_empty4["identity"] != cgroup_observer_identity(old_observer4)
+            or new_populated4["identity"] != cgroup_observer_identity(new_observer4)
+            or old_empty4["identity"]["control_group"] != initial4["ControlGroup"]
+            or new_populated4["identity"]["control_group"] != replacement4["ControlGroup"]
         ):
             close_cgroup_observer(new_observer4)
-            raise Incomplete("QP-04 old/replacement cgroup identities or population are inconsistent")
+            raise Incomplete("QP-04 old/replacement cgroup observer identity or population is inconsistent")
         _ACTIVE_FIXTURES[name4]["cgroup_observer"] = new_observer4
         _ACTIVE_FIXTURES[name4]["initial_cgroup_events"] = new_populated4
         _ACTIVE_FIXTURES[name4]["initial"] = replacement4
@@ -1931,16 +1946,21 @@ def run_probe(args: argparse.Namespace) -> dict:
         record_scenario(report, {
             "id": "QP-04", "status": "PASS",
             "decision": "ABORT_NOT_QUIESCENT",
-            "reason": "restart job remained pending while the old invocation cgroup was populated; replacement InvocationID and cgroup inode were distinct",
+            "reason": "restart job remained pending while the old invocation cgroup was populated; replacement InvocationID was distinct and both cgroup observers retained their own pinned identities",
             "observations": {
                 "old_invocation": initial4["InvocationID"],
                 "replacement_invocation": replacement4["InvocationID"],
-                "restart_job_type": transitional4["Job"][1],
+                "restart_job_type": restart_jobs4[0]["type"],
                 "old_cgroup_populated_during_restart": populated4["values"]["populated"],
-                "old_cgroup_populated_after_restart": old_empty4["values"]["populated"],
+                "old_observer_populated_after_restart": old_empty4["values"]["populated"],
                 "replacement_cgroup_populated": new_populated4["values"]["populated"],
                 "old_cgroup_identity": old_observer4["identity"],
                 "replacement_cgroup_identity": new_observer4["identity"],
+                "cgroup_inode_reused_across_invocations": (
+                    old_observer4["identity"]["st_dev"], old_observer4["identity"]["st_ino"]
+                ) == (
+                    new_observer4["identity"]["st_dev"], new_observer4["identity"]["st_ino"]
+                ),
             },
         })
 
