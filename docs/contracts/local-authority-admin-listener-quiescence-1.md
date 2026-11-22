@@ -224,7 +224,7 @@ La validación debe ejecutarse únicamente en una VM desechable y con fixtures; 
 | QP-06 | Cgroup delegado o posibilidad de migración | ABORT |
 | QP-07 | Lectura `cgroup.events` parcial, inaccesible o malformada | ABORT |
 | QP-08 | Intento de fork después de bind | Rechazado por diseño/política o contenido dentro del cgroup y terminado; nunca escapar |
-| QP-09 | Intento de duplicar/transferir listener FD mediante `SCM_RIGHTS`, `fcntl/dup*`, `pidfd_getfd` o `io_uring` | Rechazado por política; no aparece descriptor externo |
+| QP-09 | Intento de duplicar/transferir listener FD mediante `SCM_RIGHTS`, `fcntl/dup*`, `pidfd_getfd` o `io_uring`; intentar también `open(/proc/self/fd/N)` sobre el socket | Los mecanismos de transferencia/duplicación enumerados son rechazados por política; abrir el socket por procfs falla con `ENXIO` en Linux; no aparece descriptor externo |
 | QP-10 | Intento de exec con FD | El descriptor no sobrevive exec por CLOEXEC |
 | QP-11 | Start/restart concurrente durante mantenimiento | El test double del harness rechaza segundo actor y conserva marcador tras caída simulada; no valida un supervisor productivo |
 | QP-12 | Unidad reiniciada/sustituida entre snapshots | ABORT por discrepancia de invocación |
