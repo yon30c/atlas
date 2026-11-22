@@ -1257,8 +1257,9 @@ def run_probe(args: argparse.Namespace) -> dict:
         systemd_stop(name)
         stopped = wait_inactive(name, time.monotonic() + STOP_TIMEOUT + 3)
         after1 = cgroup_events(mount, initial["ControlGroup"])
-        after2 = cgroup_events(mount, initial["ControlGroup"])
+        time.sleep(0.05)
         stable = unit_snapshot(name)
+        after2 = cgroup_events(mount, initial["ControlGroup"])
         after_identity = cgroup_identity(mount, stable["ControlGroup"])
         require_cgroup_identity(before_identity, after_identity)
         quiescent = (
@@ -1299,12 +1300,15 @@ def run_probe(args: argparse.Namespace) -> dict:
             raise Incomplete("QP-02 did not observe the helper in a populated service cgroup")
         systemd_stop(name2)
         stopped2 = wait_inactive(name2, time.monotonic() + STOP_TIMEOUT + 3)
-        after2 = cgroup_events(mount, initial2["ControlGroup"])
+        after2_first = cgroup_events(mount, initial2["ControlGroup"])
+        time.sleep(0.05)
         stable2 = unit_snapshot(name2)
+        after2 = cgroup_events(mount, initial2["ControlGroup"])
         after_identity2 = cgroup_identity(mount, stable2["ControlGroup"])
         require_cgroup_identity(before_identity2, after_identity2)
         passed2 = (
-            stopped2["ActiveState"] == "inactive" and after2["values"]["populated"] == 0
+            stopped2["ActiveState"] == "inactive"
+            and after2_first["values"]["populated"] == 0 and after2["values"]["populated"] == 0
             and stopped2["MainPID"] == 0 and stable2["MainPID"] == 0
             and stable2["InvocationID"] == initial2["InvocationID"]
             and stable2["Job"][0] == 0
