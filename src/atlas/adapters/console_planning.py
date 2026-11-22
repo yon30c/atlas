@@ -3,9 +3,10 @@
 from atlas.adapters.ollama import OllamaError
 from atlas.assistant.request_planner import (
     AssistantRequestPlanner,
+    RequestPlanningResult,
     RequestPlanningStatus,
 )
-from atlas.core.errors import AtlasError
+from atlas.core.errors import AtlasError, ContractError
 from atlas.ports.clock import Clock
 
 
@@ -18,9 +19,9 @@ class PlanningConsoleCommands:
         clock: Clock,
     ) -> None:
         if planner is not None and not callable(getattr(planner, "process", None)):
-            raise TypeError("planner debe implementar process(content, created_at)")
+            raise ContractError("planner debe implementar process(content, created_at)")
         if not callable(getattr(clock, "now", None)):
-            raise TypeError("clock debe implementar now()")
+            raise ContractError("clock debe implementar now()")
         self._planner = planner
         self._clock = clock
 
@@ -39,6 +40,9 @@ class PlanningConsoleCommands:
             result = self._planner.process(request, self._clock.now())
         except (OllamaError, AtlasError, ValueError) as exc:
             return f"No se pudo preparar el plan: {exc}"
+
+        if not isinstance(result, RequestPlanningResult):
+            return "No se pudo preparar el plan: el planificador devolvió un resultado inválido."
 
         if result.status is RequestPlanningStatus.NEEDS_CLARIFICATION:
             return f"Necesito una aclaración antes de preparar el plan: {result.message}"
