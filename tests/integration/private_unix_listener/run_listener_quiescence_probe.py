@@ -1437,7 +1437,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["cleanup"]["resources"].append(cleanup)
         report["scenarios"].append({"id": "QP-01", "status": "PASS",
                                     "decision": "QUIESCENT",
-                                    "reason": "listener closed by service; fork/duplication/SCM_RIGHTS paths denied; manager inactive and two correlated cgroup snapshots populated=0",
+                                    "reason": "listener closed by service; fork/duplication/SCM_RIGHTS/io_uring paths denied; manager inactive and two correlated cgroup snapshots populated=0",
                                     "observations": {"fd_policy": policy01, "stable_invocation": stable["InvocationID"] == initial["InvocationID"],
                                                      "cgroup_identity": before_identity,
                                                      "manager_unloaded": stable["manager_unloaded"]}})
@@ -1481,7 +1481,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             raise Incomplete("QP-02 failed its pre-stop helper or post-stop empty-cgroup check")
         report["scenarios"].append({"id": "QP-02", "status": "PASS",
                                     "decision": "QUIESCENT",
-                                    "reason": "pre-listener child was contained in the service cgroup; post-listener fork/duplication/SCM_RIGHTS paths denied; stop emptied the correlated cgroup",
+                                    "reason": "pre-listener child was contained in the service cgroup; post-listener fork/duplication/SCM_RIGHTS/io_uring paths denied; stop emptied the correlated cgroup",
                                     "observations": {"fd_policy": policy02, "helper_preexisted_listener": True,
                                                      "child_pid": ready2_data["child_pid"],
                                                      "child_filter_confirmed": ready2_data["child_filter_confirmed"],
