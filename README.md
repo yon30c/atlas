@@ -15,11 +15,18 @@ La visión de Atlas se apoya en estos principios:
 
 La autonomía de Atlas no equivale a autoridad. Comprender una solicitud, generar una respuesta o proponer un plan no autoriza ni ejecuta una operación.
 
-> **Corte documental:** 21 de noviembre de 2026. PR #28 fue integrado en `main` mediante el merge commit `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`. El propietario validó esa base con **1,590 pruebas — OK (1 skipped)** en 34.895 s. Posteriormente, PR #29 fue validado localmente en Debian 13 sobre el HEAD exacto `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`: probe systemd user-manager `PASS` y suite completa **1,590 pruebas — OK (1 skipped)** en 34.753 s. La evidencia del PR no demuestra system-manager, separación de privilegios ni despliegue. El listener persistente continúa sin implementar; la activación systemd sobre filesystem permanece suspendida por la colisión de ruta observada. PR #29 fue integrado en `main` mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`. Este README distingue implementación, validación local comunicada y capacidades no habilitadas. Un contrato, puerto, modelo o reducer no demuestra por sí solo que una capacidad esté habilitada en un runtime completo.
+> **Corte documental:** 22 de noviembre de 2026. PR #28 fue integrado en `main` mediante el merge commit `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`. El propietario validó esa base con **1,590 pruebas — OK (1 skipped)** en 34.895 s. Posteriormente, PR #29 fue validado localmente en Debian 13 sobre el HEAD exacto `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`: probe systemd user-manager `PASS` y suite completa **1,590 pruebas — OK (1 skipped)** en 34.753 s. La evidencia del PR no demuestra system-manager, separación de privilegios ni despliegue. El listener persistente continúa sin implementar; la activación systemd sobre filesystem permanece suspendida por la colisión de ruta observada. PR #29 fue integrado en `main` mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`. Este README distingue implementación, validación local comunicada y capacidades no habilitadas. Un contrato, puerto, modelo o reducer no demuestra por sí solo que una capacidad esté habilitada en un runtime completo.
 
 ## Estado general del desarrollo
 
 Atlas es software funcional en desarrollo incremental, no solamente un conjunto de contratos o un prototipo. Ya dispone de una experiencia conversacional local ejecutable, integración con Ollama y gestión durable de conversaciones, incluyendo administración, exportación, backup cifrado, verificación y restauración. La suite completa local ha sido ejecutada y aprobada. A la vez, Atlas todavía no es el entorno autónomo completo descrito por su visión. Consulta el [estado vigente del proyecto](docs/status-current.md).
+
+
+### Prioridad de desarrollo: MVP local limitado
+
+La rama `work/atlas-mvp-runtime`, creada desde `main`, inicia una ruta de entrega más corta. Añade el comando `/plan <solicitud>` a la consola para mostrar una vista previa generada por el planificador F1. No ejecuta capacidades ni accede al filesystem. El cambio y sus pruebas están pendientes de validación local en Debian; no se ha integrado en `main`.
+
+El siguiente hito será conectar el acceso read-only a Workspace únicamente después de cerrar autenticación nativa, bootstrap y construcción de un contexto USER verificable. No se utilizará la identidad sintética de la consola como autoridad. Consulta [el plan funcional](docs/functional-test-roadmap.md) y [el estado vigente](docs/status-current.md).
 
 | Área | Estado real |
 |---|---|
