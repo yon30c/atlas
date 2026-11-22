@@ -283,6 +283,28 @@ def unit_snapshot(name: str) -> dict:
     return values
 
 
+def observe_stopped_unit(name: str, invocation_id: list, control_group: str) -> dict:
+    if unit_is_absent(name):
+        if list_jobs_for_unit(name):
+            raise Incomplete("manager reports a pending job for an unloaded fixture")
+        return {
+            "Id": name, "InvocationID": invocation_id,
+            "ControlGroup": control_group, "ActiveState": "inactive",
+            "MainPID": 0, "Job": [0, "/"], "manager_unloaded": True,
+        }
+    snapshot = unit_snapshot(name)
+    if (
+        snapshot["InvocationID"] != invocation_id
+        or snapshot["ControlGroup"] != control_group
+        or snapshot["ActiveState"] != "inactive"
+        or snapshot["MainPID"] != 0
+        or snapshot["Job"][0] != 0
+    ):
+        raise Incomplete("stopped fixture state changed or retains a pending job")
+    snapshot["manager_unloaded"] = False
+    return snapshot
+
+
 def cgroup_mount() -> tuple[Path, Path]:
     try:
         lines = Path("/proc/self/mountinfo").read_text(encoding="ascii").splitlines()
@@ -1350,17 +1372,18 @@ def run_probe(args: argparse.Namespace) -> dict:
         )
         report["unit_identity"][name] = initial
         update_gate_marker(marker, run_id, name, initial, "unit-started")
-        before_identity = cgroup_identity(mount, initial["ControlGroup"])
-        before = cgroup_events(mount, initial["ControlGroup"])
+        observer01 = _ACTIVE_FIXTURES[name]["cgroup_observer"]
+        before_identity = dict(observer01["identity"])
+        before = read_cgroup_observer(observer01)
         report["snapshots"].append({"scenario": "QP-01", "phase": "before-stop",
                                     "monotonic_ns": mono(), "unit": initial, "cgroup": before})
         systemd_stop(name)
         stopped = wait_inactive(name, time.monotonic() + STOP_TIMEOUT + 3)
-        after1 = cgroup_events(mount, initial["ControlGroup"])
+        after1 = read_cgroup_observer(observer01)
         time.sleep(0.05)
-        stable = unit_snapshot(name)
-        after2 = cgroup_events(mount, initial["ControlGroup"])
-        after_identity = cgroup_identity(mount, stable["ControlGroup"])
+        stable = observe_stopped_unit(name, initial["InvocationID"], initial["ControlGroup"])
+        after2 = read_cgroup_observer(observer01)
+        after_identity = dict(observer01["identity"])
         require_cgroup_identity(before_identity, after_identity)
         quiescent = (
             stopped["ActiveState"] == "inactive" and stopped["Job"][0] == 0
@@ -1383,7 +1406,8 @@ def run_probe(args: argparse.Namespace) -> dict:
                                     "decision": "QUIESCENT",
                                     "reason": "listener closed by service; fork/duplication/SCM_RIGHTS paths denied; manager inactive and two correlated cgroup snapshots populated=0",
                                     "observations": {"fd_policy": policy01, "stable_invocation": stable["InvocationID"] == initial["InvocationID"],
-                                                     "cgroup_identity": before_identity}})
+                                                     "cgroup_identity": before_identity,
+                                                     "manager_unloaded": stable["manager_unloaded"]}})
         if not cleanup["endpoint_removed"] or not cleanup["cgroup_empty"] or not cleanup.get("unit_unloaded"):
             raise Incomplete("QP-01 cleanup was not confirmed")
 
@@ -1394,17 +1418,18 @@ def run_probe(args: argparse.Namespace) -> dict:
         )
         report["unit_identity"][name2] = initial2
         update_gate_marker(marker, run_id, name2, initial2, "unit-started")
-        before_identity2 = cgroup_identity(mount, initial2["ControlGroup"])
-        before2 = cgroup_events(mount, initial2["ControlGroup"])
+        observer02 = _ACTIVE_FIXTURES[name2]["cgroup_observer"]
+        before_identity2 = dict(observer02["identity"])
+        before2 = read_cgroup_observer(observer02)
         if before2["values"]["populated"] != 1:
             raise Incomplete("QP-02 did not observe the helper in a populated service cgroup")
         systemd_stop(name2)
         stopped2 = wait_inactive(name2, time.monotonic() + STOP_TIMEOUT + 3)
-        after2_first = cgroup_events(mount, initial2["ControlGroup"])
+        after2_first = read_cgroup_observer(observer02)
         time.sleep(0.05)
-        stable2 = unit_snapshot(name2)
-        after2 = cgroup_events(mount, initial2["ControlGroup"])
-        after_identity2 = cgroup_identity(mount, stable2["ControlGroup"])
+        stable2 = observe_stopped_unit(name2, initial2["InvocationID"], initial2["ControlGroup"])
+        after2 = read_cgroup_observer(observer02)
+        after_identity2 = dict(observer02["identity"])
         require_cgroup_identity(before_identity2, after_identity2)
         passed2 = (
             stopped2["ActiveState"] == "inactive"
@@ -1428,7 +1453,8 @@ def run_probe(args: argparse.Namespace) -> dict:
                                                      "child_pid": ready2_data["child_pid"],
                                                      "child_filter_confirmed": ready2_data["child_filter_confirmed"],
                                                      "invocation_unchanged": stable2["InvocationID"] == initial2["InvocationID"],
-                                                     "cgroup_identity": before_identity2}})
+                                                     "cgroup_identity": before_identity2,
+                                                     "manager_unloaded": stable2["manager_unloaded"]}})
 
         # QP-03: ignored SIGTERM must prevent a premature quiescent result.
         name3 = f"atlas-qp-{secrets.token_hex(6)}.service"
