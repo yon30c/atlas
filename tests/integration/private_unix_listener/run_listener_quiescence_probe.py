@@ -189,7 +189,7 @@ def list_jobs_for_unit(name: str) -> list[dict]:
         if row[1] == name:
             matches.append({
                 "id": row[0], "unit": row[1], "type": row[2],
-                "state": row[3], "unit_path": row[4], "job_path": row[5],
+                "state": row[3], "job_path": row[4], "unit_path": row[5],
             })
     return matches
 
