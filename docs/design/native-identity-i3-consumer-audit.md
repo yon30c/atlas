@@ -1,6 +1,6 @@
 # I-3 — inventario de consumidores de OperationContext y plan de cierre
 
-**Estado:** auditoría incremental; I3-1 validado en Debian. I3-2 en análisis de frontera; este documento no habilita operaciones.
+**Estado histórico:** auditoría incremental por slices I3-1/I3-2; las secciones 1–19 conservan el estado de sus checkpoints. **Revisión estática vigente 2026-11-22:** véase §20, que inspecciona el código presente en `main` y `work/atlas-mvp-runtime`. Este documento no habilita operaciones.
 **Base:** `feature/verified-identity-i2-authentication-context` (I-2 validado).
 **Objetivo:** identificar cada frontera sensible que usa `OperationContext` y exigir evidencia verificable de identidad sin confundir actor, usuario contextual y autorización CAM.
 
@@ -358,3 +358,41 @@ I3-2B.6B/6C implementation now exists on the PR branch:
 - Duplicate request ID is idempotent only for the same intent; only one PENDING request per Grant is allowed.
 
 **I3-2B.6B/6C Debian validation remains pending.** The implementation is not considered validated until the owner reports focused tests, full unit suite and compileall. No AGENT login, endpoint or runtime was enabled. PR #16 remains Draft/open/unmerged.
+
+
+## 20. Revisión estática vigente de consumidores — 2026-11-22
+
+**Base inspeccionada:** `main` y `work/atlas-mvp-runtime`. Los archivos revisados de `GrantRenewalService`, contextos AGENT y consumidores sensibles tienen el mismo SHA en ambas referencias. Esta sección actualiza el estado del código sin borrar el historial de los slices anteriores.
+
+### 20.1 Renovación de Grants
+
+El código actual de `GrantRenewalService`:
+
+- `request_renewal` exige `VerifiedAgentIdentityContext` y `VerifiedAgentDelegationContext` explícitos, y ambos verificadores ejecutan `verify_in_unit_of_work` dentro de la UoW de la operación.
+- Revalida Grant, Project, Environment y asociación Project–Environment, incluyendo estado/revisión y vínculo entre delegación y Grant.
+- `approve_renewal` y `reject_renewal` usan `require_verified_owner_context_in_unit_of_work` dentro de la UoW de mutación.
+
+Esto corrige el checkpoint histórico donde la ruta AGENT se describía como completamente bloqueada. La existencia de esta ruta de aplicación no habilita login AGENT, endpoints ni runtime delegado; la autorización CAM y el cierre de la composición siguen siendo necesarios.
+
+### 20.2 Emisión y revocación directa de Grants
+
+La revisión de `GrantManagementService` confirma que `issue` y `revoke` llaman a `require_verified_owner_context` antes de abrir la UoW de mutación/coordinación. Ese helper llama a `verifier.verify()`, que abre su propia UoW.
+
+Por tanto, la evidencia de identidad se verifica, pero no se revalida dentro de la misma UoW que inserta el Grant o inicia la revocación. Una suspensión/revocación de Identity o binding concurrente puede ocurrir entre ambas fronteras. Antes de habilitar estas operaciones en runtime se requiere revalidación dentro de la UoW de mutación o un mecanismo de fencing/consistencia cuya garantía esté demostrada. No sustituirlo por una lectura puntual adicional.
+
+### 20.3 Memory y Workspace
+
+- `MemoryAuthorizationService` continúa aceptando `OperationContext` y usando el binding legacy `AuthenticatedUserSubject`; no exige ni revalida `VerifiedIdentityContext`. No habilitar lecturas protegidas desde identidad nativa por inferencia.
+- `WorkspaceCapabilityExecutionService` valida identidad canónica, estado de Workspace, propietario, Project/Environment, asociación V18, Grant exacto y mount registrado dentro de `BEGIN IMMEDIATE`. Sin embargo, su firma pública solo recibe `OperationContext` y no recibe evidencia verificada. Un caller puede fabricar un contexto con el par canónico actual y superar la comparación local. `BEGIN IMMEDIATE` protege escritores SQLite concurrentes durante la lectura, no autentica al caller ni proporciona fencing distribuido o de filesystem.
+- `LocalConsoleRequestFactory` continúa creando identidad y `user_id` sintéticos desde el usuario Unix. Debe permanecer aislada de Workspace, Memory, Grants, Broker y cualquier capacidad protegida.
+
+### 20.4 Orden de cierre
+
+1. Cambiar `GrantManagementService.issue` para verificar `VerifiedIdentityContext` dentro de la UoW que inserta el Grant.
+2. Revisar `revoke` con el coordinador de autoridad: la verificación de identidad debe estar ligada a la reserva/commit y al fencing de la operación, no solo al inicio.
+3. Exigir evidencia USER verificable en Workspace dentro de la UoW de ejecución; no aceptar solo `OperationContext`.
+4. Exigir evidencia USER verificable en Memory PRIVATE/PROJECT y conservar la distinción entre USER y AGENT delegado.
+5. Mantener la consola sintética desconectada y cubrir pruebas negativas de caller/contexto fabricado.
+6. Validar localmente carreras de suspensión/revocación frente a emisión, renovación, lectura y ejecución antes de conectar runtime.
+
+**Límite:** revisión estática solamente. No se ejecutaron pruebas ni se modificó código ejecutable. La suite completa 1,611/1,611 (con un skip) fue validada por el propietario en la rama MVP, pero no demuestra fencing frente a cambios concurrentes de identidad/Grant ni integración protegida end-to-end.
