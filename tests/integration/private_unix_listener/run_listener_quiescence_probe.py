@@ -2386,15 +2386,16 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["counts"] = {status: statuses.count(status) for status in ("PASS", "FAIL", "INCOMPLETE")}
         report_path = BASE / f"{run_id}.json"
         report["report_path"] = str(report_path)
+        report_identity = None
         persisted = False
         if BASE.exists():
             try:
                 validate_report_bounds(report)
-                _safe_json_file(report_path, report, MAX_REPORT)
+                report_identity = _safe_json_file(report_path, report, MAX_REPORT)
                 persisted = True
                 report["evidence_persisted_before_gate_release"] = True
                 if not (report["cleanup"]["safe_to_release_gate"] and marker_created):
-                    _rewrite_json_file(report_path, report, MAX_REPORT)
+                    _rewrite_json_file(report_path, report, MAX_REPORT, expected_identity=report_identity)
             except Exception as exc:
                 report["cleanup"]["report_persist_error"] = f"{type(exc).__name__}: {exc}"
                 report["cleanup"]["safe_to_release_gate"] = False
@@ -2425,7 +2426,7 @@ def run_probe(args: argparse.Namespace) -> dict:
                     else "FAIL" if "FAIL" in statuses or "harness_error" in report
                     else "INCOMPLETE"
                 )
-                _rewrite_json_file(report_path, report, MAX_REPORT)
+                _rewrite_json_file(report_path, report, MAX_REPORT, expected_identity=report_identity)
             except Exception as exc:
                 report["cleanup"]["safe_to_release_gate"] = False
                 report["overall"] = "INCOMPLETE"
@@ -2438,7 +2439,7 @@ def run_probe(args: argparse.Namespace) -> dict:
                         }, 4096)
                         report["gate"]["marker_identity"] = marker_identity
                         report["gate"]["marker_recreated_after_release_failure"] = True
-                    _rewrite_json_file(report_path, report, MAX_REPORT)
+                    _rewrite_json_file(report_path, report, MAX_REPORT, expected_identity=report_identity)
                 except Exception as recovery_exc:
                     report["gate"]["marker_recovery_error"] = (
                         f"{type(recovery_exc).__name__}: {recovery_exc}"
