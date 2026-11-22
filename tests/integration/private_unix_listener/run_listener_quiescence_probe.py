@@ -276,8 +276,6 @@ class _TestLifecycleSupervisor:
             raise Incomplete("test lifecycle supervisor is unavailable")
         if action not in {"start", "stop", "restart"}:
             raise Incomplete("test lifecycle supervisor received an unsupported action")
-        if not self.allow_owner:
-            raise Incomplete("sticky maintenance marker requires explicit manual recovery")
         try:
             fcntl.flock(self.lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             marker_data = json.loads(self.marker.read_text(encoding="utf-8"))
@@ -285,6 +283,8 @@ class _TestLifecycleSupervisor:
             raise Incomplete("test lifecycle supervisor cannot verify its gate") from exc
         if marker_data.get("schema") != SCHEMA or marker_data.get("run_id") != self.run_id:
             raise Incomplete("test lifecycle supervisor marker ownership mismatch")
+        if not self.allow_owner:
+            raise Incomplete("sticky maintenance marker blocks lifecycle until explicit manual recovery")
         if actor_run_id != self.run_id:
             raise PermissionError("second authorized actor rejected by maintenance gate")
         if not argv or argv[0] not in {"systemd-run", "systemctl"}:
