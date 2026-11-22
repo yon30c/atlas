@@ -1,29 +1,28 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-21.
+> **Última actualización:** 2026-11-22.
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
-## Estado operativo vigente — 2026-11-21
+## Estado operativo vigente — 2026-11-22
 
 > Esta sección es la referencia operativa prioritaria. Las secciones posteriores conservan decisiones y snapshots históricos; cuando un dato histórico contradiga este bloque, prevalece este bloque para el estado actual. No se elimina la historia de decisiones.
 
 - **Repositorio:** `yon30c/atlas`.
-- **Rama de trabajo activa:** `work/systemd-socket-activation-probe-contract-alignment`.
-- **PR #29:** [Alinear probe systemd con atlas-admin/1 y registrar puertas del listener](https://github.com/yon30c/atlas/pull/29), integrado en `main` mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`.
-- **HEAD de código validado en PR #29:** `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`. Los commits documentales posteriores quedaron incluidos en el merge commit indicado arriba.
-- **Base estable:** `main` en `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`; PR #28 ya integrado.
-- **Validación de la base `main`:** el propietario reportó 1.590 tests: `OK (skipped=1)`, 34.895 s, Python 3.13.5, sobre `74fcc6461c3ad8b802ef765b9d1e8aa478dcc552`.
-- **Validación local de PR #29:** confirmada por el propietario en Debian 13 sobre HEAD exacto `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, con árbol limpio y sincronizado con `origin`.
-  - Probe `tests/integration/systemd_socket_activation/run_user_manager_test.py`: `PASS` para activación systemd user-manager, validación del descriptor, dos activaciones, ownership/mode privados y limpieza delegada al harness con `RemoveOnStop=no`.
-  - Suite completa: `Ran 1590 tests in 34.753s` / `OK (skipped=1)`.
-  - La evidencia valida ese HEAD de PR #29 en el entorno Debian comunicado; no demuestra system-manager, separación de privilegios, transporte de producción ni despliegue. No se ejecutaron pruebas, compilaciones ni workflows remotos desde GitHub.
-- **Estado IPC:** contrato `atlas-admin/1` y handler/prototipo para conexiones ya aceptadas; la única operación funcional sigue siendo `authority.ping`. No existe listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
-- **Endpoint/transporte:** no hay transporte aprobado para producción. Listener propio sobre directorio privado (A) es únicamente candidato al siguiente probe temporal; socket activation systemd sobre filesystem (B) está suspendida por la colisión destructiva observada en Debian systemd 257.13; AF_UNIX abstracto (C) es experimental y conserva riesgos de preclaim/DoS y ausencia de DAC.
-- **Operaciones restantes:** las seis operaciones administrativas restantes continúan bloqueadas/no implementadas funcionalmente.
-- **Siguiente paso:** diseñar y ejecutar probes separados para A (listener propio) y C (AF_UNIX abstracto), sin asumir aprobación de transporte. No se ejecutaron ni quedan aprobados por la validación/merge de PR #29.
+- **Base estable:** `main`, HEAD observado `a89e96cc4e5d9555e28a7ea5d9f3788654fe7268`. PR #29 sigue integrado mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`.
+- **Rama de trabajo activa:** `work/atlas-mvp-runtime`, creada desde `main`. No está integrada ni validada localmente.
+- **Objetivo inmediato:** entregar un MVP local limitado que permita conversar, preparar planes y, después de cerrar la autenticación confiable, ejecutar capacidades read-only de Workspace bajo CAM.
+- **Cambio funcional en curso:** comando explícito `/plan <solicitud>`, conectado al planificador F1 y al proveedor Ollama configurado para JSON. Solo presenta una vista previa; no ejecuta capacidades ni accede al filesystem.
+- **Último commit de la rama al actualizar este documento:** `041d7669e73044bdb5d7f64dedf52357d9acfaf0`. Incluye el wiring del comando y pruebas añadidas/actualizadas. La revisión y validación local siguen pendientes.
+- **Pruebas:** no se ejecutaron pruebas, compilaciones ni workflows desde GitHub. El propietario debe ejecutar las pruebas focalizadas y la suite en Debian; no declarar PASS hasta recibir su salida.
+- **Siguiente prioridad técnica:** cerrar el camino de autenticación nativa y bootstrap de propietario, incluida una implementación compartida del control de intentos y la provisión segura de la clave HMAC. Después integrar la frontera de consola verificada con el gate CAM de Workspace.
+- **Bloqueo de seguridad:** `LocalConsoleRequestFactory` sigue creando un contexto sintético basado en la cuenta del sistema operativo. No debe alcanzar Workspace, CAM, Memory, Broker ni otras capacidades protegidas. No conectar el gate read-only hasta disponer de identidad canónica y evidencia verificable.
+- **Alcance del primer MVP:** conversación local, persistencia de conversaciones, vista previa de planes y, cuando el gate de identidad esté cerrado, listado/lectura de archivos en un Workspace de prueba. Escritura, shell, Docker, Skills, agentes y autonomía general permanecen fuera del primer MVP.
+- **IPC experimental:** A-IPC-05 permanece en su rama experimental separada. El estado residual de su ejecución fallida no se ha recuperado ni limpiado; no detener unidades, borrar marcadores, locks, informes o sandboxes ni repetir el probe por inferencia.
+- **Validación histórica:** el propietario reportó 1.590 tests OK (1 skipped) sobre el HEAD de código del PR #29 `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, más PASS del probe systemd user-manager. Esta evidencia no cubre la rama MVP ni habilita system-manager, transporte IPC productivo o despliegue.
+- **Reglas de trabajo:** edición y revisión directamente en GitHub; no usar Work; no ejecutar tests en GitHub; el propietario ejecuta pruebas localmente en Debian; no modificar `main`, host, usuarios, permisos, servicios o bases reales por inferencia.
 
-**Límites vigentes:** la validación del probe user-manager no autoriza system-manager, listener persistente, despliegue, unidades de producción, cambios del host, usuarios, grupos, permisos, privilegios, apertura de SQLite, provisioning ni operaciones administrativas. Socket activation sobre filesystem continúa suspendida por la colisión observada. Las decisiones de transporte y cualquier cambio de autoridad requieren evidencia y aprobación explícita del propietario.
+**Límites vigentes:** el comando `/plan` es únicamente una vista previa. Un plan, una identidad sintética o la existencia de un servicio de Workspace no autorizan ejecución. Las operaciones protegidas requieren identidad verificada, contexto canónico, Grant CAM exacto y mediación del servicio responsable.
 
 ---
 
