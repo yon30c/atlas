@@ -1,6 +1,7 @@
 """SQLite infrastructure for the single-server local profile."""
 
 from atlas.adapters.sqlite.database import SQLiteDatabase, SQLiteMigration, SQLiteUnitOfWork
+from atlas.adapters.sqlite.authentication_attempt_guard import SQLiteAuthenticationAttemptGuard
 from atlas.adapters.sqlite.authority_changes import SQLiteAuthorityChangeStore
 from atlas.adapters.sqlite.grant_repository import SQLiteGrantRepository
 from atlas.adapters.sqlite.grant_renewal_repository import SQLiteGrantRenewalRepository
@@ -47,7 +48,7 @@ from atlas.adapters.sqlite.migrations import (
 )
 
 __all__ = [
-    "SQLiteDatabase", "SQLiteMigration", "SQLiteUnitOfWork",
+    "SQLiteDatabase", "SQLiteMigration", "SQLiteUnitOfWork", "SQLiteAuthenticationAttemptGuard",
     "SQLiteAuthorityChangeStore", "SQLiteGrantRepository", "SQLiteGrantRenewalRepository",
     "SQLiteRecoveryEvidenceIssuerTrustPolicyRepository",
     "SQLiteRecoveryEvidenceIssuerRegistryRepository",
@@ -67,6 +68,6 @@ __all__ = [
     "CORE_SCHEMA_V4", "CORE_SCHEMA_V5", "CORE_SCHEMA_V6", "CORE_SCHEMA_V7", "CORE_SCHEMA_V8",
     "CORE_SCHEMA_V9", "CORE_SCHEMA_V10", "CORE_SCHEMA_V11", "CORE_SCHEMA_V12",
     "CORE_SCHEMA_V13", "CORE_SCHEMA_V14", "CORE_SCHEMA_V15", "CORE_SCHEMA_V16",
-    "CORE_SCHEMA_V17", "CORE_SCHEMA_V18", "CORE_SCHEMA_V19", "CORE_SCHEMA_V20", "CORE_SCHEMA_V21", "CORE_SCHEMA_V22", "CORE_SCHEMA_V23", "CORE_SCHEMA_V24", "CORE_SCHEMA_V25", "CORE_SCHEMA_V26", "CORE_SCHEMA_V27",
+    "CORE_SCHEMA_V17", "CORE_SCHEMA_V18", "CORE_SCHEMA_V19", "CORE_SCHEMA_V20", "CORE_SCHEMA_V21", "CORE_SCHEMA_V22", "CORE_SCHEMA_V23", "CORE_SCHEMA_V24", "CORE_SCHEMA_V25", "CORE_SCHEMA_V26", "CORE_SCHEMA_V27", "CORE_SCHEMA_V28",
     "CONVERSATION_MIGRATIONS", "CONVERSATION_SCHEMA_V1",
 ]
