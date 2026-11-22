@@ -1059,6 +1059,11 @@ def preflight() -> dict:
     }
 
 
+def record_scenario(report: dict, scenario: dict) -> None:
+    scenario["completed_monotonic_ns"] = mono()
+    report["scenarios"].append(scenario)
+
+
 def validate_report_bounds(report: dict) -> None:
     for scenario in report.get("scenarios", []):
         raw_scenario = json.dumps(
@@ -1466,7 +1471,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         policy01 = read_bounded_json_file(ready_path, expected_uid=SERVICE_UID, expected_gid=SERVICE_GID)["fd_policy"]
         cleanup = _stop_and_cleanup(name, initial, endpoint, ready_path, run_dir_fd, report, already_stopped=True, cgroup_empty_confirmed=True)
         report["cleanup"]["resources"].append(cleanup)
-        report["scenarios"].append({"id": "QP-01", "status": "PASS",
+        record_scenario(report, {"id": "QP-01", "status": "PASS",
                                     "decision": "QUIESCENT",
                                     "reason": "listener closed by service; fork/duplication/SCM_RIGHTS/io_uring paths denied; manager inactive and two correlated cgroup snapshots populated=0",
                                     "observations": {"fd_policy": policy01, "stable_invocation": stable["InvocationID"] == initial["InvocationID"],
@@ -1510,7 +1515,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["cleanup"]["resources"].append(cleanup2)
         if not passed2 or not cleanup2["endpoint_removed"] or not cleanup2.get("unit_unloaded"):
             raise Incomplete("QP-02 failed its pre-stop helper or post-stop empty-cgroup check")
-        report["scenarios"].append({"id": "QP-02", "status": "PASS",
+        record_scenario(report, {"id": "QP-02", "status": "PASS",
                                     "decision": "QUIESCENT",
                                     "reason": "pre-listener child was contained in the service cgroup; post-listener fork/duplication/SCM_RIGHTS/io_uring paths denied; stop emptied the correlated cgroup",
                                     "observations": {"fd_policy": policy02, "helper_preexisted_listener": True,
@@ -1540,7 +1545,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["cleanup"]["resources"].append(cleanup3)
         if stopped3["ActiveState"] != "inactive" or empty3["values"]["populated"] != 0 or not cleanup3["endpoint_removed"] or not cleanup3.get("unit_unloaded"):
             raise Incomplete("QP-03 did not reach manager-controlled final termination")
-        report["scenarios"].append({"id": "QP-03", "status": "PASS",
+        record_scenario(report, {"id": "QP-03", "status": "PASS",
                                     "decision": "ABORT_NOT_QUIESCENT",
                                     "reason": "initial deadline observed deactivating + populated=1; manager later terminated fixture"})
 
@@ -1564,7 +1569,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["cleanup"]["resources"].append(cleanup4)
         if stopped4["ActiveState"] != "inactive" or empty4["values"]["populated"] != 0 or not cleanup4["endpoint_removed"] or not cleanup4.get("unit_unloaded"):
             raise Incomplete("QP-04 cleanup after pending stop job failed")
-        report["scenarios"].append({"id": "QP-04", "status": "PASS",
+        record_scenario(report, {"id": "QP-04", "status": "PASS",
                                     "decision": "ABORT_NOT_QUIESCENT",
                                     "reason": "pending Unit.Job and populated=1 observed before manager termination"})
 
@@ -1604,7 +1609,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             raise Incomplete("QP-05 OTHER fixture directory was not empty") from exc
         if not mismatch_rejected or not cleanup5a["unit_inactive"] or not cleanup5b["unit_inactive"] or not cleanup5a.get("unit_unloaded") or not cleanup5b.get("unit_unloaded"):
             raise Incomplete("QP-05 identity mismatch or fixture cleanup was not confirmed")
-        report["scenarios"].append({
+        record_scenario(report, {
             "id": "QP-05", "status": "PASS",
             "reason": "SERVICE and OTHER fixtures had distinct ControlGroup inode identities; adapter mismatch was rejected before cgroup use",
             "observations": {"service_cgroup": cg5a, "other_cgroup": cg5b,
@@ -1620,7 +1625,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["cleanup"]["resources"].append(cleanup8)
         if not cleanup8["unit_inactive"] or not cleanup8["cgroup_empty"] or not cleanup8["endpoint_removed"] or not cleanup8.get("unit_unloaded"):
             raise Incomplete("QP-08 fixture cleanup failed")
-        report["scenarios"].append({
+        record_scenario(report, {
             "id": "QP-08", "status": "PASS",
             "reason": "fork/vfork/clone/clone3 all returned EPERM after listener bind/listen",
             "observations": policy8,
@@ -1642,7 +1647,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             or not cleanup10["endpoint_removed"]
         ):
             raise Incomplete("QP-10 exec/CLOEXEC evidence or cleanup failed")
-        report["scenarios"].append({
+        record_scenario(report, {
             "id": "QP-10", "status": "PASS",
             "reason": "execve replaced the same process and the helper observed EBADF for the listener FD",
             "observations": exec_evidence,
@@ -1657,7 +1662,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["cleanup"]["resources"].append(cleanup9)
         if not cleanup9["unit_inactive"] or not cleanup9["cgroup_empty"] or not cleanup9["endpoint_removed"] or not cleanup9.get("unit_unloaded"):
             raise Incomplete("QP-09 fixture cleanup failed")
-        report["scenarios"].append({
+        record_scenario(report, {
             "id": "QP-09", "status": "PASS",
             "reason": "duplication, SCM_RIGHTS-capable and io_uring syscalls returned EPERM; fcntl F_GETFD and read/write remained available",
             "observations": policy9,
@@ -1704,7 +1709,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["cleanup"]["resources"].append(cleanup6good)
         if not cleanup6good["unit_inactive"] or not cleanup6good["cgroup_empty"] or not cleanup6good["endpoint_removed"] or not cleanup6good.get("unit_unloaded"):
             raise Incomplete("QP-06 positive fixture cleanup failed")
-        report["scenarios"].append({
+        record_scenario(report, {
             "id": "QP-06", "status": "PASS", "decision": "ABORT_NOT_QUIESCENT",
             "reason": "Delegate=yes rejected; Delegate=no service had no CAP_SYS_ADMIN and could not write its cgroup directory",
             "observations": {"delegate_yes_rejected": delegate_yes_rejected,
@@ -1749,7 +1754,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             {"permission_error_preserved": permission_rejected},
             {"oversize_rejected": oversize_rejected},
         ])
-        report["scenarios"].append({"id": "QP-07", "status": "PASS",
+        record_scenario(report, {"id": "QP-07", "status": "PASS",
                                     "reason": "strict parser, partial-read accumulation, permission failure and byte limit all fail closed",
                                     "observations": parser_results})
 
@@ -1837,7 +1842,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             os.rmdir(other_dir13)
         except OSError as exc:
             raise Incomplete("QP-13 external holder evidence cleanup failed") from exc
-        report["scenarios"].append({
+        record_scenario(report, {
             "id": "QP-13", "status": "PASS",
             "decision": "ABORT_NOT_QUIESCENT",
             "reason": "service cgroup became empty while an OTHER-unit process retained the listener FD; holder was then terminated before endpoint cleanup",
@@ -1874,7 +1879,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             stop_timeout_rejected = True
         if not manager_failure_rejected or not supervisor_failure_rejected or not stop_timeout_rejected:
             raise Incomplete("QP-14 did not fail closed for manager/supervisor/timeout faults")
-        report["scenarios"].append({
+        record_scenario(report, {
             "id": "QP-14", "status": "PASS",
             "reason": "injected manager failure, unavailable supervisor and bounded-command timeout were rejected without pathname mutation",
             "observations": {"manager_failure_rejected": manager_failure_rejected,
@@ -1902,7 +1907,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             path_mismatch_rejected = True
         if not inode_mismatch_rejected or not path_mismatch_rejected:
             raise Incomplete("QP-15 cgroup identity fault injection was not rejected")
-        report["scenarios"].append({
+        record_scenario(report, {
             "id": "QP-15", "status": "PASS",
             "reason": "adapter-only st_dev/st_ino and ControlGroup mismatches were rejected without changing cgroupfs",
             "observations": {"actual_identity": identity15,
@@ -1947,7 +1952,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             or not cleanup12["cgroup_empty"] or not cleanup12.get("unit_unloaded")
         ):
             raise Incomplete("QP-12 cleanup failed after detected replacement")
-        report["scenarios"].append({
+        record_scenario(report, {
             "id": "QP-12", "status": "PASS",
             "decision": "ABORT_NOT_QUIESCENT",
             "reason": "direct root restart changed InvocationID; old and replacement cgroup observers were kept separate",
@@ -2055,7 +2060,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             or not cleanup11.get("unit_unloaded")
         ):
             raise Incomplete("QP-11 fixture cleanup failed")
-        report["scenarios"].append({
+        record_scenario(report, {
             "id": "QP-11", "status": "PASS",
             "reason": "competing actor rejected; simulated crash released flock; sticky marker blocked a restart while the fixture remained active; harness then stopped and cleaned its fixture",
             "observations": {
@@ -2074,7 +2079,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         implemented = {item["id"] for item in report["scenarios"]}
         for scenario_id in EXPECTED:
             if scenario_id not in implemented:
-                report["scenarios"].append({
+                record_scenario(report, {
                     "id": scenario_id, "status": "INCOMPLETE",
                     "reason": "scenario was not reached before harness completion",
                 })
@@ -2083,7 +2088,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         existing = {item["id"] for item in report["scenarios"]}
         for scenario_id in EXPECTED:
             if scenario_id not in existing:
-                report["scenarios"].append({"id": scenario_id, "status": "INCOMPLETE",
+                record_scenario(report, {"id": scenario_id, "status": "INCOMPLETE",
                                             "reason": "harness aborted before scenario execution"})
     finally:
         # Two-phase emergency cleanup: stop every still-owned fixture first,
