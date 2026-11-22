@@ -398,31 +398,46 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
 
 
 def _stop_and_cleanup(name: str, initial: dict, socket_path: Path | None, ready_path: Path | None,
-                      run_dir_fd: int, report: dict) -> dict:
-    cleanup = {"unit": name, "stop_requested": False, "unit_inactive": False,
-               "cgroup_empty": False, "endpoint_removed": False}
+                      run_dir_fd: int, report: dict, *, already_stopped: bool = False,
+                      cgroup_empty_confirmed: bool = False) -> dict:
+    cleanup = {"unit": name, "stop_requested": False, "unit_inactive": already_stopped,
+               "cgroup_empty": cgroup_empty_confirmed, "endpoint_removed": False}
     try:
-        current = unit_snapshot(name)
-        if current["InvocationID"] != initial["InvocationID"]:
-            raise Incomplete("InvocationID changed before cleanup; refusing to stop replacement")
-        systemd_stop(name)
-        cleanup["stop_requested"] = True
-        final = wait_inactive(name, time.monotonic() + STOP_TIMEOUT + 3)
-        cleanup["unit_inactive"] = final["ActiveState"] == "inactive"
-        root, mount = cgroup_mount()
-        events = cgroup_events(mount, initial["ControlGroup"])
-        cleanup["cgroup_empty"] = events["values"]["populated"] == 0
+        if not already_stopped:
+            current = unit_snapshot(name)
+            if current["InvocationID"] != initial["InvocationID"]:
+                raise Incomplete("InvocationID changed before cleanup; refusing to stop replacement")
+            systemd_stop(name)
+            cleanup["stop_requested"] = True
+            final = wait_inactive(name, time.monotonic() + STOP_TIMEOUT + 3)
+            cleanup["unit_inactive"] = final["ActiveState"] == "inactive"
+        if not cleanup["unit_inactive"]:
+            raise Incomplete("fixture unit is not confirmed inactive")
+        if not cgroup_empty_confirmed:
+            _root, mount = cgroup_mount()
+            events = cgroup_events(mount, initial["ControlGroup"])
+            cleanup["cgroup_empty"] = events["values"]["populated"] == 0
         if not cleanup["cgroup_empty"]:
             raise Incomplete("fixture cgroup remains populated during cleanup")
         if socket_path is not None:
             name_only = socket_path.name
             current_info = os.stat(name_only, dir_fd=run_dir_fd, follow_symlinks=False)
-            if not stat.S_ISSOCK(current_info.st_mode) or current_info.st_uid != SERVICE_UID:
-                raise Incomplete("fixture endpoint identity is not eligible for cleanup")
+            if (
+                not stat.S_ISSOCK(current_info.st_mode)
+                or current_info.st_uid != SERVICE_UID
+                or current_info.st_gid != SERVICE_GID
+                or stat.S_IMODE(current_info.st_mode) != 0o600
+            ):
+                raise Incomplete("fixture endpoint type/owner/mode is not eligible for cleanup")
             if ready_path is not None:
                 ready = json.loads(ready_path.read_text(encoding="ascii"))
-                if (current_info.st_dev, current_info.st_ino) != (ready["device"], ready["inode"]):
-                    raise Incomplete("fixture endpoint inode changed; preserving it")
+                if (
+                    (current_info.st_dev, current_info.st_ino) != (ready["device"], ready["inode"])
+                    or current_info.st_uid != ready["uid"]
+                    or current_info.st_gid != ready["gid"]
+                    or stat.S_IMODE(current_info.st_mode) != ready["mode"]
+                ):
+                    raise Incomplete("fixture endpoint identity changed; preserving it")
             os.unlink(name_only, dir_fd=run_dir_fd)
             cleanup["endpoint_removed"] = True
         if ready_path is not None:
@@ -515,7 +530,7 @@ def run_probe(args: argparse.Namespace) -> dict:
                                     "monotonic_ns": mono(), "unit": stable, "cgroup": after2})
         if not quiescent:
             raise Incomplete("QP-01 did not satisfy the complete quiescence predicate")
-        cleanup = _stop_and_cleanup(name, initial, endpoint, ready_path, run_dir_fd, report)
+        cleanup = _stop_and_cleanup(name, initial, endpoint, ready_path, run_dir_fd, report, already_stopped=True, cgroup_empty_confirmed=True)
         report["cleanup"]["resources"].append(cleanup)
         report["scenarios"].append({"id": "QP-01", "status": "PASS",
                                     "decision": "QUIESCENT", "reason": "two stable empty-cgroup snapshots"})
@@ -538,7 +553,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             and stable2["InvocationID"] == initial2["InvocationID"]
             and stable2["Job"][0] == 0
         )
-        cleanup2 = _stop_and_cleanup(name2, initial2, endpoint2, ready2, run_dir_fd, report)
+        cleanup2 = _stop_and_cleanup(name2, initial2, endpoint2, ready2, run_dir_fd, report, already_stopped=True, cgroup_empty_confirmed=True)
         report["cleanup"]["resources"].append(cleanup2)
         if not passed2 or not cleanup2["endpoint_removed"]:
             raise Incomplete("QP-02 failed its pre-stop helper or post-stop empty-cgroup check")
