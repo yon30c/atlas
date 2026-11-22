@@ -849,6 +849,20 @@ def preflight() -> dict:
     }
 
 
+def validate_report_bounds(report: dict) -> None:
+    for scenario in report.get("scenarios", []):
+        raw_scenario = json.dumps(
+            scenario, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode("utf-8")
+        if len(raw_scenario) > MAX_SCENARIO:
+            raise Incomplete("one scenario evidence object exceeds 32 KiB")
+    raw_report = json.dumps(
+        report, sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode("utf-8")
+    if len(raw_report) > MAX_REPORT:
+        raise Incomplete("complete evidence report exceeds 1 MiB")
+
+
 def _safe_json_file(path: Path, value: dict, limit: int) -> None:
     raw = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
     if len(raw) > limit:
@@ -1816,6 +1830,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         persisted = False
         if BASE.exists():
             try:
+                validate_report_bounds(report)
                 _safe_json_file(report_path, report, MAX_REPORT)
                 persisted = True
                 report["evidence_persisted_before_gate_release"] = True
@@ -1829,10 +1844,29 @@ def run_probe(args: argparse.Namespace) -> dict:
             try:
                 os.unlink(marker)
                 report["gate"]["marker_removed_after_cleanup"] = True
+                report["overall"] = (
+                    "PASS" if len(statuses) == 15 and all(value == "PASS" for value in statuses)
+                    and report["cleanup"]["safe_to_release_gate"]
+                    else "FAIL" if "FAIL" in statuses or "harness_error" in report
+                    else "INCOMPLETE"
+                )
                 _rewrite_json_file(report_path, report, MAX_REPORT)
             except Exception as exc:
                 report["cleanup"]["safe_to_release_gate"] = False
+                report["overall"] = "INCOMPLETE"
                 report["gate"]["marker_removal_error"] = f"{type(exc).__name__}: {exc}"
+                try:
+                    if not marker.exists():
+                        _safe_json_file(marker, {
+                            "schema": SCHEMA, "run_id": run_id,
+                            "phase": "report-finalization-failed",
+                        }, 4096)
+                        report["gate"]["marker_recreated_after_release_failure"] = True
+                    _rewrite_json_file(report_path, report, MAX_REPORT)
+                except Exception as recovery_exc:
+                    report["gate"]["marker_recovery_error"] = (
+                        f"{type(recovery_exc).__name__}: {recovery_exc}"
+                    )
         if lock_fd is not None:
             if report["cleanup"]["safe_to_release_gate"]:
                 fcntl.flock(lock_fd, fcntl.LOCK_UN)
