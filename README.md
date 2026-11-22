@@ -434,3 +434,31 @@ La rama de trabajo incorpora, además de la base conversacional y del trabajo de
 - Revisión adversarial: se corrigió la interpretación unsigned de UID/GID en `SO_PEERCRED`, se añadió una regresión pendiente de ejecución local y se aclaró el límite de confianza del digest en `authority.operation.status`. La revisión no habilita listener ni operaciones adicionales.
 
 **Límites:** el IPC no implica listener persistente, daemon, systemd, permisos definitivos del host, acceso directo del frontend a SQLite ni autorización para ejecutar mutaciones sobre la base real. Estos componentes tampoco habilitan por sí solos login público, endpoints, agentes en runtime, ejecución de herramientas, shell, Docker ni privilegios del host. PR #28 ya está integrado en `main`; PR #29 contiene la corrección del probe y los cambios documentales y fue integrado en `main` mediante `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`; la validación local corresponde al HEAD de código indicado arriba. No se ejecutaron pruebas desde GitHub durante las actualizaciones documentales. El detalle normativo está en [el contrato IPC](docs/contracts/local-authority-admin-ipc-atlas-admin-1.md), y el estado de trabajo y validación en [PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md). Para el checkpoint anterior de autoridad/almacenamiento, consulta [docs/status-current.md](docs/status-current.md); no confundirlo con el estado de esta rama.
+
+
+## Suite completa — compatibilidad V28 (2026-11-22)
+
+El propietario ejecutó localmente en Debian, checkout `/opt/atlas-dev`, la suite completa de la rama y reportó:
+
+```text
+Ran 1611 tests in 42.725s
+
+FAILED (failures=23, errors=10, skipped=1)
+```
+
+La revisión agrupó los fallos en tres causas de compatibilidad con V28: el CLI de provisión offline aún exigía V27; pruebas de Platform Admin aplicaban V28 aunque su contrato de fixture es V27; y la prueba de compatibilidad lifecycle insertaba la asociación después de V27, cuando ya se exige el evento exacto de provisión offline.
+
+Correcciones publicadas en `work/atlas-mvp-runtime`:
+- CLI: valida el historial completo hasta `CORE_SCHEMA_V28`.
+- Test del CLI: corrompe el checksum de la migración 28 para comprobar el historial completo.
+- Tests de Platform Admin: aplican explícitamente `SQLITE_MIGRATIONS[:-1]` (hasta V27).
+- Test de compatibilidad lifecycle: crea la asociación con el esquema hasta V26 (`SQLITE_MIGRATIONS[:-2]`) antes de aplicar V27 y posteriores.
+
+Commits de corrección:
+- `797a5f3882a4536f6b2f63b45c8c7bfb347cbcfa` — CLI V28.
+- `a1f24742ccaf3272f43ebdefd02a75d6b5f4b686` — prueba de historial completo V28.
+- `ee8bd43b1d5b2f56ff7304938765d267f8af9668` — fixture lifecycle.
+- `9808f697dc8b9b21f401a887b89cea957ec06b03` — fixture Platform Admin authority.
+- `78cbf6288b8dc342f2c10b0c5290a4698a58edd3` — fixture Platform Admin bootstrap.
+
+**Estado:** correcciones publicadas, pendientes de validación local. No se ejecutaron pruebas desde GitHub. El resultado fallido anterior no debe confundirse con el resultado focalizado del guard (21 tests OK); tampoco se debe declarar verde la suite completa hasta recibir una nueva ejecución local.
