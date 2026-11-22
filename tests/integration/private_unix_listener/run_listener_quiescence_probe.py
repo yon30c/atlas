@@ -833,9 +833,18 @@ def run_probe(args: argparse.Namespace) -> dict:
             os.close(run_dir_fd)
         if run_dir is not None and report["cleanup"]["safe_to_release_gate"]:
             try:
+                expected = report["sandbox"]
+                current = os.stat(run_dir, follow_symlinks=False)
+                if (
+                    not stat.S_ISDIR(current.st_mode)
+                    or (current.st_dev, current.st_ino) != (expected["device"], expected["inode"])
+                    or current.st_uid != 0 or current.st_gid != SERVICE_GID
+                    or stat.S_IMODE(current.st_mode) != 0o730
+                ):
+                    raise Incomplete("sandbox identity/mode changed; refusing directory cleanup")
                 os.rmdir(run_dir)
-            except OSError as exc:
-                report["cleanup"]["run_directory_preserved"] = f"errno={exc.errno}"
+            except Exception as exc:
+                report["cleanup"]["run_directory_preserved"] = f"{type(exc).__name__}: {exc}"
                 report["cleanup"]["safe_to_release_gate"] = False
 
         statuses = [item["status"] for item in report["scenarios"]]
