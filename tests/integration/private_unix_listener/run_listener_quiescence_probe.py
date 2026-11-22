@@ -645,6 +645,13 @@ def fixture_main(args: argparse.Namespace) -> int:
             os.umask(0o177)
             listener.bind(args.socket)
             listener.listen(1)
+            if args.transfer_fd_to:
+                with socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET) as transfer:
+                    transfer.connect(args.transfer_fd_to)
+                    transfer.sendmsg(
+                        [b"listener-fd"],
+                        [(socket.SOL_SOCKET, socket.SCM_RIGHTS, array.array("i", [listener.fileno()]))],
+                    )
             info = os.stat(args.socket, follow_symlinks=False)
             if args.exec_check:
                 original_pid = os.getpid()
@@ -811,7 +818,8 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
                    delegate=False, no_listener=False, uid=SERVICE_UID, gid=SERVICE_GID,
                    deny_fork=False, deny_fd_escape=False, exec_check=False,
                    fd_holder=False, control_path: Path | None = None,
-                   received_path: Path | None = None) -> tuple[dict, Path | None, Path]:
+                   received_path: Path | None = None,
+                   transfer_fd_to: Path | None = None) -> tuple[dict, Path | None, Path]:
     assert_unit_absent(name)
     socket_path = run_dir / f"{name}.sock"
     ready_path = run_dir / f"{name}.ready"
@@ -841,6 +849,8 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
         if control_path is None or received_path is None:
             raise Incomplete("QP-13 holder requires explicit control and received paths")
         command.extend(["--fd-holder", "--control", str(control_path), "--received", str(received_path)])
+    if transfer_fd_to is not None:
+        command.extend(["--transfer-fd-to", str(transfer_fd_to)])
     if _ACTIVE_SUPERVISOR is None or _ACTIVE_RUN_ID is None:
         raise Incomplete("no active test lifecycle supervisor")
     _ACTIVE_SUPERVISOR.request("start", command, actor_run_id=_ACTIVE_RUN_ID)
@@ -1290,19 +1300,15 @@ def run_probe(args: argparse.Namespace) -> dict:
         endpoint13 = None
         received13 = other_dir13 / f"{name13_holder}.received"
         control13 = other_dir13 / f"{name13_holder}.control"
-        initial13_service, endpoint13, ready13_service = _start_fixture(name13_service, run_dir)
         initial13_holder, _no_endpoint13, ready13_holder = _start_fixture(
             name13_holder, other_dir13, no_listener=True, uid=OTHER_UID, gid=OTHER_GID,
             fd_holder=True, control_path=control13, received_path=received13,
         )
+        initial13_service, endpoint13, ready13_service = _start_fixture(
+            name13_service, run_dir, transfer_fd_to=control13
+        )
         report["unit_identity"][name13_service] = initial13_service
         report["unit_identity"][name13_holder] = initial13_holder
-        with socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET) as transfer:
-            transfer.connect(str(control13))
-            transfer.sendmsg(
-                [b"fd"], [(socket.SOL_SOCKET, socket.SCM_RIGHTS,
-                           array.array("i", [json.loads(ready13_service.read_text(encoding="ascii"))["fd"]]))]
-            )
         deadline13 = time.monotonic() + 5.0
         while time.monotonic() < deadline13 and not received13.exists():
             time.sleep(0.02)
@@ -1340,8 +1346,12 @@ def run_probe(args: argparse.Namespace) -> dict:
         os.close(other_dir13_fd)
         if not stopped13_holder["ActiveState"] == "inactive" or not cleanup13_holder["endpoint_removed"] or not cleanup13_service["endpoint_removed"]:
             raise Incomplete("QP-13 holder/service cleanup failed")
+        other_dir13_cleanup_fd = os.open(other_dir13, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
         try:
-            os.unlink(received13.name, dir_fd=os.open(other_dir13, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW))
+            os.unlink(received13.name, dir_fd=other_dir13_cleanup_fd)
+        finally:
+            os.close(other_dir13_cleanup_fd)
+        try:
             os.rmdir(other_dir13)
         except OSError as exc:
             raise Incomplete("QP-13 external holder evidence cleanup failed") from exc
@@ -1647,6 +1657,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fd-holder", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--control", help=argparse.SUPPRESS)
     parser.add_argument("--received", help=argparse.SUPPRESS)
+    parser.add_argument("--transfer-fd-to", help=argparse.SUPPRESS)
     return parser.parse_args()
 
 
