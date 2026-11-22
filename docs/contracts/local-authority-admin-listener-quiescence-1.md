@@ -268,7 +268,7 @@ Este borrador recomienda:
 - No existe todavía listener persistente ni unidad de servicio Atlas.
 - No se creó ni modificó ninguna unidad systemd, cgroup, usuario, grupo, ruta, permiso o servicio en un host durante esta sesión.
 - No se modificó el handler IPC ni el contrato `atlas-admin/1`.
-- El runner QP-01..QP-15 está implementado en `tests/integration/private_unix_listener/run_listener_quiescence_probe.py`, pero es un harness experimental, no una herramienta operativa; no se ha ejecutado ni validado.
+- El runner QP-01..QP-15 está implementado en `tests/integration/private_unix_listener/run_listener_quiescence_probe.py`, pero es un harness experimental, no una herramienta operativa; no se ha ejecutado ni validado. Usa una conexión persistente libsystemd para RefUnit/UnrefUnit y busctl para las observaciones tipadas.
 - R1–R7 están aprobadas como baseline de diseño, pero sus requisitos de servicio siguen sin implementación/validación.
 - El runner usa supervisor temporal interno para QP-11, cgroup observers fijados, cleanup bifásico por identidad y ausencia de unidad/jobs; QP-11 simula la caída y no demuestra un supervisor independiente. QP-12 confirma que root puede eludir la puerta.
 - QP-13 usa un holder OTHER que recibe el FD por SCM_RIGHTS; no implementa ni valida socket activation.
