@@ -607,8 +607,9 @@ def run_probe(args: argparse.Namespace) -> dict:
             raise Incomplete("QP-01 did not satisfy the complete quiescence predicate")
         cleanup = _stop_and_cleanup(name, initial, endpoint, ready_path, run_dir_fd, report, already_stopped=True, cgroup_empty_confirmed=True)
         report["cleanup"]["resources"].append(cleanup)
-        report["scenarios"].append({"id": "QP-01", "status": "PASS",
-                                    "decision": "QUIESCENT", "reason": "two stable empty-cgroup snapshots"})
+        report["scenarios"].append({"id": "QP-01", "status": "INCOMPLETE",
+                                    "decision": "ABORT_NOT_QUIESCENT",
+                                    "reason": "systemd/cgroup lifecycle passed, but descriptor non-escape proof is pending QP-08/QP-09"})
         if not cleanup["endpoint_removed"] or not cleanup["cgroup_empty"]:
             raise Incomplete("QP-01 cleanup was not confirmed")
 
@@ -632,8 +633,9 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["cleanup"]["resources"].append(cleanup2)
         if not passed2 or not cleanup2["endpoint_removed"]:
             raise Incomplete("QP-02 failed its pre-stop helper or post-stop empty-cgroup check")
-        report["scenarios"].append({"id": "QP-02", "status": "PASS",
-                                    "decision": "QUIESCENT", "reason": "helper shared cgroup and terminated on stop"})
+        report["scenarios"].append({"id": "QP-02", "status": "INCOMPLETE",
+                                    "decision": "ABORT_NOT_QUIESCENT",
+                                    "reason": "helper terminated with its cgroup, but descriptor non-escape proof is pending QP-08/QP-09"})
 
         # QP-03: ignored SIGTERM must prevent a premature quiescent result.
         name3 = f"atlas-qp-{secrets.token_hex(6)}.service"
