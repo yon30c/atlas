@@ -2413,7 +2413,6 @@ def run_probe(args: argparse.Namespace) -> dict:
                         fixture["cgroup_observer"] = open_cgroup_observer(
                             emergency_mount, initial_fixture["ControlGroup"]
                         )
-                        _OPEN_CGROUP_OBSERVERS.append(fixture["cgroup_observer"])
                     if current_fixture["ActiveState"] != "inactive" or current_fixture["Job"][0] != 0:
                         if current_fixture["Job"][0] == 0:
                             systemd_stop(fixture_name)
