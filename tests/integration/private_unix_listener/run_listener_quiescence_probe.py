@@ -387,6 +387,26 @@ def _safe_json_file(path: Path, value: dict, limit: int) -> None:
         os.close(fd)
 
 
+def _rewrite_json_file(path: Path, value: dict, limit: int) -> None:
+    raw = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    if len(raw) > limit:
+        raise Incomplete(f"JSON evidence exceeds {limit} bytes")
+    fd = os.open(path, os.O_WRONLY | os.O_TRUNC | os.O_CLOEXEC | os.O_NOFOLLOW)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_gid != 0 or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) != 0o600:
+            raise Incomplete("report file identity/mode changed before final rewrite")
+        view = memoryview(raw)
+        while view:
+            written = os.write(fd, view)
+            if written <= 0:
+                raise OSError(errno.EIO, "short report rewrite")
+            view = view[written:]
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
 def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=False, delegate=False, no_listener=False) -> tuple[dict, Path | None, Path]:
     socket_path = run_dir / f"{name}.sock"
     ready_path = run_dir / f"{name}.ready"
@@ -765,41 +785,49 @@ def run_probe(args: argparse.Namespace) -> dict:
     finally:
         if run_dir_fd is not None:
             os.close(run_dir_fd)
-        # Do not remove a sticky marker or release the gate after an uncertain
-        # cleanup. This intentionally leaves a manual-recovery condition.
-        if report["cleanup"]["safe_to_release_gate"] and marker is not None:
-            try:
-                os.unlink(marker)
-                report["gate"]["marker_removed_after_cleanup"] = True
-            except FileNotFoundError:
-                report["cleanup"]["safe_to_release_gate"] = False
-        if lock_fd is not None:
-            if report["cleanup"]["safe_to_release_gate"]:
-                fcntl.flock(lock_fd, fcntl.LOCK_UN)
-            os.close(lock_fd)
         if run_dir is not None and report["cleanup"]["safe_to_release_gate"]:
             try:
                 os.rmdir(run_dir)
             except OSError as exc:
                 report["cleanup"]["run_directory_preserved"] = f"errno={exc.errno}"
                 report["cleanup"]["safe_to_release_gate"] = False
-        if base_created and report["cleanup"]["safe_to_release_gate"]:
-            try:
-                os.unlink(BASE / "maintenance.lock")
-                os.rmdir(BASE)
-            except OSError:
-                pass
 
-    statuses = [item["status"] for item in report["scenarios"]]
-    report["overall"] = (
-        "PASS" if len(statuses) == 15 and all(value == "PASS" for value in statuses)
-        and report["cleanup"]["safe_to_release_gate"]
-        else "FAIL" if "FAIL" in statuses or "harness_error" in report
-        else "INCOMPLETE"
-    )
-    report["finished_monotonic_ns"] = mono()
-    report["finished_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    report["counts"] = {status: statuses.count(status) for status in ("PASS", "FAIL", "INCOMPLETE")}
+        statuses = [item["status"] for item in report["scenarios"]]
+        report["overall"] = (
+            "PASS" if len(statuses) == 15 and all(value == "PASS" for value in statuses)
+            and report["cleanup"]["safe_to_release_gate"]
+            else "FAIL" if "FAIL" in statuses or "harness_error" in report
+            else "INCOMPLETE"
+        )
+        report["finished_monotonic_ns"] = mono()
+        report["finished_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        report["counts"] = {status: statuses.count(status) for status in ("PASS", "FAIL", "INCOMPLETE")}
+        report_path = BASE / f"{run_id}.json"
+        report["report_path"] = str(report_path)
+        persisted = False
+        if BASE.exists():
+            try:
+                _safe_json_file(report_path, report, MAX_REPORT)
+                persisted = True
+                report["evidence_persisted_before_gate_release"] = True
+            except Exception as exc:
+                report["cleanup"]["report_persist_error"] = f"{type(exc).__name__}: {exc}"
+                report["cleanup"]["safe_to_release_gate"] = False
+
+        # The sticky marker is retained on any uncertainty. The lock file and
+        # /run/atlas-qp parent remain for audit and future invocations.
+        if persisted and report["cleanup"]["safe_to_release_gate"] and marker is not None:
+            try:
+                os.unlink(marker)
+                report["gate"]["marker_removed_after_cleanup"] = True
+                _rewrite_json_file(report_path, report, MAX_REPORT)
+            except Exception as exc:
+                report["cleanup"]["safe_to_release_gate"] = False
+                report["gate"]["marker_removal_error"] = f"{type(exc).__name__}: {exc}"
+        if lock_fd is not None:
+            if report["cleanup"]["safe_to_release_gate"]:
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            os.close(lock_fd)
     return report
 
 
