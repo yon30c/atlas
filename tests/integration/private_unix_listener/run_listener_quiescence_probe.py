@@ -1013,6 +1013,9 @@ def fixture_main(args: argparse.Namespace) -> int:
                 if line.startswith(("CapEff:", "CapBnd:")):
                     key, value = line.split(":", 1)
                     status[key] = int(value.strip(), 16)
+                elif line.startswith("NoNewPrivs:"):
+                    _key, value = line.split(":", 1)
+                    status["NoNewPrivs"] = int(value.strip(), 10)
             _cg_root, cg_mount = cgroup_mount()
             cgroup_line = next(
                 line for line in Path("/proc/self/cgroup").read_text(encoding="ascii").splitlines()
@@ -1022,6 +1025,7 @@ def fixture_main(args: argparse.Namespace) -> int:
             own_cgroup_path = cg_mount / own_cgroup.lstrip("/")
             ready["cap_eff"] = status.get("CapEff")
             ready["cap_bnd"] = status.get("CapBnd")
+            ready["no_new_privs"] = status.get("NoNewPrivs")
             ready["cap_sys_admin"] = bool((status.get("CapEff", 0) >> 21) & 1)
             ready["cgroup_dir_write_access"] = os.access(
                 own_cgroup_path, os.W_OK, effective_ids=True
@@ -1612,6 +1616,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         policy01 = ready01_data["fd_policy"]
         if (
             ready01_data.get("cap_eff") != 0
+            or ready01_data.get("no_new_privs") != 1
             or ready01_data.get("cap_sys_admin") is not False
             or ready01_data.get("cgroup_dir_write_access") is not False
         ):
@@ -1624,6 +1629,7 @@ def run_probe(args: argparse.Namespace) -> dict:
                                     "observations": {"fd_policy": policy01,
                                                      "capability_evidence": {
                                                          "cap_eff": ready01_data["cap_eff"],
+                                                         "no_new_privs": ready01_data["no_new_privs"],
                                                          "cap_sys_admin": ready01_data["cap_sys_admin"],
                                                          "cgroup_dir_write_access": ready01_data["cgroup_dir_write_access"],
                                                      },
@@ -1666,6 +1672,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         policy02 = ready2_data["fd_policy"]
         if (
             ready2_data.get("cap_eff") != 0
+            or ready2_data.get("no_new_privs") != 1
             or ready2_data.get("cap_sys_admin") is not False
             or ready2_data.get("cgroup_dir_write_access") is not False
         ):
@@ -1680,6 +1687,7 @@ def run_probe(args: argparse.Namespace) -> dict:
                                     "observations": {"fd_policy": policy02,
                                                      "capability_evidence": {
                                                          "cap_eff": ready2_data["cap_eff"],
+                                                         "no_new_privs": ready2_data["no_new_privs"],
                                                          "cap_sys_admin": ready2_data["cap_sys_admin"],
                                                          "cgroup_dir_write_access": ready2_data["cgroup_dir_write_access"],
                                                      },
@@ -1868,6 +1876,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             or initial6good["AmbientCapabilities"] != 0
             or ready6good_data.get("cap_bnd") != 0
             or ready6good_data.get("cap_eff") != 0
+            or ready6good_data.get("no_new_privs") != 1
             or ready6good_data.get("cap_sys_admin") is not False
             or ready6good_data.get("cgroup_dir_write_access") is not False
         ):
