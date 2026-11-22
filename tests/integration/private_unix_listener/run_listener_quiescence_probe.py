@@ -9,6 +9,7 @@ INCOMPLETE; they are never represented as PASS.
 from __future__ import annotations
 
 import argparse
+import array
 import ctypes.util
 import errno
 import fcntl
@@ -570,6 +571,62 @@ def fixture_main(args: argparse.Namespace) -> int:
             os.close(fd)
         while True:
             signal.pause()
+    if args.fd_holder:
+        control = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+        os.umask(0o177)
+        control.bind(args.control)
+        control.listen(1)
+        control_info = os.stat(args.control, follow_symlinks=False)
+        holder_ready = {
+            "pid": os.getpid(), "fd": None, "holder_ready": True,
+            "device": control_info.st_dev, "inode": control_info.st_ino,
+            "uid": control_info.st_uid, "gid": control_info.st_gid,
+            "mode": stat.S_IMODE(control_info.st_mode),
+        }
+        ready_fd = os.open(args.ready, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600)
+        try:
+            os.write(ready_fd, json.dumps(holder_ready, sort_keys=True).encode("ascii"))
+            os.fsync(ready_fd)
+        finally:
+            os.close(ready_fd)
+        connection, _address = control.accept()
+        try:
+            _data, ancillary, _flags, _address = connection.recvmsg(
+                1, socket.CMSG_SPACE(array.array("i").itemsize * 2)
+            )
+        finally:
+            connection.close()
+            control.close()
+        received_fds = []
+        for level, kind, payload in ancillary:
+            if level == socket.SOL_SOCKET and kind == socket.SCM_RIGHTS:
+                descriptors = array.array("i")
+                descriptors.frombytes(payload[:len(payload) - (len(payload) % descriptors.itemsize)])
+                received_fds.extend(descriptors.tolist())
+        if len(received_fds) != 1:
+            raise Incomplete("QP-13 holder did not receive exactly one listener FD")
+        received_fd = received_fds[0]
+        held = socket.socket(fileno=received_fd)
+        try:
+            held_type = held.getsockopt(socket.SOL_SOCKET, socket.SO_TYPE)
+            accepting = held.getsockopt(socket.SOL_SOCKET, socket.SO_ACCEPTCONN)
+            fd_info = os.fstat(received_fd)
+            received = {
+                "pid": os.getpid(), "fd": received_fd, "device": fd_info.st_dev,
+                "inode": fd_info.st_ino, "socket_type": held_type,
+                "accepting": accepting, "fd_open": True,
+            }
+        finally:
+            held.detach()
+        received_fd_file = os.open(args.received, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600)
+        try:
+            os.write(received_fd_file, json.dumps(received, sort_keys=True).encode("ascii"))
+            os.fsync(received_fd_file)
+        finally:
+            os.close(received_fd_file)
+        while True:
+            signal.pause()
+
     listener = None
     child = None
     try:
@@ -752,7 +809,9 @@ def update_gate_marker(marker: Path, run_id: str, name: str, snapshot: dict, pha
 
 def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=False,
                    delegate=False, no_listener=False, uid=SERVICE_UID, gid=SERVICE_GID,
-                   deny_fork=False, deny_fd_escape=False, exec_check=False) -> tuple[dict, Path | None, Path]:
+                   deny_fork=False, deny_fd_escape=False, exec_check=False,
+                   fd_holder=False, control_path: Path | None = None,
+                   received_path: Path | None = None) -> tuple[dict, Path | None, Path]:
     assert_unit_absent(name)
     socket_path = run_dir / f"{name}.sock"
     ready_path = run_dir / f"{name}.ready"
@@ -778,6 +837,10 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
         command.append("--deny-fd-escape")
     if exec_check:
         command.append("--exec-check")
+    if fd_holder:
+        if control_path is None or received_path is None:
+            raise Incomplete("QP-13 holder requires explicit control and received paths")
+        command.extend(["--fd-holder", "--control", str(control_path), "--received", str(received_path)])
     if _ACTIVE_SUPERVISOR is None or _ACTIVE_RUN_ID is None:
         raise Incomplete("no active test lifecycle supervisor")
     _ACTIVE_SUPERVISOR.request("start", command, actor_run_id=_ACTIVE_RUN_ID)
@@ -1216,6 +1279,84 @@ def run_probe(args: argparse.Namespace) -> dict:
                                     "reason": "strict parser, partial-read accumulation, permission failure and byte limit all fail closed",
                                     "observations": parser_results})
 
+        # QP-13: deliberately transfer one listener FD to an OTHER-cgroup holder.
+        other_dir13 = run_dir / "other-qp13"
+        os.mkdir(other_dir13, 0o730)
+        os.chown(other_dir13, 0, OTHER_GID)
+        os.chmod(other_dir13, 0o730)
+        other_dir13_fd = os.open(other_dir13, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
+        name13_service = f"atlas-qp-{secrets.token_hex(6)}.service"
+        name13_holder = f"atlas-qp-{secrets.token_hex(6)}.service"
+        endpoint13 = None
+        received13 = other_dir13 / f"{name13_holder}.received"
+        control13 = other_dir13 / f"{name13_holder}.control"
+        initial13_service, endpoint13, ready13_service = _start_fixture(name13_service, run_dir)
+        initial13_holder, _no_endpoint13, ready13_holder = _start_fixture(
+            name13_holder, other_dir13, no_listener=True, uid=OTHER_UID, gid=OTHER_GID,
+            fd_holder=True, control_path=control13, received_path=received13,
+        )
+        report["unit_identity"][name13_service] = initial13_service
+        report["unit_identity"][name13_holder] = initial13_holder
+        with socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET) as transfer:
+            transfer.connect(str(control13))
+            transfer.sendmsg(
+                [b"fd"], [(socket.SOL_SOCKET, socket.SCM_RIGHTS,
+                           array.array("i", [json.loads(ready13_service.read_text(encoding="ascii"))["fd"]]))]
+            )
+        deadline13 = time.monotonic() + 5.0
+        while time.monotonic() < deadline13 and not received13.exists():
+            time.sleep(0.02)
+        if not received13.exists():
+            raise Incomplete("QP-13 external holder did not publish FD receipt")
+        holder_evidence13 = json.loads(received13.read_text(encoding="ascii"))
+        if holder_evidence13.get("socket_type") != socket.SOCK_SEQPACKET or holder_evidence13.get("accepting") != 1 or not holder_evidence13.get("fd_open"):
+            raise Incomplete("QP-13 external holder did not retain the active listener FD")
+        systemd_stop(name13_service)
+        stopped13 = wait_inactive(name13_service, time.monotonic() + STOP_TIMEOUT + 3)
+        empty13 = cgroup_events(mount, initial13_service["ControlGroup"])
+        holder_still_active13 = unit_snapshot(name13_holder)
+        holder_cgroup13 = cgroup_events(mount, initial13_holder["ControlGroup"])
+        if (
+            stopped13["ActiveState"] != "inactive" or stopped13["Job"][0] != 0
+            or empty13["values"]["populated"] != 0
+            or holder_still_active13["ActiveState"] != "active"
+            or holder_cgroup13["values"]["populated"] != 1
+        ):
+            raise Incomplete("QP-13 did not demonstrate empty service cgroup with external FD holder")
+        systemd_stop(name13_holder)
+        stopped13_holder = wait_inactive(name13_holder, time.monotonic() + STOP_TIMEOUT + 3)
+        empty13_holder = cgroup_events(mount, initial13_holder["ControlGroup"])
+        cleanup13_holder = _stop_and_cleanup(
+            name13_holder, initial13_holder, control13, ready13_holder,
+            other_dir13_fd, report, already_stopped=True,
+            cgroup_empty_confirmed=empty13_holder["values"]["populated"] == 0,
+        )
+        cleanup13_service = _stop_and_cleanup(
+            name13_service, initial13_service, endpoint13, ready13_service,
+            run_dir_fd, report, already_stopped=True,
+            cgroup_empty_confirmed=empty13["values"]["populated"] == 0,
+        )
+        report["cleanup"]["resources"].extend([cleanup13_holder, cleanup13_service])
+        os.close(other_dir13_fd)
+        if not stopped13_holder["ActiveState"] == "inactive" or not cleanup13_holder["endpoint_removed"] or not cleanup13_service["endpoint_removed"]:
+            raise Incomplete("QP-13 holder/service cleanup failed")
+        try:
+            os.unlink(received13.name, dir_fd=os.open(other_dir13, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW))
+            os.rmdir(other_dir13)
+        except OSError as exc:
+            raise Incomplete("QP-13 external holder evidence cleanup failed") from exc
+        report["scenarios"].append({
+            "id": "QP-13", "status": "PASS",
+            "decision": "ABORT_NOT_QUIESCENT",
+            "reason": "service cgroup became empty while an OTHER-unit process retained the listener FD; holder was then terminated before endpoint cleanup",
+            "observations": {
+                "service_cgroup_populated_after_stop": empty13["values"]["populated"],
+                "external_holder_cgroup_populated": holder_cgroup13["values"]["populated"],
+                "external_holder_fd": holder_evidence13,
+                "systemd_socket_activation_tested": False,
+            },
+        })
+
         # QP-14: injected manager timeout and unavailable supervisor are fail-closed.
         def failing_manager_adapter(*_args):
             raise TimeoutError("injected system-manager disconnect")
@@ -1503,6 +1644,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--exec-helper", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--listener-fd", type=int, help=argparse.SUPPRESS)
     parser.add_argument("--original-pid", type=int, help=argparse.SUPPRESS)
+    parser.add_argument("--fd-holder", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--control", help=argparse.SUPPRESS)
+    parser.add_argument("--received", help=argparse.SUPPRESS)
     return parser.parse_args()
 
 
