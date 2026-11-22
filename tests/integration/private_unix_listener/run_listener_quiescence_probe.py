@@ -285,19 +285,24 @@ def unit_snapshot(name: str) -> dict:
     return values
 
 
-def observe_stopped_unit(name: str, invocation_id: list, control_group: str) -> dict:
+def observe_stopped_unit(name: str, previous: dict) -> dict:
+    if (
+        previous["ActiveState"] != "inactive" or previous["MainPID"] != 0
+        or previous["Job"][0] != 0
+    ):
+        raise Incomplete("previous systemd snapshot did not prove inactive/no-job state")
     if unit_is_absent(name):
         if list_jobs_for_unit(name):
             raise Incomplete("manager reports a pending job for an unloaded fixture")
         return {
-            "Id": name, "InvocationID": invocation_id,
-            "ControlGroup": control_group, "ActiveState": "inactive",
+            "Id": name, "InvocationID": previous["InvocationID"],
+            "ControlGroup": previous["ControlGroup"], "ActiveState": "inactive",
             "MainPID": 0, "Job": [0, "/"], "manager_unloaded": True,
         }
     snapshot = unit_snapshot(name)
     if (
-        snapshot["InvocationID"] != invocation_id
-        or snapshot["ControlGroup"] != control_group
+        snapshot["InvocationID"] != previous["InvocationID"]
+        or snapshot["ControlGroup"] != previous["ControlGroup"]
         or snapshot["ActiveState"] != "inactive"
         or snapshot["MainPID"] != 0
         or snapshot["Job"][0] != 0
@@ -594,15 +599,13 @@ def wait_inactive(name: str, deadline: float, *,
                   control_group: str | None = None) -> dict:
     last = None
     while time.monotonic() < deadline:
-        if expected_invocation is not None and unit_is_absent(name):
-            if list_jobs_for_unit(name):
-                raise Incomplete("unit unloaded while Manager.ListJobs still reports a job")
-            return {
-                "Id": name, "InvocationID": expected_invocation,
-                "ControlGroup": control_group, "ActiveState": "inactive",
-                "MainPID": 0, "Job": [0, "/"], "manager_unloaded": True,
-            }
+        if unit_is_absent(name):
+            raise Incomplete("unit unloaded before an inactive/no-job snapshot was captured")
         last = unit_snapshot(name)
+        if expected_invocation is not None and last["InvocationID"] != expected_invocation:
+            raise Incomplete("InvocationID changed while waiting for unit deactivation")
+        if control_group is not None and last["ControlGroup"] != control_group:
+            raise Incomplete("ControlGroup changed while waiting for unit deactivation")
         if last["ActiveState"] == "inactive" and last["Job"][0] == 0:
             return last
         time.sleep(0.05)
@@ -1408,7 +1411,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         stopped = wait_inactive(name, time.monotonic() + STOP_TIMEOUT + 3, expected_invocation=initial["InvocationID"], control_group=initial["ControlGroup"])
         after1 = read_cgroup_observer(observer01)
         time.sleep(0.05)
-        stable = observe_stopped_unit(name, initial["InvocationID"], initial["ControlGroup"])
+        stable = observe_stopped_unit(name, stopped)
         after2 = read_cgroup_observer(observer01)
         after_identity = cgroup_observer_identity(observer01)
         require_cgroup_identity(before_identity, after_identity)
@@ -1454,7 +1457,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         stopped2 = wait_inactive(name2, time.monotonic() + STOP_TIMEOUT + 3, expected_invocation=initial2["InvocationID"], control_group=initial2["ControlGroup"])
         after2_first = read_cgroup_observer(observer02)
         time.sleep(0.05)
-        stable2 = observe_stopped_unit(name2, initial2["InvocationID"], initial2["ControlGroup"])
+        stable2 = observe_stopped_unit(name2, stopped2)
         after2 = read_cgroup_observer(observer02)
         after_identity2 = cgroup_observer_identity(observer02)
         require_cgroup_identity(before_identity2, after_identity2)
