@@ -1156,7 +1156,6 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
         command.extend(["--transfer-fd-to", str(transfer_fd_to)])
     if _ACTIVE_SUPERVISOR is None or _ACTIVE_RUN_ID is None:
         raise Incomplete("no active test lifecycle supervisor")
-    _ACTIVE_SUPERVISOR.request("start", command, actor_run_id=_ACTIVE_RUN_ID)
     fixture_socket_path = control_path if fd_holder else (None if no_listener else socket_path)
     fixture_dir_fd = os.open(run_dir, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
     _OPEN_DIR_FDS.append(fixture_dir_fd)
@@ -1165,6 +1164,13 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
         "socket_path": fixture_socket_path, "ready_path": ready_path,
         "uid": uid, "gid": gid, "initial": None,
     }
+    try:
+        _ACTIVE_SUPERVISOR.request("start", command, actor_run_id=_ACTIVE_RUN_ID)
+    except Exception:
+        _ACTIVE_FIXTURES.pop(name, None)
+        _OPEN_DIR_FDS.remove(fixture_dir_fd)
+        os.close(fixture_dir_fd)
+        raise
     deadline = time.monotonic() + 8.0
     while time.monotonic() < deadline:
         try:
