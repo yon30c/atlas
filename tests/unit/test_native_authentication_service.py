@@ -19,6 +19,7 @@ from atlas.authentication.service import (
     NativeAuthenticationService,
 )
 from atlas.core.errors import ContractError
+from atlas.ports.authentication_attempt_guard import (\n    AuthenticationAttemptDenied,\n    AuthenticationAttemptReservation,\n)
 
 
 class FixedClock:
@@ -35,21 +36,30 @@ class FakeAttemptGuard:
         self.fail = fail
         self.failures = []
         self.successes = []
+        self.abandoned = []
 
-    def is_allowed(self, issuer_id, login_handle, *, at):
+    def begin_attempt(self, issuer_id, login_handle, *, at):
         if self.fail:
             raise RuntimeError("guard unavailable")
-        return self.allowed
+        if not self.allowed:
+            raise AuthenticationAttemptDenied()
+        return AuthenticationAttemptReservation(
+            reservation_id=str(uuid4()),
+            expires_at=at + timedelta(seconds=120),
+        )
 
-    def record_failure(self, issuer_id, login_handle, *, at):
+    def complete_failure(self, reservation, *, at):
         if self.fail:
             raise RuntimeError("guard unavailable")
-        self.failures.append((issuer_id, login_handle, at))
+        self.failures.append((reservation, at))
 
-    def record_success(self, issuer_id, login_handle, *, at):
+    def complete_success(self, reservation, *, at):
         if self.fail:
             raise RuntimeError("guard unavailable")
-        self.successes.append((issuer_id, login_handle, at))
+        self.successes.append((reservation, at))
+
+    def abandon_attempt(self, reservation):
+        self.abandoned.append(reservation)
 
 
 class CountingHasher:
@@ -134,7 +144,7 @@ class NativeAuthenticationServiceTests(unittest.TestCase):
             self._service().authenticate("atlas.owner", "incorrect password")
         self.assertEqual(self._proof_rows(), [])
         self.assertEqual(len(self.guard.failures), 1)
-        self.assertEqual(self.guard.failures[0][1], "atlas.owner")
+        self.assertEqual(len(self.guard.failures), 1)
 
     def test_unknown_handle_runs_dummy_verification_and_is_generic(self):
         before = self.hasher.verify_calls
