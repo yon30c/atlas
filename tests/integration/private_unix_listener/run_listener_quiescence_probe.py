@@ -249,6 +249,8 @@ def unit_snapshot(name: str) -> dict:
         "GID": dbus_property(path, SERVICE_IFACE, "GID", "u"),
         "CapabilityBoundingSet": dbus_property(path, SERVICE_IFACE, "CapabilityBoundingSet", "t"),
         "AmbientCapabilities": dbus_property(path, SERVICE_IFACE, "AmbientCapabilities", "t"),
+        "NoNewPrivileges": dbus_property(path, SERVICE_IFACE, "NoNewPrivileges", "b"),
+        "ProtectControlGroups": dbus_property(path, SERVICE_IFACE, "ProtectControlGroups", "b"),
         "Delegate": dbus_property(path, RESOURCE_IFACE, "Delegate", "b"),
         "DelegateControllers": dbus_property(path, RESOURCE_IFACE, "DelegateControllers", "as"),
         "DelegateSubgroup": dbus_property(path, RESOURCE_IFACE, "DelegateSubgroup", "s"),
@@ -913,6 +915,7 @@ def update_gate_marker(marker: Path, run_id: str, name: str, snapshot: dict, pha
 def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=False,
                    delegate=False, no_listener=False, uid=SERVICE_UID, gid=SERVICE_GID,
                    deny_fork=False, deny_fd_escape=False, exec_check=False,
+                   no_new_privs=False, protect_cgroups=False, drop_caps=False,
                    fd_holder=False, control_path: Path | None = None,
                    received_path: Path | None = None,
                    transfer_fd_to: Path | None = None) -> tuple[dict, Path | None, Path]:
@@ -924,6 +927,12 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
         "--property=Restart=no", f"--property=Delegate={'yes' if delegate else 'no'}",
         "--property=TimeoutStopSec=6s", f"--uid={uid}", f"--gid={gid}",
     ]
+    if no_new_privs:
+        properties.append("--property=NoNewPrivileges=yes")
+    if protect_cgroups:
+        properties.append("--property=ProtectControlGroups=yes")
+    if drop_caps:
+        properties.append("--property=CapabilityBoundingSet=")
     command = [
         "systemd-run", "--system", "--no-block", f"--unit={name}",
         *properties, sys.executable, "-I", str(Path(__file__).resolve()),
@@ -1381,7 +1390,10 @@ def run_probe(args: argparse.Namespace) -> dict:
         if not cleanup6["unit_inactive"] or not cleanup6["cgroup_empty"] or not cleanup6["endpoint_removed"]:
             raise Incomplete("QP-06 negative fixture cleanup failed")
         name6good = f"atlas-qp-{secrets.token_hex(6)}.service"
-        initial6good, endpoint6good, ready6good = _start_fixture(name6good, run_dir, delegate=False)
+        initial6good, endpoint6good, ready6good = _start_fixture(
+            name6good, run_dir, delegate=False, no_new_privs=True,
+            protect_cgroups=True, drop_caps=True,
+        )
         report["unit_identity"][name6good] = initial6good
         ready6good_data = json.loads(ready6good.read_text(encoding="ascii"))
         if (
@@ -1391,6 +1403,10 @@ def run_probe(args: argparse.Namespace) -> dict:
             or initial6good["DelegateControllers"]
             or initial6good["DelegateSubgroup"] != ""
             or initial6good["UID"] != SERVICE_UID or initial6good["GID"] != SERVICE_GID
+            or initial6good["NoNewPrivileges"] is not True
+            or initial6good["ProtectControlGroups"] is not True
+            or initial6good["CapabilityBoundingSet"] != 0
+            or initial6good["AmbientCapabilities"] != 0
             or ready6good_data.get("cap_sys_admin") is not False
             or ready6good_data.get("cgroup_dir_write_access") is not False
         ):
