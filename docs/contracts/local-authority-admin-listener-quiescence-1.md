@@ -268,10 +268,10 @@ Este borrador recomienda:
 - No existe todavía listener persistente ni unidad de servicio Atlas.
 - No se creó ni modificó ninguna unidad systemd, cgroup, usuario, grupo, ruta, permiso o servicio.
 - No se modificó el handler IPC ni el contrato `atlas-admin/1`.
-- No se implementó herramienta de mantenimiento ni recuperación.
+- No se implementó herramienta de mantenimiento ni recuperación. El runner QP es un harness experimental parcial, no una herramienta operativa.
 - A-IPC-04 valida el harness SR-01..SR-12, no este contrato ni la propiedad del descriptor de un servicio real.
 - R1–R7 están aprobadas como baseline de diseño, pero no se han implementado ni validado.
-- El diseño QP-01..QP-15 y la resolución documental de sus seis dependencias previas a implementación están en `docs/design/local-authority-admin-listener-quiescence-probe.md` §9; el runner no existe.
+- El diseño QP-01..QP-15 y la resolución documental de sus seis dependencias previas a implementación están en `docs/design/local-authority-admin-listener-quiescence-probe.md` §9; existe un runner parcial en `tests/integration/private_unix_listener/run_listener_quiescence_probe.py`; no se ha ejecutado y no valida todavía el contrato completo.
 - La puerta propuesta serializa actores autorizados, pero no puede impedir que root invoque PID 1 directamente; root permanece dentro del TCB.
 - El cleanup del probe futuro podrá retirar solo el endpoint fixture creado por esa ejecución y validado por `st_dev/st_ino`; no es stale recovery ni modifica la autorización de `unlinkat` para Atlas.
 - El asistente solo preparó documentación en GitHub; no ejecutó pruebas, builds, workflows ni probes.
