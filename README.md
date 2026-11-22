@@ -24,7 +24,7 @@ Atlas es software funcional en desarrollo incremental, no solamente un conjunto 
 
 ### Prioridad de desarrollo: MVP local limitado
 
-La rama `work/atlas-mvp-runtime`, creada desde `main`, inicia una ruta de entrega más corta. Añade el comando `/plan <solicitud>` a la consola para mostrar una vista previa generada por el planificador F1. No ejecuta capacidades ni accede al filesystem. El propietario validó localmente 14 pruebas focalizadas y `compileall` para ese incremento. En la misma rama se publicó la primera implementación del guard de autenticación nativa (puerto, migración V28, adaptador SQLite, servicio y tests), todavía pendiente de validación local. La rama no se ha integrado en `main`.
+La rama `work/atlas-mvp-runtime`, creada desde `main`, inicia una ruta de entrega más corta. Añade el comando `/plan <solicitud>` a la consola para mostrar una vista previa generada por el planificador F1. No ejecuta capacidades ni accede al filesystem. El propietario validó localmente 14 pruebas focalizadas y `compileall` para ese incremento. En la misma rama se publicó la primera implementación del guard de autenticación nativa (puerto, migración V28, adaptador SQLite, servicio y tests). El propietario validó localmente 21 pruebas focalizadas (`OK`) y `compileall` sin errores; la suite completa de la rama sigue pendiente. La rama no se ha integrado en `main`.
 
 El siguiente hito será conectar el acceso read-only a Workspace únicamente después de cerrar autenticación nativa, bootstrap y construcción de un contexto USER verificable. No se utilizará la identidad sintética de la consola como autoridad. Consulta [el plan funcional](docs/functional-test-roadmap.md) y [el estado vigente](docs/status-current.md).
 
