@@ -233,3 +233,9 @@ El propietario aprobó R1–R7 del contrato `docs/contracts/local-authority-admi
 El plan experimental se desarrolla en `docs/design/local-authority-admin-listener-quiescence-probe.md`. Define QP-01..QP-15 para comprobar unidad/cgroup exclusivos, parada completa, ausencia de jobs concurrentes, puerta root-managed, identidad estable de invocación y política de propiedad del listener FD. El harness futuro se limitará a fixtures y unidades transitorias en una VM desechable; no ejecutará stale-recovery unlink ni usará socket activation. El cleanup podrá retirar únicamente el endpoint fixture de esa ejecución tras verificar su identidad exacta.
 
 **Estado:** R1–R7 aprobadas; los seis puntos de §9 del plan QP están resueltos documentalmente. Pendiente revisión estática de coherencia y aprobación expresa antes de implementar. Runner no implementado y escenarios no ejecutados. A-THREAT-05 permanece abierta; nunca ejecutar en `greed`.
+
+## Actualización — runner QP inicial (2026-11-22)
+
+El propietario autorizó la implementación del runner experimental de quiescencia. Se añadió `tests/integration/private_unix_listener/run_listener_quiescence_probe.py` en la rama de experimento. Su primera versión incluye fixtures transitorios y observación D-Bus/cgroup para parte de la matriz QP. QP-03/QP-04/QP-06/QP-07/QP-12 tienen lógica inicial; QP-01/QP-02 no declaran QUIESCENT porque aún falta probar las restricciones de FD. QP-05/QP-08/QP-09/QP-10/QP-11/QP-13/QP-14/QP-15 están pendientes. En particular, QP-11 no puede pasar sin un supervisor autorizado real.
+
+La implementación no ha sido ejecutada ni validada. No usar el resultado como evidencia de quiescencia, no ejecutar en `greed` y no inferir autorización de stale recovery, listener persistente o despliegue. La siguiente puerta es revisión estática y completar la matriz pendiente; la validación local será únicamente en `Atlas-VM-test`.
