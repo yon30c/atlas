@@ -58,7 +58,7 @@ def run_console(
                 _show_help(output_fn)
                 continue
             if command == "/clear":
-                write_fn("\\033[2J\\033[H")
+                write_fn("\033[2J\033[H")
                 continue
             if command == "/exit" or command in {"salir", "exit", "quit"}:
                 output_fn("Atlas: hasta luego.")
@@ -80,14 +80,14 @@ def run_console(
                 response = streaming_responder(content, emit)
                 if response.kind is AssistantResponseKind.ERROR:
                     if streamed:
-                        write_fn("\\nAtlas> " + response.content + "\\n")
+                        write_fn("\nAtlas> " + response.content + "\n")
                     else:
-                        write_fn(response.content + "\\n")
+                        write_fn(response.content + "\n")
                 else:
-                    write_fn("\\n")
+                    write_fn("\n")
             else:
                 response = runtime.respond(content)
                 output_fn(f"Atlas> {response.content}")
     except KeyboardInterrupt:
-        write_fn("\\n")
+        write_fn("\n")
         output_fn("Atlas: interrupción recibida. Sesión finalizada.")
