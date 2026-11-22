@@ -92,7 +92,7 @@ class OfflineAssociationProvisioningCLITests(unittest.TestCase):
             _require_current_schema(database)
             with database.connection() as connection:
                 connection.execute(
-                    "UPDATE schema_migrations SET checksum = ? WHERE version = 27",
+                    "UPDATE schema_migrations SET checksum = ? WHERE version = 28",
                     ("0" * 64,),
                 )
             with self.assertRaises(ContractError):
