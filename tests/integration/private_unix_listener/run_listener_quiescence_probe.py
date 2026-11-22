@@ -2537,6 +2537,12 @@ def run_probe(args: argparse.Namespace) -> dict:
         else:
             report["cleanup"]["sandbox_preserved_due_to_uncertainty"] = True
 
+        report["scenarios"].sort(
+            key=lambda item: int(item["id"].split("-", 1)[1])
+        )
+        scenario_ids = [item["id"] for item in report["scenarios"]]
+        if len(scenario_ids) != len(set(scenario_ids)):
+            report["harness_error"] = "duplicate scenario IDs in final evidence"
         statuses = [item["status"] for item in report["scenarios"]]
         report["overall"] = (
             "PASS" if len(statuses) == 15 and all(value == "PASS" for value in statuses)
