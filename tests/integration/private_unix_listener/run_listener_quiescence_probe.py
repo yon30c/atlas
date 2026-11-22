@@ -1780,7 +1780,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         deadline12 = time.monotonic() + 8.0
         while time.monotonic() < deadline12:
             candidate = unit_snapshot(name12)
-            if candidate["InvocationID"] != initial12["InvocationID"] and candidate["ActiveState"] == "active":
+            if candidate["InvocationID"] != initial12["InvocationID"] and candidate["ActiveState"] == "active" and candidate["MainPID"] > 0 and candidate["Job"][0] == 0:
                 changed = candidate
                 break
             time.sleep(0.05)
