@@ -26,6 +26,9 @@ from atlas.authorization.models import (
 from atlas.core.context import OperationContext
 from atlas.core.errors import AuthorizationError, ContractError
 from atlas.core.identity import IdentityKind, IdentityStatus
+from atlas.core.verified_identity_context import VerifiedIdentityContext
+from atlas.authorization.identity_evidence import require_verified_owner_context_in_unit_of_work
+from atlas.ports.verified_identity_context_verifier import VerifiedIdentityContextVerifierPort
 from atlas.memory.models import EnvironmentId, ProjectId
 from atlas.ports.workspace_mounts import WorkspaceMountResolver
 from atlas.workspace.models import (
@@ -84,13 +87,17 @@ class WorkspaceCapabilityExecutionService:
         mount_resolver: WorkspaceMountResolver,
         catalog: CapabilityCatalog | None = None,
         evaluator: AuthorizationEvaluator | None = None,
+        identity_verifier: VerifiedIdentityContextVerifierPort | None = None,
     ) -> None:
         if not callable(unit_of_work_factory):
             raise ContractError("unit_of_work_factory debe ser invocable")
         if not callable(getattr(mount_resolver, "resolve", None)):
             raise ContractError("mount_resolver debe implementar resolve(root_ref)")
+        if not callable(getattr(identity_verifier, "verify_in_unit_of_work", None)):
+            raise ContractError("identity_verifier debe verificar dentro de la UoW")
         self._unit_of_work_factory = unit_of_work_factory
         self._mount_resolver = mount_resolver
+        self._identity_verifier = identity_verifier
         self._catalog = catalog or build_default_capability_catalog()
         if not isinstance(self._catalog, CapabilityCatalog):
             raise ContractError("catalog debe ser CapabilityCatalog")
@@ -125,6 +132,7 @@ class WorkspaceCapabilityExecutionService:
         now: datetime,
         *,
         review_confirmed: bool,
+        verified_identity: VerifiedIdentityContext,
     ) -> WorkspaceCapabilityExecutionResult:
         """Revalida autoridad y Grant antes de resolver el mount y tocar disco."""
         if not isinstance(plan, AssistantPlan):
@@ -176,11 +184,17 @@ class WorkspaceCapabilityExecutionService:
         # BEGIN IMMEDIATE fences canonical SQLite writers through the filesystem
         # read. This is not a filesystem lock or a distributed consistency gate.
         with self._unit_of_work_factory() as unit:
-            canonical = unit.identity.get_user(context.user_id)
+            canonical = require_verified_owner_context_in_unit_of_work(
+                context,
+                verified_identity,
+                self._identity_verifier,
+                unit,
+            )
+            canonical_record = unit.identity.get_user(context.user_id)
             if (
-                canonical is None
-                or canonical.user_id != context.user_id
-                or canonical.identity != actor
+                canonical_record is None
+                or canonical_record.user_id != canonical.user_id
+                or canonical_record.identity != canonical.identity
             ):
                 raise AuthorizationError("la identidad canónica no coincide con el contexto")
 

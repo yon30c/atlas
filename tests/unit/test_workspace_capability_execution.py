@@ -25,6 +25,8 @@ from atlas.assistant.planning import (
 from atlas.authorization.models import Grant, GrantResourceScope
 from atlas.core.context import OperationContext
 from atlas.core.errors import AuthorizationError, ContractError
+from atlas.core.identity import IdentityKind
+from atlas.core.verified_identity_context import VerifiedIdentityContext
 from atlas.memory.metadata import EnvironmentMetadata, ProjectMetadata
 from atlas.memory.models import EnvironmentId, ProjectId
 from tests.unit.association_provisioning_test_support import provision_association
@@ -37,6 +39,31 @@ from atlas.workspace.models import (
 
 
 NOW = datetime(2026, 11, 16, 12, 0, tzinfo=timezone.utc)
+
+
+
+
+class FakeWorkspaceIdentityVerifier:
+    """Test-only verifier; production must use the native identity attestor."""
+
+    def __init__(self, expected_context):
+        self.expected_context = expected_context
+        self.calls = 0
+        self.last_unit = None
+
+    def verify_in_unit_of_work(self, context, unit):
+        self.calls += 1
+        self.last_unit = unit
+        if context != self.expected_context:
+            raise ValueError("invalid verified identity context")
+        canonical = unit.identity.get_user(context.user_id)
+        if (
+            canonical is None
+            or canonical.identity.identity_id != context.identity_id
+            or canonical.identity.revision != context.identity_revision
+        ):
+            raise ValueError("canonical identity mismatch")
+        return canonical
 
 
 class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
@@ -97,9 +124,26 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
         self.mount_resolver = TrustedWorkspaceMountResolver(
             {"demo-root": self.workspace_root}
         )
+        self.verified_identity = VerifiedIdentityContext(
+            context_id=str(uuid4()),
+            identity_id=self.user.identity.identity_id,
+            identity_type=IdentityKind.USER,
+            identity_revision=self.user.identity.revision,
+            user_id=self.user.user_id,
+            binding_id=str(uuid4()),
+            binding_revision=1,
+            issuer_id=str(uuid4()),
+            authenticated_at=NOW - timedelta(seconds=30),
+            verified_at=NOW,
+            expires_at=NOW + timedelta(minutes=5),
+            verification_ref="V" * 43,
+            attestation="A" * 43,
+        )
+        self.identity_verifier = FakeWorkspaceIdentityVerifier(self.verified_identity)
         self.service = WorkspaceCapabilityExecutionService(
             unit_of_work_factory=self.uow_factory,
             mount_resolver=self.mount_resolver,
+            identity_verifier=self.identity_verifier,
         )
 
     def _plan(self, kind, parameters):
@@ -139,6 +183,36 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
             unit.commit()
         return grant
 
+    def test_missing_verified_identity_verifier_is_rejected_by_service_contract(self):
+        with self.assertRaises(ContractError):
+            WorkspaceCapabilityExecutionService(
+                unit_of_work_factory=self.uow_factory,
+                mount_resolver=self.mount_resolver,
+            )
+
+    def test_identity_evidence_is_revalidated_inside_workspace_uow(self):
+        self._grant(kind=IntentKind.WORKSPACE_LIST, resource_id="demo")
+        plan = self._plan(IntentKind.WORKSPACE_LIST, (("workspace_id", "demo"),))
+        self.service.execute(
+            plan, self.context, NOW,
+            review_confirmed=True,
+            verified_identity=self.verified_identity,
+        )
+        self.assertEqual(self.identity_verifier.calls, 1)
+        self.assertIsNotNone(self.identity_verifier.last_unit)
+
+    def test_tampered_verified_identity_is_denied(self):
+        from dataclasses import replace
+        self._grant(kind=IntentKind.WORKSPACE_LIST, resource_id="demo")
+        plan = self._plan(IntentKind.WORKSPACE_LIST, (("workspace_id", "demo"),))
+        tampered = replace(self.verified_identity, user_id=str(uuid4()))
+        with self.assertRaises(AuthorizationError):
+            self.service.execute(
+                plan, self.context, NOW,
+                review_confirmed=True,
+                verified_identity=tampered,
+            )
+
     def test_list_executes_only_after_exact_grant_and_explicit_review(self):
         self._grant(kind=IntentKind.WORKSPACE_LIST, resource_id="demo")
         plan = self._plan(
@@ -147,7 +221,7 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
         )
 
         result = self.service.execute(
-            plan, self.context, NOW, review_confirmed=True
+            plan, self.context, NOW, review_confirmed=True, verified_identity=self.verified_identity
         )
 
         self.assertEqual(result.plan_id, plan.plan_id)
@@ -163,7 +237,7 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
         )
 
         result = self.service.execute(
-            plan, self.context, NOW, review_confirmed=True
+            plan, self.context, NOW, review_confirmed=True, verified_identity=self.verified_identity
         )
 
         self.assertEqual(result.resource_id, resource_id)
@@ -175,7 +249,7 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
             (("workspace_id", "demo"),),
         )
         with self.assertRaises(AuthorizationError):
-            self.service.execute(plan, self.context, NOW, review_confirmed=True)
+            self.service.execute(plan, self.context, NOW, review_confirmed=True, verified_identity=self.verified_identity)
 
     def test_missing_grant_denies_before_mount_resolution(self):
         class ResolverMustNotRun:
@@ -189,13 +263,14 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
         service = WorkspaceCapabilityExecutionService(
             unit_of_work_factory=self.uow_factory,
             mount_resolver=resolver,
+            identity_verifier=self.identity_verifier,
         )
         plan = self._plan(
             IntentKind.WORKSPACE_LIST,
             (("workspace_id", "demo"),),
         )
         with self.assertRaises(AuthorizationError):
-            service.execute(plan, self.context, NOW, review_confirmed=True)
+            service.execute(plan, self.context, NOW, review_confirmed=True, verified_identity=self.verified_identity)
         self.assertFalse(resolver.called)
 
     def test_unconfirmed_plan_is_denied(self):
@@ -204,7 +279,7 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
             (("workspace_id", "demo"),),
         )
         with self.assertRaises(AuthorizationError):
-            self.service.execute(plan, self.context, NOW, review_confirmed=False)
+            self.service.execute(plan, self.context, NOW, review_confirmed=False, verified_identity=self.verified_identity)
 
     def test_context_identity_must_match_canonical_identity_revision(self):
         from dataclasses import replace
@@ -217,7 +292,7 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
             (("workspace_id", "demo"),),
         )
         with self.assertRaises(AuthorizationError):
-            self.service.execute(plan, altered, NOW, review_confirmed=True)
+            self.service.execute(plan, altered, NOW, review_confirmed=True, verified_identity=self.verified_identity)
 
     def test_inactive_project_denies(self):
         from dataclasses import replace
@@ -233,7 +308,7 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
             (("workspace_id", "demo"),),
         )
         with self.assertRaises(AuthorizationError):
-            self.service.execute(plan, self.context, NOW, review_confirmed=True)
+            self.service.execute(plan, self.context, NOW, review_confirmed=True, verified_identity=self.verified_identity)
 
     def test_inactive_environment_denies(self):
         from dataclasses import replace
@@ -249,7 +324,7 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
             (("workspace_id", "demo"),),
         )
         with self.assertRaises(AuthorizationError):
-            self.service.execute(plan, self.context, NOW, review_confirmed=True)
+            self.service.execute(plan, self.context, NOW, review_confirmed=True, verified_identity=self.verified_identity)
 
     def test_workspace_owner_must_match_canonical_user(self):
         with self.uow_factory() as unit:
@@ -267,14 +342,14 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
         self._grant(kind=IntentKind.WORKSPACE_LIST, resource_id="foreign")
         plan = self._plan(IntentKind.WORKSPACE_LIST, (("workspace_id", "foreign"),))
         with self.assertRaises(AuthorizationError):
-            self.service.execute(plan, self.context, NOW, review_confirmed=True)
+            self.service.execute(plan, self.context, NOW, review_confirmed=True, verified_identity=self.verified_identity)
 
     def test_workspace_scope_must_match_context(self):
         from dataclasses import replace
         plan = self._plan(IntentKind.WORKSPACE_LIST, (("workspace_id", "demo"),))
         altered = replace(self.context, project_id="another-project")
         with self.assertRaises(AuthorizationError):
-            self.service.execute(plan, altered, NOW, review_confirmed=True)
+            self.service.execute(plan, altered, NOW, review_confirmed=True, verified_identity=self.verified_identity)
 
     def test_suspended_workspace_denies(self):
         from dataclasses import replace
@@ -288,7 +363,7 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
         self._grant(kind=IntentKind.WORKSPACE_LIST, resource_id="demo")
         plan = self._plan(IntentKind.WORKSPACE_LIST, (("workspace_id", "demo"),))
         with self.assertRaises(AuthorizationError):
-            self.service.execute(plan, self.context, NOW, review_confirmed=True)
+            self.service.execute(plan, self.context, NOW, review_confirmed=True, verified_identity=self.verified_identity)
 
     def test_suspended_project_environment_association_denies(self):
         from dataclasses import replace
@@ -325,7 +400,7 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
         self._grant(kind=IntentKind.WORKSPACE_LIST, resource_id="demo")
         plan = self._plan(IntentKind.WORKSPACE_LIST, (("workspace_id", "demo"),))
         with self.assertRaises(AuthorizationError):
-            self.service.execute(plan, self.context, NOW, review_confirmed=True)
+            self.service.execute(plan, self.context, NOW, review_confirmed=True, verified_identity=self.verified_identity)
 
     def test_unknown_mount_denies_after_cam_without_filesystem_access(self):
         service = WorkspaceCapabilityExecutionService(
@@ -333,11 +408,12 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
             mount_resolver=TrustedWorkspaceMountResolver(
                 {"other-root": self.workspace_root}
             ),
+            identity_verifier=self.identity_verifier,
         )
         self._grant(kind=IntentKind.WORKSPACE_LIST, resource_id="demo")
         plan = self._plan(IntentKind.WORKSPACE_LIST, (("workspace_id", "demo"),))
         with self.assertRaises(AuthorizationError):
-            service.execute(plan, self.context, NOW, review_confirmed=True)
+            service.execute(plan, self.context, NOW, review_confirmed=True, verified_identity=self.verified_identity)
 
     def test_missing_project_or_environment_denies(self):
         from dataclasses import replace
@@ -352,7 +428,7 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
             with self.subTest(changes=changes):
                 context = replace(self.context, **changes)
                 with self.assertRaises(AuthorizationError):
-                    self.service.execute(plan, context, NOW, review_confirmed=True)
+                    self.service.execute(plan, context, NOW, review_confirmed=True, verified_identity=self.verified_identity)
 
     def test_plan_must_contain_exactly_one_matching_step(self):
         from dataclasses import replace
@@ -368,7 +444,7 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
         )
         malformed = replace(plan, steps=plan.steps + (extra_step,))
         with self.assertRaises(ContractError):
-            self.service.execute(malformed, self.context, NOW, review_confirmed=True)
+            self.service.execute(malformed, self.context, NOW, review_confirmed=True, verified_identity=self.verified_identity)
 
     def test_expired_grant_denies(self):
         expired = Grant(
@@ -390,7 +466,7 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
             (("workspace_id", "demo"),),
         )
         with self.assertRaises(AuthorizationError):
-            self.service.execute(plan, self.context, NOW, review_confirmed=True)
+            self.service.execute(plan, self.context, NOW, review_confirmed=True, verified_identity=self.verified_identity)
 
     def test_read_grant_does_not_authorize_listing(self):
         resource_id = self.service.workspace_file_resource_id("demo", "readme.txt")
@@ -400,7 +476,7 @@ class WorkspaceCapabilityExecutionServiceTests(unittest.TestCase):
             (("workspace_id", "demo"),),
         )
         with self.assertRaises(AuthorizationError):
-            self.service.execute(plan, self.context, NOW, review_confirmed=True)
+            self.service.execute(plan, self.context, NOW, review_confirmed=True, verified_identity=self.verified_identity)
 
 
 if __name__ == "__main__":
