@@ -1143,6 +1143,13 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
         raise Incomplete("systemd fixture User/Group/UID/GID identity differs from requested identity")
     if snap["ControlGroup"] == "":
         raise Incomplete("systemd returned an empty ControlGroup")
+    _cg_root, fixture_mount = cgroup_mount()
+    observer = open_cgroup_observer(fixture_mount, snap["ControlGroup"])
+    _ACTIVE_FIXTURES[name]["cgroup_observer"] = observer
+    initial_cgroup = read_cgroup_observer(observer)
+    if initial_cgroup["values"]["populated"] != 1:
+        raise Incomplete("fixture cgroup did not become populated")
+    _ACTIVE_FIXTURES[name]["initial_cgroup_events"] = initial_cgroup
     if exec_check and (
         not ready.get("exec_helper") or not ready.get("exec_same_pid")
         or not ready.get("listener_fd_closed")
@@ -1178,9 +1185,14 @@ def _stop_and_cleanup(name: str, initial: dict, socket_path: Path | None, ready_
             cleanup["unit_inactive"] = final["ActiveState"] == "inactive"
         if not cleanup["unit_inactive"]:
             raise Incomplete("fixture unit is not confirmed inactive")
+        fixture_record = _ACTIVE_FIXTURES.get(name, {})
+        observer = fixture_record.get("cgroup_observer")
         if not cgroup_empty_confirmed:
-            _root, mount = cgroup_mount()
-            events = cgroup_events(mount, initial["ControlGroup"])
+            if observer is not None:
+                events = read_cgroup_observer(observer)
+            else:
+                _root, mount = cgroup_mount()
+                events = cgroup_events(mount, initial["ControlGroup"])
             cleanup["cgroup_empty"] = events["values"]["populated"] == 0
         if not cleanup["cgroup_empty"]:
             raise Incomplete("fixture cgroup remains populated during cleanup")
@@ -1221,6 +1233,9 @@ def _stop_and_cleanup(name: str, initial: dict, socket_path: Path | None, ready_
                 run_dir_fd, ready_path.name, ready_identity_now,
                 fixture_record["uid"], fixture_record["gid"],
             )
+        if observer is not None:
+            close_cgroup_observer(observer)
+            fixture_record["cgroup_observer"] = None
         wait_unit_absent(name, time.monotonic() + 3.0)
         cleanup["unit_unloaded"] = True
         if (
