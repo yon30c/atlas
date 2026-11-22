@@ -266,3 +266,31 @@ sin errores reportados.
 **Conclusión:** las pruebas focalizadas del servicio y del adaptador SQLite pasan y el árbol compila. La suite completa de la rama `work/atlas-mvp-runtime` sigue pendiente. No se han validado aún migración sobre una base de datos persistente real, pruebas de integración del flujo de login ni composición operativa. Mantener login, bootstrap, Workspace y CAM deshabilitados.
 
 **Siguiente paso:** ejecutar la suite unitaria completa en Debian; revisar el resultado antes de decidir si se integra o si hacen falta correcciones. No modificar `main`.
+
+
+## Suite completa — compatibilidad V28 (2026-11-22)
+
+El propietario ejecutó localmente en Debian, checkout `/opt/atlas-dev`, la suite completa de la rama y reportó:
+
+```text
+Ran 1611 tests in 42.725s
+
+FAILED (failures=23, errors=10, skipped=1)
+```
+
+La revisión agrupó los fallos en tres causas de compatibilidad con V28: el CLI de provisión offline aún exigía V27; pruebas de Platform Admin aplicaban V28 aunque su contrato de fixture es V27; y la prueba de compatibilidad lifecycle insertaba la asociación después de V27, cuando ya se exige el evento exacto de provisión offline.
+
+Correcciones publicadas en `work/atlas-mvp-runtime`:
+- CLI: valida el historial completo hasta `CORE_SCHEMA_V28`.
+- Test del CLI: corrompe el checksum de la migración 28 para comprobar el historial completo.
+- Tests de Platform Admin: aplican explícitamente `SQLITE_MIGRATIONS[:-1]` (hasta V27).
+- Test de compatibilidad lifecycle: crea la asociación con el esquema hasta V26 (`SQLITE_MIGRATIONS[:-2]`) antes de aplicar V27 y posteriores.
+
+Commits de corrección:
+- `797a5f3882a4536f6b2f63b45c8c7bfb347cbcfa` — CLI V28.
+- `a1f24742ccaf3272f43ebdefd02a75d6b5f4b686` — prueba de historial completo V28.
+- `ee8bd43b1d5b2f56ff7304938765d267f8af9668` — fixture lifecycle.
+- `9808f697dc8b9b21f401a887b89cea957ec06b03` — fixture Platform Admin authority.
+- `78cbf6288b8dc342f2c10b0c5290a4698a58edd3` — fixture Platform Admin bootstrap.
+
+**Estado:** correcciones publicadas, pendientes de validación local. No se ejecutaron pruebas desde GitHub. El resultado fallido anterior no debe confundirse con el resultado focalizado del guard (21 tests OK); tampoco se debe declarar verde la suite completa hasta recibir una nueva ejecución local.
