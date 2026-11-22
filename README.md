@@ -24,9 +24,9 @@ Atlas es software funcional en desarrollo incremental, no solamente un conjunto 
 
 ### Prioridad de desarrollo: MVP local limitado
 
-La rama `work/atlas-mvp-runtime`, creada desde `main`, inicia una ruta de entrega más corta. Añade el comando `/plan <solicitud>` a la consola para mostrar una vista previa generada por el planificador F1. No ejecuta capacidades ni accede al filesystem. El propietario validó localmente 14 pruebas focalizadas y `compileall` para ese incremento. En la misma rama se publicó la primera implementación del guard de autenticación nativa (puerto, migración V28, adaptador SQLite, servicio y tests). El propietario validó localmente 21 pruebas focalizadas (`OK`) y `compileall` sin errores; la suite completa de la rama sigue pendiente. La rama no se ha integrado en `main`.
+La rama `work/atlas-mvp-runtime`, creada desde `main`, contiene `/plan <solicitud>` como vista previa del planificador F1 y el guard persistente de intentos de autenticación nativa (puerto, migración V28, adaptador SQLite y servicio). El propietario validó localmente 14 pruebas focalizadas de planificación, 21 pruebas focalizadas del guard y, posteriormente, la suite completa de la rama: **1,611 tests — OK (1 skipped)**. También confirmó `compileall` sin errores. La rama sigue sin integrarse en `main`.
 
-El siguiente hito será conectar el acceso read-only a Workspace únicamente después de cerrar autenticación nativa, bootstrap y construcción de un contexto USER verificable. No se utilizará la identidad sintética de la consola como autoridad. Consulta [el plan funcional](docs/functional-test-roadmap.md) y [el estado vigente](docs/status-current.md).
+El siguiente hito no es conectar Workspace todavía: primero deben definirse y cerrarse la composición segura de autenticación, la provisión confiable de la clave HMAC y el perfil CAM del Grant inicial. La revisión estática confirmó que la consola actual solo compone conversación/planificación; los puntos revisados de composición SQLite no instancian `NativeAuthenticationService` ni `SQLiteAuthenticationAttemptGuard`. No se utilizará la identidad sintética de la consola como autoridad. Consulta [el plan funcional](docs/functional-test-roadmap.md) y [el estado vigente](docs/status-current.md).
 
 | Área | Estado real |
 |---|---|
@@ -34,7 +34,7 @@ El siguiente hito será conectar el acceso read-only a Workspace únicamente des
 | Integración con Ollama | **Implementada** |
 | Contexto conversacional | **Persistente en SQLite; historial durable y proyección acotada al modelo** |
 | AtlasCore | **Fachada de aplicación implementada; orquestación completa pendiente** |
-| Identidad canónica y autenticación nativa | **Primitivas, persistencia y servicios USER/AGENT implementados; guard SQLite inicial publicado en rama MVP, aún sin validar localmente; login operativo y bootstrap de producción pendientes** |
+| Identidad canónica y autenticación nativa | **Primitivas, persistencia y servicios USER/AGENT implementados; guard SQLite V28 validado localmente; login operativo, bootstrap y composición autenticada pendientes** |
 | Contexto de identidad verificada | **Servicios USER/AGENT y revalidación transaccional implementados; integración de clientes/runtime pendiente** |
 | CAM y autorización | **Evaluación de Grants y flujos de renovación implementados parcialmente; no equivale a runtime protegido completo** |
 | Delegación AGENT | **Identidad, binding, delegación del propietario, evidencia verificada y renovación delegada implementados; runtime AGENT no habilitado** |
