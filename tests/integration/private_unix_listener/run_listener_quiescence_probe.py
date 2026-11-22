@@ -45,6 +45,10 @@ SERVICE_UID = 2005
 SERVICE_GID = 2005
 OTHER_UID = 2006
 OTHER_GID = 2006
+# The transient systemd service needs only these capabilities to let setpriv
+# switch to the numeric fixture identity and clear its own bounding set.
+LAUNCHER_CAPS = (1 << 6) | (1 << 7) | (1 << 8)  # SETGID, SETUID, SETPCAP
+SETPRIV = Path('/usr/bin/setpriv')
 STOP_TIMEOUT = 8.0
 
 
@@ -953,7 +957,7 @@ def process_authority_evidence() -> dict:
     status = {}
     try:
         for line in Path("/proc/self/status").read_text(encoding="ascii").splitlines():
-            if line.startswith(("CapEff:", "CapBnd:")):
+            if line.startswith(("CapInh:", "CapPrm:", "CapEff:", "CapBnd:", "CapAmb:")):
                 key, value = line.split(":", 1)
                 status[key] = int(value.strip(), 16)
             elif line.startswith(("NoNewPrivs:", "Seccomp:", "Seccomp_filters:")):
@@ -965,12 +969,15 @@ def process_authority_evidence() -> dict:
             if line.startswith("0::")
         )
         own_cgroup_path = cg_mount / cgroup_line[3:].lstrip("/")
-        required_status = {"CapEff", "CapBnd", "NoNewPrivs", "Seccomp", "Seccomp_filters"}
+        required_status = {"CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb", "NoNewPrivs", "Seccomp", "Seccomp_filters"}
         if not required_status.issubset(status):
             raise Incomplete("required process capability/seccomp fields are missing")
         return {
+            "cap_inh": status["CapInh"],
+            "cap_prm": status["CapPrm"],
             "cap_eff": status["CapEff"],
             "cap_bnd": status["CapBnd"],
+            "cap_amb": status["CapAmb"],
             "no_new_privs": status["NoNewPrivs"],
             "seccomp": status["Seccomp"],
             "seccomp_filters": status["Seccomp_filters"],
@@ -1265,6 +1272,15 @@ def preflight() -> dict:
     for executable in ("busctl", "systemd-run", "systemctl", "git", "sleep"):
         if not __import__("shutil").which(executable):
             raise Incomplete(f"required executable missing: {executable}")
+    try:
+        setpriv_info = SETPRIV.stat(follow_symlinks=False)
+    except OSError as exc:
+        raise Incomplete("/usr/bin/setpriv is unavailable") from exc
+    if (
+        not stat.S_ISREG(setpriv_info.st_mode) or setpriv_info.st_uid != 0
+        or setpriv_info.st_mode & 0o022 or not setpriv_info.st_mode & 0o111
+    ):
+        raise Incomplete("/usr/bin/setpriv is not a protected root-owned executable")
     seccomp_library = ctypes.util.find_library("seccomp")
     systemd_library = ctypes.util.find_library("systemd")
     if not seccomp_library:
@@ -1473,17 +1489,22 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
     properties = [
         "--property=Type=exec", "--property=KillMode=control-group",
         "--property=Restart=no", f"--property=Delegate={'yes' if delegate else 'no'}",
-        "--property=TimeoutStopSec=6s", f"--uid={uid}", f"--gid={gid}",
+        "--property=TimeoutStopSec=6s",
+        f"--property=CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP",
+        "--property=AmbientCapabilities=",
+        "--uid=0", "--gid=0",
     ]
     if no_new_privs:
         properties.append("--property=NoNewPrivileges=yes")
     if protect_cgroups:
         properties.append("--property=ProtectControlGroups=yes")
-    if drop_caps:
-        properties.append("--property=CapabilityBoundingSet=")
     command = [
         "systemd-run", "--system", "--no-block", f"--unit={name}",
-        *properties, str(Path(sys.executable).resolve()), "-I", str(Path(__file__).resolve()),
+        *properties, str(SETPRIV), f"--reuid={uid}", f"--regid={gid}",
+        "--clear-groups", "--inh-caps=-all", "--ambient-caps=-all",
+        "--bounding-set=-all",
+        *( ["--no-new-privs"] if no_new_privs else [] ),
+        "--", str(Path(sys.executable).resolve()), "-I", str(Path(__file__).resolve()),
         "--fixture", "--socket", str(socket_path), "--ready", str(ready_path),
     ]
     if hold_child:
@@ -1541,7 +1562,9 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
         or not isinstance(expected_supplementary, list)
         or any(not isinstance(value, int) or isinstance(value, bool) for value in expected_supplementary)
         or expected_supplementary != sorted(set(expected_supplementary))
+        or expected_supplementary != []
         or any(value != gid for value in expected_supplementary)
+        or any(ready.get(key) != 0 for key in ("cap_inh", "cap_prm", "cap_eff", "cap_bnd", "cap_amb"))
     ):
         raise Incomplete("fixture process credentials differ from the approved numeric identity")
     _ACTIVE_FIXTURES[name]["initial"] = snap
@@ -1550,8 +1573,10 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
     if not delegate:
         require_no_delegation(snap)
     if (
-        snap["User"] != str(uid) or snap["Group"] != str(gid)
-        or snap["UID"] != uid or snap["GID"] != gid
+        snap["User"] not in {"root", "0"} or snap["Group"] not in {"root", "0"}
+        or snap["UID"] != 0 or snap["GID"] != 0
+        or snap["CapabilityBoundingSet"] != LAUNCHER_CAPS
+        or snap["AmbientCapabilities"] != 0
     ):
         raise Incomplete("systemd fixture User/Group/UID/GID identity differs from requested identity")
     if snap["ControlGroup"] == "":
@@ -2178,17 +2203,16 @@ def run_probe(args: argparse.Namespace) -> dict:
         ready6good_data = read_bounded_json_file(ready6good, expected_uid=SERVICE_UID, expected_gid=SERVICE_GID)
         if (
             initial6good["Delegate"] is not False
-            or initial6good["User"] != str(SERVICE_UID)
-            or initial6good["Group"] != str(SERVICE_GID)
+            or initial6good["User"] not in {"root", "0"}
+            or initial6good["Group"] not in {"root", "0"}
             or initial6good["DelegateControllers"]
             or initial6good["DelegateSubgroup"] != ""
-            or initial6good["UID"] != SERVICE_UID or initial6good["GID"] != SERVICE_GID
+            or initial6good["UID"] != 0 or initial6good["GID"] != 0
             or initial6good["NoNewPrivileges"] is not True
             or initial6good["ProtectControlGroups"] is not True
-            or initial6good["CapabilityBoundingSet"] != 0
+            or initial6good["CapabilityBoundingSet"] != LAUNCHER_CAPS
             or initial6good["AmbientCapabilities"] != 0
-            or ready6good_data.get("cap_bnd") != 0
-            or ready6good_data.get("cap_eff") != 0
+            or any(ready6good_data.get(key) != 0 for key in ("cap_inh", "cap_prm", "cap_bnd", "cap_eff", "cap_amb"))
             or ready6good_data.get("no_new_privs") != 1
             or ready6good_data.get("cap_sys_admin") is not False
             or ready6good_data.get("cgroup_dir_write_access") is not False
