@@ -228,7 +228,7 @@ El propietario aprobó ajustar la cuarta demora de 8 a **7 minutos**, manteniend
 - Migración `CORE_SCHEMA_V28` con tablas e índices de reservas/fallos; incluida en `SQLITE_MIGRATIONS`.
 - `SQLiteAuthenticationAttemptGuard`: transacciones cortas independientes, máximo dos reservas, TTL 120 s, ventana 15 min y demoras 1/2/4/7/15.
 - `NativeAuthenticationService`: issuer en UoW breve, reserva antes de leer el autenticador, Argon2id fuera de UoW, revalidación de issuer/autenticador/status/subject/revisión antes del proof y confirmación del guard antes de devolver la referencia.
-- Pruebas unitarias del servicio y nuevo archivo de pruebas del adaptador SQLite.
+- Pruebas unitarias del servicio y nuevo archivo de pruebas del adaptador SQLite, incluyendo concurrencia multiproceso y recolección acotada de registros vencidos de cuentas inactivas.
 
 **Revisión y validación:** se corrigieron durante la revisión el registro/exportación de V28, la limpieza durable de reservas expiradas, el orden reserva→lectura de credencial y un import de pruebas con secuencias literales escapadas. La revisión es estática. **No se ejecutaron pruebas, compilaciones ni migraciones desde GitHub; no existe todavía validación local de este incremento.**
 
