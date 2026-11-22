@@ -1087,6 +1087,8 @@ def preflight() -> dict:
             raise Incomplete(f"required executable missing: {executable}")
     if not ctypes.util.find_library("seccomp"):
         raise Incomplete("libseccomp.so.2 is unavailable")
+    if not ctypes.util.find_library("systemd"):
+        raise Incomplete("libsystemd.so.0 is unavailable for persistent RefUnit references")
     for uid, gid, label in (
         (SERVICE_UID, SERVICE_GID, "SERVICE"),
         (OTHER_UID, OTHER_GID, "OTHER"),
@@ -1280,7 +1282,7 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
     _ACTIVE_FIXTURES[name] = {
         "name": name, "run_dir": run_dir, "dir_fd": fixture_dir_fd,
         "socket_path": fixture_socket_path, "ready_path": ready_path,
-        "uid": uid, "gid": gid, "initial": None,
+        "uid": uid, "gid": gid, "initial": None, "unit_ref": False,
     }
     _ACTIVE_SUPERVISOR.request("start", command, actor_run_id=_ACTIVE_RUN_ID)
     deadline = time.monotonic() + 8.0
@@ -1316,6 +1318,10 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
         raise Incomplete("systemd fixture User/Group/UID/GID identity differs from requested identity")
     if snap["ControlGroup"] == "":
         raise Incomplete("systemd returned an empty ControlGroup")
+    if _SYSTEMD_BUS_REF is None:
+        raise Incomplete("persistent system-bus reference connection is unavailable")
+    _SYSTEMD_BUS_REF.ref_unit(name)
+    _ACTIVE_FIXTURES[name]["unit_ref"] = True
     _cg_root, fixture_mount = cgroup_mount()
     observer = open_cgroup_observer(fixture_mount, snap["ControlGroup"])
     _ACTIVE_FIXTURES[name]["cgroup_observer"] = observer
@@ -1409,6 +1415,12 @@ def _stop_and_cleanup(name: str, initial: dict, socket_path: Path | None, ready_
         if observer is not None:
             close_cgroup_observer(observer)
             fixture_record["cgroup_observer"] = None
+        if fixture_record.get("unit_ref"):
+            if _SYSTEMD_BUS_REF is None:
+                raise Incomplete("persistent system-bus connection was lost before UnrefUnit")
+            _SYSTEMD_BUS_REF.unref_unit(name)
+            fixture_record["unit_ref"] = False
+            cleanup["unit_unref_confirmed"] = True
         wait_unit_absent(name, time.monotonic() + 3.0)
         cleanup["unit_unloaded"] = True
         if (
@@ -1436,9 +1448,12 @@ def _wait_for_deactivation(name: str, observer: dict, deadline: float) -> tuple[
 
 
 def run_probe(args: argparse.Namespace) -> dict:
-    global _ACTIVE_SUPERVISOR, _ACTIVE_RUN_ID
+    global _ACTIVE_SUPERVISOR, _ACTIVE_RUN_ID, _SYSTEMD_BUS_REF
     _ACTIVE_SUPERVISOR = None
     _ACTIVE_RUN_ID = None
+    if _SYSTEMD_BUS_REF is not None:
+        _SYSTEMD_BUS_REF.close()
+    _SYSTEMD_BUS_REF = None
     _ACTIVE_FIXTURES.clear()
     _CLEANED_FIXTURES.clear()
     _SANDBOX_DIRS.clear()
@@ -1508,7 +1523,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         marker_data = {"schema": SCHEMA, "run_id": run_id, "phase": "preparing"}
         _safe_json_file(marker, marker_data, 4096)
         marker_created = True
-        global _ACTIVE_SUPERVISOR, _ACTIVE_RUN_ID
+        _SYSTEMD_BUS_REF = PersistentSystemdBusRef()
         _ACTIVE_RUN_ID = run_id
         _ACTIVE_SUPERVISOR = _TestLifecycleSupervisor(lock_fd, marker, run_id)
         report["gate"] = {"flock_acquired": True, "sticky_marker_created": True,
