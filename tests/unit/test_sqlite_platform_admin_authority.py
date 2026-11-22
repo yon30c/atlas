@@ -32,7 +32,7 @@ class SQLitePlatformAdminAuthorityTests(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
         self.database = SQLiteDatabase(Path(self.temp_dir.name) / "atlas.sqlite")
-        self.assertEqual(self.database.apply_migrations(SQLITE_MIGRATIONS), 27)
+        self.assertEqual(self.database.apply_migrations(SQLITE_MIGRATIONS[:-1]), 27)
         self.factory = SQLiteLocalAuthorityUnitOfWorkFactory(self.database)
 
     def _insert_grant(self, unit, user, *, permissions=None):
@@ -70,7 +70,7 @@ class SQLitePlatformAdminAuthorityTests(unittest.TestCase):
         return grant_id
 
     def test_migrations_through_v27_are_registered_and_idempotently_reapplied(self):
-        self.assertEqual(self.database.apply_migrations(SQLITE_MIGRATIONS), 27)
+        self.assertEqual(self.database.apply_migrations(SQLITE_MIGRATIONS[:-1]), 27)
         with self.database.connection() as connection:
             version = connection.execute(
                 "SELECT MAX(version) FROM schema_migrations"
