@@ -2,7 +2,7 @@
 
 > Prioridad acordada: 16 de noviembre de 2026.
 > Corte de estado: 22 de noviembre de 2026.
- > Rama de trabajo actual: `work/atlas-mvp-runtime` (derivada de `main`).
+> Rama de trabajo actual: `work/atlas-mvp-runtime` (derivada de `main`).
 > Objetivo: convertir la base conversacional existente en un asistente local capaz de completar flujos útiles de principio a fin en un entorno de prueba.
 > Este plan no declara Atlas listo para producción.
 
