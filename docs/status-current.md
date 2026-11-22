@@ -1041,10 +1041,10 @@ workflows ni probes.
 - Preflight: Debian 13, systemd 257, kernel/Python fijados, cgroup v2 unificado, tmpfs en `/run`, SERVICE 2005:2005 y OTHER 2006:2006; valida acceso de ambas identidades al script y al intérprete.
 - D-Bus: `GetUnit`, propiedades tipadas, `Unit.Job`, `Manager.ListJobs`, `ListUnitsByNames`; el orden de object paths de `ListJobs` está corregido. Tras stop, se exige unidad ausente y ningún job; `RefUnit/UnrefUnit` se ejecutan mediante una conexión persistente libsystemd; las observaciones permanecen en busctl.
 - Cgroups: observer FD de directorio y `cgroup.events` abierto antes de stop, identidad dev/inode fijada, lecturas repetibles después de stop; se cierra tras confirmar `populated=0`.
-- QP-01/02: seccomp para fork/clone/vfork/clone3, duplicación, SCM_RIGHTS e io_uring; QP-02 filtra también el auxiliar creado antes del listener. Dos observaciones de cgroup separadas por 50 ms; QUIESCENT solo si identidad/invocación/jobs/MainPID/cgroup/FD-policy coinciden.
+- QP-01/02: seccomp para fork/clone/vfork/clone3, duplicación, pidfd_getfd, SCM_RIGHTS e io_uring; QP-02 filtra también el auxiliar creado antes del listener. Dos observaciones de cgroup separadas por 50 ms; QUIESCENT solo si identidad/invocación/jobs/MainPID/cgroup/FD-policy coinciden.
 - QP-03/04: transición y job stop pendientes con proceso que ignora SIGTERM; ABORT hasta terminar todo el cgroup.
 - QP-05/06/07: separación de ControlGroup; rechazo de Delegate=yes y control Delegate=no con NNP, ProtectControlGroups, capabilities vacías y CAP_SYS_ADMIN/permisos; parser cgroup.events con lecturas parciales y errores.
-- QP-08/09/10: filtros de creación de procesos y FD escape (incluido io_uring), execve con mismo PID y CLOEXEC.
+- QP-08/09/10: filtros de creación de procesos y FD escape (pidfd_getfd e io_uring incluidos), execve con mismo PID y CLOEXEC.
 - QP-11: `_TestLifecycleSupervisor` interno al harness; valida token, flock, segundo actor, caída simulada, marcador sticky y restart bloqueado. La simulación también cierra/reabre la conexión sd-bus que mantiene RefUnit. No es proceso supervisor independiente ni producto Atlas.
 - QP-12: restart directo de root fuera del supervisor; detecta InvocationID nuevo y separa observers cgroup antiguo/sustituto. Root permanece en TCB.
 - QP-13: proceso OTHER recibe listener FD por SCM_RIGHTS; se demuestra que cgroup del servicio vacío no basta mientras el holder conserva el FD. No es socket activation.
