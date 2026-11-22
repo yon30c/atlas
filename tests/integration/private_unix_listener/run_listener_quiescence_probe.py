@@ -2359,8 +2359,9 @@ def run_probe(args: argparse.Namespace) -> dict:
             raise Incomplete("QP-11 fixture cleanup failed")
         record_scenario(report, {
             "id": "QP-11", "status": "PASS",
-            "reason": "competing actor rejected; simulated crash released flock; sticky marker blocked a restart while the fixture remained active; harness then stopped and cleaned its fixture",
+            "reason": "competing actor rejected; simulated crash released flock and sd-bus references; sticky marker persisted; a post-crash supervisor without owner authorization rejected restart while the fixture remained active",
             "observations": {
+                "post_crash_supervisor_owner_authorized": False,
                 "second_actor_rejected": denied_second_actor,
                 "competing_lock_denied": competing_lock_denied,
                 "lock_available_after_crash": True,
