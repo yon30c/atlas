@@ -1,6 +1,6 @@
 # Diseño aprobado: guard persistente de intentos de autenticación
 
-**Estado:** aprobado por el propietario el 2026-11-22; listo para implementación por incrementos.
+**Estado:** diseño aprobado por el propietario el 2026-11-22; implementación inicial publicada en la rama, pendiente de validación local.
 **Rama:** `work/atlas-mvp-runtime`.
 **Alcance:** contrato de reserva, política de throttling, persistencia SQLite y secuencia de `NativeAuthenticationService`. No habilita login operativo ni composición en consola.
 
@@ -73,23 +73,29 @@ Cada operación del guard:
 - confirma o revierte íntegramente;
 - nunca se ejecuta anidada dentro de `SQLiteLocalAuthorityUnitOfWork`.
 
-No se introducen tablas de secretos, sesiones, tokens, IPs ni contenido de credenciales. La retención de fallos se limita a la ventana necesaria; las reservas expiradas se limpian en operaciones posteriores. No se añade un daemon de limpieza.
+No se introducen tablas de secretos, sesiones, tokens, IPs ni contenido de credenciales. Los fallos fuera de ventana dejan de contribuir al cálculo; la limpieza física es oportunista y acotada a 256 filas por operación de inicio. Las reservas expiradas también se limpian en lotes de hasta 256. Los índices dedicados permiten esa recolección sin recorrer todas las filas. No se añade un daemon de limpieza.
 
 ## 6. Pruebas de aceptación que ejecutará el propietario en Debian
 
-- política exacta 1/2/4/8/15, ventana móvil y expiración de demora;
+- política exacta 1/2/4/7/15, ventana móvil, expiración de demora y bloqueo activo hasta `blocked_until`;
 - límite de dos reservas y rechazo de una tercera;
 - finalización de reservas correctas, fallidas, repetidas y expiradas;
 - abandono no cuenta como fallo;
 - éxito reinicia fallos sin borrar otras reservas activas;
 - recuperación de reservas expiradas después de reinicio;
-- concurrencia multiproceso sobre el mismo archivo SQLite;
+- concurrencia multiproceso sobre el mismo archivo SQLite;\n- limpieza oportunista acotada de filas vencidas pertenecientes a cuentas inactivas;
 - ausencia de bloqueo largo durante Argon2id;
 - guard indisponible, commit incierto, error Argon2id y cambio concurrente de credencial nunca producen proof;
 - handle desconocido y contraseña incorrecta conservan respuesta genérica;
 - migración histórica checksum-safe y base ya migrada;
 - regresión de todos los tests existentes del servicio de autenticación.
 
-## 7. Estado de implementación publicado — 2026-11-22\n\nSe publicaron en la rama de trabajo el puerto de reservas, la migración SQLite V28, el adaptador `SQLiteAuthenticationAttemptGuard`, la reestructuración de `NativeAuthenticationService` y pruebas unitarias del servicio y del adaptador. La migración V28 forma parte de `SQLITE_MIGRATIONS`. El servicio resuelve el issuer, reserva, consulta el autenticador, ejecuta Argon2id fuera de UoW y revalida issuer/autenticador/estado/subject/revisión antes de persistir el proof.\n\n**Estado:** implementación publicada, pendiente de revisión estática final y validación local por el propietario. No se han ejecutado pruebas ni compilaciones desde GitHub. No se habilitó composición operativa, login, Workspace ni CAM.\n\n## 8. Límites
+## 7. Estado de implementación publicado — 2026-11-22
+
+Se publicaron en la rama de trabajo el puerto de reservas, la migración SQLite V28, el adaptador `SQLiteAuthenticationAttemptGuard`, la reestructuración de `NativeAuthenticationService` y pruebas unitarias del servicio y del adaptador. La migración V28 forma parte de `SQLITE_MIGRATIONS`. El servicio resuelve el issuer, reserva, consulta el autenticador, ejecuta Argon2id fuera de UoW y revalida issuer/autenticador/estado/subject/revisión antes de persistir el proof.
+
+**Estado:** implementación publicada, pendiente de revisión estática final y validación local por el propietario. No se han ejecutado pruebas ni compilaciones desde GitHub. No se habilitó composición operativa, login, Workspace ni CAM.
+
+## 8. Límites
 
 Este incremento no configura la clave HMAC, no provisiona issuer/owner/Grant, no habilita bootstrap, no conecta consola/Workspace/CAM, no crea endpoints ni sesiones y no modifica el host. El guard no ofrece por sí solo límites por IP/origen; cualquier límite de origen futuro deberá usar datos confiables del servidor/proxy, nunca un valor declarado por el cliente.
