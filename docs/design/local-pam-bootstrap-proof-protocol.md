@@ -32,13 +32,11 @@ La invocación interactiva del helper constituye la solicitud. No hay challenge 
 
 ## 3. Descriptor protegido y datos de invocación
 
-No existe un challenge firmado ni un emisor separado. El helper lee el descriptor desde configuración protegida del host. El caller no suministra descriptor, action, profile, epoch, sujeto, host, timestamp ni IDs aleatorios.
+El helper lee el descriptor desde configuración protegida del host. El caller no suministra descriptor, action, profile, epoch, sujeto, host, timestamps ni IDs aleatorios.
 
-El descriptor protegido contiene exactamente los campos definidos por `local-bootstrap-coordination-architecture.md` §2 y ME-D4O-A §3. La revisión y el digest de esa configuración se fijan antes de la interacción. Los siguientes valores de la prueba se generan dentro del helper después de validar la configuración:
+El descriptor y sus campos canónicos son los definidos por `local-bootstrap-coordination-architecture.md` §2 y ME-D4O-A §3. El helper valida revisión, digest, canonicalización, permisos, sujeto local y host. La configuración define qué bootstrap puede solicitarse, pero no demuestra que siga pendiente; esa condición se comprueba en CAM dentro de la UoW de génesis.
 
-El descriptor protegido es el definido por `local-bootstrap-coordination-architecture.md` §2 y ME-D4O-A §3. El helper valida su canonicalización, revisión, digest, permisos y correspondencia con el host/sujeto configurados. Los identificadores aleatorios y timestamps de la prueba se generan dentro del helper; ningún campo se recibe como autoridad desde el caller.
-
-El helper verifica la integridad, canonicalización, permisos, sujeto local y host de la configuración. No determina si el bootstrap continúa pendiente: esa condición solo puede decidirla el coordinador CAM dentro de la UoW de génesis.
+El helper genera request_id, nonce y proof_id mediante un CSPRNG del sistema operativo. Los timestamps se obtienen de la fuente de reloj del host. Ninguno de esos valores se recibe del caller.
 
 ## 4. Presentación y decisión del operador
 
@@ -72,7 +70,7 @@ Tras validar la configuración protegida, capturar la decisión y completar PAM 
 | config_digest | 32 bytes | SHA-256 de la configuración canónica versionada |
 | proof_id | 128 bits | Aleatorio, único |
 | request_id | 128 bits | Generado por helper; único dentro del dominio |
-| nonce | 256 bits | Coincide con descriptor protegido |
+| nonce | 256 bits | Aleatorio criptográficamente, generado por helper |
 | subject_auth_domain | ID opaco | Host/realm PAM local |
 | subject_name | string acotado | Cuenta configurada (greed actualmente) |
 | subject_uid | entero | UID observado por helper, no elegido por caller |
@@ -80,10 +78,10 @@ Tras validar la configuración protegida, capturar la decisión y completar PAM 
 | host_binding_id | ID opaco | Coincide con host configurado |
 | action | enum cerrado | DOMAIN_BOOTSTRAP_INITIAL |
 | profile | enum cerrado | LOCAL |
-| domain_id | ID canónico | Igual al desafío |
-| authority_epoch | entero | Igual al desafío |
-| descriptor_digest | 32 bytes | Igual al desafío |
-| confirmation_commitment | 32 bytes | Igual al desafío |
+| domain_id | ID canónico | Procede del descriptor protegido |
+| authority_epoch | entero | Procede del descriptor protegido |
+| descriptor_digest | 32 bytes | Digest del descriptor canónico protegido |
+| confirmation_commitment | 32 bytes | Compromiso de los términos mostrados y confirmados |
 | pam_service | constante | atlas-bootstrap |
 | auth_time | entero UTC | Momento de reautenticación |
 | issued_at | entero UTC | Momento de emisión |
