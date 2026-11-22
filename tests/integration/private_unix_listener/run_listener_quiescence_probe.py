@@ -224,7 +224,7 @@ def wait_unit_absent(name: str, deadline: float) -> None:
 def git_commit() -> dict:
     repository = Path(__file__).resolve().parents[3]
     git = ["git", "-c", f"safe.directory={repository}"]
-    environment = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"}
+    environment = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C", "GIT_OPTIONAL_LOCKS": "0"}
     branch_result = subprocess.run(
         [*git, "branch", "--show-current"], cwd=repository,
         stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
