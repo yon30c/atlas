@@ -2404,7 +2404,20 @@ def run_probe(args: argparse.Namespace) -> dict:
         # /run/atlas-qp parent remain for audit and future invocations.
         if persisted and report["cleanup"]["safe_to_release_gate"] and marker_created and marker is not None:
             try:
-                os.unlink(marker)
+                base_fd = os.open(BASE, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
+                try:
+                    base_info = os.fstat(base_fd)
+                    if (
+                        not stat.S_ISDIR(base_info.st_mode)
+                        or base_info.st_uid != 0 or base_info.st_gid != 0
+                        or stat.S_IMODE(base_info.st_mode) != 0o711
+                    ):
+                        raise Incomplete("maintenance base directory identity changed before marker removal")
+                    if marker_identity is None:
+                        raise Incomplete("sticky marker identity evidence is unavailable")
+                    unlink_verified_regular_file(base_fd, marker.name, marker_identity, 0, 0)
+                finally:
+                    os.close(base_fd)
                 report["gate"]["marker_removed_after_cleanup"] = True
                 report["overall"] = (
                     "PASS" if len(statuses) == 15 and all(value == "PASS" for value in statuses)
@@ -2419,10 +2432,11 @@ def run_probe(args: argparse.Namespace) -> dict:
                 report["gate"]["marker_removal_error"] = f"{type(exc).__name__}: {exc}"
                 try:
                     if not marker.exists():
-                        _safe_json_file(marker, {
+                        marker_identity = _safe_json_file(marker, {
                             "schema": SCHEMA, "run_id": run_id,
                             "phase": "report-finalization-failed",
                         }, 4096)
+                        report["gate"]["marker_identity"] = marker_identity
                         report["gate"]["marker_recreated_after_release_failure"] = True
                     _rewrite_json_file(report_path, report, MAX_REPORT)
                 except Exception as recovery_exc:
