@@ -1034,9 +1034,12 @@ def _stop_and_cleanup(name: str, initial: dict, socket_path: Path | None, ready_
                 os.unlink(ready_path.name, dir_fd=run_dir_fd)
             except FileNotFoundError:
                 pass
-        manager_call(busctl_json, "call", BUS, MANAGER, MANAGER_IFACE, "UnrefUnit", "s", name)
+        fixture_record = _ACTIVE_FIXTURES.get(name, {})
+        if fixture_record.get("unit_ref"):
+            manager_call(busctl_json, "call", BUS, MANAGER, MANAGER_IFACE, "UnrefUnit", "s", name)
+            fixture_record["unit_ref"] = False
+            cleanup["unit_unref_confirmed"] = True
         wait_unit_absent(name, time.monotonic() + 3.0)
-        cleanup["unit_unref_confirmed"] = True
         cleanup["unit_unloaded"] = True
         if (
             cleanup["unit_inactive"] and cleanup["cgroup_empty"]
