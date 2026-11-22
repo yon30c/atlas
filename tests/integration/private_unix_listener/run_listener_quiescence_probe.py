@@ -1656,6 +1656,8 @@ def run_probe(args: argparse.Namespace) -> dict:
         if (
             ready01_data.get("cap_eff") != 0
             or ready01_data.get("no_new_privs") != 1
+            or ready01_data.get("seccomp") != 2
+            or ready01_data.get("seccomp_filters", 0) < 1
             or ready01_data.get("cap_sys_admin") is not False
             or ready01_data.get("cgroup_dir_write_access") is not False
         ):
@@ -1669,6 +1671,8 @@ def run_probe(args: argparse.Namespace) -> dict:
                                                      "capability_evidence": {
                                                          "cap_eff": ready01_data["cap_eff"],
                                                          "no_new_privs": ready01_data["no_new_privs"],
+                                                         "seccomp": ready01_data["seccomp"],
+                                                         "seccomp_filters": ready01_data["seccomp_filters"],
                                                          "cap_sys_admin": ready01_data["cap_sys_admin"],
                                                          "cgroup_dir_write_access": ready01_data["cgroup_dir_write_access"],
                                                      },
@@ -1712,6 +1716,8 @@ def run_probe(args: argparse.Namespace) -> dict:
         if (
             ready2_data.get("cap_eff") != 0
             or ready2_data.get("no_new_privs") != 1
+            or ready2_data.get("seccomp") != 2
+            or ready2_data.get("seccomp_filters", 0) < 1
             or ready2_data.get("cap_sys_admin") is not False
             or ready2_data.get("cgroup_dir_write_access") is not False
         ):
@@ -1727,6 +1733,8 @@ def run_probe(args: argparse.Namespace) -> dict:
                                                      "capability_evidence": {
                                                          "cap_eff": ready2_data["cap_eff"],
                                                          "no_new_privs": ready2_data["no_new_privs"],
+                                                         "seccomp": ready2_data["seccomp"],
+                                                         "seccomp_filters": ready2_data["seccomp_filters"],
                                                          "cap_sys_admin": ready2_data["cap_sys_admin"],
                                                          "cgroup_dir_write_access": ready2_data["cgroup_dir_write_access"],
                                                      },
