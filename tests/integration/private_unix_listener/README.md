@@ -1090,3 +1090,68 @@ ni identifica la causa. Próximo diagnóstico: obtener ambas salidas
 completas mientras los sockets sigan abiertos y registrar
 /proc/self/ns/net del proceso creador. No relajar matching, no inferir
 stale y no ejecutar unlink. A-IPC-04 sigue no validado y A-THREAT-05 abierta.
+
+
+## A-IPC-05 — listener quiescence runner (pending owner validation)
+
+The experimental runner is:
+
+`tests/integration/private_unix_listener/run_listener_quiescence_probe.py`
+
+It implements QP-01..QP-15 for the approved listener-quiescence/1 design
+baseline. It is not a production service, stale-recovery tool, or authorization
+to remove real socket pathnames.
+
+### Preconditions
+
+- Run only inside the disposable VM `Atlas-VM-test`; never run on `greed`.
+- Check out branch `experiment/a-ipc-01-private-unix-listener-probe` and
+  record its exact HEAD before execution.
+- Run as root with Python 3.13.5, Debian 13, systemd 257.13 and the expected
+  kernel `6.12.117+deb13-amd64`.
+- The reserved fixture identities must already exist:
+  SERVICE UID/GID 2005:2005 and OTHER UID/GID 2006:2006. The runner does not
+  create users or groups.
+- `libseccomp`, `libsystemd`, `busctl`, `systemd-run` and `systemctl`
+  must already be installed. The preflight does not install packages or alter
+  host configuration.
+- The owner must explicitly confirm the VM is disposable. The command-line
+  flag is an acknowledgement; the runner cannot prove that the host is a VM.
+
+### Execution
+
+From the repository root, on the disposable VM only:
+
+```sh
+sudo /usr/bin/python3.13 tests/integration/private_unix_listener/run_listener_quiescence_probe.py --confirm-disposable-vm
+```
+
+The runner creates only uniquely named transient `.service` units and private
+fixtures below `/run/atlas-qp`. It does not create persistent unit files,
+sockets, timers, users, groups, or production Atlas state. The parent directory
+and maintenance lock file remain for audit. A successful cleanup removes the
+run-specific sandbox and sticky marker; the JSON report remains under
+`/run/atlas-qp/<run-id>.json`.
+
+Return codes: 0 = all 15 scenarios PASS and cleanup confirmed; 1 = FAIL;
+2 = INCOMPLETE. An INCOMPLETE result may intentionally retain the sticky
+maintenance marker and sandbox because cleanup or evidence is uncertain.
+**Do not manually delete the marker, sandbox, socket, or transient unit.**
+Preserve the complete JSON report and terminal output for review before any
+recovery action.
+
+### Scope and limits
+
+- QP-04 issues a real non-blocking restart against a no-pathname fixture and
+  checks the pending restart job and replacement invocation.
+- QP-11 is an in-process supervisor test double with simulated coordinator
+  failure; it is not an independent or production supervisor.
+- QP-12 intentionally demonstrates that root can bypass the test gate.
+- QP-13 transfers a listener FD to a controlled OTHER process using
+  `SCM_RIGHTS`; it is not socket activation.
+- A PASS is limited to the tested scenarios and environment. It does not close
+  A-THREAT-05, authorize pathname unlink, stale recovery, automatic cleanup,
+  persistent listener, socket activation, or deployment.
+
+The assistant has not executed this runner, tests, builds, workflows, or VM
+probes. Validation must be performed by the owner on `Atlas-VM-test` only.
