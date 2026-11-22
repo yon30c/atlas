@@ -9,7 +9,7 @@ La clave de `HmacVerifiedIdentityContextAttestor` se carga desde una credencial 
 El adaptador `SystemdCredentialVerifiedIdentityContextAttestor`:
 
 - recibe explícitamente el directorio de credenciales y un nombre de credencial simple;
-- abre el directorio con `O_DIRECTORY | O_NOFOLLOW` y el archivo relativo con `O_NOFOLLOW`;
+- recorre desde `/` cada componente del directorio con `O_DIRECTORY | O_NOFOLLOW` (rechazando symlinks y `..`) y abre el archivo relativo con `O_NOFOLLOW`;
 - exige un archivo regular con exactamente 32 bytes;
 - falla durante la composición si falta, es un symlink, no es regular o tiene longitud incorrecta;
 - no tiene fallback, generación, rotación ni lectura de rutas arbitrarias;
