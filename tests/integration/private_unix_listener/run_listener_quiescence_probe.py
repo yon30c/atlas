@@ -386,6 +386,7 @@ def open_cgroup_observer(mount_root: Path, control_group: str) -> dict:
     except Exception:
         os.close(dir_fd)
         raise
+    events_info = os.fstat(events_fd)
     identity = {
         "control_group": control_group,
         "st_dev": directory_info.st_dev,
@@ -394,13 +395,27 @@ def open_cgroup_observer(mount_root: Path, control_group: str) -> dict:
     observer = {
         "dir_fd": dir_fd, "events_fd": events_fd,
         "path": str(directory / "cgroup.events"), "identity": identity,
+        "events_identity": (events_info.st_dev, events_info.st_ino),
     }
     _OPEN_CGROUP_OBSERVERS.append(observer)
     return observer
 
 
+def cgroup_observer_identity(observer: dict) -> dict:
+    info = os.fstat(observer["dir_fd"])
+    if not stat.S_ISDIR(info.st_mode):
+        raise Incomplete("pinned cgroup directory descriptor changed type")
+    return {
+        "control_group": observer["identity"]["control_group"],
+        "st_dev": info.st_dev, "st_ino": info.st_ino,
+    }
+
+
 def read_cgroup_observer(observer: dict) -> dict:
     try:
+        events_info = os.fstat(observer["events_fd"])
+        if (events_info.st_dev, events_info.st_ino) != observer["events_identity"]:
+            raise Incomplete("pinned cgroup.events descriptor identity changed")
         os.lseek(observer["events_fd"], 0, os.SEEK_SET)
         raw = read_bounded_chunks(
             lambda size: os.read(observer["events_fd"], size), MAX_CGROUP
@@ -410,7 +425,7 @@ def read_cgroup_observer(observer: dict) -> dict:
     parsed = _parse_cgroup_events_bytes(raw)
     return {
         "path": observer["path"], "raw": raw.decode("ascii"),
-        "values": parsed, "identity": dict(observer["identity"]),
+        "values": parsed, "identity": cgroup_observer_identity(observer),
     }
 
 
@@ -1385,7 +1400,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["unit_identity"][name] = initial
         update_gate_marker(marker, run_id, name, initial, "unit-started")
         observer01 = _ACTIVE_FIXTURES[name]["cgroup_observer"]
-        before_identity = dict(observer01["identity"])
+        before_identity = cgroup_observer_identity(observer01)
         before = read_cgroup_observer(observer01)
         report["snapshots"].append({"scenario": "QP-01", "phase": "before-stop",
                                     "monotonic_ns": mono(), "unit": initial, "cgroup": before})
@@ -1395,7 +1410,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         time.sleep(0.05)
         stable = observe_stopped_unit(name, initial["InvocationID"], initial["ControlGroup"])
         after2 = read_cgroup_observer(observer01)
-        after_identity = dict(observer01["identity"])
+        after_identity = cgroup_observer_identity(observer01)
         require_cgroup_identity(before_identity, after_identity)
         quiescent = (
             stopped["ActiveState"] == "inactive" and stopped["Job"][0] == 0
@@ -1431,7 +1446,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["unit_identity"][name2] = initial2
         update_gate_marker(marker, run_id, name2, initial2, "unit-started")
         observer02 = _ACTIVE_FIXTURES[name2]["cgroup_observer"]
-        before_identity2 = dict(observer02["identity"])
+        before_identity2 = cgroup_observer_identity(observer02)
         before2 = read_cgroup_observer(observer02)
         if before2["values"]["populated"] != 1:
             raise Incomplete("QP-02 did not observe the helper in a populated service cgroup")
@@ -1441,7 +1456,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         time.sleep(0.05)
         stable2 = observe_stopped_unit(name2, initial2["InvocationID"], initial2["ControlGroup"])
         after2 = read_cgroup_observer(observer02)
-        after_identity2 = dict(observer02["identity"])
+        after_identity2 = cgroup_observer_identity(observer02)
         require_cgroup_identity(before_identity2, after_identity2)
         passed2 = (
             stopped2["ActiveState"] == "inactive"
