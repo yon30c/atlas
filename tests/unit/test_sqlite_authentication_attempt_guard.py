@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+import multiprocessing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import tempfile
@@ -14,6 +15,23 @@ from atlas.ports.authentication_attempt_guard import (
     AuthenticationAttemptDenied,
     AuthenticationAttemptReservationError,
 )
+
+
+
+def _reserve_in_separate_process(database_path, barrier, release, results, at):
+    database = SQLiteDatabase(database_path)
+    guard = SQLiteAuthenticationAttemptGuard(database)
+    barrier.wait(timeout=15)
+    reservation = None
+    try:
+        reservation = guard.begin_attempt("issuer-process", "atlas.owner", at=at)
+        results.put(True)
+    except AuthenticationAttemptDenied:
+        results.put(False)
+    finally:
+        release.wait(timeout=15)
+        if reservation is not None:
+            guard.abandon_attempt(reservation)
 
 
 class SQLiteAuthenticationAttemptGuardTests(unittest.TestCase):
@@ -68,6 +86,32 @@ class SQLiteAuthenticationAttemptGuardTests(unittest.TestCase):
         self.assertEqual(len(self._rows("native_authentication_attempt_reservations")), 2)
         for reservation in accepted:
             self.guard.abandon_attempt(reservation)
+        self.assertEqual(self._rows("native_authentication_attempt_reservations"), [])
+
+
+    def test_two_processes_share_the_same_concurrency_limit(self):
+        context = multiprocessing.get_context("spawn")
+        barrier = context.Barrier(4)
+        release = context.Event()
+        results = context.Queue()
+        processes = [
+            context.Process(
+                target=_reserve_in_separate_process,
+                args=(str(self.database.path), barrier, release, results, self.now),
+            )
+            for _ in range(3)
+        ]
+        for process in processes:
+            process.start()
+
+        barrier.wait(timeout=15)
+        accepted = [results.get(timeout=15) for _ in processes]
+        release.set()
+        for process in processes:
+            process.join(timeout=15)
+            self.assertEqual(process.exitcode, 0)
+
+        self.assertEqual(sum(accepted), 2)
         self.assertEqual(self._rows("native_authentication_attempt_reservations"), [])
 
     def test_backoff_is_exactly_one_two_four_seven_and_fifteen_minutes(self):
