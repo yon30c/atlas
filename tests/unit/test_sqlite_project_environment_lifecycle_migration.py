@@ -22,7 +22,7 @@ class SQLiteProjectEnvironmentLifecycleMigrationTests(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
         self.database = SQLiteDatabase(Path(self.temp_dir.name) / "authority.sqlite")
-        self.database.apply_migrations(SQLITE_MIGRATIONS[:-1])
+        self.database.apply_migrations(SQLITE_MIGRATIONS[:-2])
         self.identity = SQLiteIdentityAuthority(self.database).create_user()
         projects = SQLiteProjectEnvironmentRepository(self.database)
         projects.create_project(ProjectMetadata(ProjectId("atlas"), "active", 1))
