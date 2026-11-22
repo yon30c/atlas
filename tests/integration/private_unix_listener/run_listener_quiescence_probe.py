@@ -1175,6 +1175,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         )
         report["unit_identity"][name] = initial
         update_gate_marker(marker, run_id, name, initial, "unit-started")
+        before_identity = cgroup_identity(mount, initial["ControlGroup"])
         before = cgroup_events(mount, initial["ControlGroup"])
         report["snapshots"].append({"scenario": "QP-01", "phase": "before-stop",
                                     "monotonic_ns": mono(), "unit": initial, "cgroup": before})
@@ -1183,8 +1184,11 @@ def run_probe(args: argparse.Namespace) -> dict:
         after1 = cgroup_events(mount, initial["ControlGroup"])
         after2 = cgroup_events(mount, initial["ControlGroup"])
         stable = unit_snapshot(name)
+        after_identity = cgroup_identity(mount, stable["ControlGroup"])
+        require_cgroup_identity(before_identity, after_identity)
         quiescent = (
             stopped["ActiveState"] == "inactive" and stopped["Job"][0] == 0
+            and stable["MainPID"] == 0 and stopped["MainPID"] == 0
             and after1["values"]["populated"] == 0 and after2["values"]["populated"] == 0
             and stable["InvocationID"] == initial["InvocationID"]
             and stable["ControlGroup"] == initial["ControlGroup"]
@@ -1202,7 +1206,8 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["scenarios"].append({"id": "QP-01", "status": "PASS",
                                     "decision": "QUIESCENT",
                                     "reason": "listener closed by service; fork/duplication/SCM_RIGHTS paths denied; manager inactive and two correlated cgroup snapshots populated=0",
-                                    "observations": {"fd_policy": policy01, "stable_invocation": stable["InvocationID"] == initial["InvocationID"]}})
+                                    "observations": {"fd_policy": policy01, "stable_invocation": stable["InvocationID"] == initial["InvocationID"],
+                                                     "cgroup_identity": before_identity}})
         if not cleanup["endpoint_removed"] or not cleanup["cgroup_empty"]:
             raise Incomplete("QP-01 cleanup was not confirmed")
 
@@ -1213,6 +1218,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         )
         report["unit_identity"][name2] = initial2
         update_gate_marker(marker, run_id, name2, initial2, "unit-started")
+        before_identity2 = cgroup_identity(mount, initial2["ControlGroup"])
         before2 = cgroup_events(mount, initial2["ControlGroup"])
         if before2["values"]["populated"] != 1:
             raise Incomplete("QP-02 did not observe the helper in a populated service cgroup")
@@ -1220,8 +1226,11 @@ def run_probe(args: argparse.Namespace) -> dict:
         stopped2 = wait_inactive(name2, time.monotonic() + STOP_TIMEOUT + 3)
         after2 = cgroup_events(mount, initial2["ControlGroup"])
         stable2 = unit_snapshot(name2)
+        after_identity2 = cgroup_identity(mount, stable2["ControlGroup"])
+        require_cgroup_identity(before_identity2, after_identity2)
         passed2 = (
             stopped2["ActiveState"] == "inactive" and after2["values"]["populated"] == 0
+            and stopped2["MainPID"] == 0 and stable2["MainPID"] == 0
             and stable2["InvocationID"] == initial2["InvocationID"]
             and stable2["Job"][0] == 0
         )
@@ -1234,7 +1243,8 @@ def run_probe(args: argparse.Namespace) -> dict:
                                     "decision": "QUIESCENT",
                                     "reason": "pre-listener child was contained in the service cgroup; post-listener fork/duplication/SCM_RIGHTS paths denied; stop emptied the correlated cgroup",
                                     "observations": {"fd_policy": policy02, "helper_preexisted_listener": True,
-                                                     "invocation_unchanged": stable2["InvocationID"] == initial2["InvocationID"]}})
+                                                     "invocation_unchanged": stable2["InvocationID"] == initial2["InvocationID"],
+                                                     "cgroup_identity": before_identity2}})
 
         # QP-03: ignored SIGTERM must prevent a premature quiescent result.
         name3 = f"atlas-qp-{secrets.token_hex(6)}.service"
