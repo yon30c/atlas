@@ -222,8 +222,10 @@ def wait_unit_absent(name: str, deadline: float) -> None:
 
 
 def git_commit() -> str:
+    repository = Path(__file__).resolve().parents[3]
     result = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parents[3],
+        ["git", "-c", f"safe.directory={repository}", "rev-parse", "HEAD"],
+        cwd=repository,
         stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         timeout=2.0, check=False,
         env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"},
