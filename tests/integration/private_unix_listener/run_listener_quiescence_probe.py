@@ -13,12 +13,10 @@ import array
 import ctypes.util
 import errno
 import fcntl
-import grp
 import json
 import os
 from pathlib import Path
 import platform
-import pwd
 import secrets
 import selectors
 import signal
@@ -1237,20 +1235,15 @@ def preflight() -> dict:
         raise Incomplete("libseccomp.so.2 is unavailable")
     if not systemd_library:
         raise Incomplete("libsystemd.so.0 is unavailable for persistent RefUnit references")
-    for uid, gid, label in (
+    fixture_identities = (
         (SERVICE_UID, SERVICE_GID, "SERVICE"),
         (OTHER_UID, OTHER_GID, "OTHER"),
-    ):
-        try:
-            account = pwd.getpwuid(uid)
-            group = grp.getgrgid(gid)
-        except KeyError as exc:
-            raise Incomplete(f"{label} fixture UID/GID is not provisioned") from exc
-        if account.pw_gid != gid:
-            raise Incomplete(f"{label} account primary GID differs from fixture GID")
-        supplementary_groups = sorted(set(os.getgrouplist(account.pw_name, gid)))
-        if supplementary_groups != [gid]:
-            raise Incomplete(f"{label} fixture identity has supplementary groups")
+    )
+    if len({uid for uid, _gid, _label in fixture_identities}) != len(fixture_identities):
+        raise Incomplete("fixture UIDs must be distinct")
+    if len({gid for _uid, gid, _label in fixture_identities}) != len(fixture_identities):
+        raise Incomplete("fixture GIDs must be distinct")
+    for uid, gid, _label in fixture_identities:
         if uid == 0 or gid == 0:
             raise Incomplete("fixture identities must be non-root")
     runner_path = Path(__file__).resolve()
@@ -1502,10 +1495,8 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
         raise Incomplete("systemd Delegate property differs from requested fixture")
     if not delegate:
         require_no_delegation(snap)
-    expected_users = {pwd.getpwuid(uid).pw_name, str(uid)}
-    expected_groups = {grp.getgrgid(gid).gr_name, str(gid)}
     if (
-        snap["User"] not in expected_users or snap["Group"] not in expected_groups
+        snap["User"] != str(uid) or snap["Group"] != str(gid)
         or snap["UID"] != uid or snap["GID"] != gid
     ):
         raise Incomplete("systemd fixture User/Group/UID/GID identity differs from requested identity")
@@ -2133,8 +2124,8 @@ def run_probe(args: argparse.Namespace) -> dict:
         ready6good_data = read_bounded_json_file(ready6good, expected_uid=SERVICE_UID, expected_gid=SERVICE_GID)
         if (
             initial6good["Delegate"] is not False
-            or initial6good["User"] != pwd.getpwuid(SERVICE_UID).pw_name
-            or initial6good["Group"] != grp.getgrgid(SERVICE_GID).gr_name
+            or initial6good["User"] != str(SERVICE_UID)
+            or initial6good["Group"] != str(SERVICE_GID)
             or initial6good["DelegateControllers"]
             or initial6good["DelegateSubgroup"] != ""
             or initial6good["UID"] != SERVICE_UID or initial6good["GID"] != SERVICE_GID
@@ -2576,8 +2567,8 @@ def run_probe(args: argparse.Namespace) -> dict:
                         if (
                             initial_fixture["Id"] != fixture_name
                             or not initial_fixture["Transient"]
-                            or initial_fixture["User"] != pwd.getpwuid(fixture["uid"]).pw_name
-                            or initial_fixture["Group"] != grp.getgrgid(fixture["gid"]).gr_name
+                            or initial_fixture["User"] != str(fixture["uid"])
+                            or initial_fixture["Group"] != str(fixture["gid"])
                             or initial_fixture["UID"] != fixture["uid"]
                             or initial_fixture["GID"] != fixture["gid"]
                             or fixture_name not in initial_fixture["ControlGroup"]
