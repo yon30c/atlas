@@ -564,9 +564,9 @@ class PersistentSystemdBusRef:
         if result < 0:
             raise Incomplete(f"cannot create D-Bus {method} message: {result}")
         try:
-            value = ctypes.c_char_p(name.encode("ascii"))
+            value = ctypes.create_string_buffer(name.encode("ascii"))
             result = self.lib.sd_bus_message_append_basic(
-                message, b"s", ctypes.byref(value)
+                message, b"s", ctypes.cast(value, ctypes.c_void_p)
             )
             if result < 0:
                 raise Incomplete(f"cannot append unit name to {method}: {result}")
