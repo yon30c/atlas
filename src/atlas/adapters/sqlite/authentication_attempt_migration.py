@@ -22,6 +22,9 @@ CORE_SCHEMA_V28 = SQLiteMigration(
     CREATE INDEX native_authentication_attempt_reservations_by_account
         ON native_authentication_attempt_reservations(account_digest, expires_at);
 
+    CREATE INDEX native_authentication_attempt_reservations_by_expiry
+        ON native_authentication_attempt_reservations(expires_at);
+
     CREATE TABLE native_authentication_attempt_failures (
         failure_id TEXT PRIMARY KEY CHECK (
             length(failure_id) = 36
@@ -37,5 +40,8 @@ CORE_SCHEMA_V28 = SQLiteMigration(
 
     CREATE INDEX native_authentication_attempt_failures_by_account_window
         ON native_authentication_attempt_failures(account_digest, occurred_at, blocked_until);
+
+    CREATE INDEX native_authentication_attempt_failures_by_retention
+        ON native_authentication_attempt_failures(occurred_at, blocked_until);
     """,
 )
