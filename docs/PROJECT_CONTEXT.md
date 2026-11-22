@@ -553,7 +553,7 @@ La rama de trabajo actual es `work/atlas-mvp-runtime`. El último estado de GitH
 - Política aprobada: ventana móvil de 15 minutos; demoras 1/2/4/7/15 minutos según fallos dentro de la ventana; máximo de dos reservas simultáneas por cuenta; TTL de reserva 120 segundos; éxito confirmado reinicia fallos; abandono/expiración no cuenta como fallo.
 - El guard compartirá el archivo SQLite canónico, pero cada transición tendrá su propia transacción breve `BEGIN IMMEDIATE`, fuera de la UoW de autenticación. Argon2id se ejecutará fuera de transacciones SQLite de escritura.
 - El servicio deberá volver a leer issuer, autenticador, estado y `credential_revision` después del hash y antes de crear el proof. Si el guard no confirma el resultado, no se devuelve proof.
-- **Estado de implementación:** puerto, adaptador SQLite, migración V28, reestructuración del servicio y pruebas unitarias están publicados en la rama; la validación local sigue pendiente.
+- **Estado de implementación:** puerto, adaptador SQLite, migración V28, reestructuración del servicio y pruebas unitarias están publicados en la rama. El propietario validó localmente 21 pruebas focalizadas y compileall sin errores; la suite completa de la rama sigue pendiente.
 - No habilitar login operativo ni conectar la consola sintética con CAM/Workspace. La clave HMAC sigue necesitando provisión secreta confiable; bootstrap sigue bloqueado por la decisión sobre el perfil CAM del Grant inicial.
 - El trabajo se mantiene en la rama MVP; no modificar `main`, no ejecutar pruebas desde GitHub y no tocar la DB/host reales.
 
@@ -581,3 +581,28 @@ Se corrigieron el registro/exportación de V28, la limpieza durable de reservas 
 **No habilitado:** composición de login, endpoints, bootstrap, Workspace, CAM ni consola autenticada. La provisión de clave HMAC y la decisión sobre el perfil CAM del Grant inicial siguen pendientes y separadas.
 
 **Próximo paso:** revisión estática de todas las instanciaciones de `NativeAuthenticationService`, dependencias/imports y coherencia de tests; después entregar comandos de validación focalizada al propietario. No modificar `main`.
+
+
+## 11. Validación focalizada del guard — 2026-11-22
+
+El propietario ejecutó en Debian 13, VM `Atlas-VM-test`, checkout `/opt/atlas-dev`:
+
+```text
+Ran 21 tests in 2.968s
+
+OK
+```
+
+Correspondiente a:
+
+```bash
+.venv/bin/python -m unittest -v \
+  tests.unit.test_native_authentication_service \
+  tests.unit.test_sqlite_authentication_attempt_guard
+```
+
+También ejecutó `.venv/bin/python -m compileall -q src tests` sin errores.
+
+**Estado actualizado:** el incremento focalizado del guard está validado localmente. No confundirlo con validación de la suite completa, migración de una base persistente de producción o login operativo. No se habilitan login, bootstrap, Workspace, CAM ni composición autenticada. La provisión HMAC y el perfil CAM del Grant inicial siguen bloqueados.
+
+**Siguiente paso:** solicitar y revisar el resultado de la suite unitaria completa en Debian. Mantener la metodología: cambios directamente en GitHub sobre `work/atlas-mvp-runtime`, sin ejecutar pruebas desde GitHub y sin modificar `main`.
