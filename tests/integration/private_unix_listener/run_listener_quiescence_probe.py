@@ -1287,7 +1287,7 @@ def _rewrite_json_file(path: Path, value: dict, limit: int,
     raw = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
     if len(raw) > limit:
         raise Incomplete(f"JSON evidence exceeds {limit} bytes")
-    fd = os.open(path, os.O_WRONLY | os.O_TRUNC | os.O_CLOEXEC | os.O_NOFOLLOW)
+    fd = os.open(path, os.O_WRONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
     try:
         info = os.fstat(fd)
         actual_identity = {
@@ -1302,6 +1302,8 @@ def _rewrite_json_file(path: Path, value: dict, limit: int,
             or (expected_identity is not None and actual_identity != expected_identity)
         ):
             raise Incomplete("JSON file identity/mode changed before rewrite")
+        os.ftruncate(fd, 0)
+        os.lseek(fd, 0, os.SEEK_SET)
         view = memoryview(raw)
         while view:
             written = os.write(fd, view)
