@@ -224,3 +224,12 @@ Se publicó `docs/contracts/local-authority-admin-listener-quiescence-1.md` (lis
 El cgroup vacío solo acredita ausencia de procesos dentro de ese cgroup; no prueba ausencia de FD fuera de él si el descriptor pudo transferirse. Por ello las invariantes de no transferencia y no escape son condiciones obligatorias. El contrato excluye systemd socket activation: el system manager podría retener el listener FD fuera del cgroup del servicio, y el incidente de colisión filesystem de systemd 257.13 sigue suspendiendo esa alternativa.
 
 **Estado:** borrador para revisión del propietario, no aprobado ni validado. No crear unidades/cgroups ni modificar el host. A-THREAT-05 sigue abierta hasta aprobación, probe aislado QP-01..QP-15, evidencia de lifecycle/FD y autorización humana real.
+
+
+## Quiescencia del servicio y validación QP — 2026-11-21
+
+El propietario aprobó R1–R7 del contrato `docs/contracts/local-authority-admin-listener-quiescence-1.md` como baseline de diseño. La aprobación no autoriza todavía crear unidades, implementar listener ni realizar operaciones de mantenimiento.
+
+El plan experimental se desarrolla en `docs/design/local-authority-admin-listener-quiescence-probe.md`. Define QP-01..QP-15 para comprobar unidad/cgroup exclusivos, parada completa, ausencia de jobs concurrentes, puerta root-managed, identidad estable de invocación y política de propiedad del listener FD. El harness futuro se limitará a fixtures y unidades transitorias en una VM desechable; no ejecutará unlink del endpoint ni usará socket activation.
+
+**Estado:** diseño documental publicado; runner no implementado y escenarios no ejecutados. Antes de implementar deben resolverse los puntos de diseño de la sección 9 del plan. A-THREAT-05 permanece abierta; nunca ejecutar en `greed`.
