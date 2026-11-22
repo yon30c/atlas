@@ -102,6 +102,8 @@ class GrantManagementService:
         verified_identity: VerifiedIdentityContext | None = None,
     ) -> Grant:
         """Emite un Grant tras revalidar al propietario en la UoW de escritura."""
+        if not isinstance(context, OperationContext):
+            raise ContractError("context debe ser OperationContext")
         self._validate_utc(now)
         if not isinstance(grant, Grant):
             raise ContractError("grant debe ser Grant")
