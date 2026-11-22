@@ -17,7 +17,7 @@ from atlas.ports.authentication_attempt_guard import (
 _WINDOW = timedelta(minutes=15)
 _RESERVATION_TTL = timedelta(seconds=120)
 _MAX_CONCURRENT = 2
-_BACKOFF_MINUTES = (1, 2, 4, 8, 15)
+_BACKOFF_MINUTES = (1, 2, 4, 7, 15)
 _DOMAIN = b"atlas/native-authentication-attempt/v1\x00"
 
 
@@ -51,12 +51,15 @@ class SQLiteAuthenticationAttemptGuard:
             raise ContractError("issuer_id debe ser no vacío")
         if not isinstance(login_handle, str) or not login_handle:
             raise ContractError("login_handle debe ser no vacío")
-        material = (
-            _DOMAIN
-            + issuer_id.encode("utf-8")
-            + b"\x00"
-            + login_handle.encode("ascii")
-        )
+        try:
+            material = (
+                _DOMAIN
+                + issuer_id.encode("utf-8")
+                + b"\x00"
+                + login_handle.encode("ascii")
+            )
+        except UnicodeEncodeError as exc:
+            raise ContractError("login_handle debe ser ASCII normalizado") from exc
         return hashlib.sha256(material).hexdigest()
 
     @staticmethod
@@ -74,6 +77,7 @@ class SQLiteAuthenticationAttemptGuard:
         account = self._account_digest(issuer_id, login_handle)
         reservation_id = str(uuid4())
         expires_at = now + _RESERVATION_TTL
+        denied = False
 
         with self._database.connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -96,9 +100,6 @@ class SQLiteAuthenticationAttemptGuard:
                     """,
                     (account, cutoff_text),
                 ).fetchone()["blocked_until"]
-                if blocked is not None and blocked > now_text:
-                    raise AuthenticationAttemptDenied()
-
                 active = connection.execute(
                     """
                     SELECT COUNT(*) AS total
@@ -107,22 +108,25 @@ class SQLiteAuthenticationAttemptGuard:
                     """,
                     (account, now_text),
                 ).fetchone()["total"]
-                if active >= _MAX_CONCURRENT:
-                    raise AuthenticationAttemptDenied()
-
-                connection.execute(
-                    """
-                    INSERT INTO native_authentication_attempt_reservations(
-                        reservation_id, account_digest, expires_at
-                    ) VALUES (?, ?, ?)
-                    """,
-                    (reservation_id, account, _timestamp(expires_at, "expires_at")),
+                denied = (blocked is not None and blocked > now_text) or (
+                    active >= _MAX_CONCURRENT
                 )
+                if not denied:
+                    connection.execute(
+                        """
+                        INSERT INTO native_authentication_attempt_reservations(
+                            reservation_id, account_digest, expires_at
+                        ) VALUES (?, ?, ?)
+                        """,
+                        (reservation_id, account, _timestamp(expires_at, "expires_at")),
+                    )
                 connection.commit()
             except BaseException:
                 connection.rollback()
                 raise
 
+        if denied:
+            raise AuthenticationAttemptDenied()
         return AuthenticationAttemptReservation(
             reservation_id=reservation_id,
             expires_at=expires_at,
@@ -138,6 +142,7 @@ class SQLiteAuthenticationAttemptGuard:
         now = _utc(at, "at")
         now_text = _timestamp(now, "at")
         reservation_id = self._reservation_id(reservation)
+        expired_or_missing = False
 
         with self._database.connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -150,64 +155,73 @@ class SQLiteAuthenticationAttemptGuard:
                     """,
                     (reservation_id,),
                 ).fetchone()
-                if row is None or row["expires_at"] <= now_text:
+                if row is None:
+                    expired_or_missing = True
+                elif row["expires_at"] <= now_text:
                     connection.execute(
                         "DELETE FROM native_authentication_attempt_reservations "
                         "WHERE reservation_id = ?",
                         (reservation_id,),
                     )
-                    raise AuthenticationAttemptReservationError(
-                        "reserva ausente, expirada o ya consumida"
-                    )
-
-                account = row["account_digest"]
-                if outcome == "failure":
-                    cutoff_text = _timestamp(now - _WINDOW, "window_start")
-                    connection.execute(
-                        "DELETE FROM native_authentication_attempt_failures "
-                        "WHERE account_digest = ? AND occurred_at <= ?",
-                        (account, cutoff_text),
-                    )
-                    previous = connection.execute(
-                        """
-                        SELECT COUNT(*) AS total
-                        FROM native_authentication_attempt_failures
-                        WHERE account_digest = ? AND occurred_at > ?
-                        """,
-                        (account, cutoff_text),
-                    ).fetchone()["total"]
-                    delay = _BACKOFF_MINUTES[min(previous, len(_BACKOFF_MINUTES) - 1)]
-                    connection.execute(
-                        """
-                        INSERT INTO native_authentication_attempt_failures(
-                            failure_id, account_digest, occurred_at, blocked_until
-                        ) VALUES (?, ?, ?, ?)
-                        """,
-                        (
-                            str(uuid4()),
-                            account,
-                            now_text,
-                            _timestamp(now + timedelta(minutes=delay), "blocked_until"),
-                        ),
-                    )
-                elif outcome == "success":
-                    connection.execute(
-                        "DELETE FROM native_authentication_attempt_failures "
-                        "WHERE account_digest = ?",
-                        (account,),
-                    )
+                    expired_or_missing = True
                 else:
-                    raise ContractError("outcome interno inválido")
+                    account = row["account_digest"]
+                    if outcome == "failure":
+                        cutoff_text = _timestamp(now - _WINDOW, "window_start")
+                        connection.execute(
+                            "DELETE FROM native_authentication_attempt_failures "
+                            "WHERE account_digest = ? AND occurred_at <= ?",
+                            (account, cutoff_text),
+                        )
+                        previous = connection.execute(
+                            """
+                            SELECT COUNT(*) AS total
+                            FROM native_authentication_attempt_failures
+                            WHERE account_digest = ? AND occurred_at > ?
+                            """,
+                            (account, cutoff_text),
+                        ).fetchone()["total"]
+                        delay = _BACKOFF_MINUTES[
+                            min(previous, len(_BACKOFF_MINUTES) - 1)
+                        ]
+                        connection.execute(
+                            """
+                            INSERT INTO native_authentication_attempt_failures(
+                                failure_id, account_digest, occurred_at, blocked_until
+                            ) VALUES (?, ?, ?, ?)
+                            """,
+                            (
+                                str(uuid4()),
+                                account,
+                                now_text,
+                                _timestamp(
+                                    now + timedelta(minutes=delay), "blocked_until"
+                                ),
+                            ),
+                        )
+                    elif outcome == "success":
+                        connection.execute(
+                            "DELETE FROM native_authentication_attempt_failures "
+                            "WHERE account_digest = ?",
+                            (account,),
+                        )
+                    else:
+                        raise ContractError("outcome interno inválido")
 
-                connection.execute(
-                    "DELETE FROM native_authentication_attempt_reservations "
-                    "WHERE reservation_id = ?",
-                    (reservation_id,),
-                )
+                    connection.execute(
+                        "DELETE FROM native_authentication_attempt_reservations "
+                        "WHERE reservation_id = ?",
+                        (reservation_id,),
+                    )
                 connection.commit()
             except BaseException:
                 connection.rollback()
                 raise
+
+        if expired_or_missing:
+            raise AuthenticationAttemptReservationError(
+                "reserva ausente, expirada o ya consumida"
+            )
 
     def complete_failure(
         self, reservation: AuthenticationAttemptReservation, *, at: datetime
