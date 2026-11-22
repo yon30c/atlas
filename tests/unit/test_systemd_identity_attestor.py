@@ -1,5 +1,4 @@
 """Tests for the dedicated systemd Identity HMAC credential adapter."""
-import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -64,6 +63,15 @@ class SystemdCredentialVerifiedIdentityContextAttestorTests(unittest.TestCase):
         alias.symlink_to(self.credentials, target_is_directory=True)
         with self.assertRaises(ContractError):
             self.build(directory=alias)
+
+    def test_symlinked_parent_of_credentials_directory_is_rejected(self):
+        parent = self.root / "parent"
+        parent.mkdir()
+        (parent / "credentials").mkdir()
+        alias = self.root / "parent-link"
+        alias.symlink_to(parent, target_is_directory=True)
+        with self.assertRaises(ContractError):
+            self.build(directory=alias / "credentials")
 
     def test_credential_name_must_be_a_single_safe_component(self):
         for name in ("../key", "/tmp/key", "nested/key", "", ".", ".."):
