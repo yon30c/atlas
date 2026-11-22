@@ -568,13 +568,13 @@ Esta sección prevalece sobre el estado de implementación descrito en §9. La r
 
 - Puerto `AuthenticationAttemptGuardPort` con `begin_attempt`, `complete_failure`, `complete_success` y `abandon_attempt`.
 - Migración SQLite V28, con tablas separadas para reservas y fallos e índices por cuenta/expiración/ventana; registrada en `SQLITE_MIGRATIONS`.
-- Adaptador `SQLiteAuthenticationAttemptGuard` sobre el archivo canónico, cada operación con `BEGIN IMMEDIATE` propio.
+- Adaptador `SQLiteAuthenticationAttemptGuard` sobre el archivo canónico, cada operación con `BEGIN IMMEDIATE` propio y recolección oportunista acotada a 256 reservas vencidas y 256 fallos ya vencidos por operación de inicio.
 - Servicio reordenado: resolver issuer en UoW breve; reservar; leer autenticador; verificar/hash Argon2id fuera de UoW; volver a leer issuer/autenticador y comparar estado, subject y `credential_revision`; persistir proof; confirmar éxito del guard antes de devolver referencia raw.
-- Tests del servicio adaptados y nueva suite unitaria del adaptador para migración, concurrencia de reservas, backoff, ventana, expiración, abandono, reset y consumo único.
+- Tests del servicio adaptados y nueva suite unitaria del adaptador para migración, concurrencia entre threads y procesos, backoff, ventana, expiración, limpieza acotada de cuentas inactivas, abandono, reset y consumo único.
 
 ### Revisión estática y límites
 
-Se corrigieron el registro/exportación de V28, la limpieza durable de reservas expiradas, el orden de reserva antes de leer la credencial y un import de tests que contenía secuencias literales `\\n`. La demora máxima se mantiene activa hasta su `blocked_until`, aunque el fallo origen llegue al límite de antigüedad de la ventana; los fallos fuera de ventana no contribuyen al siguiente cálculo de demora.
+Se corrigieron el registro/exportación de V28, la limpieza durable de reservas expiradas, el orden de reserva antes de leer la credencial y un import de tests que contenía secuencias literales `\\n`. La demora máxima se mantiene activa hasta su `blocked_until`, aunque el fallo origen llegue al límite de antigüedad de la ventana; los fallos fuera de ventana no contribuyen al siguiente cálculo de demora. La limpieza global acotada cubre también registros vencidos de cuentas inactivas.
 
 **No validado:** no se ejecutaron pruebas, compileall, migraciones ni workflows desde GitHub. El código publicado puede requerir correcciones tras la ejecución local. No afirmar que el guard funciona hasta que el propietario valide en Debian.
 
