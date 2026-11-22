@@ -131,15 +131,15 @@ Esta sección actualiza el estado de §§1–9, que documentan la auditoría bas
 - Puerto explícito `AuthenticationAttemptGuardPort` con reserva opaca, expiración, finalización de fallo/éxito y abandono.
 - Migración `CORE_SCHEMA_V28` con tablas separadas para reservas y fallos, índices por cuenta/expiración/ventana.
 - Registro de V28 en `SQLITE_MIGRATIONS` y exportación del símbolo desde el paquete SQLite.
-- Adaptador `SQLiteAuthenticationAttemptGuard` con transacciones independientes `BEGIN IMMEDIATE`, digest de cuenta con separación de dominio, TTL de 120 s, máximo de dos reservas y política 1/2/4/7/15.
+- Adaptador `SQLiteAuthenticationAttemptGuard` con transacciones independientes `BEGIN IMMEDIATE`, digest de cuenta con separación de dominio, TTL de 120 s, máximo de dos reservas y política 1/2/4/7/15. La recolección oportunista elimina en lotes de hasta 256 reservas vencidas y hasta 256 fallos ya vencidos, incluso para cuentas inactivas.
 - Servicio reordenado: issuer en UoW breve → reserva → lectura de autenticador en otra UoW → Argon2id fuera de UoW → relectura y validación de estado/revisión → persistencia del proof → confirmación de éxito del guard antes de devolver la referencia.
-- Pruebas unitarias del servicio corregidas y nuevo archivo de pruebas para migración, concurrencia, backoff, ventana, expiración, abandono, reset y consumo único.
+- Pruebas unitarias del servicio corregidas y nuevo archivo de pruebas para migración, concurrencia entre threads y procesos separados, backoff, ventana, expiración, limpieza de cuentas inactivas, abandono, reset y consumo único.
 
 ### Hallazgos corregidos durante la revisión
 
 1. La cuarta demora se cambió a 7 minutos conforme a la aprobación del propietario. Esto sitúa el quinto fallo a los 14 minutos en el caso secuencial límite, dentro de la ventana de 15 minutos.
 2. Se corrigió la limpieza de una reserva vencida en `_consume`: la eliminación se confirma antes de informar que la reserva no puede completarse, evitando que el rollback restaure la fila expirada.
-3. La limpieza de reservas/fallos vencidos en `begin_attempt` se confirma incluso cuando la nueva reserva es denegada por bloqueo o concurrencia.
+3. La limpieza oportunista global, acotada a 256 filas por tabla, se confirma incluso cuando la nueva reserva es denegada por bloqueo o concurrencia. Los fallos con `blocked_until` futuro se conservan hasta que expire el bloqueo.
 4. Se corrigió la secuencia del servicio para reservar antes de leer el autenticador. La lectura de issuer ocurre primero porque es necesaria para delimitar la cuenta; el acceso a credenciales y Argon2id ocurren después de reservar.
 5. Se corrigió un bloque de importación roto en `test_native_authentication_service.py` que contenía secuencias literales `\\n`.
 6. Se incorporó V28 a la tupla ordenada de migraciones y a las exportaciones del paquete SQLite.
