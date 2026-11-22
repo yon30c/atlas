@@ -3,7 +3,7 @@
 **Fecha:** 2026-11-22  
 **Rama inspeccionada:** `work/atlas-mvp-runtime`  
 **HEAD de referencia:** `598f461ee5b42b41d3792bc9dbd3fcf8f983ace8`  
-**Estado:** auditoría de diseño; no modifica código ni aprueba todavía una implementación.  
+**Estado:** auditoría base; las decisiones de implementación y política fueron aprobadas por el propietario el 2026-11-22. La especificación aprobada está en `native-authentication-attempt-guard-approved-design.md`.  
 **Alcance:** revisar el contrato `AuthenticationAttemptGuardPort`, su punto de invocación en `NativeAuthenticationService` y la transacción SQLite compartida.
 
 ## 1. Resumen
@@ -103,3 +103,20 @@ Aprobar:
 3. el almacenamiento compartido y su relación transaccional con la UoW de autoridad.
 
 Hasta entonces, mantener `NativeAuthenticationService` sin composición operativa y mantener deshabilitadas las capacidades protegidas de consola.
+
+
+## 9. Aprobación del propietario — 2026-11-22
+
+El propietario aprobó:
+- almacenamiento en el mismo archivo SQLite canónico;
+- transacciones breves e independientes del guard, fuera de la UoW de autenticación;
+- reservas explícitas por intento con ID opaco y TTL de 120 segundos;
+- ventana móvil de 15 minutos y demoras 1/2/4/8/15 minutos;
+- máximo de dos intentos simultáneos por cuenta;
+- éxito confirmado reinicia fallos; abandono/expiración no cuenta como fallo;
+- Argon2id fuera de transacciones SQLite de escritura;
+- relectura del issuer/autenticador y comparación de estado/revisión antes de emitir proof.
+
+La interpretación exacta, el algoritmo de reserva/finalización, el pseudónimo de cuenta y los criterios de aceptación están fijados en `docs/design/native-authentication-attempt-guard-approved-design.md`.
+
+**Siguiente paso:** implementar el contrato y adaptador SQLite, reestructurar `NativeAuthenticationService`, añadir pruebas unitarias y multiproceso, y actualizar la composición sin habilitar login operativo.
