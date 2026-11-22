@@ -1,6 +1,6 @@
 # Estado vigente de Atlas
 
-> **Corte documental:** 21 de noviembre de 2026.
+> **Corte documental:** 22 de noviembre de 2026.
 > **Main actual:** PR #29 integrado mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b` (21-11-2026). La suite comunicada fue ejecutada sobre el HEAD de PR `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, antes de los commits documentales y del merge; no se ha reportado una nueva ejecución sobre el merge commit.
 > **PR #29:** cerrado e integrado en `main`; HEAD probado `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`.
 > **PR integrado:** [#29](https://github.com/yon30c/atlas/pull/29), merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`.
@@ -9,6 +9,24 @@
 > **Estado IPC:** handler/prototipo para conexiones ya aceptadas; solo `authority.ping` está implementado. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
 > **Estado de transporte:** ninguno aprobado para producción. Listener propio en filesystem privado: candidato para probe aislado; socket activation systemd sobre filesystem: suspendida por colisión destructiva observada; AF_UNIX abstracto: alternativa experimental con riesgos de preclaim/DoS y sin DAC.
 > **Este documento diferencia** implementación publicada, cambios en PR, validación local reportada y capacidades conectadas al runtime.
+
+
+## Prioridad actual — MVP local limitado (2026-11-22)
+
+La rama `work/atlas-mvp-runtime` fue creada desde `main` para priorizar una versión local utilizable sin mezclar el trabajo con el experimento IPC.
+
+- Se conectó el planificador F1 a la consola mediante `/plan <solicitud>`.
+- El proveedor de planificación usa Ollama en loopback con salida JSON y `think=false`; la conversación normal conserva su proveedor y comportamiento.
+- El comando muestra el objetivo, capacidad, parámetros y resultado esperado. Aclara que es una vista previa y que no se ejecutó ninguna operación.
+- Las solicitudes no soportadas y las que requieren aclaración se informan sin convertirlas en planes.
+- En modo offline, `/plan` informa que necesita Ollama.
+- Se añadieron `tests/unit/test_console_planning.py` y cobertura de composición en `tests/unit/test_local_console_composition.py`.
+
+**Estado de validación:** implementación publicada en la rama de trabajo; pruebas focalizadas, suite completa y compilación pendientes de ejecución local por el propietario. No se ejecutó nada desde GitHub.
+
+**Siguiente paso:** completar la frontera de autenticación local y bootstrap. El servicio de Workspace ya admite list/read con CAM, pero la consola actual sigue produciendo un `OperationContext` sintético. No conectar el servicio hasta que la sesión/proof produzca identidad USER canónica y la operación vuelva a validar evidencia, scope y Grant exactos.
+
+**Alcance temporal del MVP:** conversación persistente + vista previa de planes; el siguiente hito será Workspace read-only bajo CAM. No se habilitan escritura, shell, Docker, Skills, Broker, runtime AGENT ni ejecución multi-paso.
 
 ## Autoridad administrativa local e IPC — estado al 2026-11-21
 
@@ -37,7 +55,7 @@ Atlas todavía no es la plataforma autónoma completa de la visión. La presenci
 
 - Consola conversacional local mediante `python -m atlas`, integración con Ollama, streaming y modo offline informativo.
 - Persistencia SQLite de conversaciones, recuperación de conversación activa, administración, exportación JSON y backup cifrado con verificación/restauración.
-- Interpretación y planificación funcional F1 mediante contratos y servicios aislados; no está conectada al flujo de consola.
+- Interpretación y planificación funcional F1 aislada en `main`; la rama `work/atlas-mvp-runtime` añade el comando `/plan` como vista previa, pendiente de validación local.
 - Capacidades locales de Workspace para listar y leer archivos; protocolo controlado de escritura disponible como componente, pero no habilitado en el catálogo/runtime.
 - Gate CAM local de solo lectura para `workspace.list` y `workspace.read`, con identidad canónica, Project/Environment, Grant y UoW compartida; no conectado a CLI/runtime.
 - Persistencia canónica de Identity(USER), Project, Environment, Grants, asociaciones Project–Environment y Workspaces.
