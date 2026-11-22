@@ -137,6 +137,31 @@ def list_jobs_for_unit(name: str) -> list[dict]:
     return matches
 
 
+def assert_unit_absent(name: str) -> None:
+    result = busctl_json(
+        "call", BUS, MANAGER, MANAGER_IFACE, "ListUnitsByNames", "as", "1", name
+    )
+    if result["type"] != "a(ssssssouso)" or not isinstance(result["data"], list):
+        raise Incomplete("ListUnitsByNames returned an unexpected signature or shape")
+    if result["data"]:
+        raise Incomplete(f"random fixture unit name already exists: {name}")
+
+
+def git_commit() -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parents[3],
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        timeout=2.0, check=False,
+        env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"},
+    )
+    if result.returncode or len(result.stdout) > 128:
+        raise Incomplete("cannot identify the exact checkout commit")
+    value = result.stdout.decode("ascii", "strict").strip()
+    if len(value) != 40 or any(ch not in "0123456789abcdef" for ch in value):
+        raise Incomplete("git rev-parse returned an invalid commit identifier")
+    return value
+
+
 def unit_snapshot(name: str) -> dict:
     path = unit_path(name)
     values = {
@@ -322,7 +347,7 @@ def preflight() -> dict:
         raise Incomplete("cannot identify Debian release") from exc
     if not debian.startswith("13"):
         raise Incomplete("Debian 13 is required")
-    for executable in ("busctl", "systemd-run", "systemctl"):
+    for executable in ("busctl", "systemd-run", "systemctl", "git"):
         if not __import__("shutil").which(executable):
             raise Incomplete(f"required executable missing: {executable}")
     if not ctypes.util.find_library("seccomp"):
@@ -344,6 +369,8 @@ def preflight() -> dict:
     if b"systemd 257" not in bus_version:
         raise Incomplete("systemd/busctl version is outside the 257 profile")
     root, mount = cgroup_mount()
+    if root != Path("/"):
+        raise Incomplete("cgroup v2 mount does not expose the unified hierarchy root")
     if not (mount / "cgroup.controllers").is_file():
         raise Incomplete("cgroup v2 unified hierarchy is unavailable")
     run_stat = os.stat("/run", follow_symlinks=False)
@@ -359,7 +386,9 @@ def preflight() -> dict:
         raise Incomplete("/run is not a unique tmpfs mount")
     # A harmless read-only D-Bus query proves the system manager is reachable.
     busctl_json("get-property", BUS, MANAGER, "org.freedesktop.systemd1.Manager", "Version")
+    checkout_commit = git_commit()
     return {
+        "git_commit": checkout_commit,
         "debian": debian, "kernel": platform.release(),
         "python": platform.python_version(), "busctl": bus_version.decode("utf-8", "replace").strip(),
         "cgroup2_root": str(root), "cgroup2_mount": str(mount),
@@ -408,6 +437,7 @@ def _rewrite_json_file(path: Path, value: dict, limit: int) -> None:
 
 
 def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=False, delegate=False, no_listener=False) -> tuple[dict, Path | None, Path]:
+    assert_unit_absent(name)
     socket_path = run_dir / f"{name}.sock"
     ready_path = run_dir / f"{name}.ready"
     properties = [
@@ -538,6 +568,7 @@ def run_probe(args: argparse.Namespace) -> dict:
     }
     try:
         report["preflight"] = preflight()
+        report["git_commit"] = report["preflight"]["git_commit"]
     except Exception as exc:
         report["preflight"] = {"status": "INCOMPLETE", "reason": f"{type(exc).__name__}: {exc}"}
         report["overall"] = "INCOMPLETE"
