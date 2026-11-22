@@ -2403,6 +2403,17 @@ def run_probe(args: argparse.Namespace) -> dict:
                     current_fixture = unit_snapshot(fixture_name)
                     if current_fixture["InvocationID"] != initial_fixture["InvocationID"]:
                         raise Incomplete("fixture InvocationID changed; emergency cleanup refuses replacement")
+                    if not fixture.get("unit_ref"):
+                        if _SYSTEMD_BUS_REF is None:
+                            raise Incomplete("cannot pin partially started fixture without persistent D-Bus connection")
+                        _SYSTEMD_BUS_REF.ref_unit(fixture_name)
+                        fixture["unit_ref"] = True
+                    if fixture.get("cgroup_observer") is None:
+                        _root, emergency_mount = cgroup_mount()
+                        fixture["cgroup_observer"] = open_cgroup_observer(
+                            emergency_mount, initial_fixture["ControlGroup"]
+                        )
+                        _OPEN_CGROUP_OBSERVERS.append(fixture["cgroup_observer"])
                     if current_fixture["ActiveState"] != "inactive" or current_fixture["Job"][0] != 0:
                         if current_fixture["Job"][0] == 0:
                             systemd_stop(fixture_name)
