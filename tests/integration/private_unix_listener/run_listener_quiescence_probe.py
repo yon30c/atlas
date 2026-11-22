@@ -2564,6 +2564,11 @@ def run_probe(args: argparse.Namespace) -> dict:
                 report["cleanup"]["safe_to_release_gate"] = False
                 report["overall"] = "INCOMPLETE"
 
+        if marker_created and not persisted:
+            report["cleanup"]["safe_to_release_gate"] = False
+            report["cleanup"]["evidence_not_persisted"] = True
+            report["overall"] = "INCOMPLETE"
+
         # The sticky marker is retained on any uncertainty. The lock file and
         # /run/atlas-qp parent remain for audit and future invocations.
         if persisted and report["cleanup"]["safe_to_release_gate"] and marker_created and marker is not None:
