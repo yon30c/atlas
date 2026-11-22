@@ -960,6 +960,15 @@ def process_authority_evidence() -> dict:
         ) from exc
 
 
+def fixture_identity_evidence() -> dict:
+    """Report kernel-observed credentials without consulting NSS."""
+    return {
+        "uid": os.getuid(), "euid": os.geteuid(),
+        "gid": os.getgid(), "egid": os.getegid(),
+        "supplementary_gids": sorted(set(os.getgroups())),
+    }
+
+
 def fixture_main(args: argparse.Namespace) -> int:
     """Unprivileged systemd service fixture; never used against Atlas."""
     if args.exec_helper:
@@ -979,6 +988,7 @@ def fixture_main(args: argparse.Namespace) -> int:
             "uid": info.st_uid, "gid": info.st_gid,
             "mode": stat.S_IMODE(info.st_mode), "exec_helper": True,
         }
+        ready.update(fixture_identity_evidence())
         fd = os.open(args.ready, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
         try:
             os.write(fd, json.dumps(ready, sort_keys=True).encode("ascii"))
@@ -1153,6 +1163,7 @@ def fixture_main(args: argparse.Namespace) -> int:
                     deny_fd_escape=args.deny_fd_escape,
                 )
         ready.update(process_authority_evidence())
+        ready.update(fixture_identity_evidence())
         fd = os.open(
             args.ready, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC
             | os.O_NOFOLLOW | os.O_NONBLOCK,
@@ -1490,6 +1501,16 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
     snap = unit_snapshot(name)
     if snap["MainPID"] <= 0 or ready.get("pid") != snap["MainPID"]:
         raise Incomplete("fixture readiness PID differs from systemd MainPID")
+    expected_supplementary = ready.get("supplementary_gids")
+    if (
+        ready.get("uid") != uid or ready.get("euid") != uid
+        or ready.get("gid") != gid or ready.get("egid") != gid
+        or not isinstance(expected_supplementary, list)
+        or expected_supplementary != sorted(set(expected_supplementary))
+        or any(not isinstance(value, int) or isinstance(value, bool) for value in expected_supplementary)
+        or any(value != gid for value in expected_supplementary)
+    ):
+        raise Incomplete("fixture process credentials differ from the approved numeric identity")
     _ACTIVE_FIXTURES[name]["initial"] = snap
     if snap["Delegate"] != delegate:
         raise Incomplete("systemd Delegate property differs from requested fixture")
