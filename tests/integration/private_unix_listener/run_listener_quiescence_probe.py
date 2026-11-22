@@ -1970,6 +1970,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         name11 = f"atlas-qp-{secrets.token_hex(6)}.service"
         initial11, _endpoint11, ready11 = _start_fixture(name11, run_dir, no_listener=True)
         report["unit_identity"][name11] = initial11
+        update_gate_marker(marker, run_id, name11, initial11, "qp11-active-fixture")
         unchanged_before = unit_snapshot(name11)
         if unchanged_before["ActiveState"] != "active" or unchanged_before["Job"][0] != 0:
             raise Incomplete("QP-11 gate fixture did not reach stable active state")
@@ -2062,7 +2063,7 @@ def run_probe(args: argparse.Namespace) -> dict:
                 "competing_lock_denied": competing_lock_denied,
                 "lock_available_after_crash": True,
                 "sticky_marker_retained": True,
-                "post_crash_start_rejected": denied_after_crash,
+                "post_crash_restart_rejected": denied_after_crash,
                 "unit_invocation_unchanged": unchanged_after["InvocationID"] == unchanged_before["InvocationID"],
                 "unit_remained_active": unchanged_after["ActiveState"] == "active",
                 "main_pid_unchanged": unchanged_after["MainPID"] == unchanged_before["MainPID"],
