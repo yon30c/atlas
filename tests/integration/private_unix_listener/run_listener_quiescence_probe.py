@@ -599,11 +599,13 @@ _SYSTEMD_BUS_REF: PersistentSystemdBusRef | None = None
 class _TestLifecycleSupervisor:
     """Harness-only lifecycle gate; never imported by the Atlas runtime."""
 
-    def __init__(self, lock_fd: int, marker: Path, run_id: str, *,
+    def __init__(self, lock_fd: int, marker: Path, run_id: str,
+                 marker_identity: dict, *,
                  allow_owner: bool = True, units: set[str] | None = None):
         self.lock_fd = lock_fd
         self.marker = marker
         self.run_id = run_id
+        self.marker_identity = dict(marker_identity)
         self.allow_owner = allow_owner
         self.units = set(units or ())
         self.active = True
@@ -615,9 +617,14 @@ class _TestLifecycleSupervisor:
             raise Incomplete("test lifecycle supervisor received an unsupported action")
         try:
             fcntl.flock(self.lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            marker_data = read_bounded_json_file(self.marker, expected_uid=0, expected_gid=0)
+            marker_identity = {}
+            marker_data = read_bounded_json_file(
+                self.marker, expected_uid=0, expected_gid=0, identity=marker_identity
+            )
         except (OSError, json.JSONDecodeError) as exc:
             raise Incomplete("test lifecycle supervisor cannot verify its gate") from exc
+        if marker_identity != self.marker_identity:
+            raise Incomplete("sticky maintenance marker inode identity changed")
         if marker_data.get("schema") != SCHEMA or marker_data.get("run_id") != self.run_id:
             raise Incomplete("test lifecycle supervisor marker ownership mismatch")
         if not self.allow_owner:
