@@ -552,8 +552,12 @@ class _TestLifecycleSupervisor:
             if argv[0] != "systemd-run":
                 raise Incomplete("start requests must use systemd-run")
             unit_args = [item.split("=", 1)[1] for item in argv if item.startswith("--unit=")]
-            if len(unit_args) != 1 or not unit_args[0].startswith("atlas-qp-") or not unit_args[0].endswith(".service"):
-                raise Incomplete("start request does not name one owned transient fixture")
+            if (
+                "--system" not in argv or "--no-block" not in argv
+                or len(unit_args) != 1 or not unit_args[0].startswith("atlas-qp-")
+                or not unit_args[0].endswith(".service")
+            ):
+                raise Incomplete("start request does not name one owned system fixture")
             if unit_args[0] in self.units:
                 raise Incomplete("test lifecycle supervisor refuses duplicate fixture start")
             self.units.add(unit_args[0])
