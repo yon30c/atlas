@@ -249,12 +249,24 @@ Commit 0315d52db9505998244dace068828723bb5b424f modifica `WorkspaceCapabilityExe
 El propietario aprobó el perfil descrito en `initial-owner-authority-provisioning-contract.md`:
 
 - un Project, un Environment, una asociación canónica y un Workspace;
-- Grant dirigido exclusivamente a la Identity(USER) canónica del propietario;
-- `workspace.list` sobre el ID exacto del Workspace;
-- `workspace.read` solo sobre IDs canónicos de archivos seleccionados explícitamente;
+- Paquete atómico de dos Grants, ambos dirigidos exclusivamente a la Identity(USER) canónica del propietario: uno para `workspace.list` sobre el ID exacto del Workspace y otro para `workspace.read` solo sobre IDs canónicos de archivos seleccionados explícitamente (si no se seleccionan archivos, el segundo Grant no se emite);
 - vigencia de siete días y renovación solo tras nueva autenticación/decisión directa del propietario;
 - sin delegación, wildcard, escritura, borrado, shell ni ejecución de comandos;
 - helper dedicado C/libpam, sin shell ni privilegios generales para Atlas;
 - clave HMAC de Identity separada de Local Consistency y entregada por systemd credentials.
 
 La aprobación fija el perfil funcional, no declara terminada la implementación. La selección concreta del helper privileged invocation (A/B), el formato de prueba, el binding persistente, la transacción de génesis con journal/gate, la custodia/rotación de la clave Identity y la composición productiva siguen siendo gates de implementación. No se debe activar Workspace ni login hasta cerrar esos gates y ejecutar la validación local.
+
+
+## 12. Builder puro del paquete inicial de Grants (2026-11-22)
+
+Commits `5f94714` y `4fa1fe9` añaden:
+
+- `InitialWorkspaceGrantDescriptor` y `build_initial_workspace_grants`, que construyen el paquete exacto de uno o dos Grants.
+- Grant de listado: recurso `workspace`, ID exacto del Workspace y acción `workspace.list`.
+- Grant de lectura, cuando hay archivos seleccionados: recurso `workspace_file`, IDs canónicos compactos de `[workspace_id, relative_path]` y acción `workspace.read`.
+- Mismo propietario USER, Project, Environment, `issued_at` y expiración exacta de siete días.
+- Rechazo de rutas absolutas, traversal, componentes vacíos, enlaces a staging, separadores Windows, wildcard y rutas duplicadas.
+- `src/atlas/workspace/resource_ids.py` comparte la canonicalización entre el builder y la evaluación de Workspace.
+
+**Límite deliberado:** el builder es puro. No verifica la prueba PAM, no crea Projects/Environments/Workspace, no consume evidencia, no escribe SQLite y no autoriza al caller. El coordinador de provisión debe invocarlo solo después de revalidar la evidencia y obtener el propietario canónico dentro de la misma UoW que persiste ambos Grants. No está conectado al runtime. Las pruebas añadidas están pendientes de ejecución local.
