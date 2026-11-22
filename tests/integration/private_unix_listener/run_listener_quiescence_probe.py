@@ -964,6 +964,27 @@ def fixture_main(args: argparse.Namespace) -> int:
     return 0
 
 
+def _mode_allows(info, uid: int, gid: int, required: int) -> bool:
+    mode = stat.S_IMODE(info.st_mode)
+    if uid == info.st_uid:
+        permissions = (mode >> 6) & 0o7
+    elif gid == info.st_gid:
+        permissions = (mode >> 3) & 0o7
+    else:
+        permissions = mode & 0o7
+    return permissions & required == required
+
+
+def path_accessible_by(path: Path, uid: int, gid: int, *, file_permission: int) -> bool:
+    resolved = path.resolve(strict=True)
+    for parent in reversed(resolved.parents):
+        info = os.stat(parent, follow_symlinks=False)
+        if not stat.S_ISDIR(info.st_mode) or not _mode_allows(info, uid, gid, 0o1):
+            return False
+    info = os.stat(resolved, follow_symlinks=False)
+    return stat.S_ISREG(info.st_mode) and _mode_allows(info, uid, gid, file_permission)
+
+
 def preflight() -> dict:
     if not sys.platform.startswith("linux") or os.geteuid() != 0:
         raise Incomplete("direct EUID 0 on Linux is required")
@@ -997,6 +1018,13 @@ def preflight() -> dict:
             raise Incomplete(f"{label} account primary GID differs from fixture GID")
         if uid == 0 or gid == 0:
             raise Incomplete("fixture identities must be non-root")
+    runner_path = Path(__file__).resolve()
+    python_path = Path(sys.executable).resolve()
+    for uid, gid, label in ((SERVICE_UID, SERVICE_GID, "SERVICE"), (OTHER_UID, OTHER_GID, "OTHER")):
+        if not path_accessible_by(runner_path, uid, gid, file_permission=0o4):
+            raise Incomplete(f"runner source path is not traversable/readable by {label}")
+        if not path_accessible_by(python_path, uid, gid, file_permission=0o1):
+            raise Incomplete(f"Python interpreter path is not traversable/executable by {label}")
     bus_version = bounded_run(["busctl", "--version"], timeout=3.0, limit=4096)
     if b"systemd 257" not in bus_version:
         raise Incomplete("systemd/busctl version is outside the 257 profile")
