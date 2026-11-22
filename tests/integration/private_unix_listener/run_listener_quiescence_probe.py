@@ -1528,9 +1528,9 @@ def run_probe(args: argparse.Namespace) -> dict:
             if actual != expected:
                 raise ProbeError("QP-07 cgroup.events parser fault matrix mismatch")
             parser_results.append({"input_bytes": len(raw), "accepted": actual})
-        partial_chunks = iter((b"popu", b"lated ", b"0\\n", b""))
+        partial_chunks = iter((b"popu", b"lated ", b"0\n", b""))
         partial_read = read_bounded_chunks(lambda _size: next(partial_chunks), MAX_CGROUP)
-        if partial_read != b"populated 0\\n" or _parse_cgroup_events_bytes(partial_read)["populated"] != 0:
+        if partial_read != b"populated 0\n" or _parse_cgroup_events_bytes(partial_read)["populated"] != 0:
             raise ProbeError("QP-07 partial-read accumulation failed")
         permission_rejected = False
         try:
