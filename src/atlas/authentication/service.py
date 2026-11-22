@@ -143,8 +143,6 @@ class NativeAuthenticationService:
         """Verify credentials and return a proof only after both commits succeed."""
         handle = LoginHandle(login_handle)
         validate_password_for_verification(password)
-        now = self._now(self._clock)
-
         # Resolve only the configured issuer before reserving. No guard call or
         # Argon2id work may occur while this UoW is open.
         try:
@@ -161,9 +159,10 @@ class NativeAuthenticationService:
         except Exception as exc:
             raise AuthenticationUnavailable("autoridad de autenticación no disponible") from exc
 
+        attempt_started_at = self._now(self._clock)
         try:
             reservation = self._guard.begin_attempt(
-                issuer.issuer_id, handle.value, at=now
+                issuer.issuer_id, handle.value, at=attempt_started_at
             )
         except AuthenticationAttemptDenied:
             raise AuthenticationFailed("autenticación no válida") from None
