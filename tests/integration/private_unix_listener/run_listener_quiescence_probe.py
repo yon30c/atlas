@@ -2217,6 +2217,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             close_cgroup_observer(new_observer12)
             raise Incomplete("QP-12 replacement invocation did not populate its correlated cgroup")
         _ACTIVE_FIXTURES[name12]["cgroup_observer"] = new_observer12
+        _ACTIVE_FIXTURES[name12]["initial_cgroup_events"] = new_cgroup_before_stop12
         _ACTIVE_FIXTURES[name12]["initial"] = changed
         update_gate_marker(marker, run_id, name12, changed, marker_identity, "replacement-invocation")
         close_cgroup_observer(old_observer12)
@@ -2431,6 +2432,9 @@ def run_probe(args: argparse.Namespace) -> dict:
                         _root, emergency_mount = cgroup_mount()
                         fixture["cgroup_observer"] = open_cgroup_observer(
                             emergency_mount, initial_fixture["ControlGroup"]
+                        )
+                        fixture["initial_cgroup_events"] = read_cgroup_observer(
+                            fixture["cgroup_observer"]
                         )
                     if current_fixture["ActiveState"] != "inactive" or current_fixture["Job"][0] != 0:
                         if current_fixture["Job"][0] == 0:
