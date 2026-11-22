@@ -45,7 +45,7 @@ No crear usuarios ni grupos del sistema. El probe usará identidades fixture ya 
 - No crear unidades persistentes, habilitar servicios, cambiar configuración global de systemd/cgroup, modificar usuarios, grupos, permisos o políticas del host.
 - No usar `systemd-run`/D-Bus contra el host de producción; toda interacción futura se limita a la VM desechable.
 - No conectar al listener para inferir liveness; no aceptar ni intercambiar payloads.
-- No ejecutar `unlink`, `unlinkat`, `rm` ni limpieza de endpoint. El pathname fixture se conserva hasta cerrar todos los descriptores y el cleanup se limita al sandbox cuya identidad creó el runner.
+- Durante la observación de quiescencia y cualquier decisión sobre stale recovery está prohibido ejecutar `unlink`, `unlinkat` o `rm` sobre el endpoint. Al terminar el probe, se permite retirar exclusivamente el socket fixture creado por esa ejecución como cleanup separado: todos los FDs deben estar cerrados, y `fstatat(AT_SYMLINK_NOFOLLOW)` debe confirmar tipo socket y la misma pareja `st_dev/st_ino` capturada al crearlo; la retirada se hace con `unlinkat` relativo a un `dirfd` anclado al sandbox verificado. Nunca se retira un pathname preexistente, sustituido o ajeno. Si la identidad no coincide, se conserva y el cleanup queda INCOMPLETE.
 - No considerar un PASS como autorización de recuperación, ni como prueba host-wide frente a root o procesos fuera del modelo TCB-1.
 
 ## 3. Arquitectura del harness propuesta
@@ -63,21 +63,25 @@ El canal de control fixture debe ser distinto del listener bajo prueba y no tran
 
 - Crea un único socket AF_UNIX/SOCK_SEQPACKET bajo el sandbox privado.
 - Establece `FD_CLOEXEC` al crear el descriptor o inmediatamente después, antes de cualquier posible exec.
-- No hace fork después de bind/listen; el flujo normal del fixture no inicia subprocesses.
-- No llama a `dup`/`dup2`/`fcntl(F_DUPFD*)` para replicar el listener ni envía/recibe ancillary data `SCM_RIGHTS`.
+- No hace fork después de bind/listen; tras crear el listener instala un filtro seccomp que devuelve `EPERM` para `fork`, `vfork`, `clone` y `clone3`.
+- El mismo filtro deniega `sendmsg`, `recvmsg`, `sendmmsg` y `recvmmsg` después de crear el listener; el canal de control usa únicamente `read`/`write` y mensajes de longitud fija, sin ancillary data.
+- No llama a `dup`/`dup2`/`fcntl(F_DUPFD*)` para replicar el listener. El filtro seccomp no pretende proteger frente a root/capacidades equivalentes ni frente a mecanismos externos fuera de TCB-1.
 - No registra el listener en un supervisor externo ni lo publica en el canal de control.
 - Mantiene un registro local de PID, FD, `fstat`, `getsockname`, `SO_TYPE`, `SO_ACCEPTCONN` y `FD_CLOEXEC` solo para la evidencia del fixture. Estos datos no sustituyen la evidencia del system manager/cgroup.
 - Cierra el listener durante shutdown normal. El runner no mata ni cierra FDs del proceso mediante procfs como mecanismo de prueba.
 
 ### 3.2 Puerta de mantenimiento
 
-El diseño de la puerta debe ser root-managed, exclusiva y mantenerse adquirida desde antes de solicitar stop hasta que se complete la última observación y decisión del escenario. La interfaz concreta (lock de archivo privado, coordinador o mecanismo equivalente) queda como punto de diseño de implementación; debe demostrar:
+La puerta será un protocolo root-managed de dos piezas: un `flock(LOCK_EX|LOCK_NB)` sobre un archivo de lock permanente en un directorio privado root:root 0700 de `/run`, y un marcador sticky de mantenimiento creado con `O_CREAT|O_EXCL|O_NOFOLLOW|O_CLOEXEC`, modo 0600, que contiene `run_id`, unidad y fase. El lock serializa actores vivos; el marcador permanece si el orquestador cae y hace que el supervisor rechace nuevos start/restart hasta recuperación manual auditada. El marcador solo se retira después de persistir el resultado final y completar cleanup seguro. La puerta debe demostrar:
 
 - exclusión entre dos orquestadores;
 - bloqueo de start/restart a través del único punto autorizado de lifecycle;
 - rechazo de solicitudes concurrentes y expiración/timeout fail-closed;
-- liberación inequívoca al finalizar;
-- no depender de que el proceso del servicio coopere para impedir que un actor externo reinicie la unidad.
+- liberación inequívoca al finalizar y retención fail-closed del marcador ante caída del orquestador;
+- el segundo actor autorizado usa el mismo supervisor/lock y no llama directamente a systemd;
+- la unidad fixture tiene `Restart=no`, no está habilitada y no tiene timers, paths, sockets, dependencias activadoras ni triggers externos.
+
+**Límite de autoridad:** ningún lock de archivo puede impedir que un administrador root llame directamente a PID 1 por D-Bus o `systemctl`. Root pertenece al dominio de confianza del contrato. La puerta serializa todos los actores autorizados y automatizaciones declaradas; no es una defensa contra root malicioso ni demuestra que un host de producción carezca de vías de arranque no declaradas.
 
 Si el system manager, timers, dependencias, políticas automáticas o un actor con autoridad equivalente pueden iniciar la unidad sin pasar por la puerta, QP-11 no puede pasar y el contrato no queda demostrado. La puerta no debe presentarse como barrera frente a root malicioso; root pertenece al dominio de autoridad confiable.
 
@@ -98,7 +102,7 @@ Cada escenario que aspire a declarar quiescencia debe seguir una secuencia equiv
 11. Volver a consultar unidad, InvocationID, ControlGroup y jobs; verificar que no hubo sustitución ni reinicio.
 12. Releer `cgroup.events` mientras la puerta sigue adquirida y exigir `populated 0`.
 13. Emitir `QUIESCENT` solo si todas las condiciones requeridas y la evidencia de no escape/FD ownership del escenario son completas. En cualquier otro caso emitir `ABORT_NOT_QUIESCENT` o `INCOMPLETE` con razón explícita.
-14. Liberar la puerta y limpiar únicamente recursos del harness, tras verificar su identidad. Nunca retirar el pathname del listener mediante una operación de recuperación.
+14. Persistir el reporte y la decisión; liberar el marcador solo tras completar la secuencia. Limpiar únicamente recursos del harness cuya identidad se verificó. La retirada del endpoint fixture, si procede, es el cleanup exacto descrito en §7 y no una operación de stale recovery.
 
 La secuencia no se sustituye por `sleep`, ausencia del PID principal, `pgrep`, tabla procfs AF_UNIX o una conexión de prueba.
 
@@ -108,28 +112,30 @@ La secuencia no se sustituye por `sleep`, ausencia del PID principal, `pgrep`, t
 |---|---|---|---|
 | **QP-01** | Servicio fixture normal con listener propio en unidad dedicada; solicitar stop completo. | InvocationID/cgroup coherentes; unidad `inactive`; sin jobs start/restart; `populated 0` en dos lecturas correlacionadas; listener cerrado por el proceso. | `QUIESCENT` únicamente tras completar toda la secuencia común. |
 | **QP-02** | Crear antes del listener un proceso auxiliar fixture dentro del mismo cgroup; mantenerlo vivo durante la primera observación y luego permitir su terminación por stop. | Antes de terminar el auxiliar, cgroup `populated 1` y no QUIESCENT; tras stop, todos los procesos del cgroup terminan y se observa `populated 0`. | Rechazar quiescencia prematura; después del stop completo puede ser `QUIESCENT`. El auxiliar no recibe el listener FD. |
-| **QP-03** | Proceso residual fixture deliberadamente mantenido dentro del cgroup pese al stop/deadline (solo mecanismo controlado de laboratorio). | Unidad aparentemente inactiva o PID principal ausente, pero cgroup sigue `populated 1`; registrar proceso residual sin intentar matarlo por fuera del supervisor. | `ABORT_NOT_QUIESCENT`; preservar pathname y sandbox hasta cleanup controlado del fixture. |
+| **QP-03** | Servicio fixture ignora SIGTERM; `TimeoutStopSec` de la unidad es mayor que el deadline de observación del probe. | Durante el deadline, unidad `deactivating`, job stop pendiente y cgroup `populated 1`; el probe no mata el proceso por fuera del manager. Después del aborto, systemd aplica su política final de terminación y el harness espera la salida antes de cleanup. | `ABORT_NOT_QUIESCENT` en la ventana inicial; nunca `QUIESCENT` por ausencia del PID principal. |
 | **QP-04** | Unidad en estado de transición o con job start/restart pendiente durante la ventana de observación. | Propiedades del manager muestran transición/job no terminal; la puerta debe impedir que el propio harness emita start concurrente. | `ABORT_NOT_QUIESCENT`; no inferir quiescencia aunque `populated 0` en una lectura aislada. |
-| **QP-05** | Configurar el fixture para compartir cgroup con una unidad/proceso no perteneciente al servicio, o hacer que ControlGroup no sea el cgroup exclusivo esperado. | ControlGroup inesperado/compartido o identidad de cgroup no coincide con la unidad fixture dedicada. | `ABORT_NOT_QUIESCENT` antes de cualquier decisión sobre pathname; no detener el proceso ajeno. |
-| **QP-06** | Presentar configuración fixture con delegación habilitada o evidencia de que el servicio puede migrar procesos fuera del cgroup. | Propiedad `Delegate`/configuración del manager y comprobaciones de jerarquía muestran delegación o capacidad de escape. | `ABORT_NOT_QUIESCENT`; no usar `populated 0` como prueba de ausencia de procesos/FDS externos. |
+| **QP-05** | Crear dos unidades transitorias fixture independientes (SERVICE y OTHER), verificar sus cgroups separados y ejecutar además una variante con el `ControlGroup` esperado deliberadamente discrepante en el adaptador de prueba. | Las identidades `ControlGroup` y `st_dev/st_ino` deben ser distintas y coincidir con la unidad exacta. La variante de discrepancia debe abortar antes de leer/actuar sobre el cgroup equivocado. No se fuerza una migración manual de procesos entre cgroups: hacerlo alteraría la jerarquía que el manager controla. | `ABORT_NOT_QUIESCENT` ante cualquier discrepancia o cgroup compartido observado; no detener ni modificar OTHER. |
+| **QP-06** | Crear una unidad transitoria negativa con `Delegate=yes` y otra válida con `Delegate=no`; no mover procesos manualmente ni escribir en cgroupfs. | El adaptador consulta `Delegate`, `DelegateControllers`, capacidades efectivas del proceso y permisos de escritura relevantes. La variante delegada se rechaza antes de declarar quiescencia; la válida no dispone de autoridad para modificar la jerarquía. | `ABORT_NOT_QUIESCENT` para `Delegate=yes`; no usar `populated 0` como prueba de ausencia de procesos/FDS externos. |
 | **QP-07** | Simular lectura parcial, error de permisos, contenido malformado, clave duplicada/ausente o filesystem cgroup no esperado para `cgroup.events`. | Recolector identifica exactamente el error y conserva bytes/estado disponible sin normalizarlo como cero. | `ABORT_NOT_QUIESCENT`; nunca interpretar fallo de lectura como `populated 0`. |
-| **QP-08** | El fixture intenta crear un proceso hijo después de bind/listen. | La política del fixture rechaza el intento antes de crear el hijo; evidencia de que no ocurrió fork y el listener no se heredó. | PASS del escenario solo si el fork está efectivamente prohibido por diseño/guardia. Si el hijo llega a crearse, FAIL del escenario aunque permanezca dentro del cgroup. |
-| **QP-09** | Intentar enviar o recibir el listener FD por `SCM_RIGHTS` en el canal fixture. | Operación prohibida por la interfaz/política del fixture; no se entrega descriptor y el receptor no obtiene un FD que refiera al listener. | PASS solo si no se produce transferencia. Cualquier transferencia observada es FAIL y bloquea QUIESCENT. |
-| **QP-10** | Intentar `exec` desde el proceso fixture con listener abierto, usando un helper de prueba que no transporta datos. | La política de no-fork impide el camino normal; en el subtest de descriptor, `FD_CLOEXEC` está activo y el nuevo programa no conserva el listener FD. | PASS solo si no hay herencia a través de exec. Este escenario no convierte CLOEXEC en defensa frente a fork. |
-| **QP-11** | Mientras una instancia está en mantenimiento/stop, un segundo actor fixture solicita start/restart a través de la interfaz autorizada. | Puerta exclusiva rechaza/bloquea la solicitud; unidad no vuelve a activarse; lock permanece poseído hasta finalizar la decisión. | PASS si la solicitud no produce job ni nueva InvocationID. Si existe un canal de arranque que elude la puerta, INCOMPLETE/FAIL. |
-| **QP-12** | Sustituir/reiniciar la unidad fixture entre snapshots mediante el controlador de laboratorio, sin tocar unidades ajenas. | InvocationID, ControlGroup o identidad de instancia difieren entre snapshots. | `ABORT_NOT_QUIESCENT`; no combinar evidencia de dos invocaciones. |
+| **QP-08** | Después de bind/listen, el fixture instala seccomp y ejecuta intentos controlados de `fork`, `vfork`, `clone` y `clone3`. | Cada syscall debe fallar con `EPERM`; el contador de procesos del fixture y el inventario del cgroup no deben mostrar un descendiente nuevo. | PASS solo si todas las vías disponibles quedan denegadas. Si una syscall no puede filtrarse o crea un hijo, FAIL. |
+| **QP-09** | Intentar enviar y recibir descriptores mediante `sendmsg`, `recvmsg`, `sendmmsg` y `recvmmsg` después de bind/listen. | Seccomp debe devolver `EPERM` antes de que el kernel transfiera ancillary data; el canal de control basado en `read`/`write` continúa funcionando. | PASS solo si no se produce transferencia. Cualquier syscall no filtrada o FD recibido es FAIL y bloquea QUIESCENT. |
+| **QP-10** | Ejecutar `execve` en el mismo proceso (sin fork) hacia un helper mínimo de inspección, con el listener abierto y `FD_CLOEXEC` activo. | El PID/cgroup permanecen correlacionados y el nuevo image confirma que el FD listener no existe; el helper informa por un FD de control preexistente que no transporta el listener. | PASS solo si el descriptor se cierra en exec. Este escenario no convierte CLOEXEC en defensa frente a fork. |
+| **QP-11** | Mientras el orquestador mantiene lock y marcador sticky, un segundo actor solicita start/restart por el supervisor autorizado; un subcaso simula caída del orquestador dejando el marcador. | La solicitud concurrente se rechaza por lock/marker; tras caída, el lock se libera pero el marcador persiste y el supervisor sigue rechazando start/restart hasta recuperación manual explícita. | PASS si no aparece job ni nueva InvocationID y el marcador sobrevive a la caída. Una llamada directa de root a PID 1 queda fuera del modelo de protección, no se presenta como bloqueada. |
+| **QP-12** | Un actor root de fault-injection, explícitamente fuera de la ruta autorizada, reinicia solo la unidad transitoria fixture entre snapshots mediante el manager. | Cambia `InvocationID` aunque el nombre de unidad y `ControlGroup` textual puedan repetirse; el orquestador no combina snapshots. La prueba demuestra detección, no bloqueo de root. | `ABORT_NOT_QUIESCENT`; no combinar evidencia de dos invocaciones. |
 | **QP-13** | Caso de control negativo que modela retención externa del listener FD fuera del cgroup de servicio. No usar una unidad .socket real ni activar socket activation. | El cgroup del servicio puede estar vacío mientras un proceso externo fixture retiene una referencia. Para hacer determinista el control negativo, el harness crea deliberadamente esa referencia externa mediante una transferencia fixture controlada, marcada como violación intencional de Q-05/Q-06; el recolector debe identificarla por el inventario cerrado de actores fixture y rechazar la quiescencia. Esta excepción existe solo dentro del escenario negativo, no es un patrón permitido para el servicio. | Nunca declarar `QUIESCENT`. Documentar expresamente que systemd socket activation permanece fuera de alcance y no se ha validado. |
 | **QP-14** | Forzar fallo del supervisor, desconexión del manager o timeout durante stop/consulta. | Error/timeout identificable; falta una o más observaciones obligatorias; no se emite estado terminal positivo. | `ABORT_NOT_QUIESCENT` o `INCOMPLETE`; pathname preservado y sin operación de retirada. |
-| **QP-15** | Cambiar la identidad/ruta del cgroup fixture o sustituir la instancia entre la lectura inicial y la verificación final. | Desacuerdo entre InvocationID/ControlGroup/identidad cgroup; relectura final no corresponde al snapshot inicial. | `ABORT_NOT_QUIESCENT`; no avanzar a inspección/retirada del pathname. |
+| **QP-15** | Inyectar en la frontera de lectura una identidad final distinta (`st_dev/st_ino`) o un `ControlGroup` cambiado, sin escribir ni renombrar cgroups reales. | El adaptador de prueba entrega evidencia de identidad discordante; el comparador debe detectarla antes de usar `cgroup.events` como evidencia positiva. | `ABORT_NOT_QUIESCENT`; no avanzar a inspección/retirada del pathname. |
 
 ### 5.1 Criterios de conteo
 
 - Los quince escenarios son obligatorios; un escenario no ejecutado no se considera PASS.
 - QP-01 y QP-02 deben demostrar el camino positivo y la terminación del cgroup.
 - QP-03..QP-07 y QP-12..QP-15 deben demostrar abortos fail-closed.
-- QP-08..QP-10 deben demostrar las invariantes de descriptor, no solo inspeccionar flags.
-- QP-11 debe probar la exclusión de lifecycle durante toda la ventana de mantenimiento.
+- QP-08..QP-10 deben demostrar las invariantes de descriptor mediante seccomp y exec en el mismo proceso, no solo inspeccionar flags.
+- QP-11 debe probar la exclusión de lifecycle durante toda la ventana de mantenimiento y la persistencia del marcador ante caída del orquestador.
 - QP-13 es una prueba negativa del supuesto de FD externo mediante una violación controlada y acotada de la política de FD; no es una prueba de socket activation ni valida la retención real del system manager.
+- QP-05 no intenta reparentar procesos ni escribir manualmente en cgroupfs; el mismatch se prueba en el límite del adaptador y con dos unidades fixture separadas.
+- QP-12 es fault injection root fuera del supervisor autorizado y solo comprueba detección de sustitución; QP-15 prueba la validación de identidad del descriptor de cgroup.
 - No se permite que un escenario mutile ni retire el pathname del listener. Cualquier intento de unlink hace que el probe completo falle.
 
 ## 6. Evidencia estructurada
@@ -161,7 +167,8 @@ El resultado JSON debe incluir como mínimo:
 - QP-01..QP-15: PASS/FAIL/INCOMPLETE y razón;
 - resultado global PASS solo con 15/15 PASS, cleanup confirmado y todas las evidencias requeridas;
 - resultado final de quiescencia por escenario: `QUIESCENT` o `ABORT_NOT_QUIESCENT`;
-- bandera constante `pathname_mutation_performed=false`;
+- `recovery_pathname_mutation_performed=false`;
+- `fixture_cleanup_endpoint_removed=true|false`, con `st_dev/st_ino` antes/después y resultado de validación;
 - bandera constante `systemd_socket_activation_tested=false`.
 
 No registrar `QUIESCENT` si falta una lectura, si hay discrepancia entre manager/cgroup, si la puerta no está demostrada o si la política de FD no puede verificarse.
@@ -171,8 +178,9 @@ No registrar `QUIESCENT` si falta una lectura, si hay discrepancia entre manager
 - Todo error, timeout, excepción, respuesta ambigua o evidencia incompleta produce FAIL/INCOMPLETE; nunca se convierte en cero procesos, `populated 0` ni PASS por defecto.
 - No matar procesos ajenos ni corregir manualmente un cgroup inesperado.
 - Si un fixture queda vivo, la limpieza solo puede dirigirse a la unidad transitoria identificada por nombre aleatorio e InvocationID capturados por el propio runner. Si la identidad no coincide, detener la limpieza y reportar INCOMPLETE.
-- No borrar el pathname del listener mediante unlink. El fixture debe cerrar su FD y el cleanup del sandbox solo se permite después de verificar que todos los procesos fixture terminaron y que el directorio/sandbox conserva la identidad creada.
-- Si cleanup no puede completarse de forma inequívoca, conservar evidencia y declarar INCOMPLETE; no ejecutar limpieza recursiva genérica.
+- No retirar un pathname residual, ajeno, preexistente o sustituido como operación de recuperación. El único endpoint que puede retirarse en cleanup es el creado por esta ejecución y solo tras verificar cierre de todos los FDs, `st_dev/st_ino`, tipo socket, owner/mode y el `dirfd` anclado al sandbox.
+- El cleanup del endpoint fixture usa `unlinkat` de un único nombre conocido, nunca recorrido recursivo; después se retiran únicamente los directorios vacíos creados por la ejecución.
+- Si cualquier identidad no coincide o cleanup no puede completarse inequívocamente, conservar el objeto y declarar INCOMPLETE; no ejecutar limpieza recursiva genérica.
 - La puerta se libera al final de una ruta de salida controlada; si el proceso orquestador cae, el diseño de la puerta debe tener una política de recuperación auditada que no permita start/restart durante una decisión inconclusa.
 
 ## 8. Interpretación de resultados
@@ -182,7 +190,7 @@ Un `overall=PASS` significará únicamente que QP-01..QP-15 del harness se compo
 No demuestra:
 - resistencia frente a root malicioso, capacidades equivalentes ni procesos comprometidos dentro de TCB-1;
 - cobertura global de FDs de todo el host por inspección procfs;
-- atomicidad entre snapshots ni ausencia de carreras fuera de la puerta;
+- atomicidad entre snapshots ni ausencia de carreras frente a root que omita deliberadamente la puerta;
 - seguridad de socket activation;
 - que una unidad/servicio Atlas real exista o esté correctamente configurado;
 - que el pathname sea stale o que sea seguro retirarlo;
@@ -190,16 +198,137 @@ No demuestra:
 
 A-THREAT-05 seguirá abierta después de un PASS hasta satisfacer todos los criterios del contrato base, incluida una autorización humana real para cualquier retirada futura y una decisión explícita sobre TOCTOU.
 
-## 9. Dependencias y puntos que deben resolverse antes de implementar
+## 9. Resolución de los seis puntos previos a implementación
 
-1. Seleccionar la interfaz exacta para consultar systemd (D-Bus/systemctl) y documentar cómo se obtienen InvocationID, ControlGroup, jobs y propiedades sin parseo ambiguo.
-2. Definir el mecanismo root-managed de la puerta y demostrar que todos los caminos autorizados de start/restart pasan por ella.
-3. Fijar el formato y límites del reporte JSON, incluyendo timestamps monotónicos y captura íntegra acotada de `cgroup.events`.
-4. Determinar la preparación no mutante de la VM: versión systemd/cgroup v2, herramientas disponibles y fixtures de identidad. Si falta una precondición, el runner debe detenerse; no instalar/crear automáticamente recursos persistentes.
-5. Definir cómo probar de forma determinista QP-05/QP-06/QP-08/QP-09/QP-10/QP-12/QP-13/QP-15 sin modificar unidades ajenas, escapar descriptores ni dejar procesos residuales.
-6. Revisar que el uso de unidades transitorias y cleanup no contradiga el aislamiento de la VM ni permita que el runner alcance servicios no-fixture.
+Los seis puntos de diseño se consideran **resueltos a nivel de especificación** mediante las decisiones siguientes. Esto cierra la fase de análisis documental, no la revisión del runner: cualquier detalle que contradiga estas decisiones deberá volver a revisión antes de escribir código.
 
-No implementar hasta que estos puntos se resuelvan en una revisión del diseño del runner. No ejecutar hasta que el propietario solicite expresamente la fase de validación local.
+### 9.1 Punto 1 — Interfaz de systemd y fuente de verdad
+
+**Decisión:** consultar estado y propiedades mediante el D-Bus del system manager usando `busctl --system --json=short`. No parsear salida humana de `systemctl status`, `systemctl show`, `systemd-analyze` ni mensajes de journald para decidir quiescencia.
+
+El adaptador consultará:
+
+1. `org.freedesktop.systemd1.Manager.GetUnit(nombre)` para obtener el object path exacto de la unidad ya cargada; no usar `LoadUnit` para resolver una unidad desconocida.
+2. `org.freedesktop.DBus.Properties.GetAll` sobre las interfaces Unit, Service y ResourceControl que la introspección del manager indique para esa unidad.
+3. De Unit: `Id`, `Names`, `LoadState`, `ActiveState`, `SubState`, `Job`, `InvocationID`, `Transient`, `Triggers`, `TriggeredBy`, `Requires`, `Wants` y dependencias relevantes.
+4. De Service: `ControlGroup`, `KillMode`, `Restart`, `User`, `Group` y propiedades disponibles para confirmar la configuración fixture.
+5. De ResourceControl, cuando esté expuesta: `Delegate`, `DelegateControllers` y `DelegateSubgroup`.
+6. `Manager.ListJobs()` para enumerar jobs y filtrar por nombre exacto de unidad y tipos start/restart/try-restart/reload-or-start; la propiedad Unit.Job debe concordar con el inventario.
+
+El cliente debe validar el JSON tipado producido por busctl contra las firmas D-Bus esperadas, preservar los tipos, rechazar campos ausentes/tipos inesperados y comprobar el código de salida. No se aceptan conversiones heurísticas de texto. La consulta de estado usa snapshots antes y después de leer cgroup; no se considera una única respuesta D-Bus una transacción atómica.
+
+La petición de stop se emite sobre la unidad exacta mediante el supervisor designado. El estado terminal se determina exclusivamente por D-Bus y cgroup, no por el texto/exit status del comando que solicitó stop. Cada llamada tiene timeout acotado y salida stdout/stderr acotada. La conexión siempre es al bus **system** local; quedan prohibidos `--user`, `--host`, `--machine` y destinos remotos.
+
+**Criterio de aceptación:** en preflight, `busctl --version` debe confirmar soporte JSON; el adaptador debe resolver una unidad fixture conocida, extraer propiedades y jobs con sus tipos exactos, y tratar una propiedad/interfaz no disponible como INCOMPLETE. No se implementa fallback a parseo de texto.
+
+### 9.2 Punto 2 — Puerta root-managed de mantenimiento
+
+**Decisión:** lock exclusivo más marcador sticky, ambos en un directorio privado root:root 0700 bajo `/run`.
+
+- El lock se abre con `O_NOFOLLOW|O_CLOEXEC`, se verifica como archivo regular root:root con nlink 1 y modo 0600, y se adquiere con `flock(LOCK_EX|LOCK_NB)`.
+- Tras adquirirlo, el orquestador crea el marcador de mantenimiento con `O_CREAT|O_EXCL|O_NOFOLLOW|O_CLOEXEC`, modo 0600. Contiene schema, run_id aleatorio, nombre de unidad, InvocationID inicial y fase. Se escribe de forma completa y se sincroniza antes de solicitar stop.
+- Todo start/restart autorizado pasa por un supervisor único. Ese supervisor adquiere el mismo lock y rechaza si existe marcador. El orquestador de mantenimiento conserva el lock desde antes de stop hasta que reporte, decisión y cleanup hayan concluido.
+- El marcador no se elimina en un bloque finally genérico. Solo se elimina tras persistir el reporte final, confirmar estado terminal y completar cleanup exacto. Si el orquestador cae, el kernel libera flock pero el marcador permanece y el supervisor sigue rechazando start/restart; su retiro requiere recuperación manual auditada.
+- La unidad de prueba es transitoria, no habilitada, con `Restart=no`, sin timers, path/socket activators, triggers ni dependencias que puedan iniciarla automáticamente.
+
+**Límite explícito:** un administrador root puede eludir deliberadamente el supervisor y llamar a PID 1 directamente. El lock no puede impedirlo y no se afirma lo contrario. Root está dentro del dominio de confianza. La prueba verifica que los actores autorizados y automatizaciones declaradas usan la puerta, y que una omisión root durante QP-12 es detectada por la revalidación de InvocationID; no demuestra resistencia a root malicioso.
+
+**Criterio de aceptación:** dos actores cooperantes no pueden mantener simultáneamente el lock; el segundo no crea job; la caída del orquestador deja marcador y bloquea el siguiente start autorizado; el marcador no se limpia automáticamente por timeout ni por proceso de recuperación no auditado.
+
+### 9.3 Punto 3 — Reporte JSON y límites
+
+**Decisión:** reporte JSON UTF-8, schema `atlas.listener-quiescence-probe/1`, una sola estructura raíz, claves deterministas, sin NaN/Infinity, sin claves duplicadas y sin datos no serializables. El reporte completo tendrá un máximo de **1 MiB**; cada escenario, máximo **48 KiB**; cada snapshot D-Bus, máximo **32 KiB**; cada lectura `cgroup.events`, máximo **4 KiB**. Al superar un límite se aborta el escenario; nunca se trunca evidencia y se conserva como si fuera completa.
+
+Campos raíz obligatorios:
+
+- `schema`, `run_id`, `probe_version`, `git_commit`;
+- `environment`: distro/release, kernel, systemd, busctl, Python, cgroup mode/mount, VM declarada y EUID;
+- `started_utc`/ `finished_utc` solo informativos y `started_monotonic_ns`/ `finished_monotonic_ns` obligatorios para ordenar eventos dentro del mismo boot;
+- `preflight`, `gate`, `unit_identity`, `snapshots`, `scenarios`, `cleanup`, `overall`;
+- por escenario: ID, estado PASS/FAIL/INCOMPLETE, razón estable, timestamps monotónicos, snapshots referenciados y resultado QUIESCENT/ABORT_NOT_QUIESCENT si aplica.
+
+Los timestamps se obtienen con `time.clock_gettime_ns(CLOCK_MONOTONIC)`; UTC nunca se usa para calcular deadlines. El lector de `cgroup.events` acumula lecturas parciales hasta EOF con un máximo de 4096 bytes. El parser exige una única clave `populated` con valor entero 0 o 1; rechaza duplicados, ausencia, valores extraños y claves desconocidas hasta que se revise el schema del kernel. Se permiten las claves conocidas del cgroup v2 objetivo, registrando su contenido íntegro.
+
+El reporte no contiene payloads IPC, variables de entorno completas, secretos, tokens, contenido de archivos ajenos ni datos personales. stdout y stderr de subprocesos se limitan y se redactan; la evidencia primaria son los campos estructurados consultados.
+
+**Criterio de aceptación:** validación contra schema local versionado, límites aplicados antes de acumular memoria ilimitada, timestamps monotónicos presentes en cada evento y fallo fail-closed ante JSON inválido o evidencia sobredimensionada.
+
+### 9.4 Punto 4 — Preflight no mutante de Atlas-VM-test
+
+**Decisión:** el runner no prepara ni repara el sistema. Ejecuta una fase preflight de solo lectura y, si cualquier requisito falta, termina INCOMPLETE sin crear recursos.
+
+Perfil de compatibilidad inicial que se va a validar: Debian 13, systemd 257.13, kernel `6.12.117+deb13-amd64`, Python 3.13.5, cgroup v2 unificado y `busctl` con JSON. Cualquier cambio de versión queda fuera de este primer perfil y requiere revisión explícita antes de ampliar compatibilidad.
+
+Preflight obligatorio:
+
+- EUID 0 y confirmación humana explícita de que el entorno es la VM desechable `Atlas-VM-test`; el runner no puede demostrar por sí solo que una VM es desechable.
+- system bus y PID 1 accesibles; systemd y busctl dentro del perfil fijado; interfaces D-Bus y propiedades requeridas presentes.
+- cgroup v2 unificado: mount de tipo cgroup2, raíz y mountpoint inequívocos, `cgroup.events` legible, sin fallback a cgroup v1.
+- `/run` montado como tmpfs, espacio suficiente y permisos para un sandbox privado de ejecución.
+- identidades fixture ya existentes SERVICE 2005:2005 y OTHER 2006:2006; verificar UID/GID por NSS y no crearlos ni modificarlos.
+- intérprete Python 3.13.5, `busctl`, `systemd-run`, `systemctl` y biblioteca `libseccomp.so.2` disponibles. No instalar paquetes ni compilar componentes durante preflight.
+- ausencia de colisión para los nombres aleatorios que se van a usar; una colisión implica generar otro nombre o abortar, nunca reutilizar el objeto existente.
+- disponibilidad de syscalls/funciones requeridas para dirfd, no-follow, monotonic clock y seccomp.
+
+Preflight no ejecuta stop/restart de unidades preexistentes, no consulta ni enumera servicios Atlas reales, no escribe en `/etc`, no cambia cgroups, no crea usuarios/grupos y no toca configuración global. Solo después de PASS de preflight el operador podrá iniciar una ejecución expresamente autorizada.
+
+**Criterio de aceptación:** reporte preflight completo y sin mutaciones; toda precondición ausente produce INCOMPLETE con código de razón estable.
+
+### 9.5 Punto 5 — Reproducción determinista de los escenarios difíciles
+
+**Decisión:** usar fixtures transitorios aislados y fault injection en límites explícitos, sin modificar unidades ajenas ni escribir manualmente en la jerarquía cgroup.
+
+- **QP-05:** dos unidades fixture independientes SERVICE/OTHER prueban cgroups separados. Una variante del adaptador presenta un ControlGroup esperado distinto para probar rechazo de identidad. No se fuerza una falsa compartición moviendo procesos manualmente entre cgroups.
+- **QP-06:** unidad negativa transitoria con `Delegate=yes` se rechaza antes de aceptar quiescencia; unidad positiva `Delegate=no` se comprueba sin otorgar capacidades de administración cgroup al proceso. No se escribe en cgroupfs para simular escape.
+- **QP-08:** filtro seccomp instalado después de bind/listen deniega `fork`, `vfork`, `clone` y `clone3` con EPERM. El test intenta cada syscall disponible y confirma que no nace un descendiente.
+- **QP-09:** el mismo filtro deniega `sendmsg`, `recvmsg`, `sendmmsg` y `recvmmsg`; el canal de control usa read/write. QP-13 es la única excepción fixture deliberada y separada para demostrar el resultado negativo de un FD externo.
+- **QP-10:** el proceso ejecuta `execve` sobre sí mismo (sin fork); el helper comprueba que FD_CLOEXEC cerró el listener y reporta por un descriptor de control que no es el listener.
+- **QP-12:** fault injector root llama directamente al manager para reiniciar únicamente la unidad transitoria entre snapshots. Es una violación deliberada de la puerta y sirve para comprobar que InvocationID distinto invalida toda la evidencia; no representa un actor autorizado.
+- **QP-13:** una variante aislada sin filtro de FD transfiere deliberadamente el listener mediante SCM_RIGHTS a un holder OTHER fuera del cgroup. Tras detener el servicio, se demuestra `populated 0` en el cgroup y FD listener aún abierto en el holder; el resultado obligatorio es ABORT_NOT_QUIESCENT. El holder se termina de forma controlada al finalizar el caso.
+- **QP-15:** el adaptador de cgroup inyecta una identidad final st_dev/st_ino distinta o un ControlGroup discordante. No se renombra ni manipula el cgroup real del kernel.
+
+**Criterio de aceptación:** cada fault injection tiene un identificador explícito, solo puede referirse a la unidad/run_id fixture actual y debe dejar evidencia del estímulo y de la respuesta. Si el escenario requiere tocar un servicio ajeno o mover procesos en cgroupfs, se marca INCOMPLETE; no se improvisa.
+
+### 9.6 Punto 6 — Unidades transitorias, sandbox y cleanup
+
+**Decisión:** crear únicamente unidades `.service` transitorias con nombre aleatorio mediante `systemd-run --no-block --unit=...` y propiedades explícitas. No crear archivos de unidad, drop-ins, enlaces enablement, timers, sockets ni slices persistentes. El estado se consulta por D-Bus, no se parsea la salida de systemd-run/systemctl.
+
+Propiedades mínimas de la unidad fixture: `Type=exec`, `User=2005`, `Group=2005`, `KillMode=control-group`, `Delegate=no`, `Restart=no`, sin activadores, y límites de inicio/parada acotados. QP-03 ajusta solo su fixture negativo y su deadline para observar el aborto antes de la terminación final del manager.
+
+El sandbox usa un directorio padre root:root 0700 bajo `/run`, con subdirectorio fixture dedicado y permisos mínimos para SERVICE/OTHER. Todos los nombres se generan por ejecución; cada directorio se abre y conserva mediante dirfd y se registra su st_dev/st_ino. El servicio no recibe rutas arbitrarias del usuario.
+
+Orden de cleanup:
+
+1. Persistir snapshots y resultado del escenario antes de modificar recursos fixture.
+2. Solicitar stop solo a la unidad transitoria exacta y esperar por D-Bus `inactive`, sin jobs, cgroup vacío y cierre del fixture.
+3. Confirmar que no queda holder externo del escenario; QP-13 debe cerrar su FD y terminar el proceso OTHER antes de seguir.
+4. Verificar el endpoint fixture con `fstatat(AT_SYMLINK_NOFOLLOW)` y comparar tipo, owner, mode, st_dev y st_ino con la identidad registrada al crearlo.
+5. Retirar únicamente ese nombre mediante `unlinkat(dirfd, nombre, 0)`; después retirar directorios fixture vacíos mediante dirfd. Nunca usar `rm -rf`, glob, path reconstruido o recorrido recursivo.
+6. Liberar referencia de la unidad transitoria y comprobar que systemd ya no la mantiene cargada. Si la unidad o cgroup persisten de forma inesperada, no forzar cleanup global.
+7. Persistir resultado final, retirar el marcador sticky y liberar flock. Si algo falla, conservar marcador/sandbox y reportar INCOMPLETE.
+
+Esta retirada del socket fixture es exclusivamente cleanup de un objeto creado en esta ejecución y validado por identidad. No es stale recovery, no prueba `unlinkat` productivo y no autoriza retirar ningún endpoint Atlas. La bandera de recuperación debe permanecer siempre `recovery_pathname_mutation_performed=false`.
+
+**Criterio de aceptación:** el inventario de recursos creados por run_id coincide exactamente con el inventario retirado; no hay cambios en unidades, cgroups, archivos o procesos ajenos; cualquier discrepancia detiene cleanup y deja evidencia.
+
+### 9.7 Estado de los seis puntos
+
+| Punto | Decisión de diseño | Estado |
+|---|---|---|
+| 1. Interfaz systemd | D-Bus tipado vía busctl JSON; sin parseo de salida humana | Resuelto documentalmente |
+| 2. Puerta root-managed | flock + marcador sticky + supervisor único; root directo queda dentro del TCB | Resuelto con límite explícito |
+| 3. Reporte JSON | schema versionado y límites estrictos | Resuelto documentalmente |
+| 4. Preflight VM | perfil fijado y solo lectura; sin auto-provisioning | Resuelto documentalmente |
+| 5. Fault injection | fixtures aislados, seccomp y adaptadores controlados | Resuelto documentalmente |
+| 6. Lifecycle/cleanup | unidades transitorias y cleanup por identidad exacta | Resuelto documentalmente |
+
+**Siguiente gate:** revisión estática de coherencia de este diseño y aprobación expresa del propietario para implementar el runner. La aprobación previa de R1–R7 y el cierre documental de estos seis puntos no son autorización para implementar ni ejecutar. La ejecución futura requiere otra solicitud expresa y será exclusivamente en `Atlas-VM-test`.
+
+Referencias técnicas externas usadas para fijar la interfaz (deben verificarse contra el perfil 257.13 durante una futura revisión, no durante este trabajo documental):
+
+- systemd D-Bus API: https://www.freedesktop.org/software/systemd/man/257/org.freedesktop.systemd1.html
+- busctl JSON y llamadas D-Bus: https://www.freedesktop.org/software/systemd/man/257/busctl.html
+- cgroup v2: https://docs.kernel.org/admin-guide/cgroup-v2.html
 
 ## 10. Relación con A-IPC-04 y listener-quiescence/1
 
