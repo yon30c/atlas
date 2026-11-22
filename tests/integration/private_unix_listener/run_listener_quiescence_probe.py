@@ -2072,6 +2072,15 @@ def run_probe(args: argparse.Namespace) -> dict:
                             {"unit": fixture["name"], "error": f"{type(exc).__name__}: {exc}"}
                         )
 
+        for observer in list(_OPEN_CGROUP_OBSERVERS):
+            try:
+                close_cgroup_observer(observer)
+            except OSError:
+                report["cleanup"]["safe_to_release_gate"] = False
+                report["cleanup"].setdefault("observer_close_errors", []).append(
+                    "failed to close pinned cgroup observer"
+                )
+
         for directory_fd in set(_OPEN_DIR_FDS):
             try:
                 os.close(directory_fd)
