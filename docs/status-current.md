@@ -1,6 +1,6 @@
 # Estado vigente de Atlas
 
-> **Corte documental:** 22 de noviembre de 2026. A-IPC-01: 16/16 PASS; A-IPC-02: MA-01..MA-10 y CP-01..CP-12 PASS; A-IPC-03/A-THREAT-06: PR-01..PR-12 PASS; A-IPC-04: SR-01..SR-12, **12/12 PASS** en `375fb00a3fee230a57f89ffa7897a29309ff1dd2`. La prueba unitaria `test_private_listener_procfs_read.py` fue reportada PASS inmediatamente antes del probe, sin SHA exacto confirmado. `docs/contracts/local-authority-admin-listener-quiescence-1.md` v1.0-draft: R1–R7 aprobadas como baseline; validación pendiente. Runner QP parcial en `tests/integration/private_unix_listener/run_listener_quiescence_probe.py`; no ejecutado. QP-03/QP-04/QP-06/QP-07/QP-11/QP-12 tienen implementación inicial; QP-11 usa un supervisor temporal interno al harness, revisado estáticamente pero no validado. QP-01/QP-02 y QP-05/QP-06/QP-07/QP-08/QP-09/QP-10/QP-13/QP-14/QP-15 siguen INCOMPLETE.
+> **Corte documental:** 22 de noviembre de 2026. A-IPC-01: 16/16 PASS; A-IPC-02: MA-01..MA-10 y CP-01..CP-12 PASS; A-IPC-03/A-THREAT-06: PR-01..PR-12 PASS; A-IPC-04: SR-01..SR-12, **12/12 PASS** en `375fb00a3fee230a57f89ffa7897a29309ff1dd2`. La prueba unitaria `test_private_listener_procfs_read.py` fue reportada PASS inmediatamente antes del probe, sin SHA exacto confirmado. `docs/contracts/local-authority-admin-listener-quiescence-1.md` v1.0-draft: R1–R7 aprobadas como baseline; validación pendiente. Runner QP-01..QP-15 implementado en `tests/integration/private_unix_listener/run_listener_quiescence_probe.py`; revisión estática final en curso, no ejecutado. QP-01/02 contienen predicado QUIESCENT condicionado; QP-11 usa supervisor temporal interno con caída simulada; QP-12 prueba bypass root; QP-13 holder OTHER por SCM_RIGHTS. No hay evidencia experimental todavía. A-THREAT-05 permanece abierta.
 > **Main:** permanece en HEAD `1bd73d149dbd98e7ee2e5fdc36880883b6b03d16`; PR #29 está integrado. La suite reportada para el HEAD de código de PR #29 fue 1,590 tests, `OK (skipped=1)`; no se ha reportado una nueva ejecución sobre el merge HEAD.
 > **Rama activa de diseño:** `experiment/a-ipc-01-private-unix-listener-probe`. Se mantiene separada de `main`; no tiene PR propio. PR #30 sigue abierto en Draft y corresponde a la rama de diseño original.
 > **Estado IPC:** el handler procesa conexiones ya aceptadas; solo `authority.ping` está implementada. No hay listener persistente, daemon administrativo ni acceso administrativo real a SQLite.
@@ -1034,13 +1034,22 @@ de sockets reales, limpieza automática, listener persistente, activación
 systemd ni despliegue. No ejecutar en greed producción. La validación fue
 ejecutada por el propietario; el asistente no ejecutó pruebas, builds,
 workflows ni probes.
-## A-IPC-05 — implementación inicial del runner de quiescencia (2026-11-22)
+## A-IPC-05 — runner QP-01..QP-15 implementado, pendiente de validación (2026-11-22)
 
 - Archivo: `tests/integration/private_unix_listener/run_listener_quiescence_probe.py`.
-- Rama: `experiment/a-ipc-01-private-unix-listener-probe`.
-- Implementa preflight estricto del perfil, fixtures `.service` transitorios, consultas D-Bus tipadas para unidad/jobs, observación cgroup v2, lock + marcador sticky, parser estricto de `cgroup.events`, limpieza limitada del endpoint fixture y reporte JSON acotado.
-- Escenarios con implementación inicial: QP-03, QP-04, QP-06, QP-07 y QP-12. QP-01/QP-02 ejercitan el lifecycle pero permanecen INCOMPLETE y con decisión `ABORT_NOT_QUIESCENT` hasta demostrar no-fork/no-duplicación/no-transferencia de FD.
-- QP-11 implementa `_TestLifecycleSupervisor`, exclusivo del harness: enruta start/stop, rechaza un segundo actor por token lógico, prueba exclusión `flock`, simula la caída liberando el lock y verifica que el marcador sticky impide start por un supervisor nuevo. El harness reacquire el lock solo para guardar evidencia y hacer cleanup. QP-12 mantiene una llamada directa de root como bypass intencional y detectable.
-- El supervisor es una clase interna de prueba, no un proceso/servicio productivo ni una defensa frente a root. QP-11 está implementado y revisado estáticamente, no validado.
-- No se ha completado la revisión estática integral ni se ha ejecutado localmente. No usar como evidencia de quiescencia ni ejecutar en `greed`; la futura ejecución requiere autorización y será solo en `Atlas-VM-test`.
-- A-THREAT-05 sigue abierta. No se autorizó listener persistente, stale recovery, cleanup automático ni despliegue.
+- Rama: `experiment/a-ipc-01-private-unix-listener-probe`; permanece separada de `main`.
+- Preflight: Debian 13, systemd 257, kernel/Python fijados, cgroup v2 unificado, tmpfs en `/run`, SERVICE 2005:2005 y OTHER 2006:2006; valida acceso de ambas identidades al script y al intérprete.
+- D-Bus: `GetUnit`, propiedades tipadas, `Unit.Job`, `Manager.ListJobs`, `ListUnitsByNames`; el orden de object paths de `ListJobs` está corregido. Tras stop, se exige unidad ausente y ningún job; no se usa `RefUnit/UnrefUnit` con conexiones `busctl` efímeras.
+- Cgroups: observer FD de directorio y `cgroup.events` abierto antes de stop, identidad dev/inode fijada, lecturas repetibles después de stop; se cierra tras confirmar `populated=0`.
+- QP-01/02: seccomp para fork/clone/vfork/clone3, duplicación, SCM_RIGHTS e io_uring; QP-02 filtra también el auxiliar creado antes del listener. Dos observaciones de cgroup separadas por 50 ms; QUIESCENT solo si identidad/invocación/jobs/MainPID/cgroup/FD-policy coinciden.
+- QP-03/04: transición y job stop pendientes con proceso que ignora SIGTERM; ABORT hasta terminar todo el cgroup.
+- QP-05/06/07: separación de ControlGroup; rechazo de Delegate=yes y control Delegate=no con NNP, ProtectControlGroups, capabilities vacías y CAP_SYS_ADMIN/permisos; parser cgroup.events con lecturas parciales y errores.
+- QP-08/09/10: filtros de creación de procesos y FD escape (incluido io_uring), execve con mismo PID y CLOEXEC.
+- QP-11: `_TestLifecycleSupervisor` interno al harness; valida token, flock, segundo actor, caída simulada, marcador sticky y restart bloqueado. No es proceso supervisor independiente ni producto Atlas.
+- QP-12: restart directo de root fuera del supervisor; detecta InvocationID nuevo y separa observers cgroup antiguo/sustituto. Root permanece en TCB.
+- QP-13: proceso OTHER recibe listener FD por SCM_RIGHTS; se demuestra que cgroup del servicio vacío no basta mientras el holder conserva el FD. No es socket activation.
+- QP-14/15: fallos inyectados de manager/supervisor, timeout acotado y discrepancias ControlGroup/dev/inode.
+- Cleanup: detiene primero todos los fixtures; solo después retira endpoint y archivos ready/received si tipo, owner, mode, dev/inode coinciden. Los JSON usan O_NOFOLLOW, límites, UTF-8 estricto y rechazo de claves duplicadas. Reporte schema versionado, límites por escenario/total y timestamps monotónicos.
+- El runner no se ha ejecutado ni validado. No se han ejecutado pruebas, builds o workflows; no se crearon unidades/cgroups/usuarios/grupos/rutas en hosts durante esta sesión.
+- Próximo paso: completar revisión estática final y pasar a ejecución del propietario exclusivamente en `Atlas-VM-test`. Nunca en `greed`.
+- A-THREAT-05 continúa abierta; no hay autorización de stale recovery, listener persistente, cleanup automático de endpoints Atlas ni despliegue.
