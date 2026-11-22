@@ -1893,8 +1893,8 @@ def run_probe(args: argparse.Namespace) -> dict:
         systemd_stop(name12)
         stopped12 = wait_inactive(name12, time.monotonic() + STOP_TIMEOUT + 3, expected_invocation=changed["InvocationID"], control_group=changed["ControlGroup"])
         empty12 = read_cgroup_observer(_ACTIVE_FIXTURES[name12]["cgroup_observer"])
-        # QP-12 unit remains referenced through QP-11 so its inactive state can
-        # be observed; release the manager reference only after the gate test.
+        # QP-12 is fully stopped and collected before QP-11 creates its
+        # independent active fixture for the sticky-marker gate exercise.
         cleanup12 = _stop_and_cleanup(
             name12, changed, None, ready12, run_dir_fd, report,
             already_stopped=True, cgroup_empty_confirmed=empty12["values"]["populated"] == 0
