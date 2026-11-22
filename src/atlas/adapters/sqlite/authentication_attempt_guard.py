@@ -2,7 +2,6 @@
 
 from datetime import datetime, timedelta
 import hashlib
-import sqlite3
 from uuid import uuid4
 
 from atlas.adapters.sqlite.database import SQLiteDatabase
@@ -82,23 +81,43 @@ class SQLiteAuthenticationAttemptGuard:
         with self._database.connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
+                # Opportunistic bounded garbage collection also covers accounts
+                # that never attempt another login. Active blocks are retained
+                # until blocked_until, even when their source failure leaves the
+                # rolling count window.
                 connection.execute(
-                    "DELETE FROM native_authentication_attempt_reservations "
-                    "WHERE account_digest = ? AND expires_at <= ?",
-                    (account, now_text),
+                    """
+                    DELETE FROM native_authentication_attempt_reservations
+                    WHERE reservation_id IN (
+                        SELECT reservation_id
+                        FROM native_authentication_attempt_reservations
+                        WHERE expires_at <= ?
+                        ORDER BY expires_at
+                        LIMIT 256
+                    )
+                    """,
+                    (now_text,),
                 )
                 connection.execute(
-                    "DELETE FROM native_authentication_attempt_failures "
-                    "WHERE account_digest = ? AND occurred_at <= ?",
-                    (account, cutoff_text),
+                    """
+                    DELETE FROM native_authentication_attempt_failures
+                    WHERE failure_id IN (
+                        SELECT failure_id
+                        FROM native_authentication_attempt_failures
+                        WHERE occurred_at <= ? AND blocked_until <= ?
+                        ORDER BY occurred_at
+                        LIMIT 256
+                    )
+                    """,
+                    (cutoff_text, now_text),
                 )
                 blocked = connection.execute(
                     """
                     SELECT MAX(blocked_until) AS blocked_until
                     FROM native_authentication_attempt_failures
-                    WHERE account_digest = ? AND occurred_at > ?
+                    WHERE account_digest = ? AND blocked_until > ?
                     """,
-                    (account, cutoff_text),
+                    (account, now_text),
                 ).fetchone()["blocked_until"]
                 active = connection.execute(
                     """
