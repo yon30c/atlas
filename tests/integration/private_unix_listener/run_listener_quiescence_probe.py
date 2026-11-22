@@ -2037,10 +2037,14 @@ def run_probe(args: argparse.Namespace) -> dict:
                         final_fixture = current_fixture
                     if final_fixture["ActiveState"] != "inactive" or final_fixture["Job"][0] != 0:
                         raise Incomplete("fixture did not reach inactive/no-job state during emergency cleanup")
-                    _root, cleanup_mount = cgroup_mount()
-                    events_fixture = cgroup_events(
-                        cleanup_mount, initial_fixture["ControlGroup"]
-                    )
+                    fixture_observer = fixture.get("cgroup_observer")
+                    if fixture_observer is not None:
+                        events_fixture = read_cgroup_observer(fixture_observer)
+                    else:
+                        _root, cleanup_mount = cgroup_mount()
+                        events_fixture = cgroup_events(
+                            cleanup_mount, initial_fixture["ControlGroup"]
+                        )
                     if events_fixture["values"]["populated"] != 0:
                         raise Incomplete("fixture cgroup remains populated; preserving endpoint and gate")
                     pending_cleanup.append((fixture, initial_fixture))
