@@ -26,11 +26,9 @@ El verificador Python posee únicamente la clave pública del emisor. Valida la 
 
 La clave pública no autentica por sí sola que la prueba no haya sido reproducida. El consumo único es una operación separada y atómica.
 
-### 2.3 Solicitud y desafío
+### 2.3 Solicitud
 
-La solicitud de bootstrap debe originarse en un coordinador confiable y en estado de bootstrap pendiente. Antes de permitir la autenticación, el helper comprueba que el desafío procede de un emisor autorizado, que está ligado al descriptor exacto y que no ha expirado.
-
-**Decisión pendiente:** arquitectura concreta del emisor de desafíos y su clave. No se acepta que Assistant firme desafíos, que el caller invente un desafío válido o que el helper firme ciegamente bytes proporcionados por el caller. El emisor debe consultar/validar el estado protegido de bootstrap pendiente y solo emitir desafíos para la única operación inicial LOCAL permitida.
+La invocación interactiva del helper constituye la solicitud. No hay challenge externo, servicio de desafíos ni clave de emisor de desafíos. El helper genera request_id, nonce y proof_id después de validar la configuración protegida y antes de emitir la prueba. CAM verifica el estado pendiente y consume esos identificadores en la UoW de génesis.
 
 ## 3. Descriptor protegido y datos de invocación
 
@@ -38,24 +36,7 @@ No existe un challenge firmado ni un emisor separado. El helper lee el descripto
 
 El descriptor protegido contiene exactamente los campos definidos por `local-bootstrap-coordination-architecture.md` §2 y ME-D4O-A §3. La revisión y el digest de esa configuración se fijan antes de la interacción. Los siguientes valores de la prueba se generan dentro del helper después de validar la configuración:
 
-| Campo | Tipo lógico | Regla |
-|---|---|---|
-| protocol_version | entero | Versión admitida explícitamente |
-| issuer_id | ID opaco | Emisor de desafío confiable |
-| request_id | 128 bits | Aleatorio, único, no reutilizado |
-| nonce | 256 bits | Aleatorio criptográficamente |
-| issued_at | entero UTC | Emitido por fuente confiable |
-| expires_at | entero UTC | Ventana corta, límite configurado |
-| action | enum cerrado | Solo DOMAIN_BOOTSTRAP_INITIAL |
-| profile | enum cerrado | Solo LOCAL |
-| domain_id | ID canónico | Dominio exacto |
-| authority_epoch | entero | Época inicial exacta |
-| descriptor_digest | 32 bytes | SHA-256 del descriptor canónico versionado |
-| subject_binding_id | ID opaco | Binding local protegido esperado |
-| host_binding_id | ID opaco | Host local esperado |
-| confirmation_commitment | 32 bytes | Compromiso de los términos mostrados y confirmados |
-
-El desafío se autentica mediante un mecanismo que el helper verifica sin compartir con el caller la clave privada del emisor. Campos desconocidos, duplicados, omitidos, fuera de rango o no canónicos se rechazan.
+El descriptor protegido es el definido por `local-bootstrap-coordination-architecture.md` §2 y ME-D4O-A §3. El helper valida su canonicalización, revisión, digest, permisos y correspondencia con el host/sujeto configurados. Los identificadores aleatorios y timestamps de la prueba se generan dentro del helper; ningún campo se recibe como autoridad desde el caller.
 
 El helper verifica la integridad, canonicalización, permisos, sujeto local y host de la configuración. No determina si el bootstrap continúa pendiente: esa condición solo puede decidirla el coordinador CAM dentro de la UoW de génesis.
 
@@ -90,13 +71,13 @@ Tras validar la configuración protegida, capturar la decisión y completar PAM 
 | config_revision | entero/ID opaco | Revisión exacta de configuración protegida |
 | config_digest | 32 bytes | SHA-256 de la configuración canónica versionada |
 | proof_id | 128 bits | Aleatorio, único |
-| request_id | 128 bits | Igual al desafío |
-| nonce | 256 bits | Igual al desafío |
+| request_id | 128 bits | Generado por helper; único dentro del dominio |
+| nonce | 256 bits | Coincide con descriptor protegido |
 | subject_auth_domain | ID opaco | Host/realm PAM local |
 | subject_name | string acotado | Cuenta configurada (greed actualmente) |
 | subject_uid | entero | UID observado por helper, no elegido por caller |
-| subject_binding_id | ID opaco | Igual al desafío y configuración protegida |
-| host_binding_id | ID opaco | Igual al desafío y host configurado |
+| subject_binding_id | ID opaco | Coincide con configuración protegida |
+| host_binding_id | ID opaco | Coincide con host configurado |
 | action | enum cerrado | DOMAIN_BOOTSTRAP_INITIAL |
 | profile | enum cerrado | LOCAL |
 | domain_id | ID canónico | Igual al desafío |
@@ -147,11 +128,11 @@ El verificador realiza, en orden:
 
 El almacenamiento de consumo debe tener restricciones únicas para nonce, request_id y proof_id. La transacción serializa intentos concurrentes: como máximo uno puede consumir la prueba. El consumo, el binding, la identidad, el evento DOMAIN_BOOTSTRAPPED y la proyección Recovery Gate se confirman o revierten juntos. No hay tabla de challenges pendientes ni consumo previo en otra DB. Si hay resultado ambiguo por caída, la idempotencia exacta resuelve el mismo request; cualquier discrepancia mantiene el gate cerrado.
 
-La firma válida sin registro de desafío pendiente y sin consumo atómico no es suficiente. Un OwnerDecisionProof interno solo puede construirse por el verificador confiable, nunca mediante deserialización directa desde el caller.
+La firma válida sin configuración protegida coincidente, estado de bootstrap pendiente y consumo atómico no es suficiente. Un OwnerDecisionProof interno solo puede construirse por el verificador confiable, nunca mediante deserialización directa desde el caller.
 
 ## 9. Caducidad y reloj
 
-La duración máxima de desafío y prueba será corta y configurada. El valor exacto se fijará después de probar la interacción humana y el reloj del host.
+La duración máxima de la prueba será corta y configurada. El valor exacto se fijará después de probar la interacción humana y el reloj del host.
 
 - Rechazar timestamps futuros fuera del skew configurado.
 - Rechazar issued_at posterior a expires_at.
