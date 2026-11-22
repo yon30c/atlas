@@ -201,7 +201,22 @@ def unit_is_absent(name: str) -> bool:
     )
     if result["type"] != "a(ssssssouso)" or not isinstance(result["data"], list):
         raise Incomplete("ListUnitsByNames returned an unexpected signature or shape")
-    return not result["data"]
+
+    # systemd 257 returns one tuple for every requested name, including an
+    # unloaded name. A missing unit is represented by a placeholder tuple
+    # whose LoadState is "not-found"; an empty array is not the absence oracle.
+    rows = result["data"]
+    if len(rows) != 1:
+        raise Incomplete("ListUnitsByNames did not return exactly one requested unit")
+    row = rows[0]
+    if (
+        not isinstance(row, list) or len(row) != 10
+        or row[0] != name
+        or not all(isinstance(row[index], str) for index in (0, 1, 2, 3, 4, 5, 6, 8, 9))
+        or not isinstance(row[7], int)
+    ):
+        raise Incomplete("ListUnitsByNames returned a malformed typed unit record")
+    return row[2] == "not-found"
 
 
 def assert_unit_absent(name: str) -> None:
