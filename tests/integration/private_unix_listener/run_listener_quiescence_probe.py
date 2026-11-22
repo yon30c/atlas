@@ -320,6 +320,15 @@ def require_cgroup_identity(expected: dict, observed: dict) -> None:
         raise Incomplete("cgroup identity mismatch; refusing to use the observed cgroup")
 
 
+def require_no_delegation(snapshot: dict) -> None:
+    if (
+        snapshot["Delegate"] is not False
+        or snapshot["DelegateControllers"]
+        or snapshot["DelegateSubgroup"] != ""
+    ):
+        raise Incomplete("fixture cgroup delegation is enabled or has delegated controllers")
+
+
 def read_bounded_chunks(read_call, limit: int) -> bytes:
     chunks = []
     total = 0
@@ -1090,6 +1099,8 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
     _ACTIVE_FIXTURES[name]["unit_ref"] = True
     if snap["Delegate"] != delegate:
         raise Incomplete("systemd Delegate property differs from requested fixture")
+    if not delegate:
+        require_no_delegation(snap)
     expected_user = pwd.getpwuid(uid).pw_name
     expected_group = grp.getgrgid(gid).gr_name
     if (
@@ -1522,8 +1533,13 @@ def run_probe(args: argparse.Namespace) -> dict:
         name6 = f"atlas-qp-{secrets.token_hex(6)}.service"
         initial6, endpoint6, ready6 = _start_fixture(name6, run_dir, delegate=True)
         update_gate_marker(marker, run_id, name6, initial6, "unit-started")
-        if initial6["Delegate"] is not True:
-            raise Incomplete("QP-06 negative fixture did not expose Delegate=yes")
+        delegate_yes_rejected = False
+        try:
+            require_no_delegation(initial6)
+        except Incomplete:
+            delegate_yes_rejected = True
+        if initial6["Delegate"] is not True or not delegate_yes_rejected:
+            raise Incomplete("QP-06 negative fixture was not rejected by the no-delegation gate")
         cleanup6 = _stop_and_cleanup(name6, initial6, endpoint6, ready6, run_dir_fd, report)
         report["cleanup"]["resources"].append(cleanup6)
         if not cleanup6["unit_inactive"] or not cleanup6["cgroup_empty"] or not cleanup6["endpoint_removed"] or not cleanup6.get("unit_unloaded"):
@@ -1557,7 +1573,8 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["scenarios"].append({
             "id": "QP-06", "status": "PASS", "decision": "ABORT_NOT_QUIESCENT",
             "reason": "Delegate=yes rejected; Delegate=no service had no CAP_SYS_ADMIN and could not write its cgroup directory",
-            "observations": {"delegate_yes_rejected": True, "delegate_no": ready6good_data},
+            "observations": {"delegate_yes_rejected": delegate_yes_rejected,
+                             "delegate_no": ready6good_data},
         })
 
         # QP-07: parser fault matrix; malformed data is never normalized to zero.
