@@ -44,7 +44,7 @@ El puerto sustituye la secuencia ambigua `is_allowed → record_failure/record_s
 
 La reserva es opaca, vinculada internamente a la cuenta y no contiene contraseña, PHC, proof ni identificadores de identidad adicionales. Las operaciones de finalización son idempotentes solo si el contrato lo define explícitamente; de lo contrario, una reserva ausente, repetida o expirada falla cerrado.
 
-La clave persistida de cuenta será un digest determinista SHA-256 de una codificación canónica con separación de dominio, issuer y LoginHandle normalizado. Es un pseudónimo estable para indexación, no se presentará como secreto ni como protección frente a análisis offline. No se almacenará una copia adicional del handle legible.
+La clave persistida de cuenta será un digest determinista SHA-256 de una codificación canónica con separación de dominio, issuer y LoginHandle normalizado. El adaptador normaliza el LoginHandle en su propia frontera para que diferencias de mayúsculas no creen buckets de throttling distintos. Es un pseudónimo estable para indexación, no se presentará como secreto ni como protección frente a análisis offline. No se almacenará una copia adicional del handle legible.
 
 ## 4. Secuencia de autenticación
 
@@ -78,7 +78,7 @@ No se introducen tablas de secretos, sesiones, tokens, IPs ni contenido de crede
 ## 6. Pruebas de aceptación que ejecutará el propietario en Debian
 
 - política exacta 1/2/4/7/15, ventana móvil, expiración de demora y bloqueo activo hasta `blocked_until`;
-- límite de dos reservas y rechazo de una tercera;
+- límite de dos reservas y rechazo de una tercera;\n- variantes de mayúsculas del mismo LoginHandle comparten el mismo bucket;
 - finalización de reservas correctas, fallidas, repetidas y expiradas;
 - abandono no cuenta como fallo;
 - éxito reinicia fallos sin borrar otras reservas activas;
