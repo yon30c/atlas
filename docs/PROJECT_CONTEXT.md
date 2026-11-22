@@ -1422,3 +1422,27 @@ todavía: el propietario debe actualizar el checkout, ejecutar suite local
 y después el probe exclusivamente en Atlas-VM-test. No ejecutar en
 greed. A-THREAT-05 sigue abierta; no se aprueba stale recovery, listener
 persistente, cleanup automático ni despliegue.
+
+### A-IPC-05 — segundo defecto de parsing de busctl JSON (2026-11-22)
+
+Después de la corrección de LoadState=not-found, el propietario ejecutó
+1594 tests (OK, 1 skipped). El probe abortó antes de QP-01 con
+"ListUnitsByNames returned a malformed typed unit record"; los 15
+escenarios fueron INCOMPLETE. No hubo snapshots, socket activation ni
+mutación de pathname.
+
+La salida directa de busctl --json=short ya compartida evidencia que el
+objeto data contiene primero los argumentos de salida del método. Para el
+único argumento array de ListUnitsByNames, la lista de registros se obtiene
+de data[0]; cada struct es una lista de campos. El parser confundía el
+array exterior de argumentos con la colección interior de registros.
+
+Se incorporó dbus_array_output(), que exige un único argumento de salida
+con la signature esperada y devuelve la colección interna. Se usa para
+Manager.ListUnitsByNames y Manager.ListJobs, validando también los registros
+y tipos de cada fila. Commit: a0d90189895db5799b5031c271d81989e501bb0d.
+
+Es una corrección estática aún no validada por el propietario. Actualizar
+el checkout, ejecutar suite local y luego el probe solo en Atlas-VM-test.
+No ejecutar en greed. A-THREAT-05 continúa abierta; no se autoriza stale
+recovery, listener persistente, cleanup automático ni despliegue.
