@@ -2,7 +2,7 @@
 
 > **Corte documental:** 22 de noviembre de 2026.
 > **Main:** HEAD `a89e96cc4e5d9555e28a7ea5d9f3788654fe7268`; PR #29 integrado mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`.
-> **Rama MVP activa:** `work/atlas-mvp-runtime`, no integrada en `main`. HEAD actual: `0315d52db9505998244dace068828723bb5b424f`. El último HEAD validado por el propietario sigue siendo `29e900a1129efbb83c8e4b867c99d37d66473c55`; el cambio de emisión de Grants de `1f43d29` está pendiente de validación local. La comparación consultada mostró la rama por delante y no detrás de `main`.
+> **Rama MVP activa:** `work/atlas-mvp-runtime`, no integrada en `main`. HEAD actual: `e7b64a322ef8edfa0f70e970022db56dfc023802`. El último HEAD validado por el propietario sigue siendo `29e900a1129efbb83c8e4b867c99d37d66473c55`; el cambio de emisión de Grants de `1f43d29` está pendiente de validación local. La comparación consultada mostró la rama por delante y no detrás de `main`.
 > **Validación local de la rama MVP:** suite completa `Ran 1611 tests in 40.322s — OK (skipped=1)`; `compileall -q src tests` sin errores reportados. Validación comunicada por el propietario desde Debian 13 / `Atlas-VM-test`, no ejecutada desde GitHub.
 > **Límite de validación:** la suite unitaria no demuestra migración sobre una base persistente real, login desplegado, composición autenticada, bootstrap, Workspace ni CAM operativo.
 > **IPC:** el handler sigue siendo un prototipo para conexiones ya aceptadas; solo `authority.ping` está implementado. No hay listener persistente ni transporte aprobado para producción. Socket activation systemd sobre filesystem permanece suspendida por la colisión destructiva observada.
