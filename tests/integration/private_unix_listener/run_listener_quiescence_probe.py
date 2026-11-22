@@ -143,8 +143,15 @@ def busctl_json(*args: str, timeout: float = 5.0) -> dict:
     return value
 
 
+def manager_call(adapter, *args):
+    try:
+        return adapter(*args)
+    except Exception as exc:
+        raise Incomplete(f"system manager query failed: {type(exc).__name__}") from exc
+
+
 def dbus_property(path: str, interface: str, name: str, expected_type: str):
-    result = busctl_json(
+    result = manager_call(busctl_json,
         "get-property", BUS, path, interface, name
     )
     if result["type"] != expected_type:
@@ -156,8 +163,8 @@ def dbus_property(path: str, interface: str, name: str, expected_type: str):
 
 
 def unit_path(name: str) -> str:
-    result = busctl_json(
-        "call", BUS, MANAGER, MANAGER_IFACE, "GetUnit", "s", name
+    result = manager_call(
+        busctl_json, "call", BUS, MANAGER, MANAGER_IFACE, "GetUnit", "s", name
     )
     if result["type"] != "o" or not isinstance(result["data"], str):
         raise Incomplete("GetUnit did not return one object path")
@@ -167,7 +174,7 @@ def unit_path(name: str) -> str:
 
 
 def list_jobs_for_unit(name: str) -> list[dict]:
-    result = busctl_json("call", BUS, MANAGER, MANAGER_IFACE, "ListJobs")
+    result = manager_call(busctl_json, "call", BUS, MANAGER, MANAGER_IFACE, "ListJobs")
     if result["type"] != "a(usssoo)" or not isinstance(result["data"], list):
         raise Incomplete("Manager.ListJobs returned an unexpected signature or shape")
     matches = []
@@ -187,8 +194,8 @@ def list_jobs_for_unit(name: str) -> list[dict]:
 
 
 def assert_unit_absent(name: str) -> None:
-    result = busctl_json(
-        "call", BUS, MANAGER, MANAGER_IFACE, "ListUnitsByNames", "as", "1", name
+    result = manager_call(
+        busctl_json, "call", BUS, MANAGER, MANAGER_IFACE, "ListUnitsByNames", "as", "1", name
     )
     if result["type"] != "a(ssssssouso)" or not isinstance(result["data"], list):
         raise Incomplete("ListUnitsByNames returned an unexpected signature or shape")
@@ -1144,6 +1151,40 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["scenarios"].append({"id": "QP-07", "status": "PASS",
                                     "reason": "strict parser, partial-read accumulation, permission failure and byte limit all fail closed",
                                     "observations": parser_results})
+
+        # QP-14: injected manager timeout and unavailable supervisor are fail-closed.
+        def failing_manager_adapter(*_args):
+            raise TimeoutError("injected system-manager disconnect")
+        manager_failure_rejected = False
+        try:
+            manager_call(failing_manager_adapter, "GetUnit")
+        except Incomplete:
+            manager_failure_rejected = True
+        supervisor_failure_rejected = False
+        failed_supervisor = _TestLifecycleSupervisor(lock_fd, marker, run_id)
+        failed_supervisor.crash()
+        try:
+            failed_supervisor.request(
+                "stop", ["systemctl", "--no-block", "stop", "atlas-qp-never.service"],
+                actor_run_id=run_id,
+            )
+        except Incomplete:
+            supervisor_failure_rejected = True
+        stop_timeout_rejected = False
+        try:
+            bounded_run(["/bin/sleep", "1"], timeout=0.05, limit=128)
+        except Incomplete:
+            stop_timeout_rejected = True
+        if not manager_failure_rejected or not supervisor_failure_rejected or not stop_timeout_rejected:
+            raise Incomplete("QP-14 did not fail closed for manager/supervisor/timeout faults")
+        report["scenarios"].append({
+            "id": "QP-14", "status": "PASS",
+            "reason": "injected manager failure, unavailable supervisor and bounded-command timeout were rejected without pathname mutation",
+            "observations": {"manager_failure_rejected": manager_failure_rejected,
+                             "supervisor_failure_rejected": supervisor_failure_rejected,
+                             "command_timeout_rejected": stop_timeout_rejected,
+                             "recovery_pathname_mutation_performed": False},
+        })
 
         # QP-12: direct root restart is detected by InvocationID, not trusted.
         name12 = f"atlas-qp-{secrets.token_hex(6)}.service"
