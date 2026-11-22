@@ -540,3 +540,21 @@ Esta evidencia cierra la validación local del alcance de PR #29. No demuestra c
 PR #29 se marcó Ready for review y se integró en `main` mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`. La validación local reportada por el propietario fue ejecutada sobre el HEAD de código `4e84eab1fd03ddd9057525ee18a3c02a1d804cd6`, con árbol limpio: probe systemd user-manager `PASS` (descriptor, dos activaciones, ownership/mode privados y `RemoveOnStop=no`) y suite completa `Ran 1590 tests in 34.753s`, `OK (skipped=1)`. Los commits posteriores fueron documentales; no se ha reportado una nueva ejecución de la suite sobre el merge commit.
 
 El merge no habilita listener persistente, system-manager, separación de privilegios, acceso SQLite ni operaciones administrativas. Socket activation sobre filesystem permanece suspendida por la colisión destructiva observada. Las alternativas A y C requieren probes independientes y una decisión explícita posterior.
+
+
+---
+
+## 9. MVP y autenticación — actualización 2026-11-22
+
+La rama de trabajo actual es `work/atlas-mvp-runtime`. El último estado de GitHub debe consultarse al iniciar cada sesión; no usar el HEAD de este documento como referencia viva.
+
+- `/plan` está integrado como vista previa no ejecutora. El propietario validó localmente 14 pruebas focalizadas y `.venv/bin/python -m compileall -q src tests` sin errores. La suite completa de la rama MVP no está validada.
+- El propietario aprobó el diseño del guard persistente de autenticación. La especificación es `docs/design/native-authentication-attempt-guard-approved-design.md`; la auditoría de hallazgos y aprobación es `docs/design/native-authentication-attempt-guard-storage-audit.md`.
+- Política aprobada: ventana móvil de 15 minutos; demoras 1/2/4/8/15 minutos según fallos dentro de la ventana; máximo de dos reservas simultáneas por cuenta; TTL de reserva 120 segundos; éxito confirmado reinicia fallos; abandono/expiración no cuenta como fallo.
+- El guard compartirá el archivo SQLite canónico, pero cada transición tendrá su propia transacción breve `BEGIN IMMEDIATE`, fuera de la UoW de autenticación. Argon2id se ejecutará fuera de transacciones SQLite de escritura.
+- El servicio deberá volver a leer issuer, autenticador, estado y `credential_revision` después del hash y antes de crear el proof. Si el guard no confirma el resultado, no se devuelve proof.
+- **Estado de implementación:** decisiones y documentación aprobadas; adaptador persistente, migración, nuevo contrato de reservas, reestructuración del servicio y pruebas aún pendientes de implementación y validación local.
+- No habilitar login operativo ni conectar la consola sintética con CAM/Workspace. La clave HMAC sigue necesitando provisión secreta confiable; bootstrap sigue bloqueado por la decisión sobre el perfil CAM del Grant inicial.
+- El trabajo se mantiene en la rama MVP; no modificar `main`, no ejecutar pruebas desde GitHub y no tocar la DB/host reales.
+
+**Siguiente paso único:** implementar el guard SQLite y el flujo de reservas de autenticación conforme al diseño aprobado, manteniendo la composición operativa deshabilitada.
