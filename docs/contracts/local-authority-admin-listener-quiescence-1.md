@@ -2,7 +2,7 @@
 
 **Identificador:** ATLAS-CONTRACT-LOCAL-AUTHORITY-LISTENER-QUIESCENCE  
 **Versión:** 1.0-draft  
-**Estado:** PROPUESTA PARA REVISIÓN DEL PROPIETARIO; no aprobada como arquitectura, operación ni despliegue.  
+**Estado:** R1–R7 aprobadas expresamente por el propietario como baseline de diseño (2026-11-21); contrato v1.0-draft, pendiente de validación experimental y sin autorización operativa, implementación ni despliegue.  
 **Fecha:** 21 de noviembre de 2026.  
 **Ámbito:** alternativa A — listener AF_UNIX/SOCK_SEQPACKET creado y poseído por el proceso del servicio bajo `atlas-runtime`.  
 **Dependencias:** TCB-1; `atlas-admin/1`; `local-authority-admin-listener-lifecycle.md`; `local-authority-admin-private-listener-stale-recovery.md`; A-IPC-04.
@@ -23,15 +23,15 @@ La regla principal es:
 
 Este documento es un contrato propuesto de lifecycle y mantenimiento, subordinado al contrato normativo `atlas-admin/1`. No modifica el envelope, el catálogo, las credenciales ni la autorización de operaciones IPC.
 
-Hasta que el propietario lo apruebe expresamente:
+El propietario aprobó R1–R7 como baseline de diseño el 2026-11-21. Esta aprobación no convierte el documento en un runbook ni autoriza operaciones:
 
-- sus requisitos son criterios de diseño para revisión, no instrucciones operativas;
-- no se deben crear unidades, cgroups, cuentas, rutas o servicios en Debian;
+- los requisitos siguen pendientes de validación experimental y revisión de implementación;
+- no se deben crear unidades, cgroups, cuentas, rutas o servicios en Debian como parte de esta fase documental;
 - no se debe ejecutar una recuperación real ni eliminar sockets;
 - el arranque normal debe seguir fallando cerrado ante cualquier pathname preexistente;
 - el token de SR-10 continúa siendo fixture-only y no representa aprobación humana.
 
-Si una implementación existente contradice esta propuesta, no se debe asumir que el código está autorizado: se documenta la diferencia y se solicita decisión.
+El diseño detallado del probe QP-01..QP-15 está en `docs/design/local-authority-admin-listener-quiescence-probe.md`. Su existencia tampoco autoriza implementar ni ejecutar el probe.
 
 ## 3. Modelo de confianza y supuestos
 
@@ -261,7 +261,7 @@ Este borrador recomienda:
 - **R6:** mantener una puerta de mantenimiento que impida start/restart concurrente;
 - **R7:** excluir explícitamente socket activation y tratarla mediante contrato separado si se reconsidera.
 
-Estas recomendaciones no se convierten en decisiones aprobadas hasta la aceptación expresa del propietario. Si se rechaza una de ellas, deberá definirse una alternativa con evidencia equivalente; no se rebaja el criterio de quiescencia por conveniencia.
+**Registro de decisión (2026-11-21):** el propietario aprobó expresamente R1–R7 como baseline de diseño. Se mantiene la versión 1.0-draft porque las propiedades aún no están implementadas ni validadas. Cualquier cambio posterior a una recomendación aprobada requiere nueva decisión del propietario y evidencia equivalente; no se rebaja el criterio de quiescencia por conveniencia.
 
 ## 12. Límites del trabajo actual
 
@@ -270,6 +270,8 @@ Estas recomendaciones no se convierten en decisiones aprobadas hasta la aceptaci
 - No se modificó el handler IPC ni el contrato `atlas-admin/1`.
 - No se implementó herramienta de mantenimiento ni recuperación.
 - A-IPC-04 valida el harness SR-01..SR-12, no este contrato ni la propiedad del descriptor de un servicio real.
+- R1–R7 están aprobadas como baseline de diseño, pero no se han implementado ni validado.
+- El diseño QP-01..QP-15 está documentado en `docs/design/local-authority-admin-listener-quiescence-probe.md`; el runner no existe.
 - El asistente solo preparó documentación en GitHub; no ejecutó pruebas, builds, workflows ni probes.
 - No se debe ejecutar ninguna parte de este borrador en el host `greed`.
 
@@ -281,3 +283,4 @@ Estas recomendaciones no se convierten en decisiones aprobadas hasta la aceptaci
 - `docs/design/local-authority-admin-private-listener-threat-model-review.md`
 - `docs/design/local-authority-admin-private-listener-path-resolution.md`
 - `docs/design/local-authority-admin-private-listener-stale-recovery-probe.md`
+- `docs/design/local-authority-admin-listener-quiescence-probe.md`
