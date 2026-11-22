@@ -322,7 +322,25 @@ Esta retirada del socket fixture es exclusivamente cleanup de un objeto creado e
 | 5. Fault injection | fixtures aislados, seccomp y adaptadores controlados | Resuelto documentalmente |
 | 6. Lifecycle/cleanup | unidades transitorias y cleanup por identidad exacta | Resuelto documentalmente |
 
-**Estado de implementación (2026-11-22):** el propietario autorizó expresamente implementar el runner. Existe una primera implementación parcial: preflight de solo lectura para el perfil fijado; lock `flock` + marcador sticky; consultas tipadas `GetUnit`/propiedades/`ListJobs`; fixtures transitorios; observación `ActiveState` + `Unit.Job` + `Manager.ListJobs` + `cgroup.events`; cleanup del endpoint fixture por dirfd e identidad; reporte JSON acotado persistido bajo `/run/atlas-qp` antes de intentar liberar el marcador. Los escenarios QP-03, QP-04, QP-06, QP-07 y QP-12 tienen estímulos/oráculos iniciales. QP-01/QP-02 registran lifecycle, pero se clasifican INCOMPLETE y nunca QUIESCENT porque QP-08/QP-09 aún no demuestran la política de FD. QP-05, QP-06, QP-07, QP-08, QP-09, QP-10, QP-11, QP-13, QP-14 y QP-15 siguen INCOMPLETE; QP-11 además requiere un supervisor autorizado que todavía no existe. El runner no se ha ejecutado ni validado; la revisión estática y el cierre de los escenarios pendientes continúan antes de entregar instrucciones de ejecución. La ejecución será exclusivamente en `Atlas-VM-test`.
+**Estado de implementación (2026-11-22, actualización):** el propietario autorizó implementar el runner y aprobó un supervisor temporal exclusivo del harness para QP-11. El archivo `tests/integration/private_unix_listener/run_listener_quiescence_probe.py` contiene estímulos y oráculos para QP-01..QP-15. La implementación sigue sin ejecutar ni validar; el código está en revisión estática y no constituye evidencia experimental.
+
+Cobertura implementada:
+- **QP-01/QP-02:** política seccomp aplicada después de bind/listen; QP-02 crea el auxiliar antes del listener e instala también en él la política anti-fork/FD-escape antes de que el padre enlace. El runner comprueba `fork`, `vfork`, `clone`, `clone3`, duplicación FD, `SCM_RIGHTS` e interfaces `io_uring`; usa dos lecturas `cgroup.events` separadas por 50 ms y una observación D-Bus/ausencia de unidad sin jobs. Solo emite `QUIESCENT` si todos los predicados correlacionados se cumplen.
+- **QP-03/QP-04:** unidad que ignora SIGTERM y transición con job stop pendiente; ambas decisiones son ABORT y no autorizan pathname mutation.
+- **QP-05/QP-06/QP-07:** separación de ControlGroup/identidades; rechazo de `Delegate=yes` y control positivo con `Delegate=no`, `NoNewPrivileges=yes`, `ProtectControlGroups=yes`, bounding/ambient capabilities vacías y comprobación de CAP_SYS_ADMIN/permisos; parser de `cgroup.events` con lecturas parciales, claves duplicadas, valores inválidos, límite y error de lectura.
+- **QP-08/QP-09/QP-10:** denegación seccomp de creación de procesos; denegación de duplicación/transferencia de FD incluyendo `io_uring_setup/enter/register`; y `execve` en el mismo PID con descriptor CLOEXEC cerrado.
+- **QP-11:** `_TestLifecycleSupervisor` es una clase interna del runner. Comprueba token de actor, exclusión flock, caída simulada, persistencia del marcador y rechazo de restart por un supervisor nuevo. La caída no es la terminación real de un proceso supervisor independiente.
+- **QP-12:** restart directo de root fuera del supervisor como fault injection; detecta `InvocationID` nuevo y conserva separados los observadores cgroup de la invocación antigua y la sustituta.
+- **QP-13:** fixture sin filtro que transfiere el listener FD mediante SCM_RIGHTS a un proceso OTHER externo al cgroup. Se comprueba que el servicio puede quedar `populated=0` mientras OTHER conserva el FD; el holder se termina antes de retirar el endpoint fixture.
+- **QP-14/QP-15:** fallos inyectados del adaptador/supervisor y timeout acotado; discrepancias inyectadas de ControlGroup/st_dev/st_ino.
+
+El runner fija el perfil Debian 13/systemd 257/kernel/Python previsto, valida que SERVICE y OTHER puedan recorrer/leer el script y ejecutar Python, crea solo unidades `.service` transitorias y mantiene un observer FD de `cgroup.events` para cada fixture. El cleanup es bifásico: primero detener y comprobar todos los fixtures; solo si todos están inactivos, sin jobs y con cgroup vacío, retirar endpoints y archivos ready por dirfd + identidad exacta. Los JSON de fixture se leen con O_NOFOLLOW, límites, owner/mode/inode y rechazo de claves duplicadas. El reporte aplica límites por escenario/total y timestamps monotónicos.
+
+No se usan `RefUnit`/`UnrefUnit` de D-Bus: cada invocación de `busctl` es una conexión breve. Tras cerrar el observer cgroup, el runner espera que `ListUnitsByNames` deje de devolver la unidad y que `ListJobs` no contenga jobs para ella; si no ocurre, cleanup queda INCOMPLETE y el marcador sticky se conserva.
+
+**Límites:** QP-11 es un test double en proceso, no un supervisor productivo ni protección contra root. QP-12 confirma explícitamente que root puede eludir la puerta. QP-13 prueba un holder OTHER controlado, no socket activation. El modelo TCB-1 sigue considerando confiables los procesos del mismo UID dedicado; root permanece en la TCB. A-THREAT-05 continúa abierta.
+
+**Estado de validación:** no se han ejecutado el runner, pruebas, builds ni workflows. No se han creado unidades, cgroups, usuarios, grupos, rutas ni servicios en ningún host durante esta sesión. La siguiente puerta es terminar la revisión estática y luego ejecutar exclusivamente en `Atlas-VM-test`, nunca en `greed`.
 
 Referencias técnicas externas usadas para fijar la interfaz y contrastadas durante la revisión estática del perfil systemd 257.13:
 
@@ -339,12 +357,12 @@ QP-01..QP-15 cubre la capa previa de quiescencia del proceso/servicio. No reempl
 ## 11. Límites del trabajo actual
 
 - R1–R7 fueron aprobadas por el propietario como baseline de diseño.
-- El runner parcial está en `tests/integration/private_unix_listener/run_listener_quiescence_probe.py`; no se ha ejecutado.
-- QP-11 tiene una implementación de supervisor temporal interno al harness, revisada estáticamente pero no validada. El resto de la matriz no está completo; QP-01/QP-02 no emiten QUIESCENT.
-- El runner crea recursos únicamente cuando se ejecuta manualmente con confirmación explícita en la VM desechable; durante esta sesión no se creó ninguna unidad, cgroup, usuario, grupo, ruta o servicio en un host.
-- No se ejecutaron pruebas, builds, workflows ni probes desde GitHub.
-- No se modificó `main`, `atlas-admin/1`, el handler IPC, SQLite ni el host.
-- Siguiente fase: revisión estática integral del runner, completar QP-01/QP-02/QP-05/QP-06/QP-07/QP-08/QP-09/QP-10/QP-13/QP-14/QP-15 y validar el protocolo de reporte/cleanup antes de autorizar ejecución local.
+- El runner QP-01..QP-15 está implementado en `tests/integration/private_unix_listener/run_listener_quiescence_probe.py`; aún no se ha ejecutado ni validado.
+- QP-01/QP-02 contienen el predicado para emitir QUIESCENT, condicionado a seccomp, invocación estable, no jobs, cgroup vacío y observaciones correlacionadas; ningún resultado se considera evidencia hasta la ejecución del propietario.
+- QP-11 usa un supervisor temporal interno al harness y una caída simulada; no es un supervisor independiente/productivo. QP-12 demuestra el bypass root de forma intencional. QP-13 usa un holder OTHER mediante SCM_RIGHTS, no socket activation.
+- Cleanup bifásico, observers cgroup fijados, verificación de ausencia en `ListUnitsByNames`/`ListJobs`, JSON acotado y validación de identidad de archivos/endpoints están implementados, pendientes de validación.
+- No se ejecutaron pruebas, builds, workflows ni probes desde GitHub; no se modificó `main`, `atlas-admin/1`, handler IPC, SQLite ni host.
+- Siguiente fase: cerrar la revisión estática, después ejecutar el runner solo en `Atlas-VM-test`. A-THREAT-05 sigue abierta.
 
 ## 12. Referencias
 
