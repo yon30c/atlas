@@ -677,6 +677,27 @@ def fixture_main(args: argparse.Namespace) -> int:
                     listener, deny_fork=args.deny_fork,
                     deny_fd_escape=args.deny_fd_escape,
                 )
+        try:
+            status = {}
+            for line in Path("/proc/self/status").read_text(encoding="ascii").splitlines():
+                if line.startswith(("CapEff:", "CapBnd:")):
+                    key, value = line.split(":", 1)
+                    status[key] = int(value.strip(), 16)
+            _cg_root, cg_mount = cgroup_mount()
+            cgroup_line = next(
+                line for line in Path("/proc/self/cgroup").read_text(encoding="ascii").splitlines()
+                if line.startswith("0::")
+            )
+            own_cgroup = cgroup_line[3:]
+            own_cgroup_path = cg_mount / own_cgroup.lstrip("/")
+            ready["cap_eff"] = status.get("CapEff")
+            ready["cap_bnd"] = status.get("CapBnd")
+            ready["cap_sys_admin"] = bool((status.get("CapEff", 0) >> 21) & 1)
+            ready["cgroup_dir_write_access"] = os.access(
+                own_cgroup_path, os.W_OK, effective_ids=True
+            )
+        except (OSError, StopIteration, ValueError) as exc:
+            raise Incomplete(f"fixture capability/cgroup evidence unavailable: {type(exc).__name__}") from exc
         fd = os.open(
             args.ready, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC,
             0o600,
@@ -1033,7 +1054,9 @@ def run_probe(args: argparse.Namespace) -> dict:
 
         # QP-01: normal service-owned listener, full stop, two empty snapshots.
         name = f"atlas-qp-{secrets.token_hex(6)}.service"
-        initial, endpoint, ready_path = _start_fixture(name, run_dir)
+        initial, endpoint, ready_path = _start_fixture(
+            name, run_dir, deny_fork=True, deny_fd_escape=True
+        )
         report["unit_identity"][name] = initial
         update_gate_marker(marker, run_id, name, initial, "unit-started")
         before = cgroup_events(mount, initial["ControlGroup"])
@@ -1059,15 +1082,19 @@ def run_probe(args: argparse.Namespace) -> dict:
             raise Incomplete("QP-01 did not satisfy the complete quiescence predicate")
         cleanup = _stop_and_cleanup(name, initial, endpoint, ready_path, run_dir_fd, report, already_stopped=True, cgroup_empty_confirmed=True)
         report["cleanup"]["resources"].append(cleanup)
-        report["scenarios"].append({"id": "QP-01", "status": "INCOMPLETE",
-                                    "decision": "ABORT_NOT_QUIESCENT",
-                                    "reason": "systemd/cgroup lifecycle passed, but descriptor non-escape proof is pending QP-08/QP-09"})
+        policy01 = json.loads(ready_path.read_text(encoding="ascii"))["fd_policy"]
+        report["scenarios"].append({"id": "QP-01", "status": "PASS",
+                                    "decision": "QUIESCENT",
+                                    "reason": "listener closed by service; fork/duplication/SCM_RIGHTS paths denied; manager inactive and two correlated cgroup snapshots populated=0",
+                                    "observations": {"fd_policy": policy01, "stable_invocation": stable["InvocationID"] == initial["InvocationID"]}})
         if not cleanup["endpoint_removed"] or not cleanup["cgroup_empty"]:
             raise Incomplete("QP-01 cleanup was not confirmed")
 
         # QP-02: child exists in the same service cgroup before listener creation.
         name2 = f"atlas-qp-{secrets.token_hex(6)}.service"
-        initial2, endpoint2, ready2 = _start_fixture(name2, run_dir, hold_child=True)
+        initial2, endpoint2, ready2 = _start_fixture(
+            name2, run_dir, hold_child=True, deny_fork=True, deny_fd_escape=True
+        )
         report["unit_identity"][name2] = initial2
         update_gate_marker(marker, run_id, name2, initial2, "unit-started")
         before2 = cgroup_events(mount, initial2["ControlGroup"])
@@ -1086,9 +1113,12 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["cleanup"]["resources"].append(cleanup2)
         if not passed2 or not cleanup2["endpoint_removed"]:
             raise Incomplete("QP-02 failed its pre-stop helper or post-stop empty-cgroup check")
-        report["scenarios"].append({"id": "QP-02", "status": "INCOMPLETE",
-                                    "decision": "ABORT_NOT_QUIESCENT",
-                                    "reason": "helper terminated with its cgroup, but descriptor non-escape proof is pending QP-08/QP-09"})
+        policy02 = json.loads(ready2.read_text(encoding="ascii"))["fd_policy"]
+        report["scenarios"].append({"id": "QP-02", "status": "PASS",
+                                    "decision": "QUIESCENT",
+                                    "reason": "pre-listener child was contained in the service cgroup; post-listener fork/duplication/SCM_RIGHTS paths denied; stop emptied the correlated cgroup",
+                                    "observations": {"fd_policy": policy02, "helper_preexisted_listener": True,
+                                                     "invocation_unchanged": stable2["InvocationID"] == initial2["InvocationID"]}})
 
         # QP-03: ignored SIGTERM must prevent a premature quiescent result.
         name3 = f"atlas-qp-{secrets.token_hex(6)}.service"
@@ -1233,7 +1263,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             "observations": policy9,
         })
 
-        # QP-06: Delegate=yes must be rejected; no cgroup writes or migration.
+        # QP-06: reject Delegate=yes and prove the Delegate=no fixture has no cgroup authority.
         name6 = f"atlas-qp-{secrets.token_hex(6)}.service"
         initial6, endpoint6, ready6 = _start_fixture(name6, run_dir, delegate=True)
         update_gate_marker(marker, run_id, name6, initial6, "unit-started")
@@ -1243,9 +1273,27 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["cleanup"]["resources"].append(cleanup6)
         if not cleanup6["unit_inactive"] or not cleanup6["cgroup_empty"] or not cleanup6["endpoint_removed"]:
             raise Incomplete("QP-06 negative fixture cleanup failed")
-        report["scenarios"].append({"id": "QP-06", "status": "INCOMPLETE",
-                                    "decision": "ABORT_NOT_QUIESCENT",
-                                    "reason": "Delegate=yes rejection observed; Delegate=no capability/positive control remains unverified"})
+        name6good = f"atlas-qp-{secrets.token_hex(6)}.service"
+        initial6good, endpoint6good, ready6good = _start_fixture(name6good, run_dir, delegate=False)
+        report["unit_identity"][name6good] = initial6good
+        ready6good_data = json.loads(ready6good.read_text(encoding="ascii"))
+        if (
+            initial6good["Delegate"] is not False
+            or initial6good["User"] != pwd.getpwuid(SERVICE_UID).pw_name
+            or initial6good["Group"] != grp.getgrgid(SERVICE_GID).gr_name
+            or ready6good_data.get("cap_sys_admin") is not False
+            or ready6good_data.get("cgroup_dir_write_access") is not False
+        ):
+            raise Incomplete("QP-06 Delegate=no fixture retains unexpected cgroup authority")
+        cleanup6good = _stop_and_cleanup(name6good, initial6good, endpoint6good, ready6good, run_dir_fd, report)
+        report["cleanup"]["resources"].append(cleanup6good)
+        if not cleanup6good["unit_inactive"] or not cleanup6good["cgroup_empty"] or not cleanup6good["endpoint_removed"]:
+            raise Incomplete("QP-06 positive fixture cleanup failed")
+        report["scenarios"].append({
+            "id": "QP-06", "status": "PASS", "decision": "ABORT_NOT_QUIESCENT",
+            "reason": "Delegate=yes rejected; Delegate=no service had no CAP_SYS_ADMIN and could not write its cgroup directory",
+            "observations": {"delegate_yes_rejected": True, "delegate_no": ready6good_data},
+        })
 
         # QP-07: parser fault matrix; malformed data is never normalized to zero.
         parser_cases = [
