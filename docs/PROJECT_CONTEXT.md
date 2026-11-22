@@ -10,7 +10,7 @@
 
 - **Repositorio:** `yon30c/atlas`.
 - **Base estable:** `main`, HEAD `a89e96cc4e5d9555e28a7ea5d9f3788654fe7268`.
-- **Rama activa:** `work/atlas-mvp-runtime`, HEAD `29e900a1129efbb83c8e4b867c99d37d66473c55`; comparación con `main`: 96 commits por delante y 0 por detrás. No integrada en `main`.
+- **Rama activa:** `work/atlas-mvp-runtime`, no integrada en `main`. El HEAD de código validado por el propietario es `29e900a1129efbb83c8e4b867c99d37d66473c55`; los commits posteriores de este ciclo solo actualizan documentación. La comparación observada con `main` indicó que la rama estaba por delante y no estaba detrás.
 - **Objetivo inmediato:** avanzar el MVP local limitado sin activar capacidades protegidas por inferencia.
 - **Funcionalidad de consola:** conversación local persistente con Ollama y comando `/plan <solicitud>` que presenta una vista previa F1. El plan no ejecuta capacidades ni accede al filesystem.
 - **Guard de autenticación:** implementación SQLite V28 publicada en la rama; política aprobada de ventana 15 min, demoras 1/2/4/7/15 min, dos reservas simultáneas por cuenta y TTL 120 s. Argon2id se ejecuta fuera de transacciones SQLite de escritura; la emisión del proof revalida issuer/autenticador/estado/subject/revisión y requiere finalizar correctamente la reserva.
