@@ -261,10 +261,53 @@ def cgroup_events(mount_root: Path, control_group: str) -> dict:
     return {"path": str(path), "raw": text, "values": parsed}
 
 
+class _TestLifecycleSupervisor:
+    """Harness-only lifecycle gate; never imported by the Atlas runtime."""
+
+    def __init__(self, lock_fd: int, marker: Path, run_id: str, *, allow_owner: bool = True):
+        self.lock_fd = lock_fd
+        self.marker = marker
+        self.run_id = run_id
+        self.allow_owner = allow_owner
+        self.active = True
+
+    def request(self, action: str, argv: list[str], *, actor_run_id: str) -> bytes:
+        if not self.active:
+            raise Incomplete("test lifecycle supervisor is unavailable")
+        if action not in {"start", "stop", "restart"}:
+            raise Incomplete("test lifecycle supervisor received an unsupported action")
+        if not self.allow_owner:
+            raise Incomplete("sticky maintenance marker requires explicit manual recovery")
+        try:
+            fcntl.flock(self.lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            marker_data = json.loads(self.marker.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise Incomplete("test lifecycle supervisor cannot verify its gate") from exc
+        if marker_data.get("schema") != SCHEMA or marker_data.get("run_id") != self.run_id:
+            raise Incomplete("test lifecycle supervisor marker ownership mismatch")
+        if actor_run_id != self.run_id:
+            raise PermissionError("second authorized actor rejected by maintenance gate")
+        if not argv or argv[0] not in {"systemd-run", "systemctl"}:
+            raise Incomplete("test lifecycle supervisor accepts only fixed systemd clients")
+        return bounded_run(argv, timeout=8.0)
+
+    def crash(self) -> None:
+        self.active = False
+
+
+_ACTIVE_SUPERVISOR: _TestLifecycleSupervisor | None = None
+_ACTIVE_RUN_ID: str | None = None
+
+
 def systemd_stop(name: str) -> None:
-    # The command only requests the transition; D-Bus/cgroup observations
-    # below, not its human output, determine the result.
-    bounded_run(["systemctl", "--no-block", "stop", name], timeout=5.0)
+    # Lifecycle requests pass through the harness-only supervisor. D-Bus/cgroup
+    # observations, not command output, determine the resulting state.
+    if _ACTIVE_SUPERVISOR is None or _ACTIVE_RUN_ID is None:
+        raise Incomplete("no active test lifecycle supervisor")
+    _ACTIVE_SUPERVISOR.request(
+        "stop", ["systemctl", "--no-block", "stop", name],
+        actor_run_id=_ACTIVE_RUN_ID,
+    )
 
 
 def wait_inactive(name: str, deadline: float) -> dict:
@@ -466,7 +509,9 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
         command.append("--ignore-term")
     if no_listener:
         command.append("--no-listener")
-    bounded_run(command, timeout=8.0)
+    if _ACTIVE_SUPERVISOR is None or _ACTIVE_RUN_ID is None:
+        raise Incomplete("no active test lifecycle supervisor")
+    _ACTIVE_SUPERVISOR.request("start", command, actor_run_id=_ACTIVE_RUN_ID)
     deadline = time.monotonic() + 8.0
     while time.monotonic() < deadline:
         try:
@@ -627,8 +672,12 @@ def run_probe(args: argparse.Namespace) -> dict:
         marker_data = {"schema": SCHEMA, "run_id": run_id, "phase": "preparing"}
         _safe_json_file(marker, marker_data, 4096)
         marker_created = True
+        global _ACTIVE_SUPERVISOR, _ACTIVE_RUN_ID
+        _ACTIVE_RUN_ID = run_id
+        _ACTIVE_SUPERVISOR = _TestLifecycleSupervisor(lock_fd, marker, run_id)
         report["gate"] = {"flock_acquired": True, "sticky_marker_created": True,
-                          "root_direct_bypass_protection": False}
+                          "root_direct_bypass_protection": False,
+                          "lifecycle_requests_routed_through_test_supervisor": True}
         mount_root, mount = cgroup_mount()
 
         # QP-01: normal service-owned listener, full stop, two empty snapshots.
@@ -803,6 +852,91 @@ def run_probe(args: argparse.Namespace) -> dict:
                                     "decision": "ABORT_NOT_QUIESCENT",
                                     "reason": "direct root restart changed InvocationID; snapshots were not combined"})
 
+        # QP-11: second actor is rejected; after simulated supervisor/orchestrator
+        # crash the lock becomes available but the sticky marker still denies
+        # lifecycle requests until this harness performs explicit test cleanup.
+        if _ACTIVE_SUPERVISOR is None:
+            raise Incomplete("QP-11 has no active test supervisor")
+        unchanged_before = unit_snapshot(name12)
+        denied_second_actor = False
+        try:
+            _ACTIVE_SUPERVISOR.request(
+                "restart", ["systemctl", "--no-block", "restart", name12],
+                actor_run_id=str(uuid.uuid4()),
+            )
+        except PermissionError:
+            denied_second_actor = True
+        contender_fd = os.open(
+            lock_path, os.O_RDWR | os.O_CLOEXEC | os.O_NOFOLLOW
+        )
+        competing_lock_denied = False
+        try:
+            try:
+                fcntl.flock(contender_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                competing_lock_denied = True
+        finally:
+            os.close(contender_fd)
+        if not denied_second_actor or not competing_lock_denied:
+            raise Incomplete("QP-11 did not reject the concurrent authorized actor")
+
+        _ACTIVE_SUPERVISOR.crash()
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        os.close(lock_fd)
+        lock_fd = None
+        post_crash_fd = os.open(
+            lock_path, os.O_RDWR | os.O_CLOEXEC | os.O_NOFOLLOW
+        )
+        try:
+            fcntl.flock(post_crash_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            sticky = json.loads(marker.read_text(encoding="utf-8"))
+            post_crash_supervisor = _TestLifecycleSupervisor(
+                post_crash_fd, marker, run_id, allow_owner=False
+            )
+            denied_after_crash = False
+            try:
+                post_crash_supervisor.request(
+                    "start", ["systemctl", "--no-block", "start", name12],
+                    actor_run_id=run_id,
+                )
+            except Incomplete:
+                denied_after_crash = True
+            unchanged_after = unit_snapshot(name12)
+            if (
+                sticky.get("run_id") != run_id or not denied_after_crash
+                or unchanged_after["InvocationID"] != unchanged_before["InvocationID"]
+                or unchanged_after["ActiveState"] != "inactive"
+                or unchanged_after["Job"][0] != 0
+            ):
+                raise Incomplete("QP-11 sticky marker failed to block post-crash lifecycle")
+        finally:
+            fcntl.flock(post_crash_fd, fcntl.LOCK_UN)
+            os.close(post_crash_fd)
+
+        # The harness now resumes only to persist evidence and perform its
+        # explicitly scoped cleanup; this is not a production recovery path.
+        lock_fd = os.open(lock_path, os.O_RDWR | os.O_CLOEXEC | os.O_NOFOLLOW)
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _ACTIVE_SUPERVISOR = _TestLifecycleSupervisor(lock_fd, marker, run_id)
+        report["gate"]["qp11_second_actor_rejected"] = True
+        report["gate"]["qp11_lock_released_after_simulated_crash"] = True
+        report["gate"]["qp11_sticky_marker_blocked_after_crash"] = True
+        report["gate"]["qp11_harness_reacquired_for_evidence_cleanup"] = True
+        report["scenarios"].append({
+            "id": "QP-11", "status": "PASS",
+            "reason": "competing actor rejected; simulated crash released flock; sticky marker blocked a new supervisor until harness-only evidence cleanup",
+            "observations": {
+                "second_actor_rejected": denied_second_actor,
+                "competing_lock_denied": competing_lock_denied,
+                "lock_available_after_crash": True,
+                "sticky_marker_retained": True,
+                "post_crash_start_rejected": denied_after_crash,
+                "unit_invocation_unchanged": unchanged_after["InvocationID"] == unchanged_before["InvocationID"],
+                "unit_remained_inactive": unchanged_after["ActiveState"] == "inactive",
+                "pending_jobs": unchanged_after["Job"][0],
+            },
+        })
+
         implemented = {item["id"] for item in report["scenarios"]}
         reasons = {
             "QP-03": "pending: stop-deadline/TimeoutStopSec race harness",
@@ -811,7 +945,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             "QP-08": "pending: libseccomp syscall-denial fixture",
             "QP-09": "pending: seccomp FD-duplication/SCM_RIGHTS denial fixture",
             "QP-10": "pending: same-process exec/CLOEXEC helper",
-            "QP-11": "incomplete: no authorized lifecycle supervisor exists to exercise",
+            "QP-11": "pending: test supervisor concurrency and sticky-marker crash gate",
             "QP-12": "pending: controlled direct-root restart and InvocationID revalidation",
             "QP-13": "pending: isolated external SCM_RIGHTS holder control",
             "QP-14": "pending: deterministic manager/supervisor failure injection",
