@@ -304,7 +304,7 @@ Orden de cleanup:
 3. Confirmar que no queda holder externo del escenario; QP-13 debe cerrar su FD y terminar el proceso OTHER antes de seguir.
 4. Verificar el endpoint fixture con `fstatat(AT_SYMLINK_NOFOLLOW)` y comparar tipo, owner, mode, st_dev y st_ino con la identidad registrada al crearlo.
 5. Retirar únicamente ese nombre mediante `unlinkat(dirfd, nombre, 0)`; después retirar directorios fixture vacíos mediante dirfd. Nunca usar `rm -rf`, glob, path reconstruido o recorrido recursivo.
-6. Cerrar el observer FD de cgroup después de confirmar `populated=0`; esperar que `ListUnitsByNames` no devuelva la unidad y que `ListJobs` no contenga jobs para ella. El runner no usa `RefUnit`/`UnrefUnit` mediante conexiones `busctl` efímeras. Si la unidad persiste, no forzar cleanup global.
+6. Cerrar el observer FD de cgroup después de confirmar `populated=0`; llamar `UnrefUnit` en la conexión persistente que adquirió `RefUnit`; esperar que `ListUnitsByNames` no devuelva la unidad y que `ListJobs` no contenga jobs para ella. Si la unidad persiste, no forzar cleanup global.
 7. Persistir resultado final, retirar el marcador sticky y liberar flock. Si algo falla, conservar marcador/sandbox y reportar INCOMPLETE.
 
 Esta retirada del socket fixture es exclusivamente cleanup de un objeto creado en esta ejecución y validado por identidad. No es stale recovery, no prueba `unlinkat` productivo y no autoriza retirar ningún endpoint Atlas. La bandera de recuperación debe permanecer siempre `recovery_pathname_mutation_performed=false`.
