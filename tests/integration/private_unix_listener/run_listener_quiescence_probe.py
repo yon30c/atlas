@@ -228,6 +228,7 @@ def unit_snapshot(name: str) -> dict:
         "SubState": dbus_property(path, UNIT_IFACE, "SubState", "s"),
         "InvocationID": dbus_property(path, UNIT_IFACE, "InvocationID", "ay"),
         "ControlGroup": dbus_property(path, SERVICE_IFACE, "ControlGroup", "s"),
+        "MainPID": dbus_property(path, SERVICE_IFACE, "MainPID", "u"),
         "KillMode": dbus_property(path, SERVICE_IFACE, "KillMode", "s"),
         "Restart": dbus_property(path, SERVICE_IFACE, "Restart", "s"),
         "User": dbus_property(path, SERVICE_IFACE, "User", "s"),
@@ -458,6 +459,9 @@ def install_seccomp_denials(*, deny_fork: bool = False, deny_fd_escape: bool = F
                     context, action_deny, fcntl_number, 1, ctypes.byref(comparison)
                 ) != 0:
                     raise Incomplete("cannot install argument-scoped fcntl seccomp rule")
+        libc = ctypes.CDLL(None, use_errno=True)
+        if libc.prctl(38, 1, 0, 0, 0) != 0:  # PR_SET_NO_NEW_PRIVS
+            raise Incomplete("PR_SET_NO_NEW_PRIVS failed before seccomp")
         if lib.seccomp_load(context) != 0:
             raise Incomplete("seccomp_load failed")
     finally:
@@ -727,6 +731,8 @@ def fixture_main(args: argparse.Namespace) -> int:
 def preflight() -> dict:
     if not sys.platform.startswith("linux") or os.geteuid() != 0:
         raise Incomplete("direct EUID 0 on Linux is required")
+    if platform.machine() != "x86_64":
+        raise Incomplete("the syscall fault-injection profile requires x86_64")
     if platform.python_version() != "3.13.5":
         raise Incomplete("Python profile mismatch; expected 3.13.5")
     if platform.release() != "6.12.117+deb13-amd64":
@@ -888,6 +894,8 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
     else:
         raise Incomplete("fixture did not publish readiness")
     snap = unit_snapshot(name)
+    if snap["MainPID"] <= 0 or ready.get("pid") != snap["MainPID"]:
+        raise Incomplete("fixture readiness PID differs from systemd MainPID")
     if snap["Delegate"] != delegate:
         raise Incomplete("systemd Delegate property differs from requested fixture")
     expected_user = pwd.getpwuid(uid).pw_name
@@ -1239,6 +1247,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             not exec_evidence.get("exec_helper")
             or not exec_evidence.get("exec_same_pid")
             or not exec_evidence.get("listener_fd_closed")
+            or exec_evidence.get("pid") != initial10["MainPID"]
             or not cleanup10["unit_inactive"] or not cleanup10["cgroup_empty"]
             or not cleanup10["endpoint_removed"]
         ):
