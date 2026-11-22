@@ -552,9 +552,8 @@ class _TestLifecycleSupervisor:
                 raise Incomplete("start request does not name one owned transient fixture")
             if unit_args[0] in self.units:
                 raise Incomplete("test lifecycle supervisor refuses duplicate fixture start")
-            result = bounded_run(argv, timeout=8.0)
             self.units.add(unit_args[0])
-            return result
+            return bounded_run(argv, timeout=8.0)
         if (
             argv[0] != "systemctl" or len(argv) != 4
             or argv[1] != "--no-block" or argv[2] != action
@@ -1164,13 +1163,7 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
         "socket_path": fixture_socket_path, "ready_path": ready_path,
         "uid": uid, "gid": gid, "initial": None,
     }
-    try:
-        _ACTIVE_SUPERVISOR.request("start", command, actor_run_id=_ACTIVE_RUN_ID)
-    except Exception:
-        _ACTIVE_FIXTURES.pop(name, None)
-        _OPEN_DIR_FDS.remove(fixture_dir_fd)
-        os.close(fixture_dir_fd)
-        raise
+    _ACTIVE_SUPERVISOR.request("start", command, actor_run_id=_ACTIVE_RUN_ID)
     deadline = time.monotonic() + 8.0
     while time.monotonic() < deadline:
         try:
@@ -2050,6 +2043,21 @@ def run_probe(args: argparse.Namespace) -> dict:
                     continue
                 try:
                     initial_fixture = fixture["initial"]
+                    if initial_fixture is None and unit_is_absent(fixture_name):
+                        if list_jobs_for_unit(fixture_name):
+                            raise Incomplete("unit is absent but a manager job still references it")
+                        for possible_path in (fixture["ready_path"], fixture["socket_path"]):
+                            if possible_path is not None:
+                                try:
+                                    os.stat(
+                                        possible_path.name, dir_fd=fixture["dir_fd"],
+                                        follow_symlinks=False,
+                                    )
+                                except FileNotFoundError:
+                                    continue
+                                raise Incomplete("partially started fixture left an unverified pathname")
+                        _CLEANED_FIXTURES.add(fixture_name)
+                        continue
                     if initial_fixture is None:
                         initial_fixture = unit_snapshot(fixture_name)
                         if (
