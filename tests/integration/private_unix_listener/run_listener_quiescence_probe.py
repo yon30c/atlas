@@ -857,6 +857,39 @@ def run_fd_policy_checks(listener: socket.socket, *, deny_fork: bool, deny_fd_es
     return observations
 
 
+def process_authority_evidence() -> dict:
+    status = {}
+    try:
+        for line in Path("/proc/self/status").read_text(encoding="ascii").splitlines():
+            if line.startswith(("CapEff:", "CapBnd:")):
+                key, value = line.split(":", 1)
+                status[key] = int(value.strip(), 16)
+            elif line.startswith("NoNewPrivs:"):
+                _key, value = line.split(":", 1)
+                status["NoNewPrivs"] = int(value.strip(), 10)
+        _cg_root, cg_mount = cgroup_mount()
+        cgroup_line = next(
+            line for line in Path("/proc/self/cgroup").read_text(encoding="ascii").splitlines()
+            if line.startswith("0::")
+        )
+        own_cgroup_path = cg_mount / cgroup_line[3:].lstrip("/")
+        if "CapEff" not in status or "CapBnd" not in status or "NoNewPrivs" not in status:
+            raise Incomplete("required process capability fields are missing")
+        return {
+            "cap_eff": status["CapEff"],
+            "cap_bnd": status["CapBnd"],
+            "no_new_privs": status["NoNewPrivs"],
+            "cap_sys_admin": bool((status["CapEff"] >> 21) & 1),
+            "cgroup_dir_write_access": os.access(
+                own_cgroup_path, os.W_OK, effective_ids=True
+            ),
+        }
+    except (OSError, StopIteration, ValueError) as exc:
+        raise Incomplete(
+            f"fixture capability/cgroup evidence unavailable: {type(exc).__name__}"
+        ) from exc
+
+
 def fixture_main(args: argparse.Namespace) -> int:
     """Unprivileged systemd service fixture; never used against Atlas."""
     if args.exec_helper:
@@ -944,6 +977,7 @@ def fixture_main(args: argparse.Namespace) -> int:
     listener = None
     child = None
     child_filter_confirmed = False
+    child_policy_evidence = None
     try:
         if args.hold_child:
             child_ready_read, child_ready_write = os.pipe()
@@ -956,19 +990,40 @@ def fixture_main(args: argparse.Namespace) -> int:
                         deny_fork=args.deny_fork,
                         deny_fd_escape=args.deny_fd_escape,
                     )
-                os.write(child_ready_write, b"1")
+                child_policy_evidence = process_authority_evidence()
+                child_policy_evidence["pid"] = os.getpid()
+                os.write(
+                    child_ready_write,
+                    json.dumps(child_policy_evidence, sort_keys=True).encode("ascii"),
+                )
                 os.close(child_ready_write)
                 while True:
                     signal.pause()
             os.close(child_ready_write)
-            child_filter_confirmed = os.read(child_ready_read, 1) == b"1"
+            child_raw = read_bounded_chunks(
+                lambda size: os.read(child_ready_read, size), 4096
+            )
             os.close(child_ready_read)
+            try:
+                child_policy_evidence = json.loads(
+                    child_raw.decode("ascii", "strict"),
+                    object_pairs_hook=_json_no_duplicate_keys,
+                    parse_constant=_json_reject_constant,
+                )
+            except (UnicodeError, json.JSONDecodeError, ValueError) as exc:
+                raise Incomplete("QP-02 child authority evidence is malformed") from exc
+            child_filter_confirmed = (
+                isinstance(child_policy_evidence, dict)
+                and child_policy_evidence.get("pid") == child
+                and child_policy_evidence.get("no_new_privs") == 1
+            )
             if not child_filter_confirmed:
-                raise Incomplete("QP-02 child did not confirm pre-listener seccomp policy")
+                raise Incomplete("QP-02 child did not confirm pre-listener seccomp and NNP")
         if args.ignore_term:
             signal.signal(signal.SIGTERM, signal.SIG_IGN)
         ready = {"pid": os.getpid(), "fd": None, "child_pid": child,
-                 "child_filter_confirmed": child_filter_confirmed}
+                 "child_filter_confirmed": child_filter_confirmed,
+                 "child_policy_evidence": child_policy_evidence}
         if not args.no_listener:
             listener = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
             listener.set_inheritable(False)
@@ -1007,31 +1062,7 @@ def fixture_main(args: argparse.Namespace) -> int:
                     listener, deny_fork=args.deny_fork,
                     deny_fd_escape=args.deny_fd_escape,
                 )
-        try:
-            status = {}
-            for line in Path("/proc/self/status").read_text(encoding="ascii").splitlines():
-                if line.startswith(("CapEff:", "CapBnd:")):
-                    key, value = line.split(":", 1)
-                    status[key] = int(value.strip(), 16)
-                elif line.startswith("NoNewPrivs:"):
-                    _key, value = line.split(":", 1)
-                    status["NoNewPrivs"] = int(value.strip(), 10)
-            _cg_root, cg_mount = cgroup_mount()
-            cgroup_line = next(
-                line for line in Path("/proc/self/cgroup").read_text(encoding="ascii").splitlines()
-                if line.startswith("0::")
-            )
-            own_cgroup = cgroup_line[3:]
-            own_cgroup_path = cg_mount / own_cgroup.lstrip("/")
-            ready["cap_eff"] = status.get("CapEff")
-            ready["cap_bnd"] = status.get("CapBnd")
-            ready["no_new_privs"] = status.get("NoNewPrivs")
-            ready["cap_sys_admin"] = bool((status.get("CapEff", 0) >> 21) & 1)
-            ready["cgroup_dir_write_access"] = os.access(
-                own_cgroup_path, os.W_OK, effective_ids=True
-            )
-        except (OSError, StopIteration, ValueError) as exc:
-            raise Incomplete(f"fixture capability/cgroup evidence unavailable: {type(exc).__name__}") from exc
+        ready.update(process_authority_evidence())
         fd = os.open(
             args.ready, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC,
             0o600,
