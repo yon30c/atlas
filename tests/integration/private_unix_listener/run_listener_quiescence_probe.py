@@ -43,7 +43,6 @@ MANAGER_IFACE = "org.freedesktop.systemd1.Manager"
 PROPERTIES_IFACE = "org.freedesktop.DBus.Properties"
 UNIT_IFACE = "org.freedesktop.systemd1.Unit"
 SERVICE_IFACE = "org.freedesktop.systemd1.Service"
-RESOURCE_IFACE = "org.freedesktop.systemd1.ResourceControl"
 SERVICE_UID = 2005
 SERVICE_GID = 2005
 OTHER_UID = 2006
@@ -257,9 +256,9 @@ def unit_snapshot(name: str) -> dict:
         "AmbientCapabilities": dbus_property(path, SERVICE_IFACE, "AmbientCapabilities", "t"),
         "NoNewPrivileges": dbus_property(path, SERVICE_IFACE, "NoNewPrivileges", "b"),
         "ProtectControlGroups": dbus_property(path, SERVICE_IFACE, "ProtectControlGroups", "b"),
-        "Delegate": dbus_property(path, RESOURCE_IFACE, "Delegate", "b"),
-        "DelegateControllers": dbus_property(path, RESOURCE_IFACE, "DelegateControllers", "as"),
-        "DelegateSubgroup": dbus_property(path, RESOURCE_IFACE, "DelegateSubgroup", "s"),
+        "Delegate": dbus_property(path, SERVICE_IFACE, "Delegate", "b"),
+        "DelegateControllers": dbus_property(path, SERVICE_IFACE, "DelegateControllers", "as"),
+        "DelegateSubgroup": dbus_property(path, SERVICE_IFACE, "DelegateSubgroup", "s"),
         "Transient": dbus_property(path, UNIT_IFACE, "Transient", "b"),
         "Job": dbus_property(path, UNIT_IFACE, "Job", "(uo)"),
         "Triggers": dbus_property(path, UNIT_IFACE, "Triggers", "as"),
