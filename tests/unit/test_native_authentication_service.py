@@ -34,9 +34,11 @@ class FixedClock:
 
 
 class FakeAttemptGuard:
-    def __init__(self, *, allowed=True, fail=False):
+    def __init__(self, *, allowed=True, fail=False, fail_failure=False, fail_success=False):
         self.allowed = allowed
         self.fail = fail
+        self.fail_failure = fail_failure
+        self.fail_success = fail_success
         self.failures = []
         self.successes = []
         self.abandoned = []
@@ -52,12 +54,12 @@ class FakeAttemptGuard:
         )
 
     def complete_failure(self, reservation, *, at):
-        if self.fail:
+        if self.fail or self.fail_failure:
             raise RuntimeError("guard unavailable")
         self.failures.append((reservation, at))
 
     def complete_success(self, reservation, *, at):
-        if self.fail:
+        if self.fail or self.fail_success:
             raise RuntimeError("guard unavailable")
         self.successes.append((reservation, at))
 
@@ -171,6 +173,28 @@ class NativeAuthenticationServiceTests(unittest.TestCase):
                 "atlas.owner", self.PASSWORD
             )
         self.assertEqual(self._proof_rows(), [])
+
+
+    def test_failure_completion_unavailability_fails_closed(self):
+        guard = FakeAttemptGuard(fail_failure=True)
+        with self.assertRaises(AuthenticationUnavailable):
+            self._service(guard=guard).authenticate(
+                "atlas.owner", "incorrect password"
+            )
+        self.assertEqual(self._proof_rows(), [])
+        self.assertEqual(len(guard.abandoned), 1)
+
+    def test_success_completion_unavailability_never_returns_raw_proof(self):
+        guard = FakeAttemptGuard(fail_success=True)
+        with self.assertRaises(AuthenticationUnavailable):
+            self._service(guard=guard).authenticate(
+                "atlas.owner", self.PASSWORD
+            )
+        # Proof metadata may have committed, but the raw reference is not
+        # returned unless the independent guard success transaction commits.
+        self.assertEqual(len(self._proof_rows()), 1)
+        self.assertEqual(len(guard.successes), 0)
+        self.assertEqual(len(guard.abandoned), 1)
 
     def test_rehash_uses_new_credential_revision_for_proof(self):
         old_hasher = Argon2idPasswordHasher(
