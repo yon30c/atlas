@@ -1,6 +1,6 @@
 # I-2 — Contrato de autenticación nativa y VerifiedIdentityContext
 
-**Estado:** implementación inicial en revisión; no habilita login operativo. El contexto incorpora attestation HMAC para impedir la fabricación de claims por callers.
+**Estado:** servicios iniciales y guard de intentos implementados en `work/atlas-mvp-runtime`; suite completa validada localmente por el propietario. No habilita login operativo. El contexto incorpora attestation HMAC para impedir la fabricación de claims por callers.
 **Dependencia:** I-1 en `feature/verified-identity-i1-canonical-lookup`.
 **Rama:** `feature/verified-identity-i2-authentication-context`.
 **Alcance:** servicio de autenticación de aplicación, admisión one-shot del proof y emisión/validación efímera de `VerifiedIdentityContext`. Sin endpoints, CLI, sesiones persistentes, bootstrap ni CAM.
@@ -67,18 +67,9 @@ Si issuer no existe, está revocado, o la autoridad no está disponible, no emit
 
 ### 2.3 Throttling: dependencia obligatoria
 
-No existe hoy un puerto de rate limiting de autenticación. I-2 debe introducir una interfaz explícita para controlar intentos y registrar éxitos/fallos.
+El puerto `AuthenticationAttemptGuard` y su adaptador SQLite ya están implementados en `work/atlas-mvp-runtime`, con migración V28 sobre la misma `SQLiteDatabase` de autoridad. La política aprobada es: digest SHA-256 con separación de dominio para issuer + LoginHandle normalizado; ventana móvil de 15 minutos; demoras 1/2/4/7/15 minutos; máximo de dos reservas concurrentes por cuenta; TTL de reserva de 120 segundos; éxito confirmado reinicia fallos; abandono/expiración no cuenta como fallo. Las reservas y finalizaciones usan transacciones independientes `BEGIN IMMEDIATE`; Argon2id permanece fuera de transacciones SQLite de escritura. La indisponibilidad del guard deniega la emisión del proof.
 
-Requisitos mínimos del guard:
-- clave de cuenta basada en issuer + login handle normalizado;
-- ventana y umbral configurables;
-- respuesta temporal genérica, sin revelar existencia de cuenta;
-- reloj inyectado;
-- almacenamiento atómico y compartido entre procesos/instancias;
-- límites adicionales por origen de red en el futuro entrypoint, calculados exclusivamente por proxy/servidor confiable;
-- fallar cerrado si el guard requerido está indisponible.
-
-No se acepta un contador solo en memoria como protección de producción: reinicios y múltiples workers lo eludirían. La implementación SQLite del guard, sus límites de retención y su migración deben revisarse como cambio separado antes de conectar un entrypoint. Hasta entonces el servicio no se compone para uso operativo; los tests usan un fake determinista del puerto.
+El propietario validó localmente la suite completa de la rama (1,611 tests, 1 omitido) y `compileall`. Esto cierra la validación unitaria del guard, no su composición productiva. No hay endpoint, login ni composition root que lo conecte al runtime. Cualquier límite adicional por origen de red pertenece a un futuro transporte confiable y no está implementado.
 
 ## 3. Proof admission y resolución canónica — Identity Authority
 
@@ -184,10 +175,10 @@ I-2 no habilita:
 - bootstrap de propietario o provisión inicial de Projects/Environments/Grants;
 - acceso a CAM, Memory Gateway, Workspace, Skills o Broker;
 - actor AGENT, SERVICE, SYSTEM ni delegación;
-- rate limiting productivo hasta que exista adaptador compartido y revisado;
+- login operativo hasta que el guard SQLite validado esté compuesto en un entrypoint confiable y se cierre el resto de los gates de bootstrap/identidad/CAM;
 - fencing global, coordinación con Consistency Journal o resistencia anti-rollback.
 
-El cierre de I-2 requiere tests unitarios y de integración, suite completa, compileall, revisión del diff y evidencia de rollback UoW. La implementación debe mantener la propiedad de responsabilidades: Authentication Authority verifica credenciales y emite proofs; Identity Authority consume la evidencia, resuelve el binding y emite VerifiedIdentityContext. No se declarará listo para operación mientras el guard de intentos no tenga adaptador compartido aprobado.
+El propietario confirmó en `work/atlas-mvp-runtime` la suite completa (1,611 tests, 1 omitido) y `compileall` sin errores reportados. El guard SQLite compartido existe y está validado en esa suite. La implementación mantiene la propiedad de responsabilidades: Authentication Authority verifica credenciales y emite proofs; Identity Authority consume la evidencia, resuelve el binding y emite VerifiedIdentityContext. I-2 sigue sin habilitar operación: faltan composition root confiable, provisión de la clave HMAC, bootstrap de identidad y Grant, gates I-3/CAM y entrypoint de login.
 
 ## 9. Brecha de procedencia cerrada en la implementación inicial
 
@@ -199,7 +190,7 @@ Para revalidar un contexto sin incluir `NativeSubject` ni `subject_digest` en é
 
 ## 10. Implementación inicial de proof admission y derivación
 
-Implementado en revisión:
+Implementado en la rama MVP y cubierto por la suite local confirmada:
 - `VerifiedIdentityContext` frozen con UUIDs canónicos, USER fijo, revisiones positivas, timestamps UTC, referencia aleatoria y attestation HMAC.
 - `HmacVerifiedIdentityContextAttestor` y su puerto. La firma usa HMAC-SHA256 y la verificación es constant-time.
 - `VerifiedIdentityContextService.admit_proof`: consume proof, resuelve issuer por realm confiable, binding por issuer + subject digest derivado del proof y usuario canónico por I-1; exige que la autenticación no preceda la verificación del binding; crea el contexto y confirma todo dentro de la misma `SQLiteLocalAuthorityUnitOfWork`.
@@ -210,4 +201,4 @@ Implementado en revisión:
 
 **Límite de uso:** la fábrica de OperationContext no hace seguros por sí sola a los consumidores CAM existentes. Hasta I-3, los servicios sensibles deben seguir considerándose no reconciliados; esta implementación no habilita operaciones protegidas, login operativo ni endpoints.
 
-**Validación:** pendiente de ejecución por el propietario en Debian. No se declara este slice validado hasta ejecutar pruebas focalizadas, suite completa y compileall.
+**Validación local confirmada por el propietario en Debian 13 / `Atlas-VM-test`:** suite completa `Ran 1611 tests in 40.322s — OK (skipped=1)` y `compileall -q src tests` sin errores reportados. Esta evidencia no valida login operativo, bootstrap, consumo E2E desde un entrypoint, provisión real de secretos ni integración de consumidores I-3.
