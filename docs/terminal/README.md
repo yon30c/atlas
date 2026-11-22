@@ -2,8 +2,8 @@
 
 > Estado consolidado del proyecto: [Estado vigente de Atlas](../status-current.md).
 
-> Estado: **la base conversacional está integrada en `main`**. La rama `work/atlas-mvp-runtime` añade `/plan` como vista previa; este incremento está pendiente de validación local.
-> Última validación automatizada de la base Terminal: 16 de noviembre de 2026, commit `610f027f1fe91933278e431d8a9ec29dd291b96e`. Esta evidencia no cubre los cambios nuevos de `/plan`.
+> Estado: **la base conversacional está integrada en `main`**. La rama `work/atlas-mvp-runtime` añade `/plan` como vista previa; el incremento está validado localmente en alcance focalizado: 14 pruebas aprobadas y `compileall` sin errores (Debian 13, 22 de noviembre de 2026). La suite completa de la rama aún no se ha ejecutado.
+> Última validación automatizada de la base Terminal: 16 de noviembre de 2026, commit `610f027f1fe91933278e431d8a9ec29dd291b96e`. Esa evidencia cubre la base conversacional, no los cambios de `/plan`.
 > Alcance: experiencia conversacional local, persistencia y administración de conversaciones, más vista previa de planes en la rama de MVP. No equivale todavía al runtime autónomo completo.
 
 ## 1. Objetivo
