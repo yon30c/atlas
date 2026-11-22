@@ -403,8 +403,11 @@ def _safe_json_file(path: Path, value: dict, limit: int) -> None:
     raw = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
     if len(raw) > limit:
         raise Incomplete(f"JSON evidence exceeds {limit} bytes")
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
     try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_gid != 0 or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) != 0o600:
+            raise Incomplete("new JSON evidence file identity/mode is invalid")
         view = memoryview(raw)
         while view:
             written = os.write(fd, view)
@@ -434,6 +437,13 @@ def _rewrite_json_file(path: Path, value: dict, limit: int) -> None:
         os.fsync(fd)
     finally:
         os.close(fd)
+
+
+def update_gate_marker(marker: Path, run_id: str, name: str, snapshot: dict, phase: str) -> None:
+    _rewrite_json_file(marker, {
+        "schema": SCHEMA, "run_id": run_id, "unit": name,
+        "invocation_id": snapshot["InvocationID"], "phase": phase,
+    }, 4096)
 
 
 def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=False, delegate=False, no_listener=False) -> tuple[dict, Path | None, Path]:
@@ -598,6 +608,12 @@ def run_probe(args: argparse.Namespace) -> dict:
         os.chown(run_dir, 0, SERVICE_GID)
         os.chmod(run_dir, 0o730)
         run_dir_fd = os.open(run_dir, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
+        run_dir_info = os.fstat(run_dir_fd)
+        report["sandbox"] = {
+            "path": str(run_dir), "device": run_dir_info.st_dev,
+            "inode": run_dir_info.st_ino, "uid": run_dir_info.st_uid,
+            "gid": run_dir_info.st_gid, "mode": oct(stat.S_IMODE(run_dir_info.st_mode)),
+        }
         lock_path = BASE / "maintenance.lock"
         lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
         lock_info = os.fstat(lock_fd)
@@ -619,6 +635,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         name = f"atlas-qp-{secrets.token_hex(6)}.service"
         initial, endpoint, ready_path = _start_fixture(name, run_dir)
         report["unit_identity"][name] = initial
+        update_gate_marker(marker, run_id, name, initial, "unit-started")
         before = cgroup_events(mount, initial["ControlGroup"])
         report["snapshots"].append({"scenario": "QP-01", "phase": "before-stop",
                                     "monotonic_ns": mono(), "unit": initial, "cgroup": before})
@@ -652,6 +669,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         name2 = f"atlas-qp-{secrets.token_hex(6)}.service"
         initial2, endpoint2, ready2 = _start_fixture(name2, run_dir, hold_child=True)
         report["unit_identity"][name2] = initial2
+        update_gate_marker(marker, run_id, name2, initial2, "unit-started")
         before2 = cgroup_events(mount, initial2["ControlGroup"])
         if before2["values"]["populated"] != 1:
             raise Incomplete("QP-02 did not observe the helper in a populated service cgroup")
@@ -676,6 +694,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         name3 = f"atlas-qp-{secrets.token_hex(6)}.service"
         initial3, endpoint3, ready3 = _start_fixture(name3, run_dir, ignore_term=True)
         report["unit_identity"][name3] = initial3
+        update_gate_marker(marker, run_id, name3, initial3, "unit-started")
         systemd_stop(name3)
         transitional3, populated3 = _wait_for_deactivation(
             name3, mount, initial3["ControlGroup"], time.monotonic() + 1.5
@@ -699,6 +718,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         name4 = f"atlas-qp-{secrets.token_hex(6)}.service"
         initial4, endpoint4, ready4 = _start_fixture(name4, run_dir, ignore_term=True)
         report["unit_identity"][name4] = initial4
+        update_gate_marker(marker, run_id, name4, initial4, "unit-started")
         systemd_stop(name4)
         transitional4, populated4 = _wait_for_deactivation(
             name4, mount, initial4["ControlGroup"], time.monotonic() + 1.5
@@ -721,6 +741,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         # QP-06: Delegate=yes must be rejected; no cgroup writes or migration.
         name6 = f"atlas-qp-{secrets.token_hex(6)}.service"
         initial6, endpoint6, ready6 = _start_fixture(name6, run_dir, delegate=True)
+        update_gate_marker(marker, run_id, name6, initial6, "unit-started")
         if initial6["Delegate"] is not True:
             raise Incomplete("QP-06 negative fixture did not expose Delegate=yes")
         cleanup6 = _stop_and_cleanup(name6, initial6, endpoint6, ready6, run_dir_fd, report)
@@ -756,6 +777,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         name12 = f"atlas-qp-{secrets.token_hex(6)}.service"
         initial12, _unused_endpoint, ready12 = _start_fixture(name12, run_dir, no_listener=True)
         report["unit_identity"][name12] = initial12
+        update_gate_marker(marker, run_id, name12, initial12, "unit-started")
         bounded_run(["systemctl", "--no-block", "restart", name12], timeout=5.0)
         changed = None
         deadline12 = time.monotonic() + 8.0
