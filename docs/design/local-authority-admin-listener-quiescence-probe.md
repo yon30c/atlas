@@ -2,7 +2,7 @@
 
 **Identificador:** ATLAS-PROBE-LISTENER-QUIESCENCE  
 **Versión:** 1.0-draft  
-**Estado:** diseño aprobado como siguiente trabajo de especificación; runner no implementado y escenarios no ejecutados.  
+**Estado:** diseño aprobado; runner inicial implementado parcialmente en `tests/integration/private_unix_listener/run_listener_quiescence_probe.py`; no ejecutado. QP-03/QP-04/QP-06/QP-07/QP-12 tienen estímulos y oráculos iniciales; QP-01/QP-02 solo validan lifecycle y permanecen INCOMPLETE por falta de evidencia FD.  
 **Fecha:** 21 de noviembre de 2026.  
 **Contrato base:** `docs/contracts/local-authority-admin-listener-quiescence-1.md`, versión 1.0-draft, recomendaciones R1–R7 aprobadas expresamente por el propietario.  
 **Rama:** `experiment/a-ipc-01-private-unix-listener-probe`  
@@ -322,7 +322,7 @@ Esta retirada del socket fixture es exclusivamente cleanup de un objeto creado e
 | 5. Fault injection | fixtures aislados, seccomp y adaptadores controlados | Resuelto documentalmente |
 | 6. Lifecycle/cleanup | unidades transitorias y cleanup por identidad exacta | Resuelto documentalmente |
 
-**Siguiente gate:** revisión estática de coherencia de este diseño y aprobación expresa del propietario para implementar el runner. La aprobación previa de R1–R7 y el cierre documental de estos seis puntos no son autorización para implementar ni ejecutar. La ejecución futura requiere otra solicitud expresa y será exclusivamente en `Atlas-VM-test`.
+**Estado de implementación (2026-11-22):** el propietario autorizó expresamente implementar el runner. Existe una primera implementación parcial: preflight de solo lectura para el perfil fijado; lock `flock` + marcador sticky; consultas tipadas `GetUnit`/propiedades/`ListJobs`; fixtures transitorios; observación `ActiveState` + `Unit.Job` + `Manager.ListJobs` + `cgroup.events`; cleanup del endpoint fixture por dirfd e identidad; reporte JSON acotado persistido bajo `/run/atlas-qp` antes de intentar liberar el marcador. Los escenarios QP-03, QP-04, QP-06, QP-07 y QP-12 tienen estímulos/oráculos iniciales. QP-01/QP-02 registran lifecycle, pero se clasifican INCOMPLETE y nunca QUIESCENT porque QP-08/QP-09 aún no demuestran la política de FD. QP-05, QP-08, QP-09, QP-10, QP-11, QP-13, QP-14 y QP-15 siguen INCOMPLETE; QP-11 además requiere un supervisor autorizado que todavía no existe. El runner no se ha ejecutado ni validado; la revisión estática y el cierre de los escenarios pendientes continúan antes de entregar instrucciones de ejecución. La ejecución será exclusivamente en `Atlas-VM-test`.
 
 Referencias técnicas externas usadas para fijar la interfaz (deben verificarse contra el perfil 257.13 durante una futura revisión, no durante este trabajo documental):
 
@@ -339,12 +339,12 @@ QP-01..QP-15 cubre la capa previa de quiescencia del proceso/servicio. No reempl
 ## 11. Límites del trabajo actual
 
 - R1–R7 fueron aprobadas por el propietario como baseline de diseño.
-- Este documento define escenarios y evidencia, no un runner ejecutable.
-- No se creó ninguna unidad, cgroup, usuario, grupo, ruta, servicio ni archivo en el host.
-- No se implementó código, fixture ni mecanismo de mantenimiento.
+- El runner parcial está en `tests/integration/private_unix_listener/run_listener_quiescence_probe.py`; no se ha ejecutado.
+- La cobertura ejecutable actual no equivale a QP-01..QP-15 completos; ocho escenarios permanecen explícitamente INCOMPLETE y QP-01/QP-02 no emiten QUIESCENT.
+- El runner crea recursos únicamente cuando se ejecuta manualmente con confirmación explícita en la VM desechable; durante esta sesión no se creó ninguna unidad, cgroup, usuario, grupo, ruta o servicio en un host.
 - No se ejecutaron pruebas, builds, workflows ni probes desde GitHub.
 - No se modificó `main`, `atlas-admin/1`, el handler IPC, SQLite ni el host.
-- La próxima fase, si se autoriza, es cerrar los puntos de diseño de la sección 9; no saltar directamente a implementación.
+- Siguiente fase: revisión estática del código, completar QP-05/QP-08/QP-09/QP-10/QP-11/QP-13/QP-14/QP-15 y validar el protocolo de reporte/cleanup antes de autorizar ejecución local.
 
 ## 12. Referencias
 
