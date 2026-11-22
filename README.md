@@ -63,7 +63,6 @@ La consola local y las conversaciones persistentes siguen siendo funcionales. El
 - [Auditoría de composición y bootstrap de autenticación](docs/design/native-authentication-composition-gap-audit.md)
 - [Auditoría de consumidores de identidad I-3](docs/design/native-identity-i3-consumer-audit.md)
 - [Contrato propuesto de provisión inicial del propietario](docs/design/initial-owner-authority-provisioning-contract.md)
-- [Auditoría de brecha de composición de autenticación nativa](docs/design/native-authentication-composition-gap-audit.md)
 - [Plan de Atlas funcional de prueba](docs/functional-test-roadmap.md)
 - [Mapa de composición funcional F0](docs/functional-architecture-map.md)
 - [Atlas Workstation — entorno operativo aislado](docs/design/atlas-workstation.md)
