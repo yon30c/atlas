@@ -1270,6 +1270,14 @@ def preflight() -> dict:
     except (UnicodeError, IndexError) as exc:
         raise Incomplete("cannot parse busctl version output") from exc
     client_version = client_version_line.removeprefix("systemd ")
+    # Debian 13 formats the client version as:
+    #   systemd 257 (257.13-1~deb13u1)
+    # while upstream builds may report:
+    #   systemd 257.13
+    # Normalize only the Debian parenthesized upstream/package version;
+    # keep the accepted systemd 257.13 profile strict.
+    if client_version.startswith("257 (") and client_version.endswith(")"):
+        client_version = client_version[len("257 ("):-1]
     if not (client_version == "257.13" or client_version.startswith("257.13-")):
         raise Incomplete("systemd/busctl client version is outside the pinned 257.13 profile")
     root, mount = cgroup_mount()
