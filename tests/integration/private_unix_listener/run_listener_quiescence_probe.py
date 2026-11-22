@@ -689,6 +689,15 @@ def systemd_stop(name: str) -> None:
     )
 
 
+def systemd_restart(name: str) -> None:
+    if _ACTIVE_SUPERVISOR is None or _ACTIVE_RUN_ID is None:
+        raise Incomplete("no active test lifecycle supervisor")
+    _ACTIVE_SUPERVISOR.request(
+        "restart", ["systemctl", "--no-block", "restart", name],
+        actor_run_id=_ACTIVE_RUN_ID,
+    )
+
+
 def wait_inactive(name: str, deadline: float, *,
                   expected_invocation: list | None = None,
                   control_group: str | None = None) -> dict:
@@ -1857,29 +1866,83 @@ def run_probe(args: argparse.Namespace) -> dict:
                                     "decision": "ABORT_NOT_QUIESCENT",
                                     "reason": "initial deadline observed deactivating + populated=1; manager later terminated fixture"})
 
-        # QP-04: a pending stop job and populated cgroup are never quiescent.
+        # QP-04: a pending restart job must not be confused with quiescence.
+        # This fixture has no pathname so a replacement invocation can start
+        # without colliding with the old Unix-socket filesystem entry.
         name4 = f"atlas-qp-{secrets.token_hex(6)}.service"
-        initial4, endpoint4, ready4 = _start_fixture(name4, run_dir, ignore_term=True)
+        initial4, endpoint4, ready4 = _start_fixture(
+            name4, run_dir, ignore_term=True, no_listener=True
+        )
         report["unit_identity"][name4] = initial4
         update_gate_marker(marker, run_id, name4, initial4, marker_identity, "unit-started")
-        systemd_stop(name4)
+        old_observer4 = _ACTIVE_FIXTURES[name4]["cgroup_observer"]
+        systemd_restart(name4)
         transitional4, populated4 = _wait_for_deactivation(
-            name4, _ACTIVE_FIXTURES[name4]["cgroup_observer"], time.monotonic() + 1.5
+            name4, old_observer4, time.monotonic() + 1.5
         )
         if transitional4["Job"][0] == 0 or populated4["values"]["populated"] != 1:
-            raise Incomplete("QP-04 did not observe a pending stop job with a populated cgroup")
-        stopped4 = wait_inactive(name4, time.monotonic() + STOP_TIMEOUT + 5, expected_invocation=initial4["InvocationID"], control_group=initial4["ControlGroup"])
-        empty4 = read_cgroup_observer(_ACTIVE_FIXTURES[name4]["cgroup_observer"])
+            raise Incomplete("QP-04 did not observe a pending restart job with the old cgroup populated")
+        replacement4 = None
+        deadline4 = time.monotonic() + STOP_TIMEOUT + 8
+        while time.monotonic() < deadline4:
+            candidate4 = unit_snapshot(name4)
+            if (
+                candidate4["InvocationID"] != initial4["InvocationID"]
+                and candidate4["ActiveState"] == "active"
+                and candidate4["MainPID"] > 0 and candidate4["Job"][0] == 0
+            ):
+                replacement4 = candidate4
+                break
+            time.sleep(0.05)
+        if replacement4 is None:
+            raise Incomplete("QP-04 restart did not produce a stable replacement invocation")
+        old_empty4 = read_cgroup_observer(old_observer4)
+        new_observer4 = open_cgroup_observer(mount, replacement4["ControlGroup"])
+        new_populated4 = read_cgroup_observer(new_observer4)
+        if (
+            old_empty4["values"]["populated"] != 0
+            or new_populated4["values"]["populated"] != 1
+            or old_observer4["identity"] == new_observer4["identity"]
+        ):
+            close_cgroup_observer(new_observer4)
+            raise Incomplete("QP-04 old/replacement cgroup identities or population are inconsistent")
+        _ACTIVE_FIXTURES[name4]["cgroup_observer"] = new_observer4
+        _ACTIVE_FIXTURES[name4]["initial_cgroup_events"] = new_populated4
+        _ACTIVE_FIXTURES[name4]["initial"] = replacement4
+        update_gate_marker(marker, run_id, name4, replacement4, marker_identity, "replacement-invocation")
+        close_cgroup_observer(old_observer4)
+        systemd_stop(name4)
+        stopped4 = wait_inactive(
+            name4, time.monotonic() + STOP_TIMEOUT + 3,
+            expected_invocation=replacement4["InvocationID"],
+            control_group=replacement4["ControlGroup"],
+        )
+        empty4 = read_cgroup_observer(new_observer4)
         cleanup4 = _stop_and_cleanup(
-            name4, initial4, endpoint4, ready4, run_dir_fd, report,
+            name4, replacement4, None, ready4, run_dir_fd, report,
             already_stopped=True, cgroup_empty_confirmed=empty4["values"]["populated"] == 0
         )
         report["cleanup"]["resources"].append(cleanup4)
-        if stopped4["ActiveState"] != "inactive" or empty4["values"]["populated"] != 0 or not cleanup4["endpoint_removed"] or not cleanup4.get("unit_unloaded"):
-            raise Incomplete("QP-04 cleanup after pending stop job failed")
-        record_scenario(report, {"id": "QP-04", "status": "PASS",
-                                    "decision": "ABORT_NOT_QUIESCENT",
-                                    "reason": "pending Unit.Job and populated=1 observed before manager termination"})
+        if (
+            stopped4["ActiveState"] != "inactive" or empty4["values"]["populated"] != 0
+            or not cleanup4.get("unit_unloaded")
+        ):
+            raise Incomplete("QP-04 cleanup after pending restart job failed")
+        record_scenario(report, {
+            "id": "QP-04", "status": "PASS",
+            "decision": "ABORT_NOT_QUIESCENT",
+            "reason": "restart job remained pending while the old invocation cgroup was populated; replacement InvocationID and cgroup inode were distinct",
+            "observations": {
+                "old_invocation": initial4["InvocationID"],
+                "replacement_invocation": replacement4["InvocationID"],
+                "restart_job_type": transitional4["Job"][1],
+                "old_cgroup_populated_during_restart": populated4["values"]["populated"],
+                "old_cgroup_populated_after_restart": old_empty4["values"]["populated"],
+                "replacement_cgroup_populated": new_populated4["values"]["populated"],
+                "old_cgroup_identity": old_observer4["identity"],
+                "replacement_cgroup_identity": new_observer4["identity"],
+            },
+        })
 
         # QP-05: distinct SERVICE/OTHER fixtures and an adapter-only identity mismatch.
         other_dir = BASE / f"{run_id}-other"
