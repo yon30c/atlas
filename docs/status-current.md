@@ -22,9 +22,9 @@ La rama `work/atlas-mvp-runtime` fue creada desde `main` para priorizar una vers
 - En modo offline, `/plan` informa que necesita Ollama.
 - Se añadieron `tests/unit/test_console_planning.py` y cobertura de composición en `tests/unit/test_local_console_composition.py`.
 
-**Estado de validación:** implementación publicada en la rama de trabajo; pruebas focalizadas, suite completa y compilación pendientes de ejecución local por el propietario. No se ejecutó nada desde GitHub.
+**Validación local focalizada completada por el propietario en Debian 13:** `Ran 14 tests in 0.029s — OK` para `tests.unit.test_console_planning` y `tests.unit.test_local_console_composition`. `.venv/bin/python -m compileall -q src tests` terminó sin errores. La suite completa de la rama no se ha ejecutado. No se ejecutaron pruebas ni compilaciones desde GitHub.
 
-**Siguiente paso:** completar la frontera de autenticación local y bootstrap. El código ya contiene `NativeAuthenticationService`, `VerifiedIdentityContextService` y la fábrica de `OperationContext`, pero el login no está compuesto en CLI: `NativeAuthenticationService` exige un `AuthenticationAttemptGuardPort` y no hay adaptador productivo; tampoco existe provisión operativa de la clave HMAC ni bootstrap/login de propietario. Las sesiones C2 no están integradas. El servicio de Workspace ya admite list/read con CAM, pero la consola actual sigue produciendo un `OperationContext` sintético. No conectar el servicio hasta que la frontera produzca identidad USER canónica y la operación vuelva a validar evidencia, scope y Grant exactos.
+**Siguiente paso:** cerrar las dependencias de autenticación antes de componer un login operativo. Ya existen `NativeAuthenticationService`, `VerifiedIdentityContextService`, `VerifiedOperationContextFactory` y el adaptador HMAC; todavía no existe un guard productivo compartido para `AuthenticationAttemptGuardPort`, ni una provisión segura de la clave HMAC en el composition root. El guard requiere una política explícita y persistencia atómica entre procesos; no usar un contador en memoria. El bootstrap de propietario está además bloqueado por la decisión pendiente sobre el perfil CAM del Grant inicial. Las sesiones C2 y la reconciliación I-3 de consumidores CAM tampoco están integradas. La consola actual sigue produciendo un `OperationContext` sintético: no conectar Workspace hasta cerrar la cadena de identidad USER canónica, revalidación y autorización CAM exacta.
 
 **Alcance temporal del MVP:** conversación persistente + vista previa de planes; el siguiente hito será Workspace read-only bajo CAM. No se habilitan escritura, shell, Docker, Skills, Broker, runtime AGENT ni ejecución multi-paso.
 
@@ -55,7 +55,7 @@ Atlas todavía no es la plataforma autónoma completa de la visión. La presenci
 
 - Consola conversacional local mediante `python -m atlas`, integración con Ollama, streaming y modo offline informativo.
 - Persistencia SQLite de conversaciones, recuperación de conversación activa, administración, exportación JSON y backup cifrado con verificación/restauración.
-- Interpretación y planificación funcional F1 aislada en `main`; la rama `work/atlas-mvp-runtime` añade el comando `/plan` como vista previa, pendiente de validación local.
+- Interpretación y planificación funcional F1 aislada en `main`; la rama `work/atlas-mvp-runtime` añade `/plan` como vista previa. El incremento está validado localmente con 14 pruebas focalizadas y `compileall`; la suite completa de la rama sigue pendiente.
 - Capacidades locales de Workspace para listar y leer archivos; protocolo controlado de escritura disponible como componente, pero no habilitado en el catálogo/runtime.
 - Gate CAM local de solo lectura para `workspace.list` y `workspace.read`, con identidad canónica, Project/Environment, Grant y UoW compartida; no conectado a CLI/runtime.
 - Persistencia canónica de Identity(USER), Project, Environment, Grants, asociaciones Project–Environment y Workspaces.
