@@ -117,6 +117,26 @@ def unit_path(name: str) -> str:
     return result["data"]
 
 
+def list_jobs_for_unit(name: str) -> list[dict]:
+    result = busctl_json("call", BUS, MANAGER, MANAGER_IFACE, "ListJobs")
+    if result["type"] != "a(usssoo)" or not isinstance(result["data"], list):
+        raise Incomplete("Manager.ListJobs returned an unexpected signature or shape")
+    matches = []
+    for row in result["data"]:
+        if (
+            not isinstance(row, list) or len(row) != 6
+            or not isinstance(row[0], int)
+            or not all(isinstance(row[index], str) for index in range(1, 6))
+        ):
+            raise Incomplete("Manager.ListJobs contains a malformed typed row")
+        if row[1] == name:
+            matches.append({
+                "id": row[0], "unit": row[1], "type": row[2],
+                "state": row[3], "unit_path": row[4], "job_path": row[5],
+            })
+    return matches
+
+
 def unit_snapshot(name: str) -> dict:
     path = unit_path(name)
     values = {
@@ -125,12 +145,14 @@ def unit_snapshot(name: str) -> dict:
         "ActiveState": dbus_property(path, UNIT_IFACE, "ActiveState", "s"),
         "SubState": dbus_property(path, UNIT_IFACE, "SubState", "s"),
         "InvocationID": dbus_property(path, UNIT_IFACE, "InvocationID", "ay"),
-        "ControlGroup": dbus_property(path, SERVICE_IFACE, "ControlGroup", "s"),
+        "ControlGroup": dbus_property(MANAGER, MANAGER_IFACE, "ControlGroup", "s"),
         "KillMode": dbus_property(path, SERVICE_IFACE, "KillMode", "s"),
         "Restart": dbus_property(path, SERVICE_IFACE, "Restart", "s"),
         "Delegate": dbus_property(path, RESOURCE_IFACE, "Delegate", "b"),
         "Transient": dbus_property(path, UNIT_IFACE, "Transient", "b"),
         "Job": dbus_property(path, UNIT_IFACE, "Job", "(uo)"),
+        "Triggers": dbus_property(path, UNIT_IFACE, "Triggers", "as"),
+        "TriggeredBy": dbus_property(path, UNIT_IFACE, "TriggeredBy", "as"),
     }
     if values["Id"] != name or values["LoadState"] != "loaded":
         raise Incomplete("systemd returned a different or unloaded unit")
@@ -138,10 +160,21 @@ def unit_snapshot(name: str) -> dict:
         raise Incomplete("fixture unit lifecycle properties differ from contract")
     if not values["Transient"]:
         raise Incomplete("fixture unit is not transient")
+    if values["Triggers"] or values["TriggeredBy"]:
+        raise Incomplete("fixture unit unexpectedly has activation relationships")
     if not isinstance(values["InvocationID"], list) or len(values["InvocationID"]) != 16:
         raise Incomplete("InvocationID is not a 16-byte D-Bus ay")
     if not isinstance(values["Job"], list) or len(values["Job"]) != 2:
         raise Incomplete("Unit.Job has an unexpected D-Bus representation")
+    jobs = list_jobs_for_unit(name)
+    job_id, job_path = values["Job"]
+    if job_id == 0:
+        if job_path != "/" or jobs:
+            raise Incomplete("Unit.Job and Manager.ListJobs disagree about no pending job")
+    else:
+        if len(jobs) != 1 or jobs[0]["id"] != job_id or jobs[0]["job_path"] != job_path:
+            raise Incomplete("Unit.Job and Manager.ListJobs disagree about pending job")
+    values["ListJobs"] = jobs
     return values
 
 
