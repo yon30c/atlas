@@ -175,12 +175,24 @@ def unit_path(name: str) -> str:
     return result["data"]
 
 
+def dbus_array_output(result: dict, signature: str, method: str) -> list:
+    # busctl --json=short stores method output arguments in an outer data
+    # array. The single D-Bus array argument is therefore data[0].
+    if (
+        result["type"] != signature
+        or not isinstance(result["data"], list)
+        or len(result["data"]) != 1
+        or not isinstance(result["data"][0], list)
+    ):
+        raise Incomplete(f"{method} returned an unexpected typed array output")
+    return result["data"][0]
+
+
 def list_jobs_for_unit(name: str) -> list[dict]:
     result = manager_call(busctl_json, "call", BUS, MANAGER, MANAGER_IFACE, "ListJobs")
-    if result["type"] != "a(usssoo)" or not isinstance(result["data"], list):
-        raise Incomplete("Manager.ListJobs returned an unexpected signature or shape")
+    rows = dbus_array_output(result, "a(usssoo)", "Manager.ListJobs")
     matches = []
-    for row in result["data"]:
+    for row in rows:
         if (
             not isinstance(row, list) or len(row) != 6
             or not isinstance(row[0], int)
@@ -199,13 +211,11 @@ def unit_is_absent(name: str) -> bool:
     result = manager_call(
         busctl_json, "call", BUS, MANAGER, MANAGER_IFACE, "ListUnitsByNames", "as", "1", name
     )
-    if result["type"] != "a(ssssssouso)" or not isinstance(result["data"], list):
-        raise Incomplete("ListUnitsByNames returned an unexpected signature or shape")
+    rows = dbus_array_output(result, "a(ssssssouso)", "Manager.ListUnitsByNames")
 
     # systemd 257 returns one tuple for every requested name, including an
     # unloaded name. A missing unit is represented by a placeholder tuple
     # whose LoadState is "not-found"; an empty array is not the absence oracle.
-    rows = result["data"]
     if len(rows) != 1:
         raise Incomplete("ListUnitsByNames did not return exactly one requested unit")
     row = rows[0]
