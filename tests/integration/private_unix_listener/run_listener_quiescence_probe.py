@@ -1028,10 +1028,25 @@ def fixture_main(args: argparse.Namespace) -> int:
                 while True:
                     signal.pause()
             os.close(child_ready_write)
-            child_raw = read_bounded_chunks(
-                lambda size: os.read(child_ready_read, size), 4096
-            )
-            os.close(child_ready_read)
+            child_selector = selectors.DefaultSelector()
+            child_raw_buffer = bytearray()
+            child_deadline = time.monotonic() + 3.0
+            try:
+                child_selector.register(child_ready_read, selectors.EVENT_READ)
+                while True:
+                    remaining = child_deadline - time.monotonic()
+                    if remaining <= 0 or not child_selector.select(remaining):
+                        raise Incomplete("QP-02 child authority evidence timed out")
+                    chunk = os.read(child_ready_read, min(4096, 4097 - len(child_raw_buffer)))
+                    if not chunk:
+                        break
+                    child_raw_buffer.extend(chunk)
+                    if len(child_raw_buffer) > 4096:
+                        raise Incomplete("QP-02 child authority evidence exceeds 4096 bytes")
+            finally:
+                child_selector.close()
+                os.close(child_ready_read)
+            child_raw = bytes(child_raw_buffer)
             try:
                 child_policy_evidence = json.loads(
                     child_raw.decode("ascii", "strict"),
