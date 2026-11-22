@@ -2,9 +2,9 @@
 
 > Estado consolidado del proyecto: [Estado vigente de Atlas](../status-current.md).
 
-> Estado: **Atlas Terminal funcional en la rama `feature/terminal-commands`**. Fases 1 y 2 implementadas en el alcance documentado; la suite local completa está aprobada.
-> Última validación automatizada: 16 de noviembre de 2026, commit `610f027f1fe91933278e431d8a9ec29dd291b96e`.
-> Alcance: experiencia conversacional local, con persistencia y administración de conversaciones. No equivale todavía al runtime autónomo completo de Atlas.
+> Estado: **la base conversacional está integrada en `main`**. La rama `work/atlas-mvp-runtime` añade `/plan` como vista previa; este incremento está pendiente de validación local.
+> Última validación automatizada de la base Terminal: 16 de noviembre de 2026, commit `610f027f1fe91933278e431d8a9ec29dd291b96e`. Esta evidencia no cubre los cambios nuevos de `/plan`.
+> Alcance: experiencia conversacional local, persistencia y administración de conversaciones, más vista previa de planes en la rama de MVP. No equivale todavía al runtime autónomo completo.
 
 ## 1. Objetivo
 
@@ -21,6 +21,7 @@ La rama `feature/terminal-commands` contiene:
 - Adaptador Ollama para `/api/chat`, streaming y validación del endpoint para loopback.
 - Modo `ATLAS_MODE=offline`, que permite iniciar la consola sin proveedor generativo y comunica esa limitación.
 - Comandos de terminal `/help`, `/clear` y `/exit`; `salir`, `exit` y `quit` siguen siendo alias de salida.
+- En `work/atlas-mvp-runtime`, comando `/plan <solicitud>` conectado al planificador F1; solo genera una vista previa y permanece pendiente de validación local.
 - Manejo de EOF e interrupciones de consola.
 - Persistencia SQLite durable de conversaciones, metadatos, mensajes y referencia a la conversación activa.
 - Recuperación de la conversación activa al iniciar Atlas.
@@ -52,6 +53,7 @@ Los comandos de conversaciones y sus políticas están documentados en [Conversa
 | Comando | Función |
 |---|---|
 | `/help` | Muestra ayuda |
+| `/plan <solicitud>` | En `work/atlas-mvp-runtime`: prepara y muestra un plan; no ejecuta operaciones ni accede a archivos |
 | `/clear` | Limpia la pantalla; no borra el historial |
 | `/exit` | Sale de Atlas |
 | `/new [título]` | Crea y selecciona una conversación |
@@ -84,6 +86,7 @@ También se habían realizado comprobaciones manuales locales de persistencia, b
 ## 6. Límites actuales
 
 - La experiencia conversacional local funciona, pero no es todavía un agente con ejecución general de tareas.
+- `/plan` está disponible únicamente en la rama `work/atlas-mvp-runtime` hasta que se integre; es una vista previa, no una autorización ni una ejecución.
 - El Assistant no tiene acceso directo al shell, archivos, SQL, Docker ni herramientas privilegiadas.
 - La integración con Ollama requiere que el servicio y el modelo estén instalados y disponibles localmente; Atlas no los instala ni inicia automáticamente.
 - El modo offline es informativo y no genera respuestas mediante un LLM.
