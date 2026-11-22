@@ -180,6 +180,20 @@ Se corrigieron las siguientes contradicciones de documentos heredados:
 - El contrato I-2 ahora refleja que el guard SQLite V28 existe y fue validado en la suite local, aunque no está compuesto en login operativo.
 - El contrato de provisión inicial refleja la asociación Project–Environment V18, sin declarar resuelta su provisión ni la atomicidad global.
 
+
+
+### 8.8 Provisión real de Project/Environment y primer Grant
+
+La inspección adicional de `ProjectEnvironmentLifecycleService`, su composición y los adaptadores SQLite precisa el estado:
+
+- V18 ya persiste la asociación Project–Environment con claves foráneas.
+- `SQLiteProjectEnvironmentAssociationRepository` expone lectura, no creación.
+- `SQLiteProjectEnvironmentLifecycleAssociationWriter` expone actualización CAS de una asociación existente; no crea la asociación inicial.
+- `ProjectEnvironmentLifecycleService.transition` cambia estado de una asociación existente, requiere `VerifiedIdentityContext` revalidado dentro de la UoW y un Platform Admin Grant activo. No es el flujo de bootstrap del primer Project/Environment.
+- `GrantManagementService.issue` emite Grants ordinarios con identidad USER verificada, pero no consume `InitialAuthorityProvisioningEvidence` ni crea Project/Environment/association. Su verificación de identidad ocurre antes de la UoW de inserción.
+
+Por tanto, la Operación B del contrato de provisión inicial aún no tiene un application service que coordine de forma autorizada la creación de Project, Environment, asociación y primer Grant. No se debe improvisar una secuencia de llamadas a repositorios ni reutilizar el lifecycle de Platform Admin como sustituto del bootstrap CAM. Se necesita un servicio específico que consuma evidencia excepcional de provisión, aplique las restricciones CAM y persista el conjunto con atomicidad/idempotencia demostradas.
+
 ## 9. Orden de cierre recomendado
 
 No hay una única tarea de código que cierre todo. El orden seguro es:
