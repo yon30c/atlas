@@ -3,7 +3,7 @@
 **Identificador:** ATLAS-PROBE-LISTENER-QUIESCENCE  
 **Versión:** 1.0-draft  
 **Estado:** diseño aprobado; runner inicial implementado parcialmente en `tests/integration/private_unix_listener/run_listener_quiescence_probe.py`; no ejecutado. QP-03/QP-04/QP-06/QP-07/QP-12 tienen estímulos y oráculos iniciales; QP-01/QP-02 solo validan lifecycle y permanecen INCOMPLETE por falta de evidencia FD.  
-**Fecha:** 21 de noviembre de 2026.  
+**Fecha de actualización:** 22 de noviembre de 2026.  
 **Contrato base:** `docs/contracts/local-authority-admin-listener-quiescence-1.md`, versión 1.0-draft, recomendaciones R1–R7 aprobadas expresamente por el propietario.  
 **Rama:** `experiment/a-ipc-01-private-unix-listener-probe`  
 **Entorno futuro:** únicamente VM desechable `Atlas-VM-test`; nunca `greed` producción.
@@ -322,9 +322,9 @@ Esta retirada del socket fixture es exclusivamente cleanup de un objeto creado e
 | 5. Fault injection | fixtures aislados, seccomp y adaptadores controlados | Resuelto documentalmente |
 | 6. Lifecycle/cleanup | unidades transitorias y cleanup por identidad exacta | Resuelto documentalmente |
 
-**Estado de implementación (2026-11-22):** el propietario autorizó expresamente implementar el runner. Existe una primera implementación parcial: preflight de solo lectura para el perfil fijado; lock `flock` + marcador sticky; consultas tipadas `GetUnit`/propiedades/`ListJobs`; fixtures transitorios; observación `ActiveState` + `Unit.Job` + `Manager.ListJobs` + `cgroup.events`; cleanup del endpoint fixture por dirfd e identidad; reporte JSON acotado persistido bajo `/run/atlas-qp` antes de intentar liberar el marcador. Los escenarios QP-03, QP-04, QP-06, QP-07 y QP-12 tienen estímulos/oráculos iniciales. QP-01/QP-02 registran lifecycle, pero se clasifican INCOMPLETE y nunca QUIESCENT porque QP-08/QP-09 aún no demuestran la política de FD. QP-05, QP-08, QP-09, QP-10, QP-11, QP-13, QP-14 y QP-15 siguen INCOMPLETE; QP-11 además requiere un supervisor autorizado que todavía no existe. El runner no se ha ejecutado ni validado; la revisión estática y el cierre de los escenarios pendientes continúan antes de entregar instrucciones de ejecución. La ejecución será exclusivamente en `Atlas-VM-test`.
+**Estado de implementación (2026-11-22):** el propietario autorizó expresamente implementar el runner. Existe una primera implementación parcial: preflight de solo lectura para el perfil fijado; lock `flock` + marcador sticky; consultas tipadas `GetUnit`/propiedades/`ListJobs`; fixtures transitorios; observación `ActiveState` + `Unit.Job` + `Manager.ListJobs` + `cgroup.events`; cleanup del endpoint fixture por dirfd e identidad; reporte JSON acotado persistido bajo `/run/atlas-qp` antes de intentar liberar el marcador. Los escenarios QP-03, QP-04, QP-06, QP-07 y QP-12 tienen estímulos/oráculos iniciales. QP-01/QP-02 registran lifecycle, pero se clasifican INCOMPLETE y nunca QUIESCENT porque QP-08/QP-09 aún no demuestran la política de FD. QP-05, QP-06, QP-07, QP-08, QP-09, QP-10, QP-11, QP-13, QP-14 y QP-15 siguen INCOMPLETE; QP-11 además requiere un supervisor autorizado que todavía no existe. El runner no se ha ejecutado ni validado; la revisión estática y el cierre de los escenarios pendientes continúan antes de entregar instrucciones de ejecución. La ejecución será exclusivamente en `Atlas-VM-test`.
 
-Referencias técnicas externas usadas para fijar la interfaz (deben verificarse contra el perfil 257.13 durante una futura revisión, no durante este trabajo documental):
+Referencias técnicas externas usadas para fijar la interfaz y contrastadas durante la revisión estática del perfil systemd 257.13:
 
 - systemd D-Bus API: https://www.freedesktop.org/software/systemd/man/257/org.freedesktop.systemd1.html
 - busctl JSON y llamadas D-Bus: https://www.freedesktop.org/software/systemd/man/257/busctl.html
