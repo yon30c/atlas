@@ -168,3 +168,25 @@ La revisión adicional del adaptador y sus pruebas produjo estos ajustes:
 **Revisión:** lectura estática de los archivos de puerto, adaptador, migración, servicio, exportaciones SQLite y pruebas nuevas/actualizadas. La comparación GitHub confirma que la rama de trabajo está por delante de `main` y no está detrás; los cambios de este incremento permanecen únicamente en `work/atlas-mvp-runtime`.
 
 **Validación local pendiente:** no se ejecutaron tests, compileall, migraciones ni workflows desde GitHub. La prueba multiproceso usa el contexto `spawn` y debe comprobarse en el entorno Debian del propietario. No se debe considerar aprobada la implementación hasta recibir sus resultados.
+
+
+## 12. Validación local focalizada confirmada — 2026-11-22
+
+El propietario ejecutó en `Atlas-VM-test` los módulos:
+
+- `tests.unit.test_native_authentication_service`
+- `tests.unit.test_sqlite_authentication_attempt_guard`
+
+Resultado comunicado:
+
+```text
+Ran 21 tests in 2.968s
+
+OK
+```
+
+También ejecutó `.venv/bin/python -m compileall -q src tests` sin errores.
+
+Esto reemplaza el estado de validación pendiente descrito en §§10–11 para el alcance de esas pruebas: el incremento focalizado del servicio/guard queda **validado localmente**. La suite completa de la rama, migraciones sobre una base persistente real e integración con login/composición no quedan cubiertas por esta evidencia. La prueba multiproceso forma parte del módulo focalizado reportado como aprobado.
+
+**Siguiente comprobación:** suite unitaria completa de la rama MVP en Debian. No habilitar login, bootstrap, Workspace ni CAM por el resultado focalizado.
