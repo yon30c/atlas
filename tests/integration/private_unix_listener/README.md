@@ -1117,8 +1117,9 @@ to remove real socket pathnames.
   `CAP_SETUID`, `CAP_SETGID` and `CAP_SETPCAP` in its capability bounding set,
   and no ambient capabilities. `/usr/bin/setpriv` then clears supplementary
   groups, switches to the requested numeric UID/GID, clears inheritable,
-  ambient and bounding capabilities, and execs Python. The runner verifies
-  systemd's root bootstrap identity separately from the fixture's actual
+  ambient and bounding capabilities, sets `NoNewPrivileges` before Python
+  starts, and execs Python. The runner verifies systemd's root bootstrap
+  identity separately from the fixture's actual
   kernel-observed UID/GID, empty supplementary groups and zero capability
   sets. `setpriv` must be a regular root-owned executable not writable by
   group/others. The runner does not create, modify or query system users/groups.
