@@ -1278,7 +1278,7 @@ def preflight() -> dict:
         raise Incomplete("/usr/bin/setpriv is unavailable") from exc
     if (
         not stat.S_ISREG(setpriv_info.st_mode) or setpriv_info.st_uid != 0
-        or setpriv_info.st_mode & 0o022 or not setpriv_info.st_mode & 0o111
+        or setpriv_info.st_mode & 0o6022 or not setpriv_info.st_mode & 0o111
     ):
         raise Incomplete("/usr/bin/setpriv is not a protected root-owned executable")
     seccomp_library = ctypes.util.find_library("seccomp")
@@ -1502,8 +1502,7 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
         "systemd-run", "--system", "--no-block", f"--unit={name}",
         *properties, str(SETPRIV), f"--reuid={uid}", f"--regid={gid}",
         "--clear-groups", "--inh-caps=-all", "--ambient-caps=-all",
-        "--bounding-set=-all",
-        *( ["--no-new-privs"] if no_new_privs else [] ),
+        "--bounding-set=-all", "--no-new-privs",
         "--", str(Path(sys.executable).resolve()), "-I", str(Path(__file__).resolve()),
         "--fixture", "--socket", str(socket_path), "--ready", str(ready_path),
     ]
