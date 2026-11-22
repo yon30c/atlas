@@ -1262,13 +1262,23 @@ def preflight() -> dict:
             run_mounts.append(fields[sep + 1])
     if run_mounts != ["tmpfs"]:
         raise Incomplete("/run is not a unique tmpfs mount")
-    # A harmless read-only D-Bus query proves the system manager is reachable.
-    busctl_json("get-property", BUS, MANAGER, "org.freedesktop.systemd1.Manager", "Version")
+    # Verify PID 1 itself, not only the installed busctl client package.
+    manager_version_result = busctl_json(
+        "get-property", BUS, MANAGER, "org.freedesktop.systemd1.Manager", "Version"
+    )
+    if (
+        manager_version_result.get("type") != "s"
+        or not isinstance(manager_version_result.get("data"), str)
+        or not manager_version_result["data"].startswith("257.13")
+    ):
+        raise Incomplete("system manager D-Bus Version is outside the pinned 257.13 profile")
+    manager_version = manager_version_result["data"]
     checkout_commit = git_commit()
     return {
         "git_commit": checkout_commit,
         "debian": debian, "kernel": platform.release(),
         "python": platform.python_version(), "busctl": bus_version.decode("utf-8", "replace").strip(),
+        "systemd_manager_version": manager_version,
         "cgroup2_root": str(root), "cgroup2_mount": str(mount),
         "service_uid_gid": [SERVICE_UID, SERVICE_GID],
         "other_uid_gid": [OTHER_UID, OTHER_GID],
