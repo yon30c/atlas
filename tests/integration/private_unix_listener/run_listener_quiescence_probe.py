@@ -1035,7 +1035,11 @@ def run_probe(args: argparse.Namespace) -> dict:
             require_cgroup_identity(cg5a, {**cg5a, "control_group": cg5a["control_group"] + ".mismatch"})
         except Incomplete:
             mismatch_rejected = True
-        cleanup5b = _stop_and_cleanup(name5b, initial5b, None, ready5b, os.open(other_dir, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW), report)
+        other_dir_fd = os.open(other_dir, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
+        try:
+            cleanup5b = _stop_and_cleanup(name5b, initial5b, None, ready5b, other_dir_fd, report)
+        finally:
+            os.close(other_dir_fd)
         cleanup5a = _stop_and_cleanup(name5a, initial5a, None, ready5a, run_dir_fd, report)
         report["cleanup"]["resources"].extend([cleanup5a, cleanup5b])
         try:
@@ -1058,7 +1062,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         policy8 = json.loads(ready8.read_text(encoding="ascii"))["fd_policy"]
         cleanup8 = _stop_and_cleanup(name8, initial8, endpoint8, ready8, run_dir_fd, report)
         report["cleanup"]["resources"].append(cleanup8)
-        if not cleanup8["unit_inactive"] or not cleanup8["cgroup_empty"]:
+        if not cleanup8["unit_inactive"] or not cleanup8["cgroup_empty"] or not cleanup8["endpoint_removed"]:
             raise Incomplete("QP-08 fixture cleanup failed")
         report["scenarios"].append({
             "id": "QP-08", "status": "PASS",
@@ -1073,7 +1077,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         policy9 = json.loads(ready9.read_text(encoding="ascii"))["fd_policy"]
         cleanup9 = _stop_and_cleanup(name9, initial9, endpoint9, ready9, run_dir_fd, report)
         report["cleanup"]["resources"].append(cleanup9)
-        if not cleanup9["unit_inactive"] or not cleanup9["cgroup_empty"]:
+        if not cleanup9["unit_inactive"] or not cleanup9["cgroup_empty"] or not cleanup9["endpoint_removed"]:
             raise Incomplete("QP-09 fixture cleanup failed")
         report["scenarios"].append({
             "id": "QP-09", "status": "PASS",
@@ -1116,8 +1120,13 @@ def run_probe(args: argparse.Namespace) -> dict:
                                     "reason": "parser fault matrix covered; partial-read, permission and live cgroup.events failure injection remain pending",
                                     "observations": parser_results})
 
-        # QP-15: adapter-only st_dev/st_ino and ControlGroup substitutions fail closed.
-        identity15 = cgroup_identity(mount, initial6["ControlGroup"])
+        # QP-12: direct root restart is detected by InvocationID, not trusted.
+        name12 = f"atlas-qp-{secrets.token_hex(6)}.service"
+        initial12, _unused_endpoint, ready12 = _start_fixture(name12, run_dir, no_listener=True)
+        report["unit_identity"][name12] = initial12
+        update_gate_marker(marker, run_id, name12, initial12, "unit-started")
+        # QP-15: inject cgroup identity substitutions while the real fixture cgroup exists.
+        identity15 = cgroup_identity(mount, initial12["ControlGroup"])
         inode_mismatch_rejected = False
         try:
             require_cgroup_identity(identity15, {**identity15, "st_ino": identity15["st_ino"] + 1})
@@ -1137,12 +1146,6 @@ def run_probe(args: argparse.Namespace) -> dict:
                              "inode_mismatch_rejected": inode_mismatch_rejected,
                              "control_group_mismatch_rejected": path_mismatch_rejected},
         })
-
-        # QP-12: direct root restart is detected by InvocationID, not trusted.
-        name12 = f"atlas-qp-{secrets.token_hex(6)}.service"
-        initial12, _unused_endpoint, ready12 = _start_fixture(name12, run_dir, no_listener=True)
-        report["unit_identity"][name12] = initial12
-        update_gate_marker(marker, run_id, name12, initial12, "unit-started")
         bounded_run(["systemctl", "--no-block", "restart", name12], timeout=5.0)
         changed = None
         deadline12 = time.monotonic() + 8.0
