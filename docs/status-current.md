@@ -24,7 +24,7 @@ La rama `work/atlas-mvp-runtime` fue creada desde `main` para priorizar una vers
 
 **Estado de validación:** implementación publicada en la rama de trabajo; pruebas focalizadas, suite completa y compilación pendientes de ejecución local por el propietario. No se ejecutó nada desde GitHub.
 
-**Siguiente paso:** completar la frontera de autenticación local y bootstrap. El servicio de Workspace ya admite list/read con CAM, pero la consola actual sigue produciendo un `OperationContext` sintético. No conectar el servicio hasta que la sesión/proof produzca identidad USER canónica y la operación vuelva a validar evidencia, scope y Grant exactos.
+**Siguiente paso:** completar la frontera de autenticación local y bootstrap. El código ya contiene `NativeAuthenticationService`, `VerifiedIdentityContextService` y la fábrica de `OperationContext`, pero el login no está compuesto en CLI: `NativeAuthenticationService` exige un `AuthenticationAttemptGuardPort` y no hay adaptador productivo; tampoco existe provisión operativa de la clave HMAC ni bootstrap/login de propietario. Las sesiones C2 no están integradas. El servicio de Workspace ya admite list/read con CAM, pero la consola actual sigue produciendo un `OperationContext` sintético. No conectar el servicio hasta que la frontera produzca identidad USER canónica y la operación vuelva a validar evidencia, scope y Grant exactos.
 
 **Alcance temporal del MVP:** conversación persistente + vista previa de planes; el siguiente hito será Workspace read-only bajo CAM. No se habilitan escritura, shell, Docker, Skills, Broker, runtime AGENT ni ejecución multi-paso.
 
