@@ -402,6 +402,7 @@ _ACTIVE_RUN_ID: str | None = None
 _ACTIVE_FIXTURES: dict[str, dict] = {}
 _CLEANED_FIXTURES: set[str] = set()
 _SANDBOX_DIRS: list[dict] = []
+_OPEN_DIR_FDS: list[int] = []
 
 
 def register_sandbox_dir(path: Path) -> None:
@@ -919,6 +920,7 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
     _ACTIVE_SUPERVISOR.request("start", command, actor_run_id=_ACTIVE_RUN_ID)
     fixture_socket_path = control_path if fd_holder else (None if no_listener else socket_path)
     fixture_dir_fd = os.open(run_dir, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
+    _OPEN_DIR_FDS.append(fixture_dir_fd)
     _ACTIVE_FIXTURES[name] = {
         "name": name, "run_dir": run_dir, "dir_fd": fixture_dir_fd,
         "socket_path": fixture_socket_path, "ready_path": ready_path,
@@ -1045,6 +1047,7 @@ def run_probe(args: argparse.Namespace) -> dict:
     _ACTIVE_FIXTURES.clear()
     _CLEANED_FIXTURES.clear()
     _SANDBOX_DIRS.clear()
+    _OPEN_DIR_FDS.clear()
     started_ns = mono()
     run_id = str(uuid.uuid4())
     report = {
@@ -1088,6 +1091,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         os.chown(run_dir, 0, SERVICE_GID)
         os.chmod(run_dir, 0o730)
         run_dir_fd = os.open(run_dir, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
+        _OPEN_DIR_FDS.append(run_dir_fd)
         run_dir_info = os.fstat(run_dir_fd)
         register_sandbox_dir(run_dir)
         report["sandbox"] = {
@@ -1258,10 +1262,8 @@ def run_probe(args: argparse.Namespace) -> dict:
         except Incomplete:
             mismatch_rejected = True
         other_dir_fd = os.open(other_dir, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
-        try:
-            cleanup5b = _stop_and_cleanup(name5b, initial5b, None, ready5b, other_dir_fd, report)
-        finally:
-            os.close(other_dir_fd)
+        _OPEN_DIR_FDS.append(other_dir_fd)
+        cleanup5b = _stop_and_cleanup(name5b, initial5b, None, ready5b, other_dir_fd, report)
         cleanup5a = _stop_and_cleanup(name5a, initial5a, None, ready5a, run_dir_fd, report)
         report["cleanup"]["resources"].extend([cleanup5a, cleanup5b])
         try:
@@ -1410,6 +1412,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         os.chmod(other_dir13, 0o1733)
         register_sandbox_dir(other_dir13)
         other_dir13_fd = os.open(other_dir13, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
+        _OPEN_DIR_FDS.append(other_dir13_fd)
         name13_service = f"atlas-qp-{secrets.token_hex(6)}.service"
         name13_holder = f"atlas-qp-{secrets.token_hex(6)}.service"
         endpoint13 = None
@@ -1458,7 +1461,6 @@ def run_probe(args: argparse.Namespace) -> dict:
             cgroup_empty_confirmed=empty13["values"]["populated"] == 0,
         )
         report["cleanup"]["resources"].extend([cleanup13_holder, cleanup13_service])
-        os.close(other_dir13_fd)
         if not stopped13_holder["ActiveState"] == "inactive" or not cleanup13_holder["endpoint_removed"] or not cleanup13_service["endpoint_removed"]:
             raise Incomplete("QP-13 holder/service cleanup failed")
         other_dir13_cleanup_fd = os.open(other_dir13, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
@@ -1679,23 +1681,95 @@ def run_probe(args: argparse.Namespace) -> dict:
                 report["scenarios"].append({"id": scenario_id, "status": "INCOMPLETE",
                                             "reason": "harness aborted before scenario execution"})
     finally:
+        # Two-phase emergency cleanup: stop every still-owned fixture first,
+        # then remove only endpoints whose recorded identity can be revalidated.
+        pending_cleanup = []
         if run_dir_fd is not None:
-            os.close(run_dir_fd)
-        if run_dir is not None and report["cleanup"]["safe_to_release_gate"]:
+            for fixture_name, fixture in reversed(list(_ACTIVE_FIXTURES.items())):
+                if fixture_name in _CLEANED_FIXTURES:
+                    continue
+                try:
+                    initial_fixture = fixture["initial"]
+                    if initial_fixture is None:
+                        initial_fixture = unit_snapshot(fixture_name)
+                        if (
+                            initial_fixture["Id"] != fixture_name
+                            or not initial_fixture["Transient"]
+                            or initial_fixture["User"] != pwd.getpwuid(fixture["uid"]).pw_name
+                            or initial_fixture["Group"] != grp.getgrgid(fixture["gid"]).gr_name
+                        ):
+                            raise Incomplete("cannot establish ownership of partially started fixture")
+                        fixture["initial"] = initial_fixture
+                    current_fixture = unit_snapshot(fixture_name)
+                    if current_fixture["InvocationID"] != initial_fixture["InvocationID"]:
+                        raise Incomplete("fixture InvocationID changed; emergency cleanup refuses replacement")
+                    if current_fixture["ActiveState"] != "inactive" or current_fixture["Job"][0] != 0:
+                        if current_fixture["Job"][0] == 0:
+                            systemd_stop(fixture_name)
+                        final_fixture = wait_inactive(
+                            fixture_name, time.monotonic() + STOP_TIMEOUT + 5
+                        )
+                    else:
+                        final_fixture = current_fixture
+                    if final_fixture["ActiveState"] != "inactive" or final_fixture["Job"][0] != 0:
+                        raise Incomplete("fixture did not reach inactive/no-job state during emergency cleanup")
+                    _root, cleanup_mount = cgroup_mount()
+                    events_fixture = cgroup_events(
+                        cleanup_mount, initial_fixture["ControlGroup"]
+                    )
+                    if events_fixture["values"]["populated"] != 0:
+                        raise Incomplete("fixture cgroup remains populated; preserving endpoint and gate")
+                    pending_cleanup.append((fixture, initial_fixture))
+                except Exception as exc:
+                    report["cleanup"]["safe_to_release_gate"] = False
+                    report["cleanup"].setdefault("emergency_errors", []).append(
+                        {"unit": fixture_name, "error": f"{type(exc).__name__}: {exc}"}
+                    )
+            # All candidate processes are stopped before any fixture pathname is removed.
+            for fixture, initial_fixture in pending_cleanup:
+                try:
+                    result = _stop_and_cleanup(
+                        fixture["name"], initial_fixture, fixture["socket_path"],
+                        fixture["ready_path"], fixture["dir_fd"], report,
+                        already_stopped=True, cgroup_empty_confirmed=True,
+                    )
+                    report["cleanup"]["resources"].append(result)
+                    if fixture["name"] not in _CLEANED_FIXTURES:
+                        report["cleanup"]["safe_to_release_gate"] = False
+                except Exception as exc:
+                    report["cleanup"]["safe_to_release_gate"] = False
+                    report["cleanup"].setdefault("emergency_errors", []).append(
+                        {"unit": fixture["name"], "error": f"{type(exc).__name__}: {exc}"}
+                    )
+
+        for directory_fd in set(_OPEN_DIR_FDS):
             try:
-                expected = report["sandbox"]
-                current = os.stat(run_dir, follow_symlinks=False)
-                if (
-                    not stat.S_ISDIR(current.st_mode)
-                    or (current.st_dev, current.st_ino) != (expected["device"], expected["inode"])
-                    or current.st_uid != 0 or current.st_gid != SERVICE_GID
-                    or stat.S_IMODE(current.st_mode) != 0o730
-                ):
-                    raise Incomplete("sandbox identity/mode changed; refusing directory cleanup")
-                os.rmdir(run_dir)
-            except Exception as exc:
-                report["cleanup"]["run_directory_preserved"] = f"{type(exc).__name__}: {exc}"
-                report["cleanup"]["safe_to_release_gate"] = False
+                os.close(directory_fd)
+            except OSError:
+                pass
+
+        if report["cleanup"]["safe_to_release_gate"]:
+            for entry in reversed(_SANDBOX_DIRS):
+                try:
+                    current = os.stat(entry["path"], follow_symlinks=False)
+                    if (
+                        not stat.S_ISDIR(current.st_mode)
+                        or (current.st_dev, current.st_ino) != (entry["device"], entry["inode"])
+                        or current.st_uid != entry["uid"] or current.st_gid != entry["gid"]
+                        or stat.S_IMODE(current.st_mode) != entry["mode"]
+                    ):
+                        raise Incomplete("sandbox directory identity/mode changed; preserving it")
+                    os.rmdir(entry["path"])
+                except FileNotFoundError:
+                    continue
+                except Exception as exc:
+                    report["cleanup"]["safe_to_release_gate"] = False
+                    report["cleanup"].setdefault("directory_errors", []).append(
+                        f"{entry['path']}: {type(exc).__name__}: {exc}"
+                    )
+                    break
+        else:
+            report["cleanup"]["sandbox_preserved_due_to_uncertainty"] = True
 
         statuses = [item["status"] for item in report["scenarios"]]
         report["overall"] = (
