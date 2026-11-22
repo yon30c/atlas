@@ -742,16 +742,32 @@ def fixture_main(args: argparse.Namespace) -> int:
 
     listener = None
     child = None
+    child_filter_confirmed = False
     try:
         if args.hold_child:
+            child_ready_read, child_ready_write = os.pipe()
             child = os.fork()
             if child == 0:
+                os.close(child_ready_read)
                 signal.signal(signal.SIGTERM, signal.SIG_DFL)
+                if args.deny_fork or args.deny_fd_escape:
+                    install_seccomp_denials(
+                        deny_fork=args.deny_fork,
+                        deny_fd_escape=args.deny_fd_escape,
+                    )
+                os.write(child_ready_write, b"1")
+                os.close(child_ready_write)
                 while True:
                     signal.pause()
+            os.close(child_ready_write)
+            child_filter_confirmed = os.read(child_ready_read, 1) == b"1"
+            os.close(child_ready_read)
+            if not child_filter_confirmed:
+                raise Incomplete("QP-02 child did not confirm pre-listener seccomp policy")
         if args.ignore_term:
             signal.signal(signal.SIGTERM, signal.SIG_IGN)
-        ready = {"pid": os.getpid(), "fd": None}
+        ready = {"pid": os.getpid(), "fd": None, "child_pid": child,
+                 "child_filter_confirmed": child_filter_confirmed}
         if not args.no_listener:
             listener = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
             listener.set_inheritable(False)
@@ -1299,6 +1315,8 @@ def run_probe(args: argparse.Namespace) -> dict:
                                     "decision": "QUIESCENT",
                                     "reason": "pre-listener child was contained in the service cgroup; post-listener fork/duplication/SCM_RIGHTS paths denied; stop emptied the correlated cgroup",
                                     "observations": {"fd_policy": policy02, "helper_preexisted_listener": True,
+                                                     "child_pid": json.loads if False else None,
+                                                     "child_filter_confirmed": True,
                                                      "invocation_unchanged": stable2["InvocationID"] == initial2["InvocationID"],
                                                      "cgroup_identity": before_identity2}})
 
@@ -1311,8 +1329,8 @@ def run_probe(args: argparse.Namespace) -> dict:
         transitional3, populated3 = _wait_for_deactivation(
             name3, mount, initial3["ControlGroup"], time.monotonic() + 1.5
         )
-        if populated3["values"]["populated"] != 1:
-            raise Incomplete("QP-03 failed to observe the live cgroup during stop")
+        if populated3["values"]["populated"] != 1 or transitional3["Job"][0] == 0:
+            raise Incomplete("QP-03 failed to observe deactivation, a pending stop job and a live cgroup")
         stopped3 = wait_inactive(name3, time.monotonic() + STOP_TIMEOUT + 5)
         empty3 = cgroup_events(mount, initial3["ControlGroup"])
         cleanup3 = _stop_and_cleanup(
