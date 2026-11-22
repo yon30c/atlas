@@ -78,7 +78,8 @@ No se introducen tablas de secretos, sesiones, tokens, IPs ni contenido de crede
 ## 6. Pruebas de aceptación que ejecutará el propietario en Debian
 
 - política exacta 1/2/4/7/15, ventana móvil, expiración de demora y bloqueo activo hasta `blocked_until`;
-- límite de dos reservas y rechazo de una tercera;\n- variantes de mayúsculas del mismo LoginHandle comparten el mismo bucket;
+- límite de dos reservas y rechazo de una tercera;
+- variantes de mayúsculas del mismo LoginHandle comparten el mismo bucket;
 - finalización de reservas correctas, fallidas, repetidas y expiradas;
 - abandono no cuenta como fallo;
 - éxito reinicia fallos sin borrar otras reservas activas;
