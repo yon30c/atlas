@@ -291,6 +291,20 @@ def require_cgroup_identity(expected: dict, observed: dict) -> None:
         raise Incomplete("cgroup identity mismatch; refusing to use the observed cgroup")
 
 
+def read_bounded_chunks(read_call, limit: int) -> bytes:
+    chunks = []
+    total = 0
+    while True:
+        chunk = read_call(min(1024, limit + 1 - total))
+        if not chunk:
+            break
+        chunks.append(chunk)
+        total += len(chunk)
+        if total > limit:
+            raise Incomplete(f"cgroup.events exceeds {limit} bytes")
+    return b"".join(chunks)
+
+
 def cgroup_events(mount_root: Path, control_group: str) -> dict:
     if not control_group.startswith("/") or ".." in Path(control_group).parts:
         raise Incomplete("systemd returned an unsafe ControlGroup path")
@@ -299,17 +313,7 @@ def cgroup_events(mount_root: Path, control_group: str) -> dict:
     try:
         fd = os.open(path, flags)
         try:
-            chunks = []
-            total = 0
-            while True:
-                chunk = os.read(fd, min(1024, MAX_CGROUP + 1 - total))
-                if not chunk:
-                    break
-                chunks.append(chunk)
-                total += len(chunk)
-                if total > MAX_CGROUP:
-                    raise Incomplete("cgroup.events exceeds 4096 bytes")
-            raw = b"".join(chunks)
+            raw = read_bounded_chunks(lambda size: os.read(fd, size), MAX_CGROUP)
         finally:
             os.close(fd)
     except OSError as exc:
@@ -1116,8 +1120,29 @@ def run_probe(args: argparse.Namespace) -> dict:
             if actual != expected:
                 raise ProbeError("QP-07 cgroup.events parser fault matrix mismatch")
             parser_results.append({"input_bytes": len(raw), "accepted": actual})
-        report["scenarios"].append({"id": "QP-07", "status": "INCOMPLETE",
-                                    "reason": "parser fault matrix covered; partial-read, permission and live cgroup.events failure injection remain pending",
+        partial_chunks = iter((b"popu", b"lated ", b"0\\n", b""))
+        partial_read = read_bounded_chunks(lambda _size: next(partial_chunks), MAX_CGROUP)
+        if partial_read != b"populated 0\\n" or _parse_cgroup_events_bytes(partial_read)["populated"] != 0:
+            raise ProbeError("QP-07 partial-read accumulation failed")
+        permission_rejected = False
+        try:
+            read_bounded_chunks(lambda _size: (_ for _ in ()).throw(PermissionError(errno.EACCES, "injected")), MAX_CGROUP)
+        except PermissionError:
+            permission_rejected = True
+        oversize_rejected = False
+        try:
+            read_bounded_chunks(lambda size: b"x" * size, MAX_CGROUP)
+        except Incomplete:
+            oversize_rejected = True
+        if not permission_rejected or not oversize_rejected:
+            raise ProbeError("QP-07 permission/size fault injection was not rejected")
+        parser_results.extend([
+            {"partial_read_accumulated": True},
+            {"permission_error_preserved": permission_rejected},
+            {"oversize_rejected": oversize_rejected},
+        ])
+        report["scenarios"].append({"id": "QP-07", "status": "PASS",
+                                    "reason": "strict parser, partial-read accumulation, permission failure and byte limit all fail closed",
                                     "observations": parser_results})
 
         # QP-12: direct root restart is detected by InvocationID, not trusted.
