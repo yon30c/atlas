@@ -1558,9 +1558,18 @@ def run_probe(args: argparse.Namespace) -> dict:
         _ACTIVE_SUPERVISOR = _TestLifecycleSupervisor(
             lock_fd, marker, run_id, marker_identity
         )
-        report["gate"] = {"flock_acquired": True, "sticky_marker_created": True,
-                          "root_direct_bypass_protection": False,
-                          "lifecycle_requests_routed_through_test_supervisor": True}
+        report["gate"] = {
+            "flock_acquired": True, "sticky_marker_created": True,
+            "root_direct_bypass_protection": False,
+            "lifecycle_requests_routed_through_test_supervisor": True,
+            "lock_identity": {
+                "device": lock_info.st_dev, "inode": lock_info.st_ino,
+                "uid": lock_info.st_uid, "gid": lock_info.st_gid,
+                "mode": stat.S_IMODE(lock_info.st_mode),
+            },
+            "marker_identity": marker_identity,
+            "persistent_system_bus_reference": True,
+        }
         mount_root, mount = cgroup_mount()
 
         # QP-01: normal service-owned listener, full stop, two empty snapshots.
