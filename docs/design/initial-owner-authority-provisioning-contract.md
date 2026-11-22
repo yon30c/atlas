@@ -1,9 +1,31 @@
 # Contrato propuesto de provisión inicial de autoridad del propietario
 
-**Estado:** propuesta de diseño para revisión; no aprobado para implementación.  
+**Estado:** perfil mínimo de autoridad inicial aprobado por el propietario el 2026-11-22; implementación todavía bloqueada por los requisitos de atomicidad, binding, helper/PAM y verificación indicados en este contrato.  
 **Ámbito:** bootstrap LOCAL, identidad canónica inicial y primera provisión explícita de Project, Environment y CAM Grant.  
 **Dependencias:** `ME-D4O-A-authenticated-domain-bootstrap.md`, `local-bootstrap-privilege-boundary.md`, `local-bootstrap-privilege-validation-contract.md`, `local-pam-bootstrap-authenticator.md`, `local-pam-bootstrap-proof-protocol.md`, `docs/contracts/memory.md` §8 y contratos CAM vigentes.  
 **Restricción:** este documento no autoriza cambios de host, PAM, sudoers, systemd, usuarios, base de datos productiva, migraciones ni runtime.
+
+## 0. Decisiones aprobadas por el propietario (2026-11-22)
+
+El propietario aprobó el siguiente perfil mínimo para el primer Workspace y su autoridad CAM. Esta aprobación fija el alcance funcional, pero **no autoriza todavía habilitar el bootstrap ni modificar el host** mientras no estén implementadas y verificadas las fronteras técnicas de este documento.
+
+### Perfil del primer Grant
+
+- Un único Project, un Environment y su asociación canónica Project–Environment.
+- Un único Workspace inicial, propiedad del UserId canónico creado en la génesis.
+- El sujeto del Grant es exactamente la Identity(USER) canónica del propietario; no se concede a agentes, servicios ni identidades delegadas.
+- Únicamente las acciones `workspace.list` y `workspace.read`.
+- Para `workspace.list`, el scope es `resource_type="workspace"` y contiene únicamente el ID del Workspace inicial.
+- Para `workspace.read`, el scope es `resource_type="workspace_file"` y contiene únicamente IDs canónicos de archivos seleccionados explícitamente por el propietario. El ID canónico de cada archivo es la serialización compacta UTF-8/JSON de `[workspace_id, relative_path]`, con `ensure_ascii=False` y separadores `,` y `:`, igual a `WorkspaceCapabilityExecutionService.workspace_file_resource_id`.
+- Los dos scopes son concretos, no vacíos y sin patrones/wildcards. No se infiere permiso para archivos añadidos posteriormente.
+- Vigencia inicial: exactamente siete días desde `issued_at`. La renovación requiere una nueva autenticación del propietario y una decisión directa; no es automática.
+- No se permite delegación, emisión/revocación de otros Grants, shell, ejecución de comandos, escritura, borrado, movimiento, instalación de Skills ni acceso general al filesystem.
+- El helper privilegiado debe realizar autenticación PAM y confirmación directa en TTY confiable; no abre shell ni concede privilegios generales al proceso Atlas.
+- La clave HMAC de `VerifiedIdentityContext` será independiente de la clave de Local Consistency y se entregará al proceso autorizado mediante systemd credentials. No se comparte ni deriva una clave de la otra.
+
+### Límites que siguen sin aprobación técnica de implementación
+
+La decisión no selecciona aún la invocación concreta del helper (por ejemplo, sudo de un ejecutable root-owned frente a un servicio privilegiado), no fija el layout binario de la prueba, no define la duración exacta de la prueba PAM, ni resuelve por sí sola el binding persistente, el journal/Recovery Gate o la coordinación atómica. Esos contratos deben cerrarse antes de activar bootstrap o instalar cambios en el host.
 
 ## 1. Decisión propuesta
 
@@ -247,9 +269,9 @@ Este documento no cierra ni inventa:
 3. Diseño de coordinación atómica o protocolo recuperable entre Identity, binding, Project/Environment, Grants, journal y Recovery Gate.
 4. Tipo de evento y reducer para `DOMAIN_BOOTSTRAPPED` y evento de provisión inicial.
 5. Relación formal Project–Environment y validación de pertenencia, ausente del snapshot mínimo actual.
-6. Política exacta de IDs iniciales, resource types, acciones, expiración y no delegabilidad.
-7. Modelo de propiedad de recursos y si el primer Grant se emite a la identidad del propietario o a otra identidad explícitamente seleccionada.
-8. Política de reautenticación y ventana temporal para cada operación.
+6. Política exacta de IDs iniciales, resource types, acciones, expiración y no delegabilidad. **Resuelto funcionalmente:** un Workspace; `workspace.list` sobre su ID; `workspace.read` sobre IDs canónicos de archivos elegidos; siete días; sujeto = Identity(USER) del propietario; sin delegación ni wildcard. La selección concreta de IDs se captura en el descriptor B.
+7. Modelo de propiedad de recursos y si el primer Grant se emite a la identidad del propietario o a otra identidad explícitamente seleccionada. **Resuelto:** Project, Environment y Workspace pertenecen al UserId canónico; el Grant se emite a la Identity(USER) canónica del mismo propietario.
+8. Política de reautenticación y ventana temporal para cada operación. **Resuelto en principio:** cada operación de génesis/provisión exige autenticación PAM reciente y confirmación directa; la duración máxima de la prueba, tolerancia de reloj y timeout interactivo siguen pendientes.
 9. Semántica de recuperación cuando el resultado de una operación es ambiguo.
 10. Requisitos de auditoría y pruebas independientes.
 
