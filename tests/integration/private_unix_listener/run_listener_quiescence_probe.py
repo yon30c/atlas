@@ -378,7 +378,8 @@ def _json_reject_constant(value):
 
 
 def read_bounded_json_file(path: Path, *, expected_uid: int | None = None,
-                           expected_gid: int | None = None, limit: int = 4096) -> dict:
+                           expected_gid: int | None = None, limit: int = 4096,
+                           identity: dict | None = None) -> dict:
     fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
     try:
         info = os.fstat(fd)
@@ -401,6 +402,12 @@ def read_bounded_json_file(path: Path, *, expected_uid: int | None = None,
             if total > limit:
                 raise Incomplete("JSON evidence file exceeds its byte limit")
         raw = b"".join(chunks)
+        if identity is not None:
+            identity.update({
+                "device": info.st_dev, "inode": info.st_ino,
+                "uid": info.st_uid, "gid": info.st_gid,
+                "mode": stat.S_IMODE(info.st_mode),
+            })
     finally:
         os.close(fd)
     try:
@@ -983,6 +990,27 @@ def update_gate_marker(marker: Path, run_id: str, name: str, snapshot: dict, pha
     }, 4096)
 
 
+def unlink_verified_regular_file(dir_fd: int, name: str, expected: dict,
+                                 uid: int, gid: int) -> None:
+    fd = os.open(name, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW, dir_fd=dir_fd)
+    try:
+        info = os.fstat(fd)
+        actual = {
+            "device": info.st_dev, "inode": info.st_ino,
+            "uid": info.st_uid, "gid": info.st_gid,
+            "mode": stat.S_IMODE(info.st_mode),
+        }
+        if (
+            not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+            or info.st_uid != uid or info.st_gid != gid
+            or actual != expected
+        ):
+            raise Incomplete("regular evidence file identity changed; preserving it")
+    finally:
+        os.close(fd)
+    os.unlink(name, dir_fd=dir_fd)
+
+
 def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=False,
                    delegate=False, no_listener=False, uid=SERVICE_UID, gid=SERVICE_GID,
                    deny_fork=False, deny_fd_escape=False, exec_check=False,
@@ -1041,7 +1069,12 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
     deadline = time.monotonic() + 8.0
     while time.monotonic() < deadline:
         try:
-            ready = read_bounded_json_file(ready_path, expected_uid=uid, expected_gid=gid)
+            ready_identity = {}
+            ready = read_bounded_json_file(
+                ready_path, expected_uid=uid, expected_gid=gid,
+                identity=ready_identity,
+            )
+            _ACTIVE_FIXTURES[name]["ready_identity"] = ready_identity
             break
         except FileNotFoundError:
             time.sleep(0.05)
@@ -1107,14 +1140,26 @@ def _stop_and_cleanup(name: str, initial: dict, socket_path: Path | None, ready_
             cleanup["cgroup_empty"] = events["values"]["populated"] == 0
         if not cleanup["cgroup_empty"]:
             raise Incomplete("fixture cgroup remains populated during cleanup")
+        fixture_record = _ACTIVE_FIXTURES.get(name, {})
+        ready = None
+        ready_identity_now = None
+        if ready_path is not None:
+            try:
+                ready_identity_now = {}
+                ready = read_bounded_json_file(
+                    ready_path, expected_uid=fixture_record.get("uid"),
+                    expected_gid=fixture_record.get("gid"), identity=ready_identity_now,
+                )
+            except FileNotFoundError:
+                if socket_path is not None:
+                    raise Incomplete("fixture readiness record disappeared; preserving endpoint")
+            else:
+                expected_ready_identity = fixture_record.get("ready_identity")
+                if expected_ready_identity is None or ready_identity_now != expected_ready_identity:
+                    raise Incomplete("fixture readiness file identity changed; preserving it")
         if socket_path is not None:
-            if ready_path is None:
+            if ready is None:
                 raise Incomplete("fixture endpoint has no identity record; preserving it")
-            fixture_record = _ACTIVE_FIXTURES.get(name, {})
-            ready = read_bounded_json_file(
-                ready_path, expected_uid=fixture_record.get("uid"),
-                expected_gid=fixture_record.get("gid"),
-            )
             name_only = socket_path.name
             current_info = os.stat(name_only, dir_fd=run_dir_fd, follow_symlinks=False)
             if (
@@ -1127,11 +1172,11 @@ def _stop_and_cleanup(name: str, initial: dict, socket_path: Path | None, ready_
                 raise Incomplete("fixture endpoint identity/type/owner/mode changed; preserving it")
             os.unlink(name_only, dir_fd=run_dir_fd)
             cleanup["endpoint_removed"] = True
-        if ready_path is not None:
-            try:
-                os.unlink(ready_path.name, dir_fd=run_dir_fd)
-            except FileNotFoundError:
-                pass
+        if ready_path is not None and ready is not None:
+            unlink_verified_regular_file(
+                run_dir_fd, ready_path.name, ready_identity_now,
+                fixture_record["uid"], fixture_record["gid"],
+            )
         fixture_record = _ACTIVE_FIXTURES.get(name, {})
         if fixture_record.get("unit_ref"):
             manager_call(busctl_json, "call", BUS, MANAGER, MANAGER_IFACE, "UnrefUnit", "s", name)
