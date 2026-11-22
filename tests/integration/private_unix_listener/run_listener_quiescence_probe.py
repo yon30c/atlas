@@ -1725,22 +1725,24 @@ def run_probe(args: argparse.Namespace) -> dict:
                     report["cleanup"].setdefault("emergency_errors", []).append(
                         {"unit": fixture_name, "error": f"{type(exc).__name__}: {exc}"}
                     )
-            # All candidate processes are stopped before any fixture pathname is removed.
-            for fixture, initial_fixture in pending_cleanup:
-                try:
-                    result = _stop_and_cleanup(
-                        fixture["name"], initial_fixture, fixture["socket_path"],
-                        fixture["ready_path"], fixture["dir_fd"], report,
-                        already_stopped=True, cgroup_empty_confirmed=True,
-                    )
-                    report["cleanup"]["resources"].append(result)
-                    if fixture["name"] not in _CLEANED_FIXTURES:
+            # Remove fixture pathnames only if every outstanding unit reached
+            # inactive/no-job/populated=0; otherwise preserve all remaining objects.
+            if report["cleanup"]["safe_to_release_gate"]:
+                for fixture, initial_fixture in pending_cleanup:
+                    try:
+                        result = _stop_and_cleanup(
+                            fixture["name"], initial_fixture, fixture["socket_path"],
+                            fixture["ready_path"], fixture["dir_fd"], report,
+                            already_stopped=True, cgroup_empty_confirmed=True,
+                        )
+                        report["cleanup"]["resources"].append(result)
+                        if fixture["name"] not in _CLEANED_FIXTURES:
+                            report["cleanup"]["safe_to_release_gate"] = False
+                    except Exception as exc:
                         report["cleanup"]["safe_to_release_gate"] = False
-                except Exception as exc:
-                    report["cleanup"]["safe_to_release_gate"] = False
-                    report["cleanup"].setdefault("emergency_errors", []).append(
-                        {"unit": fixture["name"], "error": f"{type(exc).__name__}: {exc}"}
-                    )
+                        report["cleanup"].setdefault("emergency_errors", []).append(
+                            {"unit": fixture["name"], "error": f"{type(exc).__name__}: {exc}"}
+                        )
 
         for directory_fd in set(_OPEN_DIR_FDS):
             try:
