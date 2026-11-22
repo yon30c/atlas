@@ -1512,6 +1512,7 @@ def run_probe(args: argparse.Namespace) -> dict:
     run_dir_fd = None
     lock_fd = None
     marker = None
+    marker_identity = None
     marker_created = False
     try:
         try:
@@ -1550,11 +1551,13 @@ def run_probe(args: argparse.Namespace) -> dict:
             raise Incomplete("another maintenance actor owns the lock") from exc
         marker = BASE / "maintenance.marker"
         marker_data = {"schema": SCHEMA, "run_id": run_id, "phase": "preparing"}
-        _safe_json_file(marker, marker_data, 4096)
+        marker_identity = _safe_json_file(marker, marker_data, 4096)
         marker_created = True
         _SYSTEMD_BUS_REF = PersistentSystemdBusRef()
         _ACTIVE_RUN_ID = run_id
-        _ACTIVE_SUPERVISOR = _TestLifecycleSupervisor(lock_fd, marker, run_id)
+        _ACTIVE_SUPERVISOR = _TestLifecycleSupervisor(
+            lock_fd, marker, run_id, marker_identity
+        )
         report["gate"] = {"flock_acquired": True, "sticky_marker_created": True,
                           "root_direct_bypass_protection": False,
                           "lifecycle_requests_routed_through_test_supervisor": True}
@@ -1566,7 +1569,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             name, run_dir, deny_fork=True, deny_fd_escape=True
         )
         report["unit_identity"][name] = initial
-        update_gate_marker(marker, run_id, name, initial, "unit-started")
+        update_gate_marker(marker, run_id, name, initial, marker_identity, "unit-started")
         observer01 = _ACTIVE_FIXTURES[name]["cgroup_observer"]
         before_identity = cgroup_observer_identity(observer01)
         before = read_cgroup_observer(observer01)
@@ -1612,7 +1615,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             name2, run_dir, hold_child=True, deny_fork=True, deny_fd_escape=True
         )
         report["unit_identity"][name2] = initial2
-        update_gate_marker(marker, run_id, name2, initial2, "unit-started")
+        update_gate_marker(marker, run_id, name2, initial2, marker_identity, "unit-started")
         observer02 = _ACTIVE_FIXTURES[name2]["cgroup_observer"]
         before_identity2 = cgroup_observer_identity(observer02)
         before2 = read_cgroup_observer(observer02)
@@ -1655,7 +1658,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         name3 = f"atlas-qp-{secrets.token_hex(6)}.service"
         initial3, endpoint3, ready3 = _start_fixture(name3, run_dir, ignore_term=True)
         report["unit_identity"][name3] = initial3
-        update_gate_marker(marker, run_id, name3, initial3, "unit-started")
+        update_gate_marker(marker, run_id, name3, initial3, marker_identity, "unit-started")
         systemd_stop(name3)
         transitional3, populated3 = _wait_for_deactivation(
             name3, _ACTIVE_FIXTURES[name3]["cgroup_observer"], time.monotonic() + 1.5
@@ -1679,7 +1682,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         name4 = f"atlas-qp-{secrets.token_hex(6)}.service"
         initial4, endpoint4, ready4 = _start_fixture(name4, run_dir, ignore_term=True)
         report["unit_identity"][name4] = initial4
-        update_gate_marker(marker, run_id, name4, initial4, "unit-started")
+        update_gate_marker(marker, run_id, name4, initial4, marker_identity, "unit-started")
         systemd_stop(name4)
         transitional4, populated4 = _wait_for_deactivation(
             name4, _ACTIVE_FIXTURES[name4]["cgroup_observer"], time.monotonic() + 1.5
@@ -1797,7 +1800,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         # QP-06: reject Delegate=yes and prove the Delegate=no fixture has no cgroup authority.
         name6 = f"atlas-qp-{secrets.token_hex(6)}.service"
         initial6, endpoint6, ready6 = _start_fixture(name6, run_dir, delegate=True)
-        update_gate_marker(marker, run_id, name6, initial6, "unit-started")
+        update_gate_marker(marker, run_id, name6, initial6, marker_identity, "unit-started")
         delegate_yes_rejected = False
         try:
             require_no_delegation(initial6)
@@ -1989,7 +1992,9 @@ def run_probe(args: argparse.Namespace) -> dict:
         except Incomplete:
             manager_failure_rejected = True
         supervisor_failure_rejected = False
-        failed_supervisor = _TestLifecycleSupervisor(lock_fd, marker, run_id)
+        failed_supervisor = _TestLifecycleSupervisor(
+            lock_fd, marker, run_id, marker_identity
+        )
         failed_supervisor.crash()
         try:
             failed_supervisor.request(
@@ -2018,7 +2023,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         name12 = f"atlas-qp-{secrets.token_hex(6)}.service"
         initial12, _unused_endpoint, ready12 = _start_fixture(name12, run_dir, no_listener=True)
         report["unit_identity"][name12] = initial12
-        update_gate_marker(marker, run_id, name12, initial12, "unit-started")
+        update_gate_marker(marker, run_id, name12, initial12, marker_identity, "unit-started")
         # QP-15: inject cgroup identity substitutions while the real fixture cgroup exists.
         identity15 = cgroup_identity(mount, initial12["ControlGroup"])
         inode_mismatch_rejected = False
@@ -2060,7 +2065,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             raise Incomplete("QP-12 replacement invocation did not populate its correlated cgroup")
         _ACTIVE_FIXTURES[name12]["cgroup_observer"] = new_observer12
         _ACTIVE_FIXTURES[name12]["initial"] = changed
-        update_gate_marker(marker, run_id, name12, changed, "replacement-invocation")
+        update_gate_marker(marker, run_id, name12, changed, marker_identity, "replacement-invocation")
         close_cgroup_observer(old_observer12)
         systemd_stop(name12)
         stopped12 = wait_inactive(name12, time.monotonic() + STOP_TIMEOUT + 3, expected_invocation=changed["InvocationID"], control_group=changed["ControlGroup"])
@@ -2101,7 +2106,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         name11 = f"atlas-qp-{secrets.token_hex(6)}.service"
         initial11, _endpoint11, ready11 = _start_fixture(name11, run_dir, no_listener=True)
         report["unit_identity"][name11] = initial11
-        update_gate_marker(marker, run_id, name11, initial11, "qp11-active-fixture")
+        update_gate_marker(marker, run_id, name11, initial11, marker_identity, "qp11-active-fixture")
         unchanged_before = unit_snapshot(name11)
         if unchanged_before["ActiveState"] != "active" or unchanged_before["Job"][0] != 0:
             raise Incomplete("QP-11 gate fixture did not reach stable active state")
@@ -2141,7 +2146,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             fcntl.flock(post_crash_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             sticky = read_bounded_json_file(marker, expected_uid=0, expected_gid=0)
             post_crash_supervisor = _TestLifecycleSupervisor(
-                post_crash_fd, marker, run_id, allow_owner=False
+                post_crash_fd, marker, run_id, marker_identity, allow_owner=False
             )
             denied_after_crash = False
             try:
@@ -2172,7 +2177,8 @@ def run_probe(args: argparse.Namespace) -> dict:
         _SYSTEMD_BUS_REF.ref_unit(name11)
         _ACTIVE_FIXTURES[name11]["unit_ref"] = True
         _ACTIVE_SUPERVISOR = _TestLifecycleSupervisor(
-            lock_fd, marker, run_id, units=set(_ACTIVE_SUPERVISOR.units)
+            lock_fd, marker, run_id, marker_identity,
+            units=set(_ACTIVE_SUPERVISOR.units)
         )
         report["gate"]["qp11_second_actor_rejected"] = True
         report["gate"]["qp11_lock_released_after_simulated_crash"] = True
