@@ -524,21 +524,6 @@ def _wait_for_deactivation(name: str, mount: Path, control_group: str, deadline:
     raise Incomplete("did not observe a pending lifecycle transition with populated=1")
 
 
-def _identity_fault_matrix() -> dict:
-    expected = {"control_group": "/system.slice/atlas-qp-fixture.service", "device": 0, "inode": 10}
-    mismatches = [
-        {**expected, "control_group": "/system.slice/other.service"},
-        {**expected, "inode": 11},
-        {**expected, "device": 1},
-    ]
-    rejected = []
-    for candidate in mismatches:
-        if candidate == expected:
-            raise ProbeError("QP-15 fault injection accidentally matched expected identity")
-        rejected.append(candidate != expected)
-    return {"injected_mismatches": len(mismatches), "all_rejected": all(rejected)}
-
-
 def run_probe(args: argparse.Namespace) -> dict:
     started_ns = mono()
     run_id = str(uuid.uuid4())
@@ -563,6 +548,7 @@ def run_probe(args: argparse.Namespace) -> dict:
     run_dir_fd = None
     lock_fd = None
     marker = None
+    marker_created = False
     try:
         try:
             os.mkdir(BASE, 0o711)
@@ -589,6 +575,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         marker = BASE / "maintenance.marker"
         marker_data = {"schema": SCHEMA, "run_id": run_id, "phase": "preparing"}
         _safe_json_file(marker, marker_data, 4096)
+        marker_created = True
         report["gate"] = {"flock_acquired": True, "sticky_marker_created": True,
                           "root_direct_bypass_protection": False}
         mount_root, mount = cgroup_mount()
@@ -816,7 +803,7 @@ def run_probe(args: argparse.Namespace) -> dict:
 
         # The sticky marker is retained on any uncertainty. The lock file and
         # /run/atlas-qp parent remain for audit and future invocations.
-        if persisted and report["cleanup"]["safe_to_release_gate"] and marker is not None:
+        if persisted and report["cleanup"]["safe_to_release_gate"] and marker_created and marker is not None:
             try:
                 os.unlink(marker)
                 report["gate"]["marker_removed_after_cleanup"] = True
