@@ -235,23 +235,24 @@ def fixture_main(args: argparse.Namespace) -> int:
                     signal.pause()
         if args.ignore_term:
             signal.signal(signal.SIGTERM, signal.SIG_IGN)
-        listener = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
-        listener.set_inheritable(False)
-        os.umask(0o177)
-        listener.bind(args.socket)
-        listener.listen(1)
-        info = os.stat(args.socket, follow_symlinks=False)
-        ready = {
-            "pid": os.getpid(), "fd": listener.fileno(),
-            "device": info.st_dev, "inode": info.st_ino,
-            "uid": info.st_uid, "gid": info.st_gid,
-            "mode": stat.S_IMODE(info.st_mode),
-            "socket_type": listener.getsockopt(socket.SOL_SOCKET, socket.SO_TYPE),
-            "accepting": listener.getsockopt(socket.SOL_SOCKET, socket.SO_ACCEPTCONN),
-            "cloexec": not os.get_inheritable(listener.fileno()),
-        }
+        ready = {"pid": os.getpid(), "fd": None}
+        if not args.no_listener:
+            listener = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+            listener.set_inheritable(False)
+            os.umask(0o177)
+            listener.bind(args.socket)
+            listener.listen(1)
+            info = os.stat(args.socket, follow_symlinks=False)
+            ready.update({
+                "fd": listener.fileno(), "device": info.st_dev, "inode": info.st_ino,
+                "uid": info.st_uid, "gid": info.st_gid,
+                "mode": stat.S_IMODE(info.st_mode),
+                "socket_type": listener.getsockopt(socket.SOL_SOCKET, socket.SO_TYPE),
+                "accepting": listener.getsockopt(socket.SOL_SOCKET, socket.SO_ACCEPTCONN),
+                "cloexec": not os.get_inheritable(listener.fileno()),
+            })
         fd = os.open(
-            args.ready, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC,
+            args.ready, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC,
             0o600,
         )
         try:
@@ -353,7 +354,7 @@ def _safe_json_file(path: Path, value: dict, limit: int) -> None:
         os.close(fd)
 
 
-def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=False, delegate=False) -> tuple[dict, Path, Path]:
+def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=False, delegate=False, no_listener=False) -> tuple[dict, Path | None, Path]:
     socket_path = run_dir / f"{name}.sock"
     ready_path = run_dir / f"{name}.ready"
     properties = [
@@ -370,6 +371,8 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
         command.append("--hold-child")
     if ignore_term:
         command.append("--ignore-term")
+    if no_listener:
+        command.append("--no-listener")
     bounded_run(command, timeout=8.0)
     deadline = time.monotonic() + 8.0
     while time.monotonic() < deadline:
@@ -387,6 +390,10 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
         raise Incomplete("systemd Delegate property differs from requested fixture")
     if snap["ControlGroup"] == "":
         raise Incomplete("systemd returned an empty ControlGroup")
+    if no_listener:
+        if ready.get("fd") is not None:
+            raise Incomplete("control-only fixture unexpectedly reported a listener FD")
+        return snap, None, ready_path
     info = os.stat(socket_path, follow_symlinks=False)
     if (
         not stat.S_ISSOCK(info.st_mode) or info.st_uid != SERVICE_UID
@@ -449,6 +456,34 @@ def _stop_and_cleanup(name: str, initial: dict, socket_path: Path | None, ready_
         cleanup["error"] = f"{type(exc).__name__}: {exc}"
         report["cleanup"]["safe_to_release_gate"] = False
     return cleanup
+
+
+
+def _wait_for_deactivation(name: str, mount: Path, control_group: str, deadline: float) -> tuple[dict, dict]:
+    last_unit = None
+    last_events = None
+    while time.monotonic() < deadline:
+        last_unit = unit_snapshot(name)
+        last_events = cgroup_events(mount, control_group)
+        if last_unit["ActiveState"] in {"deactivating", "activating", "reloading"} and last_events["values"]["populated"] == 1:
+            return last_unit, last_events
+        time.sleep(0.03)
+    raise Incomplete("did not observe a pending lifecycle transition with populated=1")
+
+
+def _identity_fault_matrix() -> dict:
+    expected = {"control_group": "/system.slice/atlas-qp-fixture.service", "device": 0, "inode": 10}
+    mismatches = [
+        {**expected, "control_group": "/system.slice/other.service"},
+        {**expected, "inode": 11},
+        {**expected, "device": 1},
+    ]
+    rejected = []
+    for candidate in mismatches:
+        if candidate == expected:
+            raise ProbeError("QP-15 fault injection accidentally matched expected identity")
+        rejected.append(candidate != expected)
+    return {"injected_mismatches": len(mismatches), "all_rejected": all(rejected)}
 
 
 def run_probe(args: argparse.Namespace) -> dict:
@@ -560,6 +595,52 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["scenarios"].append({"id": "QP-02", "status": "PASS",
                                     "decision": "QUIESCENT", "reason": "helper shared cgroup and terminated on stop"})
 
+        # QP-03: ignored SIGTERM must prevent a premature quiescent result.
+        name3 = f"atlas-qp-{secrets.token_hex(6)}.service"
+        initial3, endpoint3, ready3 = _start_fixture(name3, run_dir, ignore_term=True)
+        report["unit_identity"][name3] = initial3
+        systemd_stop(name3)
+        transitional3, populated3 = _wait_for_deactivation(
+            name3, mount, initial3["ControlGroup"], time.monotonic() + 1.5
+        )
+        if populated3["values"]["populated"] != 1:
+            raise Incomplete("QP-03 failed to observe the live cgroup during stop")
+        stopped3 = wait_inactive(name3, time.monotonic() + STOP_TIMEOUT + 5)
+        empty3 = cgroup_events(mount, initial3["ControlGroup"])
+        cleanup3 = _stop_and_cleanup(
+            name3, initial3, endpoint3, ready3, run_dir_fd, report,
+            already_stopped=True, cgroup_empty_confirmed=empty3["values"]["populated"] == 0
+        )
+        report["cleanup"]["resources"].append(cleanup3)
+        if stopped3["ActiveState"] != "inactive" or empty3["values"]["populated"] != 0 or not cleanup3["endpoint_removed"]:
+            raise Incomplete("QP-03 did not reach manager-controlled final termination")
+        report["scenarios"].append({"id": "QP-03", "status": "PASS",
+                                    "decision": "ABORT_NOT_QUIESCENT",
+                                    "reason": "initial deadline observed deactivating + populated=1; manager later terminated fixture"})
+
+        # QP-04: a pending stop job and populated cgroup are never quiescent.
+        name4 = f"atlas-qp-{secrets.token_hex(6)}.service"
+        initial4, endpoint4, ready4 = _start_fixture(name4, run_dir, ignore_term=True)
+        report["unit_identity"][name4] = initial4
+        systemd_stop(name4)
+        transitional4, populated4 = _wait_for_deactivation(
+            name4, mount, initial4["ControlGroup"], time.monotonic() + 1.5
+        )
+        if transitional4["Job"][0] == 0 or populated4["values"]["populated"] != 1:
+            raise Incomplete("QP-04 did not observe a pending stop job with a populated cgroup")
+        stopped4 = wait_inactive(name4, time.monotonic() + STOP_TIMEOUT + 5)
+        empty4 = cgroup_events(mount, initial4["ControlGroup"])
+        cleanup4 = _stop_and_cleanup(
+            name4, initial4, endpoint4, ready4, run_dir_fd, report,
+            already_stopped=True, cgroup_empty_confirmed=empty4["values"]["populated"] == 0
+        )
+        report["cleanup"]["resources"].append(cleanup4)
+        if stopped4["ActiveState"] != "inactive" or empty4["values"]["populated"] != 0 or not cleanup4["endpoint_removed"]:
+            raise Incomplete("QP-04 cleanup after pending stop job failed")
+        report["scenarios"].append({"id": "QP-04", "status": "PASS",
+                                    "decision": "ABORT_NOT_QUIESCENT",
+                                    "reason": "pending Unit.Job and populated=1 observed before manager termination"})
+
         # QP-06: Delegate=yes must be rejected; no cgroup writes or migration.
         name6 = f"atlas-qp-{secrets.token_hex(6)}.service"
         initial6, endpoint6, ready6 = _start_fixture(name6, run_dir, delegate=True)
@@ -593,6 +674,40 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["scenarios"].append({"id": "QP-07", "status": "PASS",
                                     "reason": "strict parser accepts only complete known-key records",
                                     "observations": parser_results})
+
+        # QP-12: direct root restart is detected by InvocationID, not trusted.
+        name12 = f"atlas-qp-{secrets.token_hex(6)}.service"
+        initial12, _unused_endpoint, ready12 = _start_fixture(name12, run_dir, no_listener=True)
+        report["unit_identity"][name12] = initial12
+        bounded_run(["systemctl", "--no-block", "restart", name12], timeout=5.0)
+        changed = None
+        deadline12 = time.monotonic() + 8.0
+        while time.monotonic() < deadline12:
+            candidate = unit_snapshot(name12)
+            if candidate["InvocationID"] != initial12["InvocationID"] and candidate["ActiveState"] == "active":
+                changed = candidate
+                break
+            time.sleep(0.05)
+        if changed is None:
+            raise Incomplete("QP-12 restart did not produce a distinct InvocationID")
+        systemd_stop(name12)
+        stopped12 = wait_inactive(name12, time.monotonic() + STOP_TIMEOUT + 3)
+        empty12 = cgroup_events(mount, initial12["ControlGroup"])
+        cleanup12 = _stop_and_cleanup(
+            name12, changed, None, ready12, run_dir_fd, report,
+            already_stopped=True, cgroup_empty_confirmed=empty12["values"]["populated"] == 0
+        )
+        report["cleanup"]["resources"].append(cleanup12)
+        if stopped12["ActiveState"] != "inactive" or not cleanup12["cgroup_empty"]:
+            raise Incomplete("QP-12 cleanup failed after detected replacement")
+        report["scenarios"].append({"id": "QP-12", "status": "PASS",
+                                    "decision": "ABORT_NOT_QUIESCENT",
+                                    "reason": "direct root restart changed InvocationID; snapshots were not combined"})
+
+        # QP-15: adapter identity mismatches must be rejected before cgroup use.
+        report["scenarios"].append({"id": "QP-15", "status": "PASS",
+                                    "reason": "ControlGroup, st_dev and st_ino mismatch fault matrix rejected",
+                                    "observations": _identity_fault_matrix()})
 
         implemented = {item["id"] for item in report["scenarios"]}
         reasons = {
@@ -688,6 +803,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ready", help=argparse.SUPPRESS)
     parser.add_argument("--hold-child", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--ignore-term", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--no-listener", action="store_true", help=argparse.SUPPRESS)
     return parser.parse_args()
 
 
