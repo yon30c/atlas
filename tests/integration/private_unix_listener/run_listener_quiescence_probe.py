@@ -347,11 +347,13 @@ def cgroup_events(mount_root: Path, control_group: str) -> dict:
 class _TestLifecycleSupervisor:
     """Harness-only lifecycle gate; never imported by the Atlas runtime."""
 
-    def __init__(self, lock_fd: int, marker: Path, run_id: str, *, allow_owner: bool = True):
+    def __init__(self, lock_fd: int, marker: Path, run_id: str, *,
+                 allow_owner: bool = True, units: set[str] | None = None):
         self.lock_fd = lock_fd
         self.marker = marker
         self.run_id = run_id
         self.allow_owner = allow_owner
+        self.units = set(units or ())
         self.active = True
 
     def request(self, action: str, argv: list[str], *, actor_run_id: str) -> bytes:
@@ -370,8 +372,25 @@ class _TestLifecycleSupervisor:
             raise Incomplete("sticky maintenance marker blocks lifecycle until explicit manual recovery")
         if actor_run_id != self.run_id:
             raise PermissionError("second authorized actor rejected by maintenance gate")
-        if not argv or argv[0] not in {"systemd-run", "systemctl"}:
-            raise Incomplete("test lifecycle supervisor accepts only fixed systemd clients")
+        if not argv:
+            raise Incomplete("test lifecycle supervisor received an empty command")
+        if action == "start":
+            if argv[0] != "systemd-run":
+                raise Incomplete("start requests must use systemd-run")
+            unit_args = [item.split("=", 1)[1] for item in argv if item.startswith("--unit=")]
+            if len(unit_args) != 1 or not unit_args[0].startswith("atlas-qp-") or not unit_args[0].endswith(".service"):
+                raise Incomplete("start request does not name one owned transient fixture")
+            if unit_args[0] in self.units:
+                raise Incomplete("test lifecycle supervisor refuses duplicate fixture start")
+            result = bounded_run(argv, timeout=8.0)
+            self.units.add(unit_args[0])
+            return result
+        if (
+            argv[0] != "systemctl" or len(argv) != 4
+            or argv[1] != "--no-block" or argv[2] != action
+            or argv[3] not in self.units
+        ):
+            raise Incomplete("lifecycle request is outside the registered fixture allowlist")
         return bounded_run(argv, timeout=8.0)
 
     def crash(self) -> None:
@@ -1575,7 +1594,9 @@ def run_probe(args: argparse.Namespace) -> dict:
         # explicitly scoped cleanup; this is not a production recovery path.
         lock_fd = os.open(lock_path, os.O_RDWR | os.O_CLOEXEC | os.O_NOFOLLOW)
         fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        _ACTIVE_SUPERVISOR = _TestLifecycleSupervisor(lock_fd, marker, run_id)
+        _ACTIVE_SUPERVISOR = _TestLifecycleSupervisor(
+            lock_fd, marker, run_id, units=set(_ACTIVE_SUPERVISOR.units)
+        )
         report["gate"]["qp11_second_actor_rejected"] = True
         report["gate"]["qp11_lock_released_after_simulated_crash"] = True
         report["gate"]["qp11_sticky_marker_blocked_after_crash"] = True
