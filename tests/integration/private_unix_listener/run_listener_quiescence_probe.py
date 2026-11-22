@@ -695,7 +695,7 @@ def run_fd_policy_checks(listener: socket.socket, *, deny_fork: bool, deny_fd_es
     libc = ctypes.CDLL(None, use_errno=True)
     libc.syscall.restype = ctypes.c_long
     libc.vfork.restype = ctypes.c_int
-    observations = {}
+    observations = {"no_new_privileges_set_before_filter": True}
     install_seccomp_denials(deny_fork=deny_fork, deny_fd_escape=deny_fd_escape)
     if deny_fork:
         results = {}
