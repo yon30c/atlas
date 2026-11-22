@@ -387,7 +387,8 @@ El cambio de `issue` reduce la ventana TOCTOU en la emisión, pero no cierra tod
 ### 20.3 Memory y Workspace
 
 - `MemoryAuthorizationService` continúa aceptando `OperationContext` y usando el binding legacy `AuthenticatedUserSubject`; no exige ni revalida `VerifiedIdentityContext`. No habilitar lecturas protegidas desde identidad nativa por inferencia.
-- `WorkspaceCapabilityExecutionService` valida identidad canónica, estado de Workspace, propietario, Project/Environment, asociación V18, Grant exacto y mount registrado dentro de `BEGIN IMMEDIATE`. Sin embargo, su firma pública solo recibe `OperationContext` y no recibe evidencia verificada. Un caller puede fabricar un contexto con el par canónico actual y superar la comparación local. `BEGIN IMMEDIATE` protege escritores SQLite concurrentes durante la lectura, no autentica al caller ni proporciona fencing distribuido o de filesystem.
+- `WorkspaceCapabilityExecutionService` ahora exige un `VerifiedIdentityContext` y un verificador que implemente `verify_in_unit_of_work`. La evidencia USER se revalida dentro de la misma UoW que consulta identidad, Workspace, Project/Environment, asociación y Grants, antes de resolver el mount o tocar filesystem. La ruta falla cerrada si falta el verificador transaccional.
+- Se añadieron pruebas con un fake explícito para comprobar revalidación dentro de la UoW y rechazo de evidencia manipulada. **Estas pruebas están pendientes de ejecución local.** El fake es solo test support; no constituye un verificador productivo ni compone login.
 - `LocalConsoleRequestFactory` continúa creando identidad y `user_id` sintéticos desde el usuario Unix. Debe permanecer aislada de Workspace, Memory, Grants, Broker y cualquier capacidad protegida.
 
 ### 20.4 Orden de cierre
@@ -400,3 +401,15 @@ El cambio de `issue` reduce la ventana TOCTOU en la emisión, pero no cierra tod
 6. Validar localmente carreras de suspensión/revocación frente a emisión, renovación, lectura y ejecución antes de conectar runtime.
 
 **Límite:** revisión estática solamente. No se ejecutaron pruebas ni se modificó código ejecutable. La suite completa 1,611/1,611 (con un skip) fue validada por el propietario en la rama MVP, pero no demuestra fencing frente a cambios concurrentes de identidad/Grant ni integración protegida end-to-end.
+
+
+## 21. Evidencia transaccional en Workspace read-only — 2026-11-22
+
+Commit 0315d52db9505998244dace068828723bb5b424f endurece Workspace:
+
+- El constructor exige un verificador con `verify_in_unit_of_work`; sin él no se puede construir el servicio.
+- `execute` recibe explícitamente `VerifiedIdentityContext` y lo revalida dentro de la UoW compartida antes de consultar Workspace/Grant o resolver el mount.
+- El par canónico devuelto por el verificador se compara además con el registro de Identity leído desde esa misma UoW.
+- La API ya no acepta una mera coincidencia de `OperationContext` como prueba suficiente de autenticación.
+
+Las pruebas del slice usan un fake de test y comprueban evidencia ausente en composición, revalidación transaccional y manipulación. **Pendiente de ejecutar en Debian.** No hay todavía composition root productivo que proporcione el verificador HMAC; por tanto, Workspace sigue sin estar habilitado en el runtime y la consola sintética permanece desconectada.

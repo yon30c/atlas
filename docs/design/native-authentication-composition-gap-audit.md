@@ -230,3 +230,15 @@ Commit 1f43d29c531a04c745394ce0f80af710841a55ae modifica GrantManagementService.
 - Se añadió una prueba que comprueba que no se invoca el verificador autónomo y que la UoW de inserción se pasa al verificador.
 
 **Pendiente:** ejecutar la prueba focalizada y la suite completa en Debian. Este cambio solo afecta emisión directa de Grants. No corrige la frontera de revoke, no habilita bootstrap, no compone login y no habilita Workspace. La revisión estática de la composición de autenticación sigue vigente en las secciones anteriores.
+
+
+## 10. Actualización de Workspace read-only — evidencia USER transaccional (2026-11-22)
+
+Commit 0315d52db9505998244dace068828723bb5b424f modifica `WorkspaceCapabilityExecutionService`:
+
+- El servicio requiere un `VerifiedIdentityContextVerifierPort` con `verify_in_unit_of_work`.
+- Cada ejecución recibe evidencia USER explícita y la revalida dentro de la misma `SQLiteLocalAuthorityUnitOfWork` que consulta Identity, Workspace, Project/Environment, asociación y Grants.
+- El servicio compara el resultado verificado con la Identity canónica leída dentro de esa transacción antes de evaluar CAM y resolver el mount.
+- Los tests incorporan un fake local explícito; no simulan ni prueban la custodia HMAC productiva.
+
+**Pendiente:** pruebas focalizadas y suite completa en Debian. No existe todavía un composition root productivo para el verificador HMAC, y Workspace no está conectado a la CLI. Este cambio endurece el servicio, pero no habilita su uso operativo.
