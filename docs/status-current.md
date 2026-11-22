@@ -294,3 +294,26 @@ Commits de corrección:
 - `78cbf6288b8dc342f2c10b0c5290a4698a58edd3` — fixture Platform Admin bootstrap.
 
 **Estado:** correcciones publicadas, pendientes de validación local. No se ejecutaron pruebas desde GitHub. El resultado fallido anterior no debe confundirse con el resultado focalizado del guard (21 tests OK); tampoco se debe declarar verde la suite completa hasta recibir una nueva ejecución local.
+
+
+## Validación local de suite completa — 2026-11-22
+
+El propietario confirmó en Debian, VM `Atlas-VM-test`, checkout `/opt/atlas-dev`, después de incorporar las correcciones de compatibilidad V28:
+
+```text
+Ran 1611 tests in 40.322s
+
+OK (skipped=1)
+```
+
+También ejecutó:
+
+```bash
+.venv/bin/python -m compileall -q src tests
+```
+
+sin errores reportados.
+
+**Conclusión:** la suite unitaria completa de esta rama queda validada localmente con 1611 tests ejecutados, cero fallos y un test omitido. La compilación de `src` y `tests` también finalizó correctamente. Esta evidencia no equivale a validar migraciones sobre una base persistente real ni habilita login, bootstrap, Workspace, CAM o composición autenticada; esas capacidades continúan deshabilitadas según las decisiones vigentes.
+
+**Siguiente paso:** revisar el estado/documentación y definir el siguiente incremento del MVP sin ampliar permisos ni activar flujos operativos por inferencia. La validación fue ejecutada por el propietario en Debian; no se ejecutaron pruebas desde GitHub.
