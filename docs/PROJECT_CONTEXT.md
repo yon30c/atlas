@@ -10,7 +10,7 @@
 
 - **Repositorio:** `yon30c/atlas`.
 - **Base estable:** `main`, HEAD `a89e96cc4e5d9555e28a7ea5d9f3788654fe7268`.
-- **Rama activa:** `work/atlas-mvp-runtime`, no integrada en `main`. HEAD actual `551c9c4938ef730b6fd0380c2de7981242675c36`. El último HEAD validado por el propietario es `29e900a1129efbb83c8e4b867c99d37d66473c55`; todos los cambios posteriores, incluidos emisión Grant (`1f43d29`), Workspace (`0315d52`) y el builder inicial (`5f94714`/`4fa1fe9`/`08eea1c`), están pendientes de validación local.
+- **Rama activa:** `work/atlas-mvp-runtime`, no integrada en `main`. HEAD actual `500281df58485e281de160103df9c40dc14c8873`. El último HEAD validado por el propietario es `29e900a1129efbb83c8e4b867c99d37d66473c55`; todos los cambios posteriores, incluidos emisión Grant (`1f43d29`), Workspace (`0315d52`) y el builder inicial (`5f94714`/`4fa1fe9`/`08eea1c`), están pendientes de validación local.
 - **Objetivo inmediato:** avanzar el MVP local limitado sin activar capacidades protegidas por inferencia.
 - **Funcionalidad de consola:** conversación local persistente con Ollama y comando `/plan <solicitud>` que presenta una vista previa F1. El plan no ejecuta capacidades ni accede al filesystem.
 - **Guard de autenticación:** implementación SQLite V28 publicada en la rama; política aprobada de ventana 15 min, demoras 1/2/4/7/15 min, dos reservas simultáneas por cuenta y TTL 120 s. Argon2id se ejecuta fuera de transacciones SQLite de escritura; la emisión del proof revalida issuer/autenticador/estado/subject/revisión y requiere finalizar correctamente la reserva. La brecha de composición está auditada en [`native-authentication-composition-gap-audit.md`](design/native-authentication-composition-gap-audit.md).
