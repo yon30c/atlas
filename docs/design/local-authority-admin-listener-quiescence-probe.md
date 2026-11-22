@@ -83,7 +83,7 @@ La puerta será un protocolo root-managed de dos piezas: un `flock(LOCK_EX|LOCK_
 
 **Límite de autoridad:** ningún lock de archivo puede impedir que un administrador root llame directamente a PID 1 por D-Bus o `systemctl`. Root pertenece al dominio de confianza del contrato. La puerta serializa todos los actores autorizados y automatizaciones declaradas; no es una defensa contra root malicioso ni demuestra que un host de producción carezca de vías de arranque no declaradas.
 
-Si el system manager, timers, dependencias, políticas automáticas o un actor con autoridad equivalente pueden iniciar la unidad sin pasar por la puerta, QP-11 no puede pasar y el contrato no queda demostrado. La puerta no debe presentarse como barrera frente a root malicioso; root pertenece al dominio de autoridad confiable.
+Si timers, dependencias, triggers o políticas automáticas pueden iniciar la unidad sin pasar por la puerta, QP-11 no puede pasar. Una llamada directa de root a PID 1 se considera una acción del dominio de autoridad confiable y queda fuera de la protección de la puerta; QP-12 comprueba que la sustitución resultante se detecta.
 
 ## 4. Secuencia común de observación
 
@@ -136,7 +136,7 @@ La secuencia no se sustituye por `sleep`, ausencia del PID principal, `pgrep`, t
 - QP-13 es una prueba negativa del supuesto de FD externo mediante una violación controlada y acotada de la política de FD; no es una prueba de socket activation ni valida la retención real del system manager.
 - QP-05 no intenta reparentar procesos ni escribir manualmente en cgroupfs; el mismatch se prueba en el límite del adaptador y con dos unidades fixture separadas.
 - QP-12 es fault injection root fuera del supervisor autorizado y solo comprueba detección de sustitución; QP-15 prueba la validación de identidad del descriptor de cgroup.
-- No se permite que un escenario mutile ni retire el pathname del listener. Cualquier intento de unlink hace que el probe completo falle.
+- Ningún escenario de quiescencia ni de fault injection puede retirar o sustituir el pathname. Solo la fase final de cleanup puede retirar el endpoint fixture de esta ejecución, bajo las verificaciones exactas de §7 y §9.6; cualquier otra mutación hace que el probe falle.
 
 ## 6. Evidencia estructurada
 
@@ -215,9 +215,9 @@ El adaptador consultará:
 5. De ResourceControl, cuando esté expuesta: `Delegate`, `DelegateControllers` y `DelegateSubgroup`.
 6. `Manager.ListJobs()` para enumerar jobs y filtrar por nombre exacto de unidad y tipos start/restart/try-restart/reload-or-start; la propiedad Unit.Job debe concordar con el inventario.
 
-El cliente debe validar el JSON tipado producido por busctl contra las firmas D-Bus esperadas, preservar los tipos, rechazar campos ausentes/tipos inesperados y comprobar el código de salida. No se aceptan conversiones heurísticas de texto. La consulta de estado usa snapshots antes y después de leer cgroup; no se considera una única respuesta D-Bus una transacción atómica.
+El cliente debe validar el JSON tipado producido por busctl contra las firmas D-Bus esperadas, preservar los tipos, rechazar campos ausentes/tipos inesperados y comprobar el código de salida. No se aceptan conversiones heurísticas de texto. La introspección del object path identifica en qué interfaz está expuesta cada propiedad; si `InvocationID`, `ControlGroup`, `KillMode` o `Delegate` no están disponibles con su firma esperada, el preflight aborta. La consulta de estado usa snapshots antes y después de leer cgroup; no se considera una única respuesta D-Bus una transacción atómica.
 
-La petición de stop se emite sobre la unidad exacta mediante el supervisor designado. El estado terminal se determina exclusivamente por D-Bus y cgroup, no por el texto/exit status del comando que solicitó stop. Cada llamada tiene timeout acotado y salida stdout/stderr acotada. La conexión siempre es al bus **system** local; quedan prohibidos `--user`, `--host`, `--machine` y destinos remotos.
+La petición de stop se emite sobre la unidad exacta mediante el supervisor designado (D-Bus `Manager.StopUnit` con respuesta tipada o `systemctl --no-block stop` invocado sin shell). El estado terminal se determina exclusivamente por D-Bus y cgroup, no por el texto/exit status del comando que solicitó stop. Cada llamada tiene timeout acotado y salida stdout/stderr acotada. La conexión siempre es al bus **system** local; quedan prohibidos `--user`, `--host`, `--machine` y destinos remotos.
 
 **Criterio de aceptación:** en preflight, `busctl --version` debe confirmar soporte JSON; el adaptador debe resolver una unidad fixture conocida, extraer propiedades y jobs con sus tipos exactos, y tratar una propiedad/interfaz no disponible como INCOMPLETE. No se implementa fallback a parseo de texto.
 
@@ -237,7 +237,7 @@ La petición de stop se emite sobre la unidad exacta mediante el supervisor desi
 
 ### 9.3 Punto 3 — Reporte JSON y límites
 
-**Decisión:** reporte JSON UTF-8, schema `atlas.listener-quiescence-probe/1`, una sola estructura raíz, claves deterministas, sin NaN/Infinity, sin claves duplicadas y sin datos no serializables. El reporte completo tendrá un máximo de **1 MiB**; cada escenario, máximo **48 KiB**; cada snapshot D-Bus, máximo **32 KiB**; cada lectura `cgroup.events`, máximo **4 KiB**. Al superar un límite se aborta el escenario; nunca se trunca evidencia y se conserva como si fuera completa.
+**Decisión:** reporte JSON UTF-8, schema `atlas.listener-quiescence-probe/1`, una sola estructura raíz, claves deterministas, sin NaN/Infinity, sin claves duplicadas y sin datos no serializables. El reporte completo tendrá un máximo de **1 MiB**; cada escenario, máximo **32 KiB**; cada snapshot D-Bus, máximo **16 KiB**; cada lectura `cgroup.events`, máximo **4 KiB**. Al superar un límite se aborta el escenario; nunca se trunca evidencia y se conserva como si fuera completa.
 
 Campos raíz obligatorios:
 
