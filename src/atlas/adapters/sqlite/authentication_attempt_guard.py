@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import hashlib
 from uuid import uuid4
 
+from atlas.authentication.credentials import LoginHandle
 from atlas.adapters.sqlite.database import SQLiteDatabase
 from atlas.core.errors import ContractError
 from atlas.ports.authentication_attempt_guard import (
@@ -50,15 +51,13 @@ class SQLiteAuthenticationAttemptGuard:
             raise ContractError("issuer_id debe ser no vacío")
         if not isinstance(login_handle, str) or not login_handle:
             raise ContractError("login_handle debe ser no vacío")
-        try:
-            material = (
-                _DOMAIN
-                + issuer_id.encode("utf-8")
-                + b"\x00"
-                + login_handle.encode("ascii")
-            )
-        except UnicodeEncodeError as exc:
-            raise ContractError("login_handle debe ser ASCII normalizado") from exc
+        normalized_handle = LoginHandle(login_handle).value
+        material = (
+            _DOMAIN
+            + issuer_id.encode("utf-8")
+            + b"\x00"
+            + normalized_handle.encode("ascii")
+        )
         return hashlib.sha256(material).hexdigest()
 
     @staticmethod
