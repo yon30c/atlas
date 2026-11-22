@@ -1629,7 +1629,11 @@ def run_probe(args: argparse.Namespace) -> dict:
             time.sleep(0.02)
         if not received13.exists():
             raise Incomplete("QP-13 external holder did not publish FD receipt")
-        holder_evidence13 = read_bounded_json_file(received13, expected_uid=OTHER_UID, expected_gid=OTHER_GID)
+        received_identity13 = {}
+        holder_evidence13 = read_bounded_json_file(
+            received13, expected_uid=OTHER_UID, expected_gid=OTHER_GID,
+            identity=received_identity13,
+        )
         if holder_evidence13.get("socket_type") != socket.SOCK_SEQPACKET or holder_evidence13.get("accepting") != 1 or not holder_evidence13.get("fd_open"):
             raise Incomplete("QP-13 external holder did not retain the active listener FD")
         systemd_stop(name13_service)
@@ -1672,7 +1676,10 @@ def run_probe(args: argparse.Namespace) -> dict:
             raise Incomplete("QP-13 holder/service cleanup failed")
         other_dir13_cleanup_fd = os.open(other_dir13, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
         try:
-            os.unlink(received13.name, dir_fd=other_dir13_cleanup_fd)
+            unlink_verified_regular_file(
+                other_dir13_cleanup_fd, received13.name,
+                received_identity13, OTHER_UID, OTHER_GID,
+            )
         finally:
             os.close(other_dir13_cleanup_fd)
         try:
