@@ -500,6 +500,8 @@ def run_fd_policy_checks(listener: socket.socket, *, deny_fork: bool, deny_fd_es
         raise Incomplete("syscall fault-injection numbers are defined only for x86_64")
     import ctypes
     libc = ctypes.CDLL(None, use_errno=True)
+    libc.syscall.restype = ctypes.c_long
+    libc.vfork.restype = ctypes.c_int
     observations = {}
     install_seccomp_denials(deny_fork=deny_fork, deny_fd_escape=deny_fd_escape)
     if deny_fork:
@@ -1368,9 +1370,9 @@ def run_probe(args: argparse.Namespace) -> dict:
 
         # QP-13: deliberately transfer one listener FD to an OTHER-cgroup holder.
         other_dir13 = BASE / f"{run_id}-qp13-shared"
-        os.mkdir(other_dir13, 0o733)
+        os.mkdir(other_dir13, 0o1733)
         os.chown(other_dir13, 0, 0)
-        os.chmod(other_dir13, 0o733)
+        os.chmod(other_dir13, 0o1733)
         other_dir13_fd = os.open(other_dir13, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
         name13_service = f"atlas-qp-{secrets.token_hex(6)}.service"
         name13_holder = f"atlas-qp-{secrets.token_hex(6)}.service"
