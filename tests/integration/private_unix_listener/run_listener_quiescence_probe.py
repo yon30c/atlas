@@ -474,7 +474,7 @@ def _json_reject_constant(value):
 def read_bounded_json_file(path: Path, *, expected_uid: int | None = None,
                            expected_gid: int | None = None, limit: int = 4096,
                            identity: dict | None = None) -> dict:
-    fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+    fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK)
     try:
         info = os.fstat(fd)
         if (
@@ -962,7 +962,7 @@ def fixture_main(args: argparse.Namespace) -> int:
             "uid": info.st_uid, "gid": info.st_gid,
             "mode": stat.S_IMODE(info.st_mode), "exec_helper": True,
         }
-        fd = os.open(args.ready, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC, 0o600)
+        fd = os.open(args.ready, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
         try:
             os.write(fd, json.dumps(ready, sort_keys=True).encode("ascii"))
             os.fsync(fd)
@@ -983,7 +983,7 @@ def fixture_main(args: argparse.Namespace) -> int:
             "uid": control_info.st_uid, "gid": control_info.st_gid,
             "mode": stat.S_IMODE(control_info.st_mode),
         }
-        ready_fd = os.open(args.ready, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600)
+        ready_fd = os.open(args.ready, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
         try:
             os.write(ready_fd, json.dumps(holder_ready, sort_keys=True).encode("ascii"))
             os.fsync(ready_fd)
@@ -1137,7 +1137,8 @@ def fixture_main(args: argparse.Namespace) -> int:
                 )
         ready.update(process_authority_evidence())
         fd = os.open(
-            args.ready, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC,
+            args.ready, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC
+            | os.O_NOFOLLOW | os.O_NONBLOCK,
             0o600,
         )
         try:
@@ -1364,7 +1365,7 @@ def update_gate_marker(marker: Path, run_id: str, name: str, snapshot: dict,
 
 def unlink_verified_regular_file(dir_fd: int, name: str, expected: dict,
                                  uid: int, gid: int) -> None:
-    fd = os.open(name, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW, dir_fd=dir_fd)
+    fd = os.open(name, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dir_fd)
     try:
         info = os.fstat(fd)
         actual = {
