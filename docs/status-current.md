@@ -1034,7 +1034,7 @@ de sockets reales, limpieza automática, listener persistente, activación
 systemd ni despliegue. No ejecutar en greed producción. La validación fue
 ejecutada por el propietario; el asistente no ejecutó pruebas, builds,
 workflows ni probes.
-## A-IPC-05 — runner QP-01..QP-15 implementado, pendiente de validación (2026-11-22)
+## A-IPC-05 — runner QP-01..QP-15 implementado, revisión estática completada (2026-11-22)
 
 - Archivo: `tests/integration/private_unix_listener/run_listener_quiescence_probe.py`.
 - Rama: `experiment/a-ipc-01-private-unix-listener-probe`; permanece separada de `main`. El runner exige esta rama y un worktree limpio para que el SHA reportado identifique el código ejecutado.
@@ -1050,6 +1050,7 @@ workflows ni probes.
 - QP-13: proceso OTHER recibe listener FD por SCM_RIGHTS; se demuestra que cgroup del servicio vacío no basta mientras el holder conserva el FD. No es socket activation.
 - QP-14/15: fallos inyectados de manager/supervisor, timeout acotado y discrepancias ControlGroup/dev/inode.
 - Cleanup: detiene primero todos los fixtures; solo después retira endpoint y archivos ready/received si tipo, owner, mode, dev/inode coinciden. Los JSON usan O_NOFOLLOW + O_NONBLOCK, límites, UTF-8 estricto y rechazo de claves duplicadas; la verificación/retirada de archivos evita bloquearse ante FIFO. Reporte schema versionado, límites por escenario/total y timestamps monotónicos. La evidencia final y la autorización de liberar la puerta se persisten antes de retirar el marcador sticky; no se reescribe el reporte después de la retirada.
-- El runner incorpora validación del endpoint (`SOCK_SEQPACKET`, `SO_ACCEPTCONN`, `CLOEXEC`, UID/GID) y la comprobación procfs descrita arriba. El cambio está revisado por lectura estática, pero no se ha ejecutado ni validado. No se han ejecutado pruebas, builds o workflows; no se crearon unidades/cgroups/usuarios/grupos/rutas en hosts durante esta sesión.
-- Próximo paso: completar revisión estática final y pasar a ejecución del propietario exclusivamente en `Atlas-VM-test`. Nunca en `greed`.
+- Revisión estática final: corregida la interfaz D-Bus de `Delegate*` (Service), validada la versión del PID 1, reforzados QP-04 (restart real), endpoint/CLOEXEC, paths fuente no modificables, aperturas JSON no bloqueantes y persistencia del reporte antes de liberar el marcador. El runner sigue sin ejecutarse ni validarse.
+- Último commit del runner: `9b3e3bb6401840c8a7f2b9b0370eb627c8a4c16a`. El worktree y la rama exacta se verifican en preflight.
+- Próximo paso: ejecución del propietario exclusivamente en `Atlas-VM-test`, con el checkout limpio y el HEAD indicado. Nunca en `greed`. No se han ejecutado pruebas, builds, workflows ni probes por parte del asistente.
 - A-THREAT-05 continúa abierta; no hay autorización de stale recovery, listener persistente, cleanup automático de endpoints Atlas ni despliegue.
