@@ -976,7 +976,7 @@ def preflight() -> dict:
         raise Incomplete("cannot identify Debian release") from exc
     if not debian.startswith("13"):
         raise Incomplete("Debian 13 is required")
-    for executable in ("busctl", "systemd-run", "systemctl", "git"):
+    for executable in ("busctl", "systemd-run", "systemctl", "git", "sleep"):
         if not __import__("shutil").which(executable):
             raise Incomplete(f"required executable missing: {executable}")
     if not ctypes.util.find_library("seccomp"):
@@ -2119,8 +2119,11 @@ def run_probe(args: argparse.Namespace) -> dict:
         for directory_fd in set(_OPEN_DIR_FDS):
             try:
                 os.close(directory_fd)
-            except OSError:
-                pass
+            except OSError as exc:
+                report["cleanup"]["safe_to_release_gate"] = False
+                report["cleanup"].setdefault("fd_close_errors", []).append(
+                    f"directory fd close errno={exc.errno}"
+                )
 
         if report["cleanup"]["safe_to_release_gate"]:
             for entry in reversed(_SANDBOX_DIRS):
