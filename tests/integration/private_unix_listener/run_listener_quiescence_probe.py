@@ -1783,16 +1783,40 @@ def run_probe(args: argparse.Namespace) -> dict:
         systemd_stop(name12)
         stopped12 = wait_inactive(name12, time.monotonic() + STOP_TIMEOUT + 3)
         empty12 = cgroup_events(mount, changed["ControlGroup"])
+        # QP-12 unit remains referenced through QP-11 so its inactive state can
+        # be observed; release the manager reference only after the gate test.
+        cleanup12 = _stop_and_cleanup(
+            name12, changed, None, ready12, run_dir_fd, report,
+            already_stopped=True, cgroup_empty_confirmed=empty12["values"]["populated"] == 0
+        )
+        report["cleanup"]["resources"].append(cleanup12)
+        if (
+            stopped12["ActiveState"] != "inactive"
+            or stopped12["InvocationID"] != changed["InvocationID"]
+            or not cleanup12["cgroup_empty"] or not cleanup12.get("unit_unloaded")
+        ):
+            raise Incomplete("QP-12 cleanup failed after detected replacement")
+        report["scenarios"].append({
+            "id": "QP-12", "status": "PASS",
+            "decision": "ABORT_NOT_QUIESCENT",
+            "reason": "direct root restart changed InvocationID; snapshots were not combined",
+        })
+
         # QP-11: second actor is rejected; after simulated supervisor/orchestrator
         # crash the lock becomes available but the sticky marker still denies
         # lifecycle requests until this harness performs explicit test cleanup.
         if _ACTIVE_SUPERVISOR is None:
             raise Incomplete("QP-11 has no active test supervisor")
-        unchanged_before = unit_snapshot(name12)
+        name11 = f"atlas-qp-{secrets.token_hex(6)}.service"
+        initial11, _endpoint11, ready11 = _start_fixture(name11, run_dir, no_listener=True)
+        report["unit_identity"][name11] = initial11
+        unchanged_before = unit_snapshot(name11)
+        if unchanged_before["ActiveState"] != "active" or unchanged_before["Job"][0] != 0:
+            raise Incomplete("QP-11 gate fixture did not reach stable active state")
         denied_second_actor = False
         try:
             _ACTIVE_SUPERVISOR.request(
-                "restart", ["systemctl", "--no-block", "restart", name12],
+                "restart", ["systemctl", "--no-block", "restart", name11],
                 actor_run_id=str(uuid.uuid4()),
             )
         except PermissionError:
@@ -1827,16 +1851,17 @@ def run_probe(args: argparse.Namespace) -> dict:
             denied_after_crash = False
             try:
                 post_crash_supervisor.request(
-                    "start", ["systemctl", "--no-block", "start", name12],
+                    "restart", ["systemctl", "--no-block", "restart", name11],
                     actor_run_id=run_id,
                 )
             except Incomplete:
                 denied_after_crash = True
-            unchanged_after = unit_snapshot(name12)
+            unchanged_after = unit_snapshot(name11)
             if (
                 sticky.get("run_id") != run_id or not denied_after_crash
                 or unchanged_after["InvocationID"] != unchanged_before["InvocationID"]
-                or unchanged_after["ActiveState"] != "inactive"
+                or unchanged_after["ActiveState"] != "active"
+                or unchanged_after["MainPID"] != unchanged_before["MainPID"]
                 or unchanged_after["Job"][0] != 0
             ):
                 raise Incomplete("QP-11 sticky marker failed to block post-crash lifecycle")
@@ -1855,9 +1880,23 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["gate"]["qp11_lock_released_after_simulated_crash"] = True
         report["gate"]["qp11_sticky_marker_blocked_after_crash"] = True
         report["gate"]["qp11_harness_reacquired_for_evidence_cleanup"] = True
+        systemd_stop(name11)
+        stopped11 = wait_inactive(name11, time.monotonic() + STOP_TIMEOUT + 3)
+        empty11 = cgroup_events(mount, initial11["ControlGroup"])
+        cleanup11 = _stop_and_cleanup(
+            name11, initial11, None, ready11, run_dir_fd, report,
+            already_stopped=True, cgroup_empty_confirmed=empty11["values"]["populated"] == 0,
+        )
+        report["cleanup"]["resources"].append(cleanup11)
+        if (
+            stopped11["ActiveState"] != "inactive" or stopped11["Job"][0] != 0
+            or empty11["values"]["populated"] != 0
+            or not cleanup11.get("unit_unloaded")
+        ):
+            raise Incomplete("QP-11 fixture cleanup failed")
         report["scenarios"].append({
             "id": "QP-11", "status": "PASS",
-            "reason": "competing actor rejected; simulated crash released flock; sticky marker blocked a new supervisor until harness-only evidence cleanup",
+            "reason": "competing actor rejected; simulated crash released flock; sticky marker blocked a restart while the fixture remained active; harness then stopped and cleaned its fixture",
             "observations": {
                 "second_actor_rejected": denied_second_actor,
                 "competing_lock_denied": competing_lock_denied,
@@ -1865,28 +1904,10 @@ def run_probe(args: argparse.Namespace) -> dict:
                 "sticky_marker_retained": True,
                 "post_crash_start_rejected": denied_after_crash,
                 "unit_invocation_unchanged": unchanged_after["InvocationID"] == unchanged_before["InvocationID"],
-                "unit_remained_inactive": unchanged_after["ActiveState"] == "inactive",
+                "unit_remained_active": unchanged_after["ActiveState"] == "active",
+                "main_pid_unchanged": unchanged_after["MainPID"] == unchanged_before["MainPID"],
                 "pending_jobs": unchanged_after["Job"][0],
             },
-        })
-
-        # QP-12 unit remains referenced through QP-11 so its inactive state can
-        # be observed; release the manager reference only after the gate test.
-        cleanup12 = _stop_and_cleanup(
-            name12, changed, None, ready12, run_dir_fd, report,
-            already_stopped=True, cgroup_empty_confirmed=empty12["values"]["populated"] == 0
-        )
-        report["cleanup"]["resources"].append(cleanup12)
-        if (
-            stopped12["ActiveState"] != "inactive"
-            or stopped12["InvocationID"] != changed["InvocationID"]
-            or not cleanup12["cgroup_empty"] or not cleanup12.get("unit_unloaded")
-        ):
-            raise Incomplete("QP-12 cleanup failed after detected replacement")
-        report["scenarios"].append({
-            "id": "QP-12", "status": "PASS",
-            "decision": "ABORT_NOT_QUIESCENT",
-            "reason": "direct root restart changed InvocationID; snapshots were not combined",
         })
 
         implemented = {item["id"] for item in report["scenarios"]}
