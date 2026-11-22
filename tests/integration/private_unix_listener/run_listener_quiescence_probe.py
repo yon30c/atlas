@@ -2290,6 +2290,14 @@ def run_probe(args: argparse.Namespace) -> dict:
                     "failed to close pinned cgroup observer"
                 )
 
+        if _SYSTEMD_BUS_REF is not None:
+            try:
+                _SYSTEMD_BUS_REF.close()
+                _SYSTEMD_BUS_REF = None
+            except Exception:
+                report["cleanup"]["safe_to_release_gate"] = False
+                report["cleanup"]["persistent_bus_close_error"] = True
+
         for directory_fd in set(_OPEN_DIR_FDS):
             try:
                 os.close(directory_fd)
