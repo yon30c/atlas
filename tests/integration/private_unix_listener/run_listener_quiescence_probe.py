@@ -2505,7 +2505,10 @@ def main() -> int:
     report = run_probe(args)
     raw = json.dumps(report, indent=2, sort_keys=True, allow_nan=False).encode("utf-8")
     if len(raw) > MAX_REPORT:
-        print("ERROR: report exceeds 1 MiB; evidence preserved only in bounded stdout", file=sys.stderr)
+        print(
+            f"ERROR: pretty report exceeds 1 MiB; compact evidence path={report.get('report_path', 'unavailable')}",
+            file=sys.stderr,
+        )
         return 2
     print(raw.decode("utf-8"))
     return 0 if report.get("overall") == "PASS" else 1 if report.get("overall") == "FAIL" else 2
