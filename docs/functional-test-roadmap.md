@@ -22,15 +22,22 @@ En `work/atlas-mvp-runtime` se conectó el planificador F1 a la consola mediante
 - no ejecuta capacidades ni toca archivos;
 - informa que el runtime protegido aún no está habilitado.
 
-Pruebas focalizadas añadidas, todavía **pendientes de ejecución local**:
-`python -m unittest tests.unit.test_console_planning tests.unit.test_local_console_composition -v`
+**Validación local completada por el propietario en Debian 13:**
 
-No se ejecutaron pruebas ni compilaciones desde GitHub.
+```text
+Ran 14 tests in 0.029s
+OK
+```
+
+Comando ejecutado:
+` .venv/bin/python -m unittest tests.unit.test_console_planning tests.unit.test_local_console_composition -v `
+
+También ejecutó `.venv/bin/python -m compileall -q src tests`, que terminó sin errores. La suite completa de la rama aún no se ha ejecutado. No se ejecutaron pruebas ni compilaciones desde GitHub.
 
 ### Secuencia acelerada para llegar al primer uso con archivos
 
-1. **F1 — Planificación en consola:** completar revisión y validación local de `/plan`.
-2. **3.2-C — Autenticación local confiable:** completar bootstrap del propietario, control de intentos, clave de attestation y admisión de proof. No usar `getuser()`, UID/GID ni contexto sintético como identidad Atlas.
+1. **F1 — Planificación en consola:** vista previa `/plan` revisada y validada localmente en alcance focalizado (14 tests + compileall); la suite completa de la rama permanece pendiente.
+2. **3.2-C — Autenticación local confiable:** completar el guard de intentos SQLite compartido con política aprobada y provisión de clave HMAC desde configuración secreta confiable. La admisión de proof y la emisión/verificación de `VerifiedIdentityContext` ya están implementadas y validadas en incrementos anteriores. El bootstrap del propietario no debe avanzar hasta resolver el perfil CAM del Grant inicial. No usar `getuser()`, UID/GID ni contexto sintético como identidad Atlas.
 3. **3.2-C4 — Frontera de consola:** construir contexto de operación desde evidencia USER verificada; revalidar dentro de la misma UoW.
 4. **F2 — Workspace read-only:** conectar exclusivamente `workspace.list` y `workspace.read` mediante el gate CAM ya existente, con Project/Environment/association activos, mount confiable y Grant exacto.
 5. **MVP 0.1:** conversación persistente, planes visibles y lectura controlada de un Workspace de prueba. Escritura, shell, Docker, Skills, Broker, agentes y tareas autónomas quedan fuera.
