@@ -340,11 +340,11 @@ QP-01..QP-15 cubre la capa previa de quiescencia del proceso/servicio. No reempl
 
 - R1–R7 fueron aprobadas por el propietario como baseline de diseño.
 - El runner parcial está en `tests/integration/private_unix_listener/run_listener_quiescence_probe.py`; no se ha ejecutado.
-- La cobertura ejecutable actual no equivale a QP-01..QP-15 completos; doce escenarios permanecen explícitamente INCOMPLETE y QP-01/QP-02 no emiten QUIESCENT.
+- QP-11 tiene una implementación de supervisor temporal interno al harness, revisada estáticamente pero no validada. El resto de la matriz no está completo; QP-01/QP-02 no emiten QUIESCENT.
 - El runner crea recursos únicamente cuando se ejecuta manualmente con confirmación explícita en la VM desechable; durante esta sesión no se creó ninguna unidad, cgroup, usuario, grupo, ruta o servicio en un host.
 - No se ejecutaron pruebas, builds, workflows ni probes desde GitHub.
 - No se modificó `main`, `atlas-admin/1`, el handler IPC, SQLite ni el host.
-- Siguiente fase: revisión estática del código, completar QP-01/QP-02/QP-05/QP-06/QP-07/QP-08/QP-09/QP-10/QP-11/QP-13/QP-14/QP-15 y validar el protocolo de reporte/cleanup antes de autorizar ejecución local.
+- Siguiente fase: revisión estática integral del runner, completar QP-01/QP-02/QP-05/QP-06/QP-07/QP-08/QP-09/QP-10/QP-13/QP-14/QP-15 y validar el protocolo de reporte/cleanup antes de autorizar ejecución local.
 
 ## 12. Referencias
 
