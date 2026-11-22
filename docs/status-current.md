@@ -1135,3 +1135,16 @@ Se adaptó estáticamente el runner para iniciar cada unidad como root con un bo
 Commits de esta corrección: runner `48345527fb000d33127abbc3b8106af00a789f43`, ajuste de verificaciones `79d61323d136360b4cbca73245e81520480c386b` y NNP incondicional `da3bd2213ce25590941fcb66636f116f8f612ba8`; diseño `b50720019733588fc961f126222708d36076dfa6` / `f0199d04691671bf9036c4614fb6ec61d28e097a`; README `b67af4a0e0fd57094751394e7a9b139906d0a84e` / `848a3892aa58db2fe6451c90ad22eaa9fad1a397`. Revisión estática únicamente: no se ejecutaron tests, builds, workflows ni probes desde GitHub.
 
 **Siguiente gate:** el propietario actualiza el checkout de `experiment/a-ipc-01-private-unix-listener-probe`, verifica HEAD y worktree limpio, ejecuta primero la suite local y solo después el probe en `Atlas-VM-test`. No repetir el probe antes de verificar que el nuevo HEAD contiene el launcher. No ejecutar en `greed`. A-THREAT-05 sigue abierta; no se aprueba stale recovery, listener persistente, cleanup automático ni despliegue.
+
+
+### A-IPC-05 — corrección de la salida D-Bus GetUnit (2026-11-22)
+
+La inspección de solo lectura del intento fallido f72ef01f-7a36-41f4-a848-53d94fac9b58 confirmó que la unidad transient atlas-qp-7277d5973cb5.service sigue cargada en estado loaded/failed/failed, sin procesos, cgroup ni jobs activos. No hay bloqueo activo observado sobre maintenance.lock; el marcador y el informe conservan las identidades previamente registradas. El gate sigue retenido y no se ha realizado cleanup.
+
+El propietario consultó directamente Manager.GetUnit y Manager.ListUnitsByNames con busctl --json=short. GetUnit devolvió type=o y data=[object_path]. Esto confirma que el argumento de salida de tipo object-path también se envuelve en el array exterior data de busctl JSON. La función unit_path() lo trataba incorrectamente como una cadena directa, mientras dbus_array_output() ya aplicaba la regla correcta a métodos con argumento array.
+
+Se corrigió unit_path() para exigir signature o, exactamente un elemento en data, tipo string para ese elemento y prefijo de object path esperado. La función devuelve el único path validado. No se relaja ninguna validación ni se adopta una unidad distinta.
+
+Commit de código: e7d57b584fc9ad5082c1476640799c559b4285f6.
+
+Estado: corrección revisada estáticamente; suite local y probe aún no ejecutados por el propietario. El estado residual del intento anterior se mantiene intacto. No ejecutar stop/reset-failed, borrar marcador/sandbox, liberar el gate ni repetir el probe hasta validar la corrección y diseñar una recuperación específica. A-THREAT-05 sigue abierta; no se autoriza stale recovery, listener persistente, cleanup automático ni despliegue.
