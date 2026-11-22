@@ -165,6 +165,6 @@ La revisión adicional del adaptador y sus pruebas produjo estos ajustes:
 - Se añadieron regresiones del servicio para demostrar que la indisponibilidad al completar fallo no emite proof y que la indisponibilidad al completar éxito nunca devuelve la referencia raw, aunque la metadata del proof ya se haya confirmado.
 - El instante de reserva se toma después de resolver el issuer, evitando consumir TTL durante la UoW inicial.
 
-**Revisión:** lectura estática de los archivos de puerto, adaptador, migración, servicio, exportaciones SQLite y pruebas nuevas/actualizadas. La comparación GitHub confirma que la rama de trabajo está 78 commits por delante y 0 por detrás de `main`; los cambios de este incremento permanecen únicamente en `work/atlas-mvp-runtime`.
+**Revisión:** lectura estática de los archivos de puerto, adaptador, migración, servicio, exportaciones SQLite y pruebas nuevas/actualizadas. La comparación GitHub confirma que la rama de trabajo está por delante de `main` y no está detrás; los cambios de este incremento permanecen únicamente en `work/atlas-mvp-runtime`.
 
 **Validación local pendiente:** no se ejecutaron tests, compileall, migraciones ni workflows desde GitHub. La prueba multiproceso usa el contexto `spawn` y debe comprobarse en el entorno Debian del propietario. No se debe considerar aprobada la implementación hasta recibir sus resultados.
