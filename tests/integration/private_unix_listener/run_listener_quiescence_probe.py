@@ -585,6 +585,10 @@ def run_probe(args: argparse.Namespace) -> dict:
             os.mkdir(BASE, 0o711)
             base_created = True
             os.chown(BASE, 0, 0)
+            os.chmod(BASE, 0o711)
+            base_info = os.stat(BASE, follow_symlinks=False)
+            if not stat.S_ISDIR(base_info.st_mode) or base_info.st_uid != 0 or base_info.st_gid != 0 or stat.S_IMODE(base_info.st_mode) != 0o711:
+                raise Incomplete("new /run/atlas-qp directory identity/mode is invalid")
         except FileExistsError:
             info = os.stat(BASE, follow_symlinks=False)
             if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_gid != 0 or stat.S_IMODE(info.st_mode) != 0o711:
@@ -723,9 +727,9 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["cleanup"]["resources"].append(cleanup6)
         if not cleanup6["unit_inactive"] or not cleanup6["cgroup_empty"] or not cleanup6["endpoint_removed"]:
             raise Incomplete("QP-06 negative fixture cleanup failed")
-        report["scenarios"].append({"id": "QP-06", "status": "PASS",
+        report["scenarios"].append({"id": "QP-06", "status": "INCOMPLETE",
                                     "decision": "ABORT_NOT_QUIESCENT",
-                                    "reason": "Delegate=yes is rejected before quiescence"})
+                                    "reason": "Delegate=yes rejection observed; Delegate=no capability/positive control remains unverified"})
 
         # QP-07: parser fault matrix; malformed data is never normalized to zero.
         parser_cases = [
@@ -744,8 +748,8 @@ def run_probe(args: argparse.Namespace) -> dict:
             if actual != expected:
                 raise ProbeError("QP-07 cgroup.events parser fault matrix mismatch")
             parser_results.append({"input_bytes": len(raw), "accepted": actual})
-        report["scenarios"].append({"id": "QP-07", "status": "PASS",
-                                    "reason": "strict parser accepts only complete known-key records",
+        report["scenarios"].append({"id": "QP-07", "status": "INCOMPLETE",
+                                    "reason": "parser fault matrix covered; partial-read, permission and live cgroup.events failure injection remain pending",
                                     "observations": parser_results})
 
         # QP-12: direct root restart is detected by InvocationID, not trusted.
