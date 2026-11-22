@@ -1112,12 +1112,19 @@ to remove real socket pathnames.
   kernel `6.12.117+deb13-amd64`.
 - The approved fixture identities are reserved numeric IDs:
   SERVICE UID/GID 2005:2005 and OTHER UID/GID 2006:2006. They do not require
-  NSS account/group entries. The runner configures numeric `User=`/`Group=`
-  values and verifies the fixture process's real/effective UID/GID and
-  supplementary groups. It does not create, modify, or query system users/groups.
-- `libseccomp`, `libsystemd`, `busctl`, `systemd-run` and `systemctl`
-  must already be installed. The preflight does not install packages or alter
-  host configuration.
+  NSS account/group entries. Because systemd resolves `User=`/`Group=` through
+  NSS, each transient unit starts as root with exactly
+  `CAP_SETUID`, `CAP_SETGID` and `CAP_SETPCAP` in its capability bounding set,
+  and no ambient capabilities. `/usr/bin/setpriv` then clears supplementary
+  groups, switches to the requested numeric UID/GID, clears inheritable,
+  ambient and bounding capabilities, and execs Python. The runner verifies
+  systemd's root bootstrap identity separately from the fixture's actual
+  kernel-observed UID/GID, empty supplementary groups and zero capability
+  sets. `setpriv` must be a regular root-owned executable not writable by
+  group/others. The runner does not create, modify or query system users/groups.
+- `libseccomp`, `libsystemd`, `busctl`, `systemd-run`, `systemctl` and the
+  protected `/usr/bin/setpriv` executable must already be installed. The
+  preflight does not install packages or alter host configuration.
 - The owner must explicitly confirm the VM is disposable. The command-line
   flag is an acknowledgement; the runner cannot prove that the host is a VM.
 
