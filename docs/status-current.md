@@ -1055,3 +1055,12 @@ workflows ni probes.
 - Último commit del runner: `cbbc5a10384846364d60b25ace8f3d48343476cf`. La guía `tests/integration/private_unix_listener/README.md` y el diseño §9.4 quedaron alineados con identidades numéricas sin NSS. Último commit de guía: `8968207ac258c58979974b2a84e76cfd23b25a70`. La rama/HEAD deben volver a consultarse antes de ejecutar. El worktree y la rama exacta se verifican en preflight.
 - Estado: cambio estático publicado; no se han ejecutado pruebas, builds, workflows ni probes desde GitHub. Pendiente de ejecución del propietario exclusivamente en `Atlas-VM-test`, con checkout limpio en el HEAD actualizado. Nunca en `greed`.
 - A-THREAT-05 continúa abierta; no hay autorización de stale recovery, listener persistente, cleanup automático de endpoints Atlas ni despliegue. La corrección de identidad numérica aún no está validada por el propietario.
+
+
+### A-IPC-05 — corrección de formato Debian en preflight (2026-11-22)
+
+El propietario ejecutó el runner en `Atlas-VM-test` desde el checkout limpio de la rama experimental y obtuvo `overall=INCOMPLETE` antes de iniciar escenarios. El preflight rechazó `busctl --version` porque el parser esperaba `systemd 257.13`, mientras Debian 13 informa `systemd 257 (257.13-1~deb13u1)`. La consulta D-Bus del PID 1 devolvió `257.13-1~deb13u1`, compatible con el perfil fijado.
+
+Se corrigió únicamente la normalización del formato parentizado de Debian en `run_listener_quiescence_probe.py`: extrae la versión upstream/paquete entre paréntesis y conserva la exigencia estricta de 257.13. No se amplió el perfil a systemd 257 genérico ni se modificó la VM. Commit: `0f767347d50936195def9139605bdc45c30bfd0a`.
+
+La primera ejecución no inició escenarios (`scenarios=[]`, `systemd_socket_activation_tested=false`) y no realizó mutación de pathname. No hubo evidencia de fallo del listener. La corrección solo tiene revisión estática; no se ejecutaron pruebas, builds, workflows ni probes desde GitHub. Pendiente: actualizar el checkout de `Atlas-VM-test`, revisar rama/HEAD/worktree y ejecutar las pruebas locales antes de repetir el probe. A-THREAT-05 permanece abierta; no hay aprobación de stale recovery, listener persistente, cleanup automático ni despliegue.
