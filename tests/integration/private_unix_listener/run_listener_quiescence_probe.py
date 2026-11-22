@@ -1487,8 +1487,12 @@ def _verify_fixture_quiescent(name: str, initial: dict, fixture_record: dict) ->
 def _stop_and_cleanup(name: str, initial: dict, socket_path: Path | None, ready_path: Path | None,
                       run_dir_fd: int, report: dict, *, already_stopped: bool = False,
                       cgroup_empty_confirmed: bool = False) -> dict:
-    cleanup = {"unit": name, "stop_requested": False, "unit_inactive": already_stopped,
-               "cgroup_empty": cgroup_empty_confirmed, "endpoint_removed": False}
+    cleanup = {
+        "unit": name, "stop_requested": False,
+        "unit_inactive": False, "cgroup_empty": False,
+        "prior_cgroup_empty_confirmed": cgroup_empty_confirmed,
+        "endpoint_removed": False,
+    }
     try:
         if not already_stopped:
             current = unit_snapshot(name)
@@ -1497,12 +1501,12 @@ def _stop_and_cleanup(name: str, initial: dict, socket_path: Path | None, ready_
             systemd_stop(name)
             cleanup["stop_requested"] = True
             final = wait_inactive(name, time.monotonic() + STOP_TIMEOUT + 3, expected_invocation=initial["InvocationID"], control_group=initial["ControlGroup"])
-            cleanup["unit_inactive"] = final["ActiveState"] == "inactive"
-        if not cleanup["unit_inactive"]:
-            raise Incomplete("fixture unit is not confirmed inactive")
+            if final["ActiveState"] != "inactive":
+                raise Incomplete("fixture unit did not become inactive")
         fixture_record = _ACTIVE_FIXTURES.get(name, {})
         observer = fixture_record.get("cgroup_observer")
         final_snapshot, events = _verify_fixture_quiescent(name, initial, fixture_record)
+        cleanup["unit_inactive"] = True
         cleanup["cgroup_empty"] = True
         cleanup["final_invocation_id"] = final_snapshot["InvocationID"]
         cleanup["final_cgroup_identity"] = events["identity"]
