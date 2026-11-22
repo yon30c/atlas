@@ -1339,9 +1339,9 @@ def unlink_verified_regular_file(dir_fd: int, name: str, expected: dict,
             or actual != expected
         ):
             raise Incomplete("regular evidence file identity changed; preserving it")
+        os.unlink(name, dir_fd=dir_fd)
     finally:
         os.close(fd)
-    os.unlink(name, dir_fd=dir_fd)
 
 
 def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=False,
