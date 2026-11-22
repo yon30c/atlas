@@ -2704,7 +2704,6 @@ def run_probe(args: argparse.Namespace) -> dict:
                 if marker_identity is None:
                     raise Incomplete("sticky marker identity evidence is unavailable")
                 unlink_verified_regular_file(base_fd, marker.name, marker_identity, 0, 0)
-                report["gate"]["marker_removed_after_cleanup"] = True
             except Exception as exc:
                 report["cleanup"]["safe_to_release_gate"] = False
                 report["overall"] = "INCOMPLETE"
