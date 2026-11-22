@@ -16,7 +16,12 @@ from atlas.authentication.native import (
     NativeProofReference,
 )
 from atlas.core.errors import AtlasError, ConcurrencyError, ContractError
-from atlas.ports.authentication_attempt_guard import AuthenticationAttemptGuardPort
+from atlas.ports.authentication_attempt_guard import (
+    AuthenticationAttemptDenied,
+    AuthenticationAttemptGuardPort,
+    AuthenticationAttemptReservation,
+    AuthenticationAttemptReservationError,
+)
 from atlas.ports.clock import Clock
 
 
@@ -74,7 +79,7 @@ class NativeAuthenticationGrant:
 
 
 class NativeAuthenticationService:
-    """Verifies native credentials and issues audience-bound one-shot proofs."""
+    """Verifies credentials outside write transactions and issues one-shot proofs."""
 
     def __init__(
         self,
@@ -95,9 +100,12 @@ class NativeAuthenticationService:
             raise ContractError("password_hasher no implementa needs_rehash")
         if not isinstance(config, NativeAuthenticationConfig):
             raise ContractError("config debe ser NativeAuthenticationConfig")
-        for method in ("is_allowed", "record_failure", "record_success"):
-            if not callable(getattr(attempt_guard, method, None)):
-                raise ContractError("attempt_guard no implementa el contrato requerido")
+        required = (
+            "begin_attempt", "complete_failure",
+            "complete_success", "abandon_attempt",
+        )
+        if any(not callable(getattr(attempt_guard, method, None)) for method in required):
+            raise ContractError("attempt_guard no implementa el contrato de reservas")
         if not callable(getattr(clock, "now", None)):
             raise ContractError("clock no implementa now()")
 
@@ -106,8 +114,6 @@ class NativeAuthenticationService:
         self._guard = attempt_guard
         self._clock = clock
         self._config = config
-        # Generated once per process from the same configured Argon2id policy.
-        # It is never persisted and is used only for unknown login handles.
         try:
             self._dummy_phc = self._hasher.hash_password(_DUMMY_PASSWORD)
         except Exception as exc:
@@ -124,13 +130,24 @@ class NativeAuthenticationService:
             raise AuthenticationUnavailable("reloj UTC no disponible")
         return value
 
+    def _abandon(self, reservation: AuthenticationAttemptReservation | None) -> None:
+        if reservation is None:
+            return
+        try:
+            self._guard.abandon_attempt(reservation)
+        except Exception:
+            # The reservation has a bounded 120-second TTL. Failure to release
+            # it cannot authorize a proof; the guard remains fail-closed.
+            pass
+
     def authenticate(self, login_handle: str, password: str) -> NativeAuthenticationGrant:
-        """Verify credentials and return a proof reference after durable commit."""
+        """Verify credentials and return a proof only after both commits succeed."""
         handle = LoginHandle(login_handle)
         validate_password_for_verification(password)
         now = self._now(self._clock)
 
-        # Resolve only the configured realm. Neither realm nor audience is request data.
+        # Resolve the configured realm in a short, read-only UoW. The guard and
+        # Argon2id must never run while this SQLite BEGIN IMMEDIATE is held.
         try:
             with self._unit_of_work_factory() as unit:
                 issuer = unit.native_identity.get_native_issuer(self._config.realm)
@@ -140,63 +157,91 @@ class NativeAuthenticationService:
                     or getattr(issuer.profile, "value", None) != "NATIVE_AUTHORITY_PROOF"
                 ):
                     raise AuthenticationFailed("autenticación no válida")
+                authenticator = unit.native_authentication.get_native_authenticator_by_login_handle(
+                    issuer.issuer_id, handle.value
+                )
+        except (AuthenticationFailed, ContractError):
+            raise
+        except Exception as exc:
+            raise AuthenticationUnavailable("autoridad de autenticación no disponible") from exc
 
+        try:
+            reservation = self._guard.begin_attempt(
+                issuer.issuer_id, handle.value, at=now
+            )
+        except AuthenticationAttemptDenied:
+            raise AuthenticationFailed("autenticación no válida") from None
+        except Exception as exc:
+            raise AuthenticationUnavailable("control de intentos no disponible") from exc
+
+        try:
+            encoded_hash = (
+                self._dummy_phc if authenticator is None
+                else authenticator.password_hash_phc
+            )
+            try:
+                password_matches = self._hasher.verify_password(encoded_hash, password)
+            except Exception as exc:
+                raise AuthenticationUnavailable(
+                    "verificador de contraseña no disponible"
+                ) from exc
+
+            if (
+                authenticator is None
+                or not password_matches
+                or authenticator.status is not NativeAuthenticatorStatus.ACTIVE
+            ):
                 try:
-                    allowed = self._guard.is_allowed(
-                        issuer.issuer_id, handle.value, at=now
+                    self._guard.complete_failure(
+                        reservation, at=self._now(self._clock)
                     )
+                    reservation = None
                 except Exception as exc:
                     raise AuthenticationUnavailable(
                         "control de intentos no disponible"
                     ) from exc
-                if not allowed:
-                    raise AuthenticationFailed("autenticación no válida")
+                raise AuthenticationFailed("autenticación no válida")
 
-                authenticator = unit.native_authentication.get_native_authenticator_by_login_handle(
-                    issuer.issuer_id, handle.value
+            try:
+                needs_rehash = self._hasher.needs_rehash(authenticator.password_hash_phc)
+                replacement_phc = (
+                    self._hasher.hash_password(password) if needs_rehash else None
                 )
-                encoded_hash = (
-                    self._dummy_phc
-                    if authenticator is None
-                    else authenticator.password_hash_phc
+            except Exception as exc:
+                raise AuthenticationUnavailable(
+                    "verificador de contraseña no disponible"
+                ) from exc
+
+            authenticated_at = self._now(self._clock)
+            expires_at = authenticated_at + self._config.proof_ttl
+            reference = NativeProofReference.generate()
+            proof_id = str(uuid4())
+
+            # Re-read all mutable authority state after Argon2id. The final
+            # transaction is short and contains only CAS/hash metadata + proof.
+            with self._unit_of_work_factory() as unit:
+                current_issuer = unit.native_identity.get_native_issuer(
+                    self._config.realm
                 )
-                try:
-                    password_matches = self._hasher.verify_password(encoded_hash, password)
-                except Exception as exc:
-                    raise AuthenticationUnavailable(
-                        "verificador de contraseña no disponible"
-                    ) from exc
-
-                if (
-                    authenticator is None
-                    or not password_matches
-                    or authenticator.status is not NativeAuthenticatorStatus.ACTIVE
-                ):
-                    try:
-                        self._guard.record_failure(
-                            issuer.issuer_id, handle.value, at=now
-                        )
-                    except Exception as exc:
-                        raise AuthenticationUnavailable(
-                            "control de intentos no disponible"
-                        ) from exc
-                    raise AuthenticationFailed("autenticación no válida")
-
                 current = unit.native_authentication.get_native_authenticator(
                     authenticator.authenticator_id
                 )
                 if (
-                    current is None
+                    current_issuer is None
+                    or current_issuer.issuer_id != issuer.issuer_id
+                    or getattr(current_issuer.status, "value", None) != "ACTIVE"
+                    or getattr(current_issuer.profile, "value", None) != "NATIVE_AUTHORITY_PROOF"
+                    or current is None
                     or current.issuer_id != issuer.issuer_id
                     or current.native_subject != authenticator.native_subject
+                    or current.login_handle != authenticator.login_handle
                     or current.status is not NativeAuthenticatorStatus.ACTIVE
                     or current.credential_revision != authenticator.credential_revision
                 ):
                     raise AuthenticationFailed("autenticación no válida")
 
-                if self._hasher.needs_rehash(current.password_hash_phc):
+                if replacement_phc is not None:
                     try:
-                        replacement_phc = self._hasher.hash_password(password)
                         current = unit.native_authentication.update_native_password_hash(
                             current.authenticator_id,
                             expected_credential_revision=current.credential_revision,
@@ -204,18 +249,11 @@ class NativeAuthenticationService:
                         )
                     except ConcurrencyError as exc:
                         raise AuthenticationFailed("autenticación no válida") from exc
-                    except Exception as exc:
-                        raise AuthenticationUnavailable(
-                            "actualización de credencial no disponible"
-                        ) from exc
 
-                authenticated_at = self._now(self._clock)
-                expires_at = authenticated_at + self._config.proof_ttl
-                reference = NativeProofReference.generate()
                 proof = NativeAuthenticationProof(
-                    proof_id=str(uuid4()),
+                    proof_id=proof_id,
                     reference_digest=reference.digest,
-                    issuer_id=issuer.issuer_id,
+                    issuer_id=current_issuer.issuer_id,
                     native_subject=current.native_subject,
                     authenticator_id=current.authenticator_id,
                     credential_revision=current.credential_revision,
@@ -223,21 +261,15 @@ class NativeAuthenticationService:
                     expires_at=expires_at,
                     audience=self._config.audience,
                 )
-                try:
-                    unit.native_authentication.create_native_authentication_proof(proof)
-                    unit.commit()
-                except Exception as exc:
-                    raise AuthenticationUnavailable(
-                        "no se pudo emitir la prueba de autenticación"
-                    ) from exc
+                unit.native_authentication.create_native_authentication_proof(proof)
+                unit.commit()
 
-            # Never clear throttling state before the proof transaction commits.
+            # A persisted proof is not returned unless the guard also commits
+            # the success/reset. If this fails, the raw reference stays private.
             try:
-                self._guard.record_success(
-                    issuer.issuer_id, handle.value, at=authenticated_at
-                )
-            except Exception as exc:
-                # The proof remains unreturned and therefore unusable by the caller.
+                self._guard.complete_success(reservation, at=authenticated_at)
+                reservation = None
+            except (AuthenticationAttemptReservationError, Exception) as exc:
                 raise AuthenticationUnavailable(
                     "control de intentos no disponible"
                 ) from exc
@@ -247,11 +279,13 @@ class NativeAuthenticationService:
                 authenticated_at=authenticated_at,
                 expires_at=expires_at,
             )
-        except (AuthenticationFailed, AuthenticationUnavailable):
-            raise
-        except ContractError:
+        except (AuthenticationFailed, AuthenticationUnavailable, ContractError):
+            self._abandon(reservation)
             raise
         except Exception as exc:
+            self._abandon(reservation)
             raise AuthenticationUnavailable(
                 "servicio de autenticación no disponible"
             ) from exc
+        finally:
+            self._abandon(reservation)
