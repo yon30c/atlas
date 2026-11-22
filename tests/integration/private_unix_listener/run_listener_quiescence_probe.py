@@ -748,7 +748,7 @@ def install_seccomp_denials(*, deny_fork: bool = False, deny_fd_escape: bool = F
         if deny_fork:
             names.extend((b"fork", b"vfork", b"clone", b"clone3"))
         if deny_fd_escape:
-            names.extend((b"dup", b"dup2", b"dup3", b"sendmsg", b"recvmsg", b"sendmmsg", b"recvmmsg", b"io_uring_setup", b"io_uring_enter", b"io_uring_register"))
+            names.extend((b"dup", b"dup2", b"dup3", b"sendmsg", b"recvmsg", b"sendmmsg", b"recvmmsg", b"pidfd_getfd", b"io_uring_setup", b"io_uring_enter", b"io_uring_register"))
         for name in names:
             number = lib.seccomp_syscall_resolve_name(name)
             if number < 0 or lib.seccomp_rule_add(context, action_deny, number, 0) != 0:
@@ -788,6 +788,20 @@ def run_fd_policy_checks(listener: socket.socket, *, deny_fork: bool, deny_fd_es
     libc.syscall.restype = ctypes.c_long
     libc.vfork.restype = ctypes.c_int
     observations = {"no_new_privileges_set_before_filter": True}
+    if deny_fd_escape:
+        pidfd = libc.syscall(ctypes.c_long(434), ctypes.c_int(os.getpid()), ctypes.c_uint(0))
+        if pidfd < 0:
+            raise Incomplete("pidfd_open baseline failed; cannot test pidfd_getfd denial")
+        try:
+            duplicate_before_filter = libc.syscall(
+                ctypes.c_long(438), ctypes.c_int(pidfd),
+                ctypes.c_int(listener.fileno()), ctypes.c_uint(0),
+            )
+            if duplicate_before_filter < 0:
+                raise Incomplete("pidfd_getfd baseline was not permitted before seccomp")
+            os.close(duplicate_before_filter)
+        finally:
+            os.close(pidfd)
     install_seccomp_denials(deny_fork=deny_fork, deny_fd_escape=deny_fd_escape)
     if deny_fork:
         results = {}
@@ -839,6 +853,16 @@ def run_fd_policy_checks(listener: socket.socket, *, deny_fork: bool, deny_fd_es
             "io_uring_enter": _raw_syscall_errno(libc, 426, ctypes.c_int(-1), ctypes.c_uint(0), ctypes.c_uint(0), ctypes.c_uint(0), ctypes.c_void_p(0), ctypes.c_size_t(0)),
             "io_uring_register": _raw_syscall_errno(libc, 427, ctypes.c_int(-1), ctypes.c_uint(0), ctypes.c_void_p(0), ctypes.c_uint(0)),
         }
+        pidfd = libc.syscall(ctypes.c_long(434), ctypes.c_int(os.getpid()), ctypes.c_uint(0))
+        if pidfd < 0:
+            raise Incomplete("pidfd_open failed after seccomp; cannot verify pidfd_getfd denial")
+        try:
+            results["pidfd_getfd"] = _raw_syscall_errno(
+                libc, 438, ctypes.c_int(pidfd),
+                ctypes.c_int(fd), ctypes.c_uint(0),
+            )
+        finally:
+            os.close(pidfd)
         if fcntl.fcntl(fd, fcntl.F_GETFD) < 0:
             raise Incomplete("non-dup fcntl operation was unexpectedly blocked")
         read_fd, write_fd = os.pipe()
