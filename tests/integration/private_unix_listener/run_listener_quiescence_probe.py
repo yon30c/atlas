@@ -104,6 +104,11 @@ def bounded_run(argv: list[str], timeout: float = 5.0, limit: int = MAX_DBUS) ->
             raise Incomplete(f"{argv[0]} exceeded {timeout:.1f}s timeout")
         returncode = process.wait(timeout=remaining)
     except (OSError, subprocess.TimeoutExpired) as exc:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait()
         raise Incomplete(f"{argv[0]} subprocess supervision failed: {type(exc).__name__}") from exc
     except BaseException:
         try:
