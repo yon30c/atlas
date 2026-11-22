@@ -1112,8 +1112,8 @@ def preflight() -> dict:
         if not path_accessible_by(python_path, uid, gid, file_permission=0o1):
             raise Incomplete(f"Python interpreter path is not traversable/executable by {label}")
     bus_version = bounded_run(["busctl", "--version"], timeout=3.0, limit=4096)
-    if b"systemd 257" not in bus_version:
-        raise Incomplete("systemd/busctl version is outside the 257 profile")
+    if b"systemd 257.13" not in bus_version:
+        raise Incomplete("systemd/busctl version is outside the pinned 257.13 profile")
     root, mount = cgroup_mount()
     if root != Path("/"):
         raise Incomplete("cgroup v2 mount does not expose the unified hierarchy root")
@@ -1257,7 +1257,7 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
         properties.append("--property=CapabilityBoundingSet=")
     command = [
         "systemd-run", "--system", "--no-block", f"--unit={name}",
-        *properties, sys.executable, "-I", str(Path(__file__).resolve()),
+        *properties, str(Path(sys.executable).resolve()), "-I", str(Path(__file__).resolve()),
         "--fixture", "--socket", str(socket_path), "--ready", str(ready_path),
     ]
     if hold_child:
