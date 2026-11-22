@@ -7,9 +7,7 @@ from atlas.adapters.console_planning import PlanningConsoleCommands
 from atlas.assistant.planning import (
     AssistantIntent,
     AssistantPlan,
-    IntentInterpretation,
     IntentKind,
-    InterpretationStatus,
     PlanStep,
 )
 from atlas.assistant.request_planner import (
