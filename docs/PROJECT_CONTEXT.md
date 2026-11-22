@@ -1,10 +1,10 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-21 (A-IPC-04 validado por el propietario: 12/12 PASS en `375fb00a3fee230a57f89ffa7897a29309ff1dd2`; prueba unitaria `test_private_listener_procfs_read.py` PASS reportada antes del probe, commit exacto no confirmado. R1–R7 del contrato listener-quiescence/1 aprobadas como baseline; runner QP parcial implementado, sin ejecución).
+> **Última actualización:** 2026-11-22 (A-IPC-04 validado por el propietario: 12/12 PASS en `375fb00a3fee230a57f89ffa7897a29309ff1dd2`; prueba unitaria `test_private_listener_procfs_read.py` PASS reportada antes del probe, commit exacto no confirmado. R1–R7 del contrato listener-quiescence/1 aprobadas como baseline; runner QP parcial implementado, sin ejecución).
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
-## Estado operativo vigente — 2026-11-21
+## Estado operativo vigente — 2026-11-22
 
 > Esta sección es la referencia operativa prioritaria. Las secciones posteriores conservan decisiones y snapshots históricos; cuando un dato histórico contradiga este bloque, prevalece este bloque para el estado actual.
 
