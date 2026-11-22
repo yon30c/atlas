@@ -1377,10 +1377,10 @@ el asistente no ejecutó pruebas, builds, workflows ni probes.
 El propietario autorizó implementar el runner en la rama experiment/a-ipc-01-private-unix-listener-probe y aprobó un supervisor temporal de prueba para QP-11. Archivo: tests/integration/private_unix_listener/run_listener_quiescence_probe.py. El runner implementa preflight estricto, unidades .service transitorias, D-Bus tipado (GetUnit, propiedades, Unit.Job, Manager.ListJobs, ListUnitsByNames), cgroup v2 con observers FD fijados, gate flock/marcador sticky, parser estricto y cleanup bifásico por identidad. El reporte JSON es acotado por escenario/total y registra timestamps monotónicos.
 
 Cobertura implementada:
-- QP-01/02: seccomp anti-fork/clone/vfork/clone3, duplicación, SCM_RIGHTS e io_uring; QP-02 filtra también el auxiliar creado antes del listener. Dos lecturas cgroup separadas por 50 ms y correlación de invocación, jobs, MainPID, ControlGroup e identidad.
+- QP-01/02: seccomp anti-fork/clone/vfork/clone3, duplicación, pidfd_getfd, SCM_RIGHTS e io_uring; QP-02 filtra también el auxiliar creado antes del listener. Dos lecturas cgroup separadas por 50 ms y correlación de invocación, jobs, MainPID, ControlGroup e identidad.
 - QP-03/04: transición y job stop pendiente con proceso que ignora SIGTERM; ABORT hasta vaciar el cgroup.
 - QP-05/06/07: separación de ControlGroup; rechazo de Delegate=yes y control Delegate=no con NNP, ProtectControlGroups, capabilities vacías, CAP_SYS_ADMIN y permisos; parser cgroup.events con lecturas parciales/errores.
-- QP-08/09/10: denegación de creación de procesos y FD escape (incluido io_uring); execve mismo PID con CLOEXEC.
+- QP-08/09/10: denegación de creación de procesos y FD escape (pidfd_getfd e io_uring incluidos); execve mismo PID con CLOEXEC.
 - QP-11: _TestLifecycleSupervisor interno valida token, flock, segundo actor, caída simulada, marcador sticky y restart bloqueado; la simulación cierra/reabre la conexión sd-bus que mantiene RefUnit. No es un proceso supervisor independiente ni producto Atlas.
 - QP-12: restart directo de root fuera del supervisor; detecta InvocationID sustituto y mantiene separados los observers cgroup antiguo/nuevo. Root permanece en TCB.
 - QP-13: proceso OTHER recibe el listener FD por SCM_RIGHTS; demuestra que cgroup del servicio vacío no basta mientras el holder conserva el FD. No es socket activation.
