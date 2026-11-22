@@ -131,7 +131,7 @@ Esta sección actualiza el estado de §§1–9, que documentan la auditoría bas
 - Puerto explícito `AuthenticationAttemptGuardPort` con reserva opaca, expiración, finalización de fallo/éxito y abandono.
 - Migración `CORE_SCHEMA_V28` con tablas separadas para reservas y fallos, índices por cuenta/expiración/ventana.
 - Registro de V28 en `SQLITE_MIGRATIONS` y exportación del símbolo desde el paquete SQLite.
-- Adaptador `SQLiteAuthenticationAttemptGuard` con transacciones independientes `BEGIN IMMEDIATE`, digest de cuenta con separación de dominio, TTL de 120 s, máximo de dos reservas y política 1/2/4/7/15. La recolección oportunista elimina en lotes de hasta 256 reservas vencidas y hasta 256 fallos ya vencidos, incluso para cuentas inactivas.
+- Adaptador `SQLiteAuthenticationAttemptGuard` con transacciones independientes `BEGIN IMMEDIATE`, digest de cuenta con separación de dominio y normalización defensiva del LoginHandle, TTL de 120 s, máximo de dos reservas y política 1/2/4/7/15. La recolección oportunista elimina en lotes de hasta 256 reservas vencidas y hasta 256 fallos ya vencidos, incluso para cuentas inactivas.
 - Servicio reordenado: issuer en UoW breve → reserva → lectura de autenticador en otra UoW → Argon2id fuera de UoW → relectura y validación de estado/revisión → persistencia del proof → confirmación de éxito del guard antes de devolver la referencia.
 - Pruebas unitarias del servicio corregidas y nuevo archivo de pruebas para migración, concurrencia entre threads y procesos separados, backoff, ventana, expiración, limpieza de cuentas inactivas, abandono, reset y consumo único.
 
