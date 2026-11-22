@@ -147,6 +147,32 @@ class SQLiteAuthenticationAttemptGuardTests(unittest.TestCase):
         self.assertEqual(reservations[0]["reservation_id"], second.reservation_id)
         self.guard.abandon_attempt(second)
 
+
+    def test_bounded_cleanup_removes_expired_records_for_inactive_accounts(self):
+        stale_reservation = self.guard.begin_attempt(
+            self.issuer_id, self.handle, at=self.now
+        )
+        self.guard.complete_failure(
+            self.guard.begin_attempt(
+                "issuer-other", "other.owner", at=self.now
+            ),
+            at=self.now,
+        )
+        # The first reservation remains pending; its expiry and the other
+        # account's expired failure are cleaned during an unrelated request.
+        at = self.now + timedelta(minutes=16)
+        fresh = self.guard.begin_attempt(
+            "issuer-third", "third.owner", at=at
+        )
+        reservations = self._rows("native_authentication_attempt_reservations")
+        failures = self._rows("native_authentication_attempt_failures")
+        self.assertEqual(len(reservations), 1)
+        self.assertEqual(reservations[0]["reservation_id"], fresh.reservation_id)
+        self.assertEqual(failures, [])
+        with self.assertRaises(AuthenticationAttemptReservationError):
+            self.guard.complete_failure(stale_reservation, at=at)
+        self.guard.abandon_attempt(fresh)
+
     def test_reservation_cannot_be_completed_twice(self):
         reservation = self.guard.begin_attempt(
             self.issuer_id, self.handle, at=self.now
