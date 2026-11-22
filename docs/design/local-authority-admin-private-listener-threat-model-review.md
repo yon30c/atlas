@@ -204,3 +204,12 @@ El siguiente paso ya no es redactar el diseño inicial: es obtener la decisión 
 El propietario confirmó EUID 0 como requisito del frontend administrativo; la allowlist de diseño queda exactamente `{0}`. Esto cierra la decisión de política del propietario, pero no demuestra el EUID del futuro entrypoint, que aún no existe/revisado. La política se valida en ambos extremos: cliente EUID 0 antes de conectar y servidor `SO_PEERCRED.uid == 0` antes de `recv`; el cliente valida el UID de `atlas-runtime` antes de `send`.
 
 A-THREAT-06 cuenta ahora con una especificación de diseño dedicada, pero permanece abierta para implementación hasta probar recorrido completo y resolver la relación entre el descriptor del directorio validado y el pathname usado por `bind()`. A-THREAT-04 queda como residual aceptado bajo TCB-1, condicionado a directorio privado, instancia única y revalidación por descriptor; unlink no es atómico. A-THREAT-05 tiene procedimiento manual candidato publicado, pero sigue bloqueante hasta validar la enumeración de namespaces y el flujo en sandbox.
+
+
+## Actualización A-THREAT-05 — contrato de quiescencia propuesto (2026-11-21)
+
+Se redactó `docs/contracts/local-authority-admin-listener-quiescence-1.md` v1.0-draft. La recomendación para alternativa A es demostrar conjuntamente: unidad de servicio dedicada y exclusiva; cgroup propio sin delegación; stop de todo el grupo; unidad en estado terminal `inactive`; `cgroup.events` con `populated 0`; identidad de invocación estable; puerta que impida start/restart concurrente; y prohibición verificable de fork/FD inheritance/SCM_RIGHTS o cualquier retención del listener fuera del cgroup.
+
+Esta estrategia sustituiría la pretensión de enumerar globalmente namespaces solo para responder si el proceso de servicio sigue vivo, pero no elimina la necesidad de las comprobaciones de pathname/AF_UNIX ni el residual TOCTOU. Un cgroup vacío no prueba ausencia de un descriptor transferido externamente; las invariantes de no delegación son parte de la prueba. Socket activation queda fuera del contrato porque systemd puede retener el FD en el manager; además, su ruta filesystem continúa suspendida por el incidente de colisión documentado.
+
+**Estado:** propuesta para revisión, no aprobada ni probada. A-THREAT-05 sigue abierta. No hay listener persistente, runbook autorizado ni recuperación real.
