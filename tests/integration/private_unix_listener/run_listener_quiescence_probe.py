@@ -1690,7 +1690,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["cleanup"]["resources"].append(cleanup)
         record_scenario(report, {"id": "QP-01", "status": "PASS",
                                     "decision": "QUIESCENT",
-                                    "reason": "listener closed by service; no CAP_SYS_ADMIN/cgroup write; fork/duplication/SCM_RIGHTS/io_uring paths denied; manager inactive and two correlated cgroup snapshots populated=0",
+                                    "reason": "listener closed by service; no CAP_SYS_ADMIN/cgroup write; fork/duplication/pidfd_getfd/SCM_RIGHTS/io_uring paths denied; manager inactive and two correlated cgroup snapshots populated=0",
                                     "observations": {"fd_policy": policy01,
                                                      "capability_evidence": {
                                                          "cap_eff": ready01_data["cap_eff"],
@@ -1752,7 +1752,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             raise Incomplete("QP-02 failed its pre-stop helper or post-stop empty-cgroup check")
         record_scenario(report, {"id": "QP-02", "status": "PASS",
                                     "decision": "QUIESCENT",
-                                    "reason": "pre-listener child was contained in the service cgroup; no CAP_SYS_ADMIN/cgroup write; post-listener fork/duplication/SCM_RIGHTS/io_uring paths denied; stop emptied the correlated cgroup",
+                                    "reason": "pre-listener child was contained in the service cgroup; no CAP_SYS_ADMIN/cgroup write; post-listener fork/duplication/pidfd_getfd/SCM_RIGHTS/io_uring paths denied; stop emptied the correlated cgroup",
                                     "observations": {"fd_policy": policy02,
                                                      "capability_evidence": {
                                                          "cap_eff": ready2_data["cap_eff"],
