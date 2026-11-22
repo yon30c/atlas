@@ -1699,22 +1699,12 @@ def run_probe(args: argparse.Namespace) -> dict:
         })
 
         implemented = {item["id"] for item in report["scenarios"]}
-        reasons = {
-            "QP-03": "pending: stop-deadline/TimeoutStopSec race harness",
-            "QP-04": "pending: deterministic pending-job injection",
-            "QP-05": "pending: dual-unit identity and adapter mismatch injection",
-            "QP-08": "pending: libseccomp syscall-denial fixture",
-            "QP-09": "pending: seccomp FD-duplication/SCM_RIGHTS denial fixture",
-            "QP-10": "pending: same-process exec/CLOEXEC helper",
-            "QP-12": "pending: controlled direct-root restart and InvocationID revalidation",
-            "QP-13": "pending: isolated external SCM_RIGHTS holder control",
-            "QP-14": "pending: deterministic manager/supervisor failure injection",
-            "QP-15": "pending: cgroup identity adapter fault injection",
-        }
         for scenario_id in EXPECTED:
             if scenario_id not in implemented:
-                report["scenarios"].append({"id": scenario_id, "status": "INCOMPLETE",
-                                            "reason": reasons[scenario_id]})
+                report["scenarios"].append({
+                    "id": scenario_id, "status": "INCOMPLETE",
+                    "reason": "scenario was not reached before harness completion",
+                })
     except Exception as exc:
         report["harness_error"] = f"{type(exc).__name__}: {exc}"
         existing = {item["id"] for item in report["scenarios"]}
