@@ -991,24 +991,19 @@ def _stop_and_cleanup(name: str, initial: dict, socket_path: Path | None, ready_
         if not cleanup["cgroup_empty"]:
             raise Incomplete("fixture cgroup remains populated during cleanup")
         if socket_path is not None:
+            if ready_path is None:
+                raise Incomplete("fixture endpoint has no identity record; preserving it")
+            ready = json.loads(ready_path.read_text(encoding="ascii"))
             name_only = socket_path.name
             current_info = os.stat(name_only, dir_fd=run_dir_fd, follow_symlinks=False)
             if (
                 not stat.S_ISSOCK(current_info.st_mode)
-                or current_info.st_uid != SERVICE_UID
-                or current_info.st_gid != SERVICE_GID
-                or stat.S_IMODE(current_info.st_mode) != 0o600
+                or (current_info.st_dev, current_info.st_ino) != (ready["device"], ready["inode"])
+                or current_info.st_uid != ready["uid"]
+                or current_info.st_gid != ready["gid"]
+                or stat.S_IMODE(current_info.st_mode) != ready["mode"]
             ):
-                raise Incomplete("fixture endpoint type/owner/mode is not eligible for cleanup")
-            if ready_path is not None:
-                ready = json.loads(ready_path.read_text(encoding="ascii"))
-                if (
-                    (current_info.st_dev, current_info.st_ino) != (ready["device"], ready["inode"])
-                    or current_info.st_uid != ready["uid"]
-                    or current_info.st_gid != ready["gid"]
-                    or stat.S_IMODE(current_info.st_mode) != ready["mode"]
-                ):
-                    raise Incomplete("fixture endpoint identity changed; preserving it")
+                raise Incomplete("fixture endpoint identity/type/owner/mode changed; preserving it")
             os.unlink(name_only, dir_fd=run_dir_fd)
             cleanup["endpoint_removed"] = True
         if ready_path is not None:
