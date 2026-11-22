@@ -83,7 +83,8 @@ No se introducen tablas de secretos, sesiones, tokens, IPs ni contenido de crede
 - abandono no cuenta como fallo;
 - éxito reinicia fallos sin borrar otras reservas activas;
 - recuperación de reservas expiradas después de reinicio;
-- concurrencia multiproceso sobre el mismo archivo SQLite;\n- limpieza oportunista acotada de filas vencidas pertenecientes a cuentas inactivas;
+- concurrencia multiproceso sobre el mismo archivo SQLite;
+- limpieza oportunista acotada de filas vencidas pertenecientes a cuentas inactivas;
 - ausencia de bloqueo largo durante Argon2id;
 - guard indisponible, commit incierto, error Argon2id y cambio concurrente de credencial nunca producen proof;
 - handle desconocido y contraseña incorrecta conservan respuesta genérica;
