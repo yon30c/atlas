@@ -1039,7 +1039,7 @@ workflows ni probes.
 - Archivo: `tests/integration/private_unix_listener/run_listener_quiescence_probe.py`.
 - Rama: `experiment/a-ipc-01-private-unix-listener-probe`; permanece separada de `main`.
 - Preflight: Debian 13, systemd 257, kernel/Python fijados, cgroup v2 unificado, tmpfs en `/run`, SERVICE 2005:2005 y OTHER 2006:2006; valida acceso de ambas identidades al script y al intérprete.
-- D-Bus: `GetUnit`, propiedades tipadas, `Unit.Job`, `Manager.ListJobs`, `ListUnitsByNames`; el orden de object paths de `ListJobs` está corregido. Tras stop, se exige unidad ausente y ningún job; no se usa `RefUnit/UnrefUnit` con conexiones `busctl` efímeras.
+- D-Bus: `GetUnit`, propiedades tipadas, `Unit.Job`, `Manager.ListJobs`, `ListUnitsByNames`; el orden de object paths de `ListJobs` está corregido. Tras stop, se exige unidad ausente y ningún job; `RefUnit/UnrefUnit` se ejecutan mediante una conexión persistente libsystemd; las observaciones permanecen en busctl.
 - Cgroups: observer FD de directorio y `cgroup.events` abierto antes de stop, identidad dev/inode fijada, lecturas repetibles después de stop; se cierra tras confirmar `populated=0`.
 - QP-01/02: seccomp para fork/clone/vfork/clone3, duplicación, SCM_RIGHTS e io_uring; QP-02 filtra también el auxiliar creado antes del listener. Dos observaciones de cgroup separadas por 50 ms; QUIESCENT solo si identidad/invocación/jobs/MainPID/cgroup/FD-policy coinciden.
 - QP-03/04: transición y job stop pendientes con proceso que ignora SIGTERM; ABORT hasta terminar todo el cgroup.
