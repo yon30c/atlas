@@ -15,9 +15,11 @@ El propietario aprobó el siguiente perfil mínimo para el primer Workspace y su
 - Un único Workspace inicial, propiedad del UserId canónico creado en la génesis.
 - El sujeto del Grant es exactamente la Identity(USER) canónica del propietario; no se concede a agentes, servicios ni identidades delegadas.
 - Únicamente las acciones `workspace.list` y `workspace.read`.
-- Para `workspace.list`, el scope es `resource_type="workspace"` y contiene únicamente el ID del Workspace inicial.
-- Para `workspace.read`, el scope es `resource_type="workspace_file"` y contiene únicamente IDs canónicos de archivos seleccionados explícitamente por el propietario. El ID canónico de cada archivo es la serialización compacta UTF-8/JSON de `[workspace_id, relative_path]`, con `ensure_ascii=False` y separadores `,` y `:`, igual a `WorkspaceCapabilityExecutionService.workspace_file_resource_id`.
-- Los dos scopes son concretos, no vacíos y sin patrones/wildcards. No se infiere permiso para archivos añadidos posteriormente.
+- El modelo CAM admite un solo `resource_type` por Grant; por eso el paquete inicial contiene **dos Grants distintos**, confirmados y persistidos como una sola operación atómica:
+  1. Grant de listado: `resource_type="workspace"`, único ID = Workspace inicial, única acción = `workspace.list`.
+  2. Grant de lectura: `resource_type="workspace_file"`, IDs = archivos seleccionados explícitamente por el propietario, única acción = `workspace.read`.
+- El ID canónico de cada archivo es la serialización compacta UTF-8/JSON de `[workspace_id, relative_path]`, con `ensure_ascii=False` y separadores `,` y `:`, igual a `WorkspaceCapabilityExecutionService.workspace_file_resource_id`.
+- Los dos Grants comparten `owner_user_id`, `subject_identity_id`, `project_id`, `environment`, `issued_at` y `expires_at`; cada uno tiene scope concreto no vacío y sin patrones/wildcards. No se infiere permiso para archivos añadidos posteriormente. La provisión falla completa si no se pueden persistir ambos.
 - Vigencia inicial: exactamente siete días desde `issued_at`. La renovación requiere una nueva autenticación del propietario y una decisión directa; no es automática.
 - No se permite delegación, emisión/revocación de otros Grants, shell, ejecución de comandos, escritura, borrado, movimiento, instalación de Skills ni acceso general al filesystem.
 - El helper privilegiado debe realizar autenticación PAM y confirmación directa en TTY confiable; no abre shell ni concede privilegios generales al proceso Atlas.
