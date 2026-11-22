@@ -105,6 +105,12 @@ class PlanningConsoleCommandsTests(unittest.TestCase):
         self.assertIn("Todavía no puedo preparar un plan", result)
         self.assertNotIn("Paso 1", result)
 
+    def test_invalid_planner_result_is_not_presented_as_a_plan(self):
+        commands = PlanningConsoleCommands(FakePlanner(None), FixedClock())
+        result = commands.handle("/plan inspecciona demo")
+        self.assertIn("resultado inválido", result)
+        self.assertNotIn("Plan preparado", result)
+
     def test_planner_contract_errors_are_reported_without_claiming_success(self):
         planner = FakePlanner(error=ContractError("respuesta inválida"))
         commands = PlanningConsoleCommands(planner, FixedClock())
