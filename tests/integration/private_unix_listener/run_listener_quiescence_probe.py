@@ -136,8 +136,12 @@ def busctl_json(*args: str, timeout: float = 5.0) -> dict:
         ["busctl", "--system", "--json=short", *args], timeout=timeout
     )
     try:
-        value = json.loads(raw.decode("utf-8", "strict"))
-    except (UnicodeError, json.JSONDecodeError) as exc:
+        value = json.loads(
+            raw.decode("utf-8", "strict"),
+            object_pairs_hook=_json_no_duplicate_keys,
+            parse_constant=_json_reject_constant,
+        )
+    except (UnicodeError, json.JSONDecodeError, ValueError) as exc:
         raise Incomplete("busctl returned invalid JSON") from exc
     if not isinstance(value, dict) or "type" not in value or "data" not in value:
         raise Incomplete("busctl JSON lacks typed type/data fields")
