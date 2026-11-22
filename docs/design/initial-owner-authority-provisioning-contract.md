@@ -52,7 +52,7 @@ No se aceptan campos desconocidos, defaults implícitos ni normalizaciones depen
 2. El helper PAM aprobado autentica recientemente al sujeto configurado y comprueba autenticación y estado de cuenta; la confirmación directa se liga al descriptor.
 3. El helper emite una prueba tipada, de un solo uso, ligada al request, sujeto, host, acción y descriptor.
 4. Un verificador confiable valida firma/emisor, host, sujeto, binding protegido, descriptor, acción, vigencia, nonce y no-replay.
-5. La autoridad canónica genera los UUIDv4 de `UserId` e `Identity(USER)`; nunca se derivan del nombre Unix ni de su UID.
+5. Identity Authority genera el `UserId` y la `Identity(USER)` canónicos mediante su mecanismo autoritativo. El formato y mecanismo de generación de `UserId` siguen sujetos a B1-B-03A §3.3; este contrato no fija UUIDv4 ni permite derivarlos del nombre Unix o UID.
 6. Se registra el binding de propietario con procedencia y revisión.
 7. Se registra el evento de génesis y se actualizan head y Recovery Gate.
 8. Se consume la prueba dentro de la misma frontera transaccional que los cambios de génesis.
