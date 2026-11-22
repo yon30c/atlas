@@ -19,7 +19,10 @@ from atlas.authentication.service import (
     NativeAuthenticationService,
 )
 from atlas.core.errors import ContractError
-from atlas.ports.authentication_attempt_guard import (\n    AuthenticationAttemptDenied,\n    AuthenticationAttemptReservation,\n)
+from atlas.ports.authentication_attempt_guard import (
+    AuthenticationAttemptDenied,
+    AuthenticationAttemptReservation,
+)
 
 
 class FixedClock:
@@ -143,7 +146,6 @@ class NativeAuthenticationServiceTests(unittest.TestCase):
         with self.assertRaises(AuthenticationFailed):
             self._service().authenticate("atlas.owner", "incorrect password")
         self.assertEqual(self._proof_rows(), [])
-        self.assertEqual(len(self.guard.failures), 1)
         self.assertEqual(len(self.guard.failures), 1)
 
     def test_unknown_handle_runs_dummy_verification_and_is_generic(self):
