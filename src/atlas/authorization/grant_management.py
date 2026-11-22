@@ -11,7 +11,10 @@ from atlas.authorization.grant_revocation import (
     GrantRevocationProofAuthorizationService,
     GrantRevocationResult,
 )
-from atlas.authorization.identity_evidence import require_verified_owner_context
+from atlas.authorization.identity_evidence import (
+    require_verified_owner_context,
+    require_verified_owner_context_in_unit_of_work,
+)
 from atlas.authorization.models import (
     Grant,
     GrantRevocationAuthorizationRequest,
@@ -98,15 +101,10 @@ class GrantManagementService:
         *,
         verified_identity: VerifiedIdentityContext | None = None,
     ) -> Grant:
-        """Emite un Grant solo con evidencia vigente del propietario."""
-        canonical = self._validate_owner_context(context, verified_identity)
+        """Emite un Grant tras revalidar al propietario en la UoW de escritura."""
         self._validate_utc(now)
         if not isinstance(grant, Grant):
             raise ContractError("grant debe ser Grant")
-        if grant.owner_user_id != canonical.user_id:
-            raise AuthorizationError(
-                "No se pueden emitir Grants para otro propietario"
-            )
         if grant.project_id != context.project_id:
             raise AuthorizationError(
                 "El proyecto del Grant no coincide con el contexto"
@@ -126,8 +124,19 @@ class GrantManagementService:
                 "emisión deshabilitada: requiere una unidad de trabajo transaccional"
             )
 
-        # The uniqueness check and insert must share one immediate transaction.
+        # Identity evidence, uniqueness and insertion share one immediate
+        # transaction. A suspension/revocation cannot race the Grant write.
         with self._unit_of_work_factory() as uow:
+            canonical = require_verified_owner_context_in_unit_of_work(
+                context,
+                verified_identity,
+                self._identity_verifier,
+                uow,
+            )
+            if grant.owner_user_id != canonical.user_id:
+                raise AuthorizationError(
+                    "No se pueden emitir Grants para otro propietario"
+                )
             if uow.grants.get(grant.grant_id) is not None:
                 raise ContractError("El grant_id ya existe")
             uow.grants.create(grant)

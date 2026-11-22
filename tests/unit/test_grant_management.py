@@ -154,6 +154,20 @@ class GrantManagementTests(unittest.TestCase):
         result = self.issue(self.context, self.grant, NOW)
         self.assertEqual(result.owner_user_id, self.context.user_id)
 
+    def test_issue_revalidates_identity_inside_grant_transaction(self):
+        uow = InMemoryAuthorizationUnitOfWork(self.repository)
+        service = GrantManagementService(
+            self.repository,
+            unit_of_work_factory=lambda: uow,
+            identity_verifier=self.identity_verifier,
+        )
+
+        self.issue(service=service)
+
+        self.assertEqual(self.identity_verifier.verify_calls, 0)
+        self.assertEqual(self.identity_verifier.verify_in_uow_calls, 1)
+        self.assertIs(self.identity_verifier.last_unit_of_work, uow)
+
     def test_issue_stores_and_returns_grant(self):
         result = self.issue(self.context, self.grant, NOW)
         self.assertEqual(result, self.grant)
