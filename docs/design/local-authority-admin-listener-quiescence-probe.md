@@ -347,6 +347,7 @@ Referencias técnicas externas usadas para fijar la interfaz y contrastadas dura
 - systemd D-Bus API: https://www.freedesktop.org/software/systemd/man/257/org.freedesktop.systemd1.html
 - busctl JSON y llamadas D-Bus: https://www.freedesktop.org/software/systemd/man/257/busctl.html
 - cgroup v2: https://docs.kernel.org/admin-guide/cgroup-v2.html
+- pidfd_getfd syscall and ptrace access requirement (Debian trixie man-pages): https://manpages.debian.org/trixie/manpages-dev/pidfd_getfd.2.en.html
 
 ## 10. Relación con A-IPC-04 y listener-quiescence/1
 
