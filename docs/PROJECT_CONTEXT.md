@@ -1381,7 +1381,7 @@ Cobertura implementada:
 - QP-03/04: transición y job stop pendiente con proceso que ignora SIGTERM; ABORT hasta vaciar el cgroup.
 - QP-05/06/07: separación de ControlGroup; rechazo de Delegate=yes y control Delegate=no con NNP, ProtectControlGroups, capabilities vacías, CAP_SYS_ADMIN y permisos; parser cgroup.events con lecturas parciales/errores.
 - QP-08/09/10: denegación de creación de procesos y FD escape (incluido io_uring); execve mismo PID con CLOEXEC.
-- QP-11: _TestLifecycleSupervisor interno valida token, flock, segundo actor, caída simulada, marcador sticky y restart bloqueado. No es un proceso supervisor independiente ni producto Atlas.
+- QP-11: _TestLifecycleSupervisor interno valida token, flock, segundo actor, caída simulada, marcador sticky y restart bloqueado; la simulación cierra/reabre la conexión sd-bus que mantiene RefUnit. No es un proceso supervisor independiente ni producto Atlas.
 - QP-12: restart directo de root fuera del supervisor; detecta InvocationID sustituto y mantiene separados los observers cgroup antiguo/nuevo. Root permanece en TCB.
 - QP-13: proceso OTHER recibe el listener FD por SCM_RIGHTS; demuestra que cgroup del servicio vacío no basta mientras el holder conserva el FD. No es socket activation.
 - QP-14/15: fallo inyectado del manager/supervisor, timeout acotado y discrepancias ControlGroup/dev/inode.
