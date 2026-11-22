@@ -194,6 +194,14 @@ La inspección adicional de `ProjectEnvironmentLifecycleService`, su composició
 
 Por tanto, la Operación B del contrato de provisión inicial aún no tiene un application service que coordine de forma autorizada la creación de Project, Environment, asociación y primer Grant. No se debe improvisar una secuencia de llamadas a repositorios ni reutilizar el lifecycle de Platform Admin como sustituto del bootstrap CAM. Se necesita un servicio específico que consuma evidencia excepcional de provisión, aplique las restricciones CAM y persista el conjunto con atomicidad/idempotencia demostradas.
 
+
+
+### 8.9 Propiedad de autoridad en el coordinador de génesis
+
+Los diseños de coordinación llaman en algunos pasajes al componente que verifica la prueba y realiza la génesis **“coordinador CAM”**. Sin embargo, la misma operación propuesta modifica agregados de Identity/Native Identity, consume evidencia PAM, registra `DOMAIN_BOOTSTRAPPED` en el journal de Consistency y actualiza Recovery Gate. CAM es la autoridad de Grants y decisiones de autorización; no debe asumir implícitamente la propiedad de identidad ni del journal/gate de Consistency.
+
+Antes de implementar se debe resolver si existirá un **orquestador de bootstrap** de aplicación, con puertos separados hacia Identity Authority, Authentication Authority, Consistency y CAM. El orquestador puede coordinar una transacción física compartida si las autoridades participan mediante sus repositorios/UoW, pero cada autoridad conserva la propiedad de sus agregados y reglas. La génesis del dominio no debe presentarse como una operación de CAM; la Operación B sí utiliza CAM para emitir el primer Grant. Este límite debe quedar explícito en el diseño contractual y en los nombres de servicios/puertos.
+
 ## 9. Orden de cierre recomendado
 
 No hay una única tarea de código que cierre todo. El orden seguro es:
