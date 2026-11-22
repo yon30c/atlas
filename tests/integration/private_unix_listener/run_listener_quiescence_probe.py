@@ -575,6 +575,7 @@ def fixture_main(args: argparse.Namespace) -> int:
         control = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
         os.umask(0o177)
         control.bind(args.control)
+        os.chmod(args.control, 0o666)
         control.listen(1)
         control_info = os.stat(args.control, follow_symlinks=False)
         holder_ready = {
