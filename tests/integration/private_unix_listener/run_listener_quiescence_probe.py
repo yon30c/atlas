@@ -945,7 +945,6 @@ def run_probe(args: argparse.Namespace) -> dict:
             "QP-08": "pending: libseccomp syscall-denial fixture",
             "QP-09": "pending: seccomp FD-duplication/SCM_RIGHTS denial fixture",
             "QP-10": "pending: same-process exec/CLOEXEC helper",
-            "QP-11": "pending: test supervisor concurrency and sticky-marker crash gate",
             "QP-12": "pending: controlled direct-root restart and InvocationID revalidation",
             "QP-13": "pending: isolated external SCM_RIGHTS holder control",
             "QP-14": "pending: deterministic manager/supervisor failure injection",
