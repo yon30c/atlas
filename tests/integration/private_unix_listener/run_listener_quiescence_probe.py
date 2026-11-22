@@ -222,6 +222,8 @@ def unit_snapshot(name: str) -> dict:
         "ControlGroup": dbus_property(path, SERVICE_IFACE, "ControlGroup", "s"),
         "KillMode": dbus_property(path, SERVICE_IFACE, "KillMode", "s"),
         "Restart": dbus_property(path, SERVICE_IFACE, "Restart", "s"),
+        "User": dbus_property(path, SERVICE_IFACE, "User", "s"),
+        "Group": dbus_property(path, SERVICE_IFACE, "Group", "s"),
         "Delegate": dbus_property(path, RESOURCE_IFACE, "Delegate", "b"),
         "Transient": dbus_property(path, UNIT_IFACE, "Transient", "b"),
         "Job": dbus_property(path, UNIT_IFACE, "Job", "(uo)"),
@@ -268,6 +270,25 @@ def cgroup_mount() -> tuple[Path, Path]:
     if len(found) != 1:
         raise Incomplete("cgroup v2 mount is not unique")
     return found[0]
+
+
+def cgroup_identity(mount_root: Path, control_group: str) -> dict:
+    if not control_group.startswith("/") or ".." in Path(control_group).parts:
+        raise Incomplete("systemd returned an unsafe ControlGroup path")
+    path = mount_root / control_group.lstrip("/")
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISDIR(info.st_mode):
+            raise Incomplete("ControlGroup does not resolve to a directory")
+        return {"control_group": control_group, "st_dev": info.st_dev, "st_ino": info.st_ino}
+    finally:
+        os.close(fd)
+
+
+def require_cgroup_identity(expected: dict, observed: dict) -> None:
+    if expected != observed:
+        raise Incomplete("cgroup identity mismatch; refusing to use the observed cgroup")
 
 
 def cgroup_events(mount_root: Path, control_group: str) -> dict:
@@ -538,14 +559,15 @@ def update_gate_marker(marker: Path, run_id: str, name: str, snapshot: dict, pha
     }, 4096)
 
 
-def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=False, delegate=False, no_listener=False) -> tuple[dict, Path | None, Path]:
+def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=False,
+                   delegate=False, no_listener=False, uid=SERVICE_UID, gid=SERVICE_GID) -> tuple[dict, Path | None, Path]:
     assert_unit_absent(name)
     socket_path = run_dir / f"{name}.sock"
     ready_path = run_dir / f"{name}.ready"
     properties = [
         "--property=Type=exec", "--property=KillMode=control-group",
         "--property=Restart=no", f"--property=Delegate={'yes' if delegate else 'no'}",
-        "--property=TimeoutStopSec=6s", f"--uid={SERVICE_UID}", f"--gid={SERVICE_GID}",
+        "--property=TimeoutStopSec=6s", f"--uid={uid}", f"--gid={gid}",
     ]
     command = [
         "systemd-run", "--system", "--no-block", f"--unit={name}",
@@ -575,6 +597,10 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
     snap = unit_snapshot(name)
     if snap["Delegate"] != delegate:
         raise Incomplete("systemd Delegate property differs from requested fixture")
+    expected_user = pwd.getpwuid(uid).pw_name
+    expected_group = grp.getgrgid(gid).gr_name
+    if snap["User"] != expected_user or snap["Group"] != expected_group:
+        raise Incomplete("systemd fixture User/Group identity differs from requested UID/GID")
     if snap["ControlGroup"] == "":
         raise Incomplete("systemd returned an empty ControlGroup")
     if no_listener:
@@ -836,6 +862,46 @@ def run_probe(args: argparse.Namespace) -> dict:
                                     "decision": "ABORT_NOT_QUIESCENT",
                                     "reason": "pending Unit.Job and populated=1 observed before manager termination"})
 
+        # QP-05: distinct SERVICE/OTHER fixtures and an adapter-only identity mismatch.
+        other_dir = run_dir / "other"
+        os.mkdir(other_dir, 0o730)
+        os.chown(other_dir, 0, OTHER_GID)
+        os.chmod(other_dir, 0o730)
+        name5a = f"atlas-qp-{secrets.token_hex(6)}.service"
+        name5b = f"atlas-qp-{secrets.token_hex(6)}.service"
+        initial5a, _endpoint5a, ready5a = _start_fixture(name5a, run_dir, no_listener=True)
+        initial5b, _endpoint5b, ready5b = _start_fixture(
+            name5b, other_dir, no_listener=True, uid=OTHER_UID, gid=OTHER_GID
+        )
+        report["unit_identity"][name5a] = initial5a
+        report["unit_identity"][name5b] = initial5b
+        cg5a = cgroup_identity(mount, initial5a["ControlGroup"])
+        cg5b = cgroup_identity(mount, initial5b["ControlGroup"])
+        if cg5a["control_group"] == cg5b["control_group"] or (
+            cg5a["st_dev"], cg5a["st_ino"]
+        ) == (cg5b["st_dev"], cg5b["st_ino"]):
+            raise Incomplete("QP-05 SERVICE and OTHER fixtures do not have distinct cgroup identities")
+        mismatch_rejected = False
+        try:
+            require_cgroup_identity(cg5a, {**cg5a, "control_group": cg5a["control_group"] + ".mismatch"})
+        except Incomplete:
+            mismatch_rejected = True
+        cleanup5b = _stop_and_cleanup(name5b, initial5b, None, ready5b, os.open(other_dir, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW), report)
+        cleanup5a = _stop_and_cleanup(name5a, initial5a, None, ready5a, run_dir_fd, report)
+        report["cleanup"]["resources"].extend([cleanup5a, cleanup5b])
+        try:
+            os.rmdir(other_dir)
+        except OSError as exc:
+            raise Incomplete("QP-05 OTHER fixture directory was not empty") from exc
+        if not mismatch_rejected or not cleanup5a["unit_inactive"] or not cleanup5b["unit_inactive"]:
+            raise Incomplete("QP-05 identity mismatch or fixture cleanup was not confirmed")
+        report["scenarios"].append({
+            "id": "QP-05", "status": "PASS",
+            "reason": "SERVICE and OTHER fixtures had distinct ControlGroup inode identities; adapter mismatch was rejected before cgroup use",
+            "observations": {"service_cgroup": cg5a, "other_cgroup": cg5b,
+                             "adapter_mismatch_rejected": mismatch_rejected},
+        })
+
         # QP-06: Delegate=yes must be rejected; no cgroup writes or migration.
         name6 = f"atlas-qp-{secrets.token_hex(6)}.service"
         initial6, endpoint6, ready6 = _start_fixture(name6, run_dir, delegate=True)
@@ -870,6 +936,28 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["scenarios"].append({"id": "QP-07", "status": "INCOMPLETE",
                                     "reason": "parser fault matrix covered; partial-read, permission and live cgroup.events failure injection remain pending",
                                     "observations": parser_results})
+
+        # QP-15: adapter-only st_dev/st_ino and ControlGroup substitutions fail closed.
+        identity15 = cgroup_identity(mount, initial6["ControlGroup"])
+        inode_mismatch_rejected = False
+        try:
+            require_cgroup_identity(identity15, {**identity15, "st_ino": identity15["st_ino"] + 1})
+        except Incomplete:
+            inode_mismatch_rejected = True
+        path_mismatch_rejected = False
+        try:
+            require_cgroup_identity(identity15, {**identity15, "control_group": identity15["control_group"] + ".other"})
+        except Incomplete:
+            path_mismatch_rejected = True
+        if not inode_mismatch_rejected or not path_mismatch_rejected:
+            raise Incomplete("QP-15 cgroup identity fault injection was not rejected")
+        report["scenarios"].append({
+            "id": "QP-15", "status": "PASS",
+            "reason": "adapter-only st_dev/st_ino and ControlGroup mismatches were rejected without changing cgroupfs",
+            "observations": {"actual_identity": identity15,
+                             "inode_mismatch_rejected": inode_mismatch_rejected,
+                             "control_group_mismatch_rejected": path_mismatch_rejected},
+        })
 
         # QP-12: direct root restart is detected by InvocationID, not trusted.
         name12 = f"atlas-qp-{secrets.token_hex(6)}.service"
