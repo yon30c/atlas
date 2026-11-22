@@ -1462,6 +1462,28 @@ def _start_fixture(name: str, run_dir: Path, *, hold_child=False, ignore_term=Fa
     return snap, socket_path, ready_path
 
 
+def _verify_fixture_quiescent(name: str, initial: dict, fixture_record: dict) -> tuple[dict, dict]:
+    current = unit_snapshot(name)
+    if (
+        current["InvocationID"] != initial["InvocationID"]
+        or current["ControlGroup"] != initial["ControlGroup"]
+        or current["ActiveState"] != "inactive"
+        or current["MainPID"] != 0
+        or current["Job"][0] != 0
+    ):
+        raise Incomplete("fixture lost inactive/no-job/invocation identity before pathname cleanup")
+    observer = fixture_record.get("cgroup_observer")
+    initial_events = fixture_record.get("initial_cgroup_events")
+    if observer is None or initial_events is None:
+        raise Incomplete("fixture lacks a pinned cgroup observer and initial identity")
+    if observer["identity"] != initial_events["identity"]:
+        raise Incomplete("pinned cgroup observer identity differs from initial fixture identity")
+    events = read_cgroup_observer(observer)
+    if events["identity"] != initial_events["identity"] or events["values"]["populated"] != 0:
+        raise Incomplete("fixture cgroup identity changed or remains populated")
+    return current, events
+
+
 def _stop_and_cleanup(name: str, initial: dict, socket_path: Path | None, ready_path: Path | None,
                       run_dir_fd: int, report: dict, *, already_stopped: bool = False,
                       cgroup_empty_confirmed: bool = False) -> dict:
@@ -1479,17 +1501,10 @@ def _stop_and_cleanup(name: str, initial: dict, socket_path: Path | None, ready_
         if not cleanup["unit_inactive"]:
             raise Incomplete("fixture unit is not confirmed inactive")
         fixture_record = _ACTIVE_FIXTURES.get(name, {})
-        observer = fixture_record.get("cgroup_observer")
-        if not cgroup_empty_confirmed:
-            if observer is not None:
-                events = read_cgroup_observer(observer)
-            else:
-                _root, mount = cgroup_mount()
-                events = cgroup_events(mount, initial["ControlGroup"])
-            cleanup["cgroup_empty"] = events["values"]["populated"] == 0
-        if not cleanup["cgroup_empty"]:
-            raise Incomplete("fixture cgroup remains populated during cleanup")
-        fixture_record = _ACTIVE_FIXTURES.get(name, {})
+        final_snapshot, events = _verify_fixture_quiescent(name, initial, fixture_record)
+        cleanup["cgroup_empty"] = True
+        cleanup["final_invocation_id"] = final_snapshot["InvocationID"]
+        cleanup["final_cgroup_identity"] = events["identity"]
         ready = None
         ready_identity_now = None
         if ready_path is not None:
@@ -1519,9 +1534,11 @@ def _stop_and_cleanup(name: str, initial: dict, socket_path: Path | None, ready_
                 or stat.S_IMODE(current_info.st_mode) != ready["mode"]
             ):
                 raise Incomplete("fixture endpoint identity/type/owner/mode changed; preserving it")
+            _verify_fixture_quiescent(name, initial, fixture_record)
             os.unlink(name_only, dir_fd=run_dir_fd)
             cleanup["endpoint_removed"] = True
         if ready_path is not None and ready is not None:
+            _verify_fixture_quiescent(name, initial, fixture_record)
             unlink_verified_regular_file(
                 run_dir_fd, ready_path.name, ready_identity_now,
                 fixture_record["uid"], fixture_record["gid"],
