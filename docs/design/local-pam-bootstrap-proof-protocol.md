@@ -175,7 +175,7 @@ El perfil LOCAL acepta explícitamente la limitación anti-rollback descrita por
 
 ## 12. Decisiones que deben cerrarse antes de implementación
 
-1. Identidad y frontera del emisor de desafíos, incluido cómo consulta el bootstrap pendiente sin confiar en Assistant.
+1. **Resuelto a nivel de arquitectura:** no existe emisor separado de desafíos. El helper C lee el descriptor desde configuración protegida, recoge la decisión y PAM, y emite directamente la prueba firmada; CAM verifica el estado pendiente y consume la prueba junto con la génesis. Siguen pendientes la implementación y las pruebas de esta frontera.
 2. Layout binario final y vectores de serialización/canonicalización.
 3. Disponibilidad real de OpenSSL EVP headers/libs en Debian.
 4. Custodia de clave, key_id, rotación y permisos de helper/configuración.
@@ -184,7 +184,7 @@ El perfil LOCAL acepta explícitamente la limitación anti-rollback descrita por
 7. Política de expiración y skew del reloj.
 8. Binding protegido entre sujeto local greed y la decisión de establecer el propietario canónico, sin derivar UserId del UID.
 
-No se debe comenzar el helper ejecutable hasta cerrar estas decisiones. El siguiente trabajo es inspeccionar los contratos y primitivas existentes en Atlas para determinar si el verificador y el consumo pueden componerse sin duplicar autoridad ni crear una segunda fuente de verdad.
+No se debe comenzar el helper ejecutable hasta cerrar estas decisiones. El siguiente trabajo es cerrar las decisiones restantes de formato binario, custodia de clave, invocación privilegiada/TTY, binding protegido, expiración y coordinación transaccional; después implementar y probar el helper y el coordinador sin duplicar autoridad.
 ## 13. Inspección de contratos existentes en Atlas (16-11-2026)
 
 La revisión de la rama confirma los siguientes puntos relevantes:
@@ -204,7 +204,7 @@ Esta lista es una meta de composición, no una afirmación de que las tablas, pu
 
 ### Bloqueadores que permanecen abiertos
 
-1. No se ha definido un emisor de desafíos confiable para el estado previo a CAM. El desafío no puede firmarlo Assistant ni un caller arbitrario. Debe resolverse junto con el estado protegido de bootstrap pendiente.
+1. No existe un emisor separado de desafíos ni debe añadirse: la arquitectura de coordinación §14 y `local-bootstrap-coordination-architecture.md` sustituyen esta propuesta anterior. El helper es el emisor de la prueba; el estado pendiente se verifica dentro de CAM al consumirla. La implementación del helper, su configuración protegida y el coordinador CAM siguen pendientes.
 2. No existe todavía un binding persistente y verificable entre el sujeto Linux greed y el UserId/Identity(USER) que se creará. No derivar el ID canónico del UID ni del nombre.
 3. No existe el evento DOMAIN_BOOTSTRAPPED ni su coordinador transaccional integrado.
 4. No está decidido cómo el helper demuestra que su TTY y su invocación privilegiada son confiables.
