@@ -89,7 +89,13 @@ class SQLiteAuthenticationAttemptGuardTests(unittest.TestCase):
 
         self.assertEqual(len(self._rows("native_authentication_attempt_failures")), 5)
         with self.assertRaises(AuthenticationAttemptDenied):
-            self.guard.begin_attempt(self.issuer_id, self.handle, at=at)
+            self.guard.begin_attempt(
+                self.issuer_id, self.handle, at=at - timedelta(seconds=1)
+            )
+        reservation = self.guard.begin_attempt(
+            self.issuer_id, self.handle, at=at
+        )
+        self.guard.abandon_attempt(reservation)
 
     def test_failure_window_expires_old_failures(self):
         self._failure(self.now)
