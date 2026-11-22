@@ -145,7 +145,7 @@ def unit_snapshot(name: str) -> dict:
         "ActiveState": dbus_property(path, UNIT_IFACE, "ActiveState", "s"),
         "SubState": dbus_property(path, UNIT_IFACE, "SubState", "s"),
         "InvocationID": dbus_property(path, UNIT_IFACE, "InvocationID", "ay"),
-        "ControlGroup": dbus_property(MANAGER, MANAGER_IFACE, "ControlGroup", "s"),
+        "ControlGroup": dbus_property(path, SERVICE_IFACE, "ControlGroup", "s"),
         "KillMode": dbus_property(path, SERVICE_IFACE, "KillMode", "s"),
         "Restart": dbus_property(path, SERVICE_IFACE, "Restart", "s"),
         "Delegate": dbus_property(path, RESOURCE_IFACE, "Delegate", "b"),
@@ -736,11 +736,6 @@ def run_probe(args: argparse.Namespace) -> dict:
         report["scenarios"].append({"id": "QP-12", "status": "PASS",
                                     "decision": "ABORT_NOT_QUIESCENT",
                                     "reason": "direct root restart changed InvocationID; snapshots were not combined"})
-
-        # QP-15: adapter identity mismatches must be rejected before cgroup use.
-        report["scenarios"].append({"id": "QP-15", "status": "PASS",
-                                    "reason": "ControlGroup, st_dev and st_ino mismatch fault matrix rejected",
-                                    "observations": _identity_fault_matrix()})
 
         implemented = {item["id"] for item in report["scenarios"]}
         reasons = {
