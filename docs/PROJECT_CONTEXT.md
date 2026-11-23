@@ -1,10 +1,10 @@
 # Atlas — contexto operativo del proyecto
 
-> **Última actualización:** 2026-11-22.
+> **Última actualización:** 2026-11-23.
 > **Repositorio:** [yon30c/atlas](https://github.com/yon30c/atlas)
 > **Propósito:** documento de transferencia de contexto para continuar el desarrollo sin reconstruir decisiones ni confundir código publicado, código en ramas y validación local.
 
-## Estado operativo vigente — 2026-11-22
+## Estado operativo vigente — 2026-11-23
 
 > Esta sección es la referencia operativa prioritaria. Las secciones posteriores conservan decisiones y snapshots históricos; cuando un dato histórico contradiga este bloque, prevalece este bloque para el estado actual.
 
@@ -672,3 +672,12 @@ El propietario ejecutó `sh tools/bootstrap-chain-observer/test_chain.sh` en Deb
 - La salida mantuvo `AUTHORIZATION=NOT_PROVIDED`.
 
 Esta evidencia valida únicamente el build/tests y los dos escenarios observados. No cubre SSH con/sin PTY, wrappers, root sin sudo, política efectiva de sudo, PAM ni autenticidad de procedencia TTY. El candidato A continúa sin aprobación para ejecución privilegiada; no instalar helper ni modificar sudoers, PAM, systemd, SSH, claves, SQLite o CAM. La siguiente tarea es cerrar las condiciones de política sudo y procedencia TTY pendientes y revisar adversarialmente el contrato antes de una decisión A/B. No se ejecutaron pruebas desde GitHub.
+
+
+## Auditoría estática de sudo y TTY — 2026-11-23
+
+Se revisaron directamente en GitHub `local-bootstrap-privilege-validation-contract.md`, `local-bootstrap-chain-observer-v3-design.md`, `local-bootstrap-privilege-boundary.md` y `tools/bootstrap-chain-observer/bootstrap_chain_observer.c`. La función `aco_is_sudo_candidate()` solo compara basename `sudo`, archivo regular, UID/GID 0/0, setuid y ausencia de escritura por grupo/otros; no verifica paquete, hash confiable, plugins ni política efectiva. La regla TTY comprueba que el primer ancestro no sudo tenga TTY controlador coincidente con el monitor sudo externo y foreground esperado; no inspecciona descriptores `/dev/ptmx` ni autentica procedencia SSH. `tty_nr=0` de `sshd-session` no demuestra por sí solo ausencia de PTY.
+
+La evidencia histórica del host reporta sudo 1.9.16p2, defaults `env_reset`, `mail_badpass`, `secure_path`, `use_pty`, y `greed` con `(ALL : ALL) ALL`. Esto significa que Candidate A no protege frente al propio `greed` actuando como root. Falta reconfirmar defaults/reglas efectivos, identidad/integridad del binario y definir si “SSH interactivo con PTY” significa shell interactiva o cualquier solicitud SSH con PTY asignado. V3 build/tests y los escenarios directo/sudo fueron validados localmente el 23-11; esa evidencia es solo diagnóstica.
+
+Referencia normativa y próximos comandos read-only: `docs/design/local-bootstrap-sudo-tty-static-audit.md`. No se modificó el host, no se instaló helper, no se tocó PAM/sudoers/systemd/SSH y no se ejecutaron pruebas desde GitHub.
