@@ -190,3 +190,10 @@ No se ejecutaron pruebas desde GitHub. No hubo cambios en sudoers, PAM, SSH, tim
 La revisión estática de `bootstrap_chain_observer.c` confirma que la regla V3 observa el TTY controlador del primer ancestro no sudo (`tty_nr`, `tpgid`) y lo compara con el monitor sudo externo. No inspecciona descriptores `/dev/ptmx`, no asocia el master con el slave de la sesión SSH y no autentica la procedencia del terminal. Por ello, `tty_nr=0` en `sshd-session` no demuestra ausencia de PTY; el resultado `CHAIN_MISMATCH` solo expresa que no se cumplió la relación de TTY controlador implementada. La auditoría completa y los comandos de host read-only están en `local-bootstrap-sudo-tty-static-audit.md`.
 
 La misma revisión confirma que `aco_is_sudo_candidate()` verifica solo basename, tipo regular, UID/GID 0/0, setuid y ausencia de escritura por grupo/otros. No valida paquete, versión aprobada, hash de confianza, plugin ni política sudo efectiva. V3 permanece estrictamente diagnóstica.
+
+
+### 5.2 Política SSH/PTY adoptada — 2026-11-23
+
+El propietario adoptó la política conservadora: SSH solo se acepta si primero se establece una shell interactiva con PTY y desde ella se ejecuta sudo directamente. Se rechazan el comando remoto `ssh -t host 'sudo ...'`, SSH sin PTY, comandos no interactivos y wrappers/shells intermedias.
+
+Esta decisión define los casos de aceptación futuros; no cambia el comportamiento ni la autoridad del observador V3. La coincidencia V3 en una shell SSH interactiva sigue siendo diagnóstica y no autentica SSH ni la procedencia del PTY. El mecanismo para distinguir de forma estable la shell interactiva de un comando remoto con PTY sigue sin resolverse. No aceptar `sshd-session` ni inspección `/dev/ptmx` como sustituto sin un contrato y pruebas específicos. Si no puede demostrarse fail-closed, Candidate A se descarta sin relajar la política.
