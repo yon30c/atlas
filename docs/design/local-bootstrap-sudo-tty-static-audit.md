@@ -113,15 +113,15 @@ Cuando se recoja la siguiente evidencia, ejecutar desde la sesión normal de `gr
 ### 5.1 Sudo efectivo
 
 ```bash
-printf '%s\\n' '===== SUDO VERSION / BUILD ====='
+printf '%s\n' '===== SUDO VERSION / BUILD ====='
 sudo -V
-printf '%s\\n' '===== PRIVILEGIOS EFECTIVOS COMPLETOS ====='
+printf '%s\n' '===== PRIVILEGIOS EFECTIVOS COMPLETOS ====='
 sudo -ll
-printf '%s\\n' '===== REGLA PARA LA RUTA PROPUESTA ====='
+printf '%s\n' '===== REGLA PARA LA RUTA PROPUESTA ====='
 sudo -ll /usr/libexec/atlas/local-bootstrap-authenticator
-printf '%s\\n' '===== SINTAXIS SUDOERS ====='
+printf '%s\n' '===== SINTAXIS SUDOERS ====='
 sudo visudo -c
-printf '%s\\n' '===== DIRECTIVAS RELEVANTES ====='
+printf '%s\n' '===== DIRECTIVAS RELEVANTES ====='
 sudo grep -RInE '^[[:space:]]*(Defaults|#include|@include)|env_reset|env_keep|env_delete|setenv|secure_path|timestamp_type|use_pty|requiretty|!authenticate|NOPASSWD|SETENV|PASSWD' /etc/sudoers /etc/sudoers.d 2>/dev/null
 ```
 
@@ -133,10 +133,10 @@ La ruta del helper todavía no existe; la consulta de esa ruta es una comprobaci
 
 ```bash
 sudo_bin=$(readlink -f "$(command -v sudo)")
-printf 'sudo_path=%s\\n' "$sudo_bin"
+printf 'sudo_path=%s\n' "$sudo_bin"
 stat -Lc 'path=%n type=%F owner=%U:%G mode=%a (%A) dev=%D inode=%i' "$sudo_bin"
 dpkg-query -S "$sudo_bin"
-dpkg-query -W -f='${Package} ${Version} ${Architecture}\\n' sudo
+dpkg-query -W -f='${Package} ${Version} ${Architecture}\n' sudo
 dpkg -V sudo
 sha256sum "$sudo_bin"
 getcap "$sudo_bin" 2>/dev/null || true
