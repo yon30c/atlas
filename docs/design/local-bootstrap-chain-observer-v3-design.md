@@ -7,7 +7,7 @@
 
 ## 1. Objetivo y resultado
 
-V3 implementa un observador Linux de solo lectura que contrasta una forma acotada de la cadena de procesos del candidato A. Separa expresamente la observación genérica V2 de la pregunta específica: si el proceso actual fue lanzado directamente por un proceso compatible con sudo y si la cadena observada conserva una relación verificable con el TTY de origen.
+V3 implementa un observador Linux de solo lectura que contrasta una forma acotada de la cadena de procesos del candidato A. Separa expresamente la observación genérica V2 de la pregunta específica: si el proceso actual fue lanzado directamente por un proceso compatible con sudo y si la cadena observada conserva una relación verificable entre el TTY controlador del primer ancestro no sudo y el monitor sudo externo; esto no autentica la procedencia del TTY ni del canal SSH.
 
 Resultados permitidos:
 - CHAIN_PATTERN_MATCHED_DIAGNOSTICALLY
@@ -183,3 +183,10 @@ La ejecución directa desde `bash` volvió a producir `CHAIN_MISMATCH` con `DIRE
 Esta reejecución confirma build/tests y los dos escenarios locales en el estado Debian observado; no repitió los escenarios SSH históricos de §4 ni amplía sus conclusiones. En particular, los resultados anteriores distinguen: SSH interactivo con PTY entrando primero a una shell y ejecutando sudo (coincidencia diagnóstica); comando remoto `ssh -t ... 'sudo ...'` (mismatch porque `sshd-session` aparece como origen sin `tty_nr`); y shell intermediaria (mismatch por padre directo `dash`). La observación separada de descriptores `/dev/ptmx` no se ha convertido en una prueba de procedencia TTY segura.
 
 No se ejecutaron pruebas desde GitHub. No hubo cambios en sudoers, PAM, SSH, timestamp, configuración o privilegios del host. Los límites de §5 y la prohibición de interpretar la salida como autorización permanecen sin cambio.
+
+
+### 5.1 Aclaración de la auditoría estática — 2026-11-23
+
+La revisión estática de `bootstrap_chain_observer.c` confirma que la regla V3 observa el TTY controlador del primer ancestro no sudo (`tty_nr`, `tpgid`) y lo compara con el monitor sudo externo. No inspecciona descriptores `/dev/ptmx`, no asocia el master con el slave de la sesión SSH y no autentica la procedencia del terminal. Por ello, `tty_nr=0` en `sshd-session` no demuestra ausencia de PTY; el resultado `CHAIN_MISMATCH` solo expresa que no se cumplió la relación de TTY controlador implementada. La auditoría completa y los comandos de host read-only están en `local-bootstrap-sudo-tty-static-audit.md`.
+
+La misma revisión confirma que `aco_is_sudo_candidate()` verifica solo basename, tipo regular, UID/GID 0/0, setuid y ausencia de escritura por grupo/otros. No valida paquete, versión aprobada, hash de confianza, plugin ni política sudo efectiva. V3 permanece estrictamente diagnóstica.
