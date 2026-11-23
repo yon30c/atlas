@@ -259,3 +259,42 @@ La política se refiere al flujo de invocación requerido; **no afirma que la im
 - La política general `greed: (ALL : ALL) ALL` sigue limitando el modelo de amenaza: el helper no protege frente a ese usuario actuando como root.
 
 **Decisión funcional cerrada; mecanismo técnico abierto.** Candidate A continúa no aprobado. No se implementó helper ni se modificó PAM, sudoers, SSH, systemd o el host.
+
+
+## 9. Auditoría de la frontera de petición SSH — 2026-11-23
+
+### 9.1 Verificación del paquete sudo completada
+
+El propietario ejecutó en Debian 13 / Atlas-VM-test:
+
+    sudo dpkg -V sudo
+
+La salida fue vacía. Se registra como: **dpkg no reportó discrepancias en los archivos del paquete que pudo verificar**. No es una verificación criptográfica independiente, no demuestra que la política sudo sea segura y no elimina la limitación de greed: (ALL : ALL) ALL. La comprobación pendiente de §7.3 queda cerrada en ese alcance limitado.
+
+### 9.2 OpenSSH conoce una distinción que V3 no observa
+
+La revisión de OpenSSH identifica una frontera más temprana que procfs:
+
+- Petición de shell sin comando: OpenSSH ejecuta la login shell con argv[0] precedido por - y sin -c.
+- Petición exec: OpenSSH ejecuta la login shell con -c y el comando solicitado.
+- Asignar PTY no convierte una petición exec en una petición de shell. Un comando remoto puede recibir PTY.
+
+El código de OpenSSH muestra ambas formas de invocación en do_child() y la asignación del TTY en do_exec_pty(): [session.c — OpenSSH](https://github.com/openssh/openssh-portable/blob/master/session.c). La documentación de ForceCommand especifica que se aplica a shell, command y subsystem, y expone el comando original mediante SSH_ORIGINAL_COMMAND: [sshd_config(5)](https://man.openbsd.org/sshd_config.5).
+
+Por ello, la política aprobada no puede demostrarse solo con tty_nr, tpgid, SSH_TTY ni el PTY master observado en sshd-session.
+
+### 9.3 Alternativa de diseño identificada
+
+Se añadió [local-bootstrap-sshd-session-gate-design.md](local-bootstrap-sshd-session-gate-design.md). Evalúa una puerta C root-owned como login shell de una cuenta SSH administrada, combinada con un ForceCommand administrativo fijo. La puerta recibiría la invocación de OpenSSH antes de iniciar la shell real, distinguiría comando original de petición de shell, exigiría TTY controlador y luego haría execve() de la shell real sin dejar un proceso intermediario.
+
+La alternativa es **prometedora, no aprobada**. Requiere, entre otros puntos, validar la versión Debian exacta de OpenSSH, la configuración efectiva de todos los listeners, la protección de SSH_ORIGINAL_COMMAND, el tratamiento de SFTP/subsystems, la inmutabilidad administrativa de la login shell, el forwarding, la cadena sudo→shell→sshd y los casos de wrapper/exec. La documentación de ForceCommand advierte que no deshabilita por sí sola los distintos tipos de forwarding.
+
+### 9.4 Estado de decisión
+
+- V3 continúa siendo observador diagnóstico; no se reutiliza como autorización.
+- La inferencia posterior basada solo en procfs/TTY no demuestra el tipo de petición SSH.
+- La puerta de sesión administrada por sshd pasa a ser la siguiente alternativa que merece evaluación aislada; no se implementa ni instala en este incremento.
+- El helper todavía tendría que verificar la cadena de procesos y rechazar wrappers. La posibilidad de distinguir un reemplazo deliberado de shell mediante exec sigue siendo un límite abierto.
+- Si los requisitos de política no pueden demostrarse con evidencia estable, Candidate A se descarta sin relajar la política.
+
+No se modificaron sudoers, PAM, sshd, cuentas, shells, systemd, claves, permisos ni host. No se ejecutaron pruebas desde GitHub.
