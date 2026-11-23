@@ -352,3 +352,10 @@ El propietario compartió una nueva captura read-only desde Debian 13 / `Atlas-V
 - `dpkg -V sudo` se ejecutó sin root y devolvió signos `?????????` para los archivos sudoers; la verificación queda inconclusa, no prueba modificación ni integridad. Pendiente repetir como `sudo dpkg -V sudo`.
 
 **Decisión:** Candidate A sigue sin aprobación. La política general de sudo y la identidad del paquete/binario quedan mejor inventariadas, pero `greed` puede actuar como root; la política del helper no es verificable hasta que exista; la procedencia TTY y la interpretación exacta de SSH con PTY siguen abiertas. No se ha modificado el host ni se ha instalado helper. Detalle: [auditoría estática sudo/TTY](design/local-bootstrap-sudo-tty-static-audit.md).
+
+
+### Decisión de política SSH/PTY para bootstrap LOCAL — 2026-11-23
+
+El propietario aceptó la recomendación conservadora: permitir SSH solo cuando primero se abre una shell interactiva con PTY y desde ella se ejecuta sudo/helper directamente. Se rechazan `ssh -t host 'sudo ...'` (comando remoto directo, aunque tenga PTY), SSH sin PTY, comandos no interactivos y wrappers/shells intermedias.
+
+La decisión funcional está cerrada; el mecanismo técnico de verificación sigue abierto. V3 continúa siendo exclusivamente diagnóstico: su coincidencia no autentica el canal SSH ni la procedencia del PTY. Candidate A sigue bloqueado hasta demostrar la distinción de forma estable y fail-closed; si no es posible, se descarta y Candidate B se reevalúa por separado. No se han modificado PAM, sudoers, SSH, systemd ni el host.
