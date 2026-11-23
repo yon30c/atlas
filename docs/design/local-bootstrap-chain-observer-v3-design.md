@@ -1,8 +1,8 @@
 # Diseño V3 — observador diagnóstico de la cadena sudo para bootstrap LOCAL
 
-**Estado:** prototipo diagnóstico V3 implementado y validado en Debian; pruebas automatizadas y escenarios manuales documentados (16-11-2026).  
+**Estado:** prototipo diagnóstico V3 implementado y validado localmente en Debian; validación original y escenarios SSH documentados en §4, con reejecución de build/tests y escenarios locales directos/sudo el 23-11-2026 (§4.1).  
 **Aprobación:** el propietario autorizó trabajar conjuntamente los puntos 1–7 el 16-11-2026. La aprobación cubre únicamente el observador C no privilegiado, sus pruebas y documentación. No autoriza helper privilegiado, PAM, instalación, configuración del host ni ejecución de bootstrap.  
-**Rama:** feature/terminal-commands.  
+**Rama de trabajo actual:** `work/atlas-mvp-runtime`.  
 **Relacionado:** local-bootstrap-privilege-validation-contract.md, local-bootstrap-observer-v2-design.md, local-bootstrap-privilege-boundary.md.
 
 ## 1. Objetivo y resultado
@@ -166,3 +166,20 @@ Si el comportamiento real de sudo no coincide con el modelo de monitor/TTY, no s
 7. Revisión de código independiente antes de cualquier propuesta de helper privilegiado.
 
 Completar V3 no aprueba A ni autoriza PAM, helper privilegiado, cambios del host o Recovery Gate. La siguiente etapa requiere una revisión específica de política efectiva sudo, trust reference del ejecutable, PAM, TTY interactivo y transporte del proof.
+
+
+### 4.1 Revalidación local del build y escenarios directos — 2026-11-23
+
+El propietario repitió en Debian 13 / `Atlas-VM-test`:
+
+```text
+bootstrap-chain-observer: tests passed
+Bootstrap chain observer build and tests completed.
+Observer binary: /tmp/atlas-bootstrap-chain-observer
+```
+
+La ejecución directa desde `bash` volvió a producir `CHAIN_MISMATCH` con `DIRECT_PARENT_IS_NOT_ROOT_OWNED_SETUID_SUDO`. La invocación `sudo -- /tmp/atlas-bootstrap-chain-observer` produjo `CHAIN_PATTERN_MATCHED_DIAGNOSTICALLY`, con dos procesos sudo contiguos (ejecutor y monitor), shell de origen en el índice 2, `chain_stable=yes`, `pidfds_stable=yes` y `collection_complete=yes`. Ambas rutas mantuvieron `AUTHORIZATION=NOT_PROVIDED`.
+
+Esta reejecución confirma build/tests y los dos escenarios locales en el estado Debian observado; no repitió los escenarios SSH históricos de §4 ni amplía sus conclusiones. En particular, los resultados anteriores distinguen: SSH interactivo con PTY entrando primero a una shell y ejecutando sudo (coincidencia diagnóstica); comando remoto `ssh -t ... 'sudo ...'` (mismatch porque `sshd-session` aparece como origen sin `tty_nr`); y shell intermediaria (mismatch por padre directo `dash`). La observación separada de descriptores `/dev/ptmx` no se ha convertido en una prueba de procedencia TTY segura.
+
+No se ejecutaron pruebas desde GitHub. No hubo cambios en sudoers, PAM, SSH, timestamp, configuración o privilegios del host. Los límites de §5 y la prohibición de interpretar la salida como autorización permanecen sin cambio.
