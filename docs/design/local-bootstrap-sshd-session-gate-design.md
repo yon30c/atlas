@@ -25,7 +25,7 @@ OpenSSH no decide el tipo de sesión mirando únicamente si existe un PTY:
 - En una petición SSH de ejecución (`exec`), OpenSSH ejecuta la shell de la cuenta con `-c` y el comando solicitado.
 - La asignación de PTY ocurre por una ruta separada. Una petición `exec` puede tener PTY y seguir siendo una petición de comando.
 
-El código de OpenSSH muestra ambas formas de invocación en `do_child()` y la asignación del TTY en `do_exec_pty()`: [session.c — OpenSSH](https://github.com/openssh/openssh-portable/blob/master/session.c). La documentación de `ForceCommand` indica que se aplica a shell, command y subsystem, y que el comando original queda disponible en `SSH_ORIGINAL_COMMAND`: [sshd_config(5)](https://man.openbsd.org/sshd_config.5).
+El código de OpenSSH muestra ambas formas de invocación en `do_child()` y la asignación del TTY en `do_exec_pty()`: [session.c del paquete Debian 13](https://sources.debian.org/src/openssh/1:10.0p1-7+deb13u4/session.c/). El índice de Debian publica `openssh-server` `1:10.0p1-7+deb13u4` para trixie; es una referencia de fuente, no una afirmación sobre la versión instalada en Atlas: [paquete Debian](https://packages.debian.org/trixie/openssh-server). La documentación de `ForceCommand` indica que se aplica a shell, command y subsystem, y que el comando original queda disponible en `SSH_ORIGINAL_COMMAND`: [sshd_config(5)](https://man.openbsd.org/sshd_config.5).
 
 **Consecuencia:** `tty_nr`, `tpgid`, `SSH_TTY` o la existencia de un PTY no bastan para distinguir `ssh -t host` de `ssh -t host 'sudo ...'`. V3 observa la topología posterior, no la clase de petición SSH recibida por el servidor.
 
@@ -56,6 +56,8 @@ La ausencia de `SSH_ORIGINAL_COMMAND` debe comprobarse por presencia de variable
 | SSH subsystem/SFTP | Debe quedar interceptado por ForceCommand y rechazado | Rechazar; validar en la versión exacta |
 | Terminal local interactiva | Sin contexto SSH; TTY controlador válido | Ejecutar shell local |
 | Shell interactiva seguida de sudo directo | Shell real como origen de la cadena | Candidato a aceptar, sujeto a la validación del helper |
+
+La fuente Debian también confirma que una petición subsystem pasa su comando configurado a `do_exec()`; cuando existe ForceCommand administrativo, `do_exec()` conserva ese comando como original y reemplaza la ejecución por el comando forzado. Como el comando forzado propuesto no es `internal-sftp`, el flujo debe llegar a la puerta en vez de entrar en la implementación interna SFTP. Esto se debe confirmar en la versión instalada y probar de forma negativa; no se presupone por el nombre del subsistema.
 
 ### 3.3 Por qué se requiere tanto ForceCommand como una login shell controlada
 
