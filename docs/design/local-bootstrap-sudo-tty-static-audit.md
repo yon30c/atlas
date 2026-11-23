@@ -161,3 +161,73 @@ Esto aporta ruta resuelta, metadatos, propietario de paquete, versión instalada
 6. Revisar Candidate B por separado; `SO_PEERCRED` autentica credenciales del peer del socket, no la procedencia de un TTY transferido. El receptor debe validar el descriptor recibido y mantener el mismo modelo de amenaza. B no es automáticamente más seguro.
 
 **Decisión actual:** Candidate A sigue sin aprobación para ejecución privilegiada. La evidencia V3 del 23-11-2026 no cierra la política efectiva de sudo, la identidad del ejecutable ni la procedencia del TTY. No se ha cambiado el host ni se han ejecutado pruebas desde GitHub.
+
+
+## 7. Evidencia adicional recibida del propietario — 2026-11-23
+
+Se recibió una nueva captura de solo lectura desde Debian 13, VM `Atlas-VM-test`. Esta evidencia sustituye las dudas históricas solo para los campos que muestra; no constituye aprobación de Candidate A.
+
+### 7.1 Política sudo efectiva
+
+`sudo -V` reportó:
+
+- Sudo, plugin sudoers, gramática sudoers y plugins I/O/audit: versión `1.9.16p2`.
+- Paquete Debian: `sudo 1.9.16p2-3+deb13u2 amd64`.
+
+`sudo -ll` reportó para `greed`:
+
+- Defaults efectivos mostrados: `env_reset`, `mail_badpass`, `secure_path=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin` y `use_pty`.
+- Regla efectiva en `/etc/sudoers`: `RunAsUsers: ALL`, `RunAsGroups: ALL`, comando `ALL`.
+
+La búsqueda textual compartida no encontró directivas activas adicionales de `env_keep`, `SETENV`, `NOPASSWD`, `requiretty` o similares en los archivos inspeccionados; sí mostró los defaults e includes descritos. Este grep no reemplaza el resultado efectivo de sudo.
+
+La consulta `sudo -ll /usr/libexec/atlas/local-bootstrap-authenticator` devolvió `command not found`. La ruta propuesta aún no existe; por tanto, no se obtuvo un conjunto de defaults/reglas efectivo para el helper concreto. No debe interpretarse como una regla sudoers específica ya instalada.
+
+`sudo visudo -c` reportó que `/etc/sudoers` y `/etc/sudoers.d/README` parsean correctamente. Esto acredita sintaxis, no restricción de privilegios.
+
+### 7.2 Identidad observada del binario
+
+La captura reportó:
+
+| Campo | Resultado |
+|---|---|
+| Ruta resuelta | `/usr/bin/sudo` |
+| Tipo | Archivo regular |
+| Propietario | `root:root` |
+| Modo | `4755` (`-rwsr-xr-x`) |
+| Paquete propietario | `sudo` |
+| Versión/arquitectura | `1.9.16p2-3+deb13u2 amd64` |
+| SHA-256 observado | `a59f393bad5037644b89de64fe558ae6d5d1473c25c63022241e7c7019ad2f0c` |
+| File capabilities | `getcap` no mostró ninguna |
+| Componentes de ruta | `/`, `/usr`, `/usr/bin` y el binario aparecen propiedad root; directorios con modo `755` |
+
+La huella SHA-256 identifica la muestra observada, pero no se comparó con un digest obtenido de una fuente autenticada independiente. No es todavía una raíz de confianza ni una política de actualización.
+
+### 7.3 Verificación dpkg inconclusa
+
+El comando compartido fue `dpkg -V sudo` sin privilegios root y mostró:
+
+```text
+????????? c /etc/sudoers
+????????? c /etc/sudoers.d/README
+```
+
+La verificación de esos archivos queda **inconclusa**. Los signos de interrogación no se deben interpretar como una modificación confirmada ni como integridad confirmada. La ejecución no privilegiada no aportó evidencia suficiente para verificar esos archivos protegidos.
+
+Para cerrar únicamente esta comprobación, ejecutar:
+
+```bash
+sudo dpkg -V sudo
+```
+
+Si no produce salida, registrar exactamente que `dpkg -V` no reportó discrepancias para los archivos que puede verificar según los metadatos del paquete; no convertirlo en prueba criptográfica de procedencia del paquete ni de que sudoers sea una política segura. Si produce salida, compartirla sin editar archivos.
+
+### 7.4 Consecuencias y estado actualizado
+
+- La política irrestricta `greed: (ALL : ALL) ALL` queda reconfirmada en la VM. Candidate A no puede defenderse de `greed` actuando como root; esta limitación ya forma parte explícita del modelo de amenaza.
+- Los defaults generales efectivos indicados por `sudo -ll` quedan reconfirmados. La política efectiva de la ruta helper sigue sin verificarse porque el ejecutable no existe.
+- La identidad de ruta, paquete, versión, propietario, modo y hash de `/usr/bin/sudo` queda inventariada. La confianza criptográfica de ese binario y la integridad verificable de los archivos sudoers no quedan demostradas por esta captura.
+- No se modificó sudoers, PAM, SSH, systemd, usuarios, grupos, permisos, claves ni servicios. No se instaló helper y no se ejecutaron pruebas desde GitHub.
+
+**Matriz actualizada:** política general de sudo y paquete/binario inventariados; regla del helper aún no aplicable; verificación dpkg pendiente de repetición como root; procedencia del TTY y resolución de la ambigüedad SSH/PTY siguen abiertas. Candidate A continúa **no aprobado**.
+
