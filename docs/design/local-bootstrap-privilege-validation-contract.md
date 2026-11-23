@@ -154,13 +154,15 @@ No se usa stdin, stdout, stderr, pipes ni variables de entorno como sustituto de
 
 ### 6.2 Terminal local y SSH
 
-La política funcional permite terminal local y SSH interactivo con PTY. No se intenta inferir presencia física ni ubicación.
+La política funcional cerrada permite terminal local interactiva y SSH únicamente después de una petición de shell interactiva con PTY; desde esa shell se debe invocar sudo/helper directamente. Se rechazan las peticiones SSH exec aunque tengan PTY, SSH sin PTY, comandos remotos no interactivos y wrappers intermedios. No se infiere presencia física ni ubicación.
 
-La opción sudo `use_pty` introduce una distinción esencial: el proceso ejecutor puede tener un PTY creado por sudo incluso cuando el cliente SSH no solicitó uno. Por eso, que el helper tenga `/dev/tty`, esté en foreground o comparta SID con el ejecutor no demuestra por sí solo que la sesión de origen tenía PTY.
+La opción sudo `use_pty` sigue siendo relevante: el proceso ejecutor puede tener un PTY creado por sudo incluso cuando el cliente SSH no solicitó uno. Sin embargo, el problema es más amplio que detectar un PTY interno. OpenSSH distingue una petición shell de una petición exec antes de ejecutar la login shell: la petición shell se invoca sin `-c`; la petición exec se invoca con `-c <command>`. La asignación de PTY es independiente, por lo que `ssh -t host 'sudo ...'` continúa siendo una petición exec.
 
-El diseño debe identificar de forma inequívoca el proceso monitor de sudo (o el contexto de invocación equivalente, específico de la versión/configuración aprobada) y comprobar que conserva la terminal de la sesión iniciadora. La observación anterior de dos PTY distintos en la ejecución indirecta muestra que monitor y ejecutor pueden tener descriptores/terminales diferentes; no basta comparar destinos textuales de FD ni buscar un ancestro con nombre `sudo`.
+La auditoría identificó una alternativa en la frontera de OpenSSH: puerta C root-owned como login shell administrada y `ForceCommand` administrativo fijo, descrita en `local-bootstrap-sshd-session-gate-design.md`. La puerta podría rechazar el comando original antes de ejecutar la shell real y exigir TTY controlador para la petición shell. Es un diseño candidato, no una implementación ni una aprobación.
 
-**Condición obligatoria aún no demostrada:** el monitor de sudo asociado a la invocación debe permitir distinguir una sesión iniciada con PTY de una ejecución SSH sin PTY a la que `use_pty` asigna un PTY interno. Si no puede identificarse y verificarse de forma estable, A no puede cumplir la política de rechazo de SSH sin PTY y debe descartarse o rediseñarse sin relajar la política.
+El helper todavía debe validar la cadena sudo→shell→sshd, el TTY de la shell, el foreground y la ausencia de wrappers. El monitor sudo y el ejecutor pueden conservar PTY distintos; no basta comparar destinos textuales de FD ni buscar un ancestro con nombre sudo. Las carreras procfs/pidfd permanecen.
+
+**Condición obligatoria aún no demostrada:** la puerta y el helper deben distinguir de forma estable shell request interactiva de exec request con PTY, rechazar subsystems que no pasen por la puerta y verificar la invocación directa. Si no puede demostrarse sin relajar la política, Candidate A se descarta y B se evalúa por separado.
 
 No se modificará timestamp, sudoers, NOPASSWD, PAM ni se usará `sudo -S` para forzar una prueba. Si la configuración actual no permite ejecutar la prueba negativa de forma segura, se documenta como no demostrada.
 
