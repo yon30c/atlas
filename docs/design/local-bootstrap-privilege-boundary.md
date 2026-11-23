@@ -483,3 +483,10 @@ Compilar en Debian con las opciones estrictas documentadas en `tools/bootstrap-p
 Comparar si el recorrido identifica de forma consistente el monitor sudo, el ejecutor sudo, la shell original y los procesos sshd. Registrar errores de lectura o PPID inestable como resultados inconclusos, no como autorización ni como prueba automática de ataque.
 
 No modificar sudoers, PAM, systemd, usuarios/grupos, permisos ni políticas de timestamp para realizar estas pruebas.
+
+
+## 10. Política SSH/PTY aprobada — 2026-11-23
+
+El propietario adoptó la política conservadora: permitir SSH solo si se establece primero una shell interactiva con PTY y desde ella se ejecuta sudo/helper directamente. Se rechazan el comando remoto `ssh -t host 'sudo ...'`, SSH sin PTY, comandos no interactivos y wrappers/shells intermedias.
+
+Esto cierra la decisión funcional que §9 dejaba pendiente, pero no demuestra que el mecanismo actual pueda verificarla. V3 sigue siendo diagnóstico; no autentica SSH ni la procedencia del PTY. El diseño de helper debe probar esta distinción de forma estable y fail-closed, sin inferirla únicamente de variables de entorno, `tty_nr` o presencia de `/dev/ptmx`. Si no puede demostrarse, Candidate A se descarta sin relajar la política. Candidate A no está aprobado y no se autoriza instalación ni cambio del host.
