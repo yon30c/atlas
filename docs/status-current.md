@@ -1,6 +1,6 @@
 # Estado vigente de Atlas
 
-> **Corte documental:** 22 de noviembre de 2026.
+> **Corte documental:** 23 de noviembre de 2026.
 > **Main:** HEAD `a89e96cc4e5d9555e28a7ea5d9f3788654fe7268`; PR #29 integrado mediante merge commit `c4e5655c37f4d7bd21d431d1c855b8f0cb2c0d0b`.
 > **Rama MVP activa:** `work/atlas-mvp-runtime`, no integrada en `main`. Último commit de código del incremento de credencial: `55cec33686cecf33b86721fb84a04b758498819e`. El último HEAD validado por el propietario sigue siendo `29e900a1129efbb83c8e4b867c99d37d66473c55`; los cambios posteriores de Grant (`1f43d29`), Workspace (`0315d52`) y el perfil CAM inicial (`5f94714`–`08eea1c`) están pendientes de validación local. La comparación consultada mostró la rama por delante y no detrás de `main`.
 > **Validación local de la rama MVP:** suite completa `Ran 1611 tests in 40.322s — OK (skipped=1)`; `compileall -q src tests` sin errores reportados. Validación comunicada por el propietario desde Debian 13 / `Atlas-VM-test`, no ejecutada desde GitHub.
@@ -316,3 +316,18 @@ sin errores reportados.
 **Conclusión:** la suite unitaria completa de esta rama queda validada localmente con 1611 tests ejecutados, cero fallos y un test omitido. La compilación de `src` y `tests` también finalizó correctamente. Esta evidencia no equivale a validar migraciones sobre una base persistente real ni habilita login, bootstrap, Workspace, CAM o composición autenticada; esas capacidades continúan deshabilitadas según las decisiones vigentes.
 
 **Siguiente paso:** revisar el estado/documentación y definir el siguiente incremento del MVP sin ampliar permisos ni activar flujos operativos por inferencia. La validación fue ejecutada por el propietario en Debian; no se ejecutaron pruebas desde GitHub.
+
+
+## Validación local del observador bootstrap V3 — 2026-11-23
+
+El propietario ejecutó en Debian 13, VM `Atlas-VM-test`, checkout `/opt/atlas-dev`, `sh tools/bootstrap-chain-observer/test_chain.sh`. Resultado comunicado: `bootstrap-chain-observer: tests passed`; build completado y binario temporal en `/tmp/atlas-bootstrap-chain-observer`.
+
+Escenarios manuales:
+
+- Invocación directa desde `bash`: rechazada con `CHAIN_MISMATCH` y `DIRECT_PARENT_IS_NOT_ROOT_OWNED_SETUID_SUDO`.
+- Invocación `sudo -- /tmp/atlas-bootstrap-chain-observer`: coincidencia diagnóstica `CHAIN_PATTERN_MATCHED_DIAGNOSTICALLY`; dos ancestros sudo contiguos observados (ejecutor y monitor), shell de origen en índice 2; `chain_stable=yes`, `pidfds_stable=yes`, `collection_complete=yes`.
+- En todos los casos, `AUTHORIZATION=NOT_PROVIDED`.
+
+**Conclusión limitada:** V3 queda validada localmente para build/tests y esos dos escenarios manuales. La coincidencia demuestra únicamente que las observaciones de esta VM encajaron con el patrón diagnóstico sudo esperado. No valida SSH con/sin PTY, wrapper, root sin sudo, política efectiva de sudo, identidad del paquete, PAM ni procedencia criptográfica del TTY. Tampoco elimina las carreras no atómicas de procfs.
+
+**Seguridad y decisión:** el candidato A sigue sin aprobarse para ejecución privilegiada. No instalar helper, modificar sudoers/PAM/systemd/SSH, generar claves ni conectar CAM/SQLite. La siguiente fase es cerrar documentalmente las condiciones obligatorias aún no demostradas (en particular política efectiva de sudo y distinción de TTY de origen frente a PTY interno), y después realizar revisión adversarial del contrato antes de solicitar una decisión A/B. La validación fue ejecutada por el propietario en Debian; no se ejecutaron pruebas desde GitHub.
