@@ -349,9 +349,9 @@ El propietario compartió una nueva captura read-only desde Debian 13 / `Atlas-V
 - `visudo -c`: archivos inspeccionados parsean correctamente; esto no acredita política restrictiva.
 - La ruta propuesta `/usr/libexec/atlas/local-bootstrap-authenticator` no existe; no hay regla efectiva específica del helper que pueda evaluarse.
 - `/usr/bin/sudo`: regular, `root:root`, modo `4755`, propiedad del paquete sudo; SHA-256 observado `a59f393bad5037644b89de64fe558ae6d5d1473c25c63022241e7c7019ad2f0c`. `getcap` no mostró capacidades adicionales. El digest no se contrastó con una referencia autenticada.
-- `dpkg -V sudo` se ejecutó sin root y devolvió signos `?????????` para los archivos sudoers; la verificación queda inconclusa, no prueba modificación ni integridad. Pendiente repetir como `sudo dpkg -V sudo`.
+- La primera ejecución de `dpkg -V sudo` sin root mostró signos `?????????` para los archivos sudoers y fue inconclusa. El propietario repitió `sudo dpkg -V sudo` como root y no obtuvo salida: dpkg no reportó discrepancias en los archivos que pudo verificar. Esto no es una raíz de confianza criptográfica ni demuestra que la política sudo sea segura.
 
-**Decisión:** Candidate A sigue sin aprobación. La política general de sudo y la identidad del paquete/binario quedan mejor inventariadas, pero `greed` puede actuar como root; la política del helper no es verificable hasta que exista; la procedencia TTY y la interpretación exacta de SSH con PTY siguen abiertas. No se ha modificado el host ni se ha instalado helper. Detalle: [auditoría estática sudo/TTY](design/local-bootstrap-sudo-tty-static-audit.md).
+**Decisión:** Candidate A sigue sin aprobación. `greed` puede actuar como root; la política del helper no es verificable hasta que exista; V3 no distingue la petición SSH de shell de una petición exec con PTY. La puerta administrada por OpenSSH es solo una alternativa de diseño y conserva bloqueadores. No se ha modificado el host ni se ha instalado helper. Detalles: [auditoría estática sudo/TTY](design/local-bootstrap-sudo-tty-static-audit.md) y [diseño de puerta SSH](design/local-bootstrap-sshd-session-gate-design.md).
 
 
 ### Decisión de política SSH/PTY para bootstrap LOCAL — 2026-11-23
