@@ -84,14 +84,14 @@ La observación de `/dev/ptmx` demuestra que `tty_nr=0` en `sshd-session` no per
 
 **Hallazgo crítico:** V3 no prueba la procedencia del TTY. Prueba una relación de TTY controlador en una cadena de procesos concreta. Su rechazo de la invocación SSH remota directa no demuestra que esa conexión careciera de PTY; demuestra que no cumplió la regla de ancestro/TTY implementada.
 
-### 3.4 Ambigüedad funcional pendiente
+### 3.4 Ambigüedad funcional histórica — resuelta en §8
 
 La política de producto dice que se admite “SSH interactivo con PTY” y se rechaza “SSH sin PTY y toda ejecución no interactiva”. Hay que distinguir dos interpretaciones antes de diseñar el mecanismo:
 
 1. **Shell interactiva:** solo se acepta una sesión SSH que inicia una shell interactiva y desde ella ejecuta sudo.
 2. **Cualquier solicitud SSH con PTY:** también se acepta `ssh -t host 'sudo ...'` si el servidor asignó un PTY, aunque el cliente envíe un comando remoto en vez de abrir una shell interactiva.
 
-Los resultados actuales no permiten declarar que ambas políticas sean equivalentes. La interpretación elegida cambia el criterio de aceptación y las pruebas negativas. Ninguna implementación debe inferirla.
+Los resultados actuales no permiten declarar que ambas políticas sean equivalentes. La interpretación elegida cambia el criterio de aceptación y las pruebas negativas. Ninguna implementación debe inferirla. La decisión del propietario del 23-11-2026 cerró esta cuestión a favor de la primera interpretación: shell interactiva con PTY primero, luego sudo directo; el comando remoto con PTY se rechaza. El mecanismo técnico permanece abierto y se evalúa en §9 y en `local-bootstrap-sshd-session-gate-design.md`.
 
 ## 4. Matriz de decisión actual
 
