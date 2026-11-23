@@ -160,3 +160,15 @@ Este documento no:
 - inicializa CAM ni abre Recovery Gate;
 - sustituye las fases funcionales de Atlas Assistant/Workstation.
 
+
+
+## 9. Decisión de política SSH/PTY posterior — 2026-11-23
+
+El propietario aceptó la recomendación conservadora para la política de invocación:
+
+- Terminal local interactiva: sudo directo.
+- SSH: primero abrir shell interactiva con PTY; desde ella ejecutar sudo/helper directamente.
+- Rechazar `ssh -t host 'sudo ...'`, incluso con PTY asignado.
+- Rechazar SSH sin PTY, comandos remotos no interactivos y wrappers/shells intermedias.
+
+La decisión funcional ya no está pendiente. El mecanismo que demuestre que la solicitud procede de una shell interactiva SSH (y no de un comando remoto con PTY) sí permanece pendiente. La evidencia V3 no resuelve esta distinción: su resultado es diagnóstico, no autorización. Candidate A sigue sin aprobarse; si la condición no puede demostrarse de forma estable y fail-closed, se descarta y B se evalúa independientemente. No se han realizado cambios de host.
