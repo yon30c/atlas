@@ -13,7 +13,7 @@ El contrato no aprueba A ni autoriza implementar o instalar el helper privilegia
 
 **Decisión provisional:** A continúa como candidato preferido por su menor superficie operativa. B (servicio privilegiado con socket Unix, `SO_PEERCRED` y TTY transferido) permanece como alternativa. Si una condición obligatoria de A no puede demostrarse en el Debian real, no se debilita el requisito: A se descarta y se reevalúa B.
 
-La política de sesión ya acordada admite terminal local y SSH interactivo con PTY; rechaza SSH sin PTY y toda ejecución no interactiva. Un PTY no demuestra presencia física.
+La política de sesión ya acordada admite terminal local interactiva y solo SSH que abre primero una shell interactiva con PTY y después ejecuta sudo/helper directamente. Rechaza ssh -t host 'sudo ...', SSH sin PTY, comandos remotos no interactivos, subsistemas no autorizados y wrappers intermedios. Un PTY no demuestra presencia física.
 
 ## 2. Límites e invariantes
 
@@ -377,3 +377,14 @@ Esta es una **decisión de política**, no una afirmación de que V3 pueda verif
 El diseño técnico debe demostrar la distinción de forma estable y fail-closed. No se debe inferirla únicamente de `tty_nr`, `tpgid`, basename de procesos o la presencia de un descriptor `/dev/ptmx`. Si no se puede demostrar sin relajar la política, Candidate A se descarta y Candidate B se evalúa por separado con los mismos requisitos. La política general de sudo irrestricto de `greed` sigue fuera de la protección que Candidate A puede ofrecer frente a ese usuario actuando como root.
 
 **Estado:** decisión funcional cerrada; mecanismo de verificación abierto; Candidate A no aprobado; sin cambios de host ni pruebas privilegiadas.
+
+
+## 15. Puerta SSH en la frontera de OpenSSH — 2026-11-23
+
+La auditoría estática identificó que OpenSSH diferencia la petición de shell de la petición de comando antes de ejecutar la login shell: la primera usa argv de login sin -c; la segunda usa -c <command>. La asignación de PTY es independiente. Por tanto, V3 no puede inferir esa diferencia a partir del TTY controlador del primer ancestro no sudo.
+
+Se documentó como alternativa una puerta C root-owned configurada como login shell administrada, junto con ForceCommand administrativo fijo. La puerta sería el primer ejecutable del usuario, rechazaría comandos originales/subsystems y solicitudes sin TTY, y haría execve() de la shell real solo para la petición interactiva aprobada. El diseño está en local-bootstrap-sshd-session-gate-design.md.
+
+**No es implementación ni aprobación de Candidate A.** Antes de cualquier prototipo deben cerrarse la versión exacta de OpenSSH, configuración efectiva de todos los listeners, variables de entorno no falsificables, cuenta/login shell administrada, subsystems, forwarding, relación shell→sshd, wrappers y reemplazos mediante exec. La puerta no resuelve por sí sola las carreras de procfs ni demuestra que el proceso shell no haya sido reemplazado. Si no se puede validar cada requisito, A se descarta sin relajar la política.
+
+La verificación reportada por el propietario sudo dpkg -V sudo terminó sin salida; se registra solo como ausencia de discrepancias reportadas por dpkg, no como raíz de confianza ni política segura.
