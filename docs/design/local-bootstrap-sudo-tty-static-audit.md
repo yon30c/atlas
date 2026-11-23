@@ -231,3 +231,31 @@ Si no produce salida, registrar exactamente que `dpkg -V` no reportó discrepanc
 
 **Matriz actualizada:** política general de sudo y paquete/binario inventariados; regla del helper aún no aplicable; verificación dpkg pendiente de repetición como root; procedencia del TTY y resolución de la ambigüedad SSH/PTY siguen abiertas. Candidate A continúa **no aprobado**.
 
+
+
+## 8. Decisión de política SSH/PTY — 2026-11-23
+
+El propietario acepta la recomendación conservadora: **solo se admite una sesión SSH que establezca primero una shell interactiva con PTY y desde esa shell se invoque el helper mediante sudo directo**.
+
+### 8.1 Casos permitidos y rechazados
+
+| Escenario | Política |
+|---|---|
+| Terminal local interactiva y sudo directo | Permitido, sujeto a los demás controles |
+| SSH con PTY, abrir shell interactiva y ejecutar sudo directo desde ella | Permitido, sujeto a los demás controles |
+| `ssh -t host 'sudo ...'` (comando remoto directo, aunque tenga PTY) | Rechazado |
+| SSH sin PTY | Rechazado |
+| Comando remoto no interactivo | Rechazado |
+| Shell/wrapper intermedio entre shell interactiva y sudo/helper | Rechazado |
+
+La política se refiere al flujo de invocación requerido; **no afirma que la implementación actual pueda demostrarlo de forma segura**. El hecho de que V3 haya coincidido diagnósticamente en una shell SSH interactiva es evidencia de topología observada, no autenticación del canal SSH ni prueba suficiente para conceder autoridad.
+
+### 8.2 Consecuencia para V3 y Candidate A
+
+- V3 permanece como observador no privilegiado y exclusivamente diagnóstico.
+- Su regla actual puede reconocer algunos casos de shell interactiva seguida de sudo directo, pero no autentica que el origen sea una shell SSH interactiva ni demuestra la procedencia del PTY.
+- No se debe convertir el patrón V3 en autorización ni ampliar la regla para aceptar `sshd-session` a partir de `/dev/ptmx`/ `tty-index` sin un contrato y validación específicos.
+- El diseño siguiente debe demostrar de forma fail-closed la diferencia entre una shell interactiva de sesión y un comando remoto con PTY. Si no puede probarse de forma estable, Candidate A se descarta; no se relaja la política.
+- La política general `greed: (ALL : ALL) ALL` sigue limitando el modelo de amenaza: el helper no protege frente a ese usuario actuando como root.
+
+**Decisión funcional cerrada; mecanismo técnico abierto.** Candidate A continúa no aprobado. No se implementó helper ni se modificó PAM, sudoers, SSH, systemd o el host.
