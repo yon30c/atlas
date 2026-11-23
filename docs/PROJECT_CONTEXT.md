@@ -661,3 +661,14 @@ sin errores reportados.
 **Conclusión:** la suite unitaria completa de esta rama queda validada localmente con 1611 tests ejecutados, cero fallos y un test omitido. La compilación de `src` y `tests` también finalizó correctamente. Esta evidencia no equivale a validar migraciones sobre una base persistente real ni habilita login, bootstrap, Workspace, CAM o composición autenticada; esas capacidades continúan deshabilitadas según las decisiones vigentes.
 
 **Siguiente paso:** revisar el estado/documentación y definir el siguiente incremento del MVP sin ampliar permisos ni activar flujos operativos por inferencia. La validación fue ejecutada por el propietario en Debian; no se ejecutaron pruebas desde GitHub.
+
+
+## Validación local del observador bootstrap V3 — 2026-11-23
+
+El propietario ejecutó `sh tools/bootstrap-chain-observer/test_chain.sh` en Debian 13 / `Atlas-VM-test`; las pruebas y el build finalizaron correctamente. El binario temporal fue `/tmp/atlas-bootstrap-chain-observer`.
+
+- Ejecución directa desde `bash`: `CHAIN_MISMATCH` (`DIRECT_PARENT_IS_NOT_ROOT_OWNED_SETUID_SUDO`).
+- Ejecución mediante `sudo --`: `CHAIN_PATTERN_MATCHED_DIAGNOSTICALLY`; se observaron dos procesos sudo contiguos (ejecutor/monitor), shell de origen en índice 2 y muestras estables (`chain_stable`, `pidfds_stable`, `collection_complete` en `yes`).
+- La salida mantuvo `AUTHORIZATION=NOT_PROVIDED`.
+
+Esta evidencia valida únicamente el build/tests y los dos escenarios observados. No cubre SSH con/sin PTY, wrappers, root sin sudo, política efectiva de sudo, PAM ni autenticidad de procedencia TTY. El candidato A continúa sin aprobación para ejecución privilegiada; no instalar helper ni modificar sudoers, PAM, systemd, SSH, claves, SQLite o CAM. La siguiente tarea es cerrar las condiciones de política sudo y procedencia TTY pendientes y revisar adversarialmente el contrato antes de una decisión A/B. No se ejecutaron pruebas desde GitHub.
