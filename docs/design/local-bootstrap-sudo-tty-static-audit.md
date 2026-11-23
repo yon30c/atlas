@@ -279,7 +279,7 @@ La revisión de OpenSSH identifica una frontera más temprana que procfs:
 - Petición exec: OpenSSH ejecuta la login shell con -c y el comando solicitado.
 - Asignar PTY no convierte una petición exec en una petición de shell. Un comando remoto puede recibir PTY.
 
-El código de OpenSSH muestra ambas formas de invocación en do_child() y la asignación del TTY en do_exec_pty(): [session.c — OpenSSH](https://github.com/openssh/openssh-portable/blob/master/session.c). La documentación de ForceCommand especifica que se aplica a shell, command y subsystem, y expone el comando original mediante SSH_ORIGINAL_COMMAND: [sshd_config(5)](https://man.openbsd.org/sshd_config.5).
+El código de OpenSSH muestra ambas formas de invocación en do_child() y la asignación del TTY en do_exec_pty(): [session.c del paquete Debian 13 1:10.0p1-7+deb13u4](https://sources.debian.org/src/openssh/1:10.0p1-7+deb13u4/session.c/). La documentación de ForceCommand especifica que se aplica a shell, command y subsystem, y expone el comando original mediante SSH_ORIGINAL_COMMAND: [sshd_config(5)](https://man.openbsd.org/sshd_config.5).
 
 Por ello, la política aprobada no puede demostrarse solo con tty_nr, tpgid, SSH_TTY ni el PTY master observado en sshd-session.
 
