@@ -360,3 +360,20 @@ No:
 Se añadió `local-bootstrap-sudo-tty-static-audit.md`. La revisión de código confirma que V3 clasifica sudo por basename, archivo regular, UID/GID 0/0, setuid y ausencia de escritura por grupo/otros; no verifica identidad de paquete, hash contra una referencia protegida, política efectiva ni integridad de sudoers. Su comprobación TTY exige que el primer ancestro no sudo tenga TTY controlador y que coincida con el monitor sudo externo; no inspecciona el PTY master de `sshd-session` ni autentica procedencia SSH. Por ello, el rechazo histórico de `ssh -t host 'sudo ...'` no demuestra que no hubiera PTY: solo que el ancestro no cumplió la regla de TTY controlador.
 
 La evidencia histórica reportada para Debian es sudo 1.9.16p2, defaults `env_reset`, `mail_badpass`, `secure_path`, `use_pty` y autorización irrestricta `(ALL : ALL) ALL` para `greed`; falta reconfirmar la política efectiva completa y la identidad/integridad del binario. El acceso root irrestricto define el límite de amenaza: Candidate A no protege frente a `greed` actuando como root. No se han realizado cambios de host ni pruebas desde GitHub. Candidate A continúa bloqueado por política efectiva, trust reference del ejecutable y semántica/procedencia TTY.
+
+
+## 14. Política SSH/PTY aprobada — 2026-11-23
+
+El propietario eligió la recomendación conservadora:
+
+- Aceptar terminal local interactiva con sudo directo.
+- Aceptar SSH únicamente cuando se inicia primero una shell interactiva con PTY y desde esa shell se ejecuta sudo/helper directamente.
+- Rechazar `ssh -t host 'sudo ...'`, aunque el cliente solicite PTY.
+- Rechazar SSH sin PTY y cualquier comando remoto no interactivo.
+- Rechazar shell o wrapper intermedio entre la shell interactiva y sudo/helper.
+
+Esta es una **decisión de política**, no una afirmación de que V3 pueda verificarla. V3 sigue siendo observador diagnóstico; su coincidencia no constituye autenticación de SSH, procedencia de PTY ni autorización.
+
+El diseño técnico debe demostrar la distinción de forma estable y fail-closed. No se debe inferirla únicamente de `tty_nr`, `tpgid`, basename de procesos o la presencia de un descriptor `/dev/ptmx`. Si no se puede demostrar sin relajar la política, Candidate A se descarta y Candidate B se evalúa por separado con los mismos requisitos. La política general de sudo irrestricto de `greed` sigue fuera de la protección que Candidate A puede ofrecer frente a ese usuario actuando como root.
+
+**Estado:** decisión funcional cerrada; mecanismo de verificación abierto; Candidate A no aprobado; sin cambios de host ni pruebas privilegiadas.
