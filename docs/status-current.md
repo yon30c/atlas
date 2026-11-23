@@ -338,3 +338,17 @@ Escenarios manuales:
 Se revisaron directamente en GitHub el contrato de privilegios, el diseño V3 y `bootstrap_chain_observer.c`. V3 solo clasifica un ejecutable con basename `sudo`, propiedad root, bit setuid y sin escritura por grupo/otros; no verifica paquete, hash confiable, configuración efectiva ni plugins. La regla de terminal comprueba la relación del TTY controlador del primer ancestro no sudo con el sudo monitor externo; no inspecciona los descriptores `/dev/ptmx` ni autentica procedencia SSH. Por ello, `tty_nr=0` en `sshd-session` no demuestra por sí solo que no haya PTY, y el rechazo de `ssh -t host 'sudo ...'` solo indica que no cumplió la regla actual.
 
 La evidencia histórica reporta sudo 1.9.16p2, defaults `env_reset`, `mail_badpass`, `secure_path`, `use_pty`, y `greed` con `(ALL : ALL) ALL`. Falta reconfirmar defaults/reglas efectivos para la ruta propuesta, identidad e integridad del binario y política vigente. El acceso sudo irrestricto implica que Candidate A no protege contra `greed` actuando como root. No se modificó el host ni se ejecutaron pruebas desde GitHub. Próximo paso: ejecutar solo las consultas de lectura de `design/local-bootstrap-sudo-tty-static-audit.md` §5.
+
+
+### Evidencia actualizada de sudo para bootstrap LOCAL — 2026-11-23
+
+El propietario compartió una nueva captura read-only desde Debian 13 / `Atlas-VM-test`:
+
+- `sudo -V`: sudo y plugins en `1.9.16p2`; paquete `sudo 1.9.16p2-3+deb13u2 amd64`.
+- `sudo -ll`: defaults efectivos mostrados `env_reset`, `mail_badpass`, `secure_path`, `use_pty`; `greed` conserva `(ALL : ALL) ALL` para cualquier usuario/grupo destino.
+- `visudo -c`: archivos inspeccionados parsean correctamente; esto no acredita política restrictiva.
+- La ruta propuesta `/usr/libexec/atlas/local-bootstrap-authenticator` no existe; no hay regla efectiva específica del helper que pueda evaluarse.
+- `/usr/bin/sudo`: regular, `root:root`, modo `4755`, propiedad del paquete sudo; SHA-256 observado `a59f393bad5037644b89de64fe558ae6d5d1473c25c63022241e7c7019ad2f0c`. `getcap` no mostró capacidades adicionales. El digest no se contrastó con una referencia autenticada.
+- `dpkg -V sudo` se ejecutó sin root y devolvió signos `?????????` para los archivos sudoers; la verificación queda inconclusa, no prueba modificación ni integridad. Pendiente repetir como `sudo dpkg -V sudo`.
+
+**Decisión:** Candidate A sigue sin aprobación. La política general de sudo y la identidad del paquete/binario quedan mejor inventariadas, pero `greed` puede actuar como root; la política del helper no es verificable hasta que exista; la procedencia TTY y la interpretación exacta de SSH con PTY siguen abiertas. No se ha modificado el host ni se ha instalado helper. Detalle: [auditoría estática sudo/TTY](design/local-bootstrap-sudo-tty-static-audit.md).
