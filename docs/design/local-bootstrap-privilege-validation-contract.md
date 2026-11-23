@@ -1,9 +1,9 @@
 # Contrato de validación de privilegios para bootstrap LOCAL (candidato A)
 
-**Estado:** V1 y V2 completadas y validadas en Debian; V3 (observador diagnóstico de cadena sudo) validada localmente en Debian dentro del alcance documentado; contrato general abierto y candidato A no aprobado para ejecución privilegiada. Contrato general abierto; candidato A no aprobado para ejecución privilegiada.  
+**Estado:** V1, V2 y V3 validadas localmente en el alcance documentado; contrato general abierto y Candidate A no aprobado para ejecución privilegiada.  
 **Rama de trabajo actual:** `work/atlas-mvp-runtime`.  
 **Fecha de actualización:** 23 de noviembre de 2026. La sección 11 conserva el corte histórico del 16-11-2026.  
-**Relacionado:** `local-bootstrap-privilege-boundary.md`, `local-pam-bootstrap-authenticator.md`, `local-pam-bootstrap-proof-protocol.md`, `local-bootstrap-coordination-architecture.md`, `local-bootstrap-chain-observer-v3-design.md`.
+**Relacionado:** `local-bootstrap-privilege-boundary.md`, `local-pam-bootstrap-authenticator.md`, `local-pam-bootstrap-proof-protocol.md`, `local-bootstrap-coordination-architecture.md`, `local-bootstrap-chain-observer-v3-design.md`, `local-bootstrap-sudo-tty-static-audit.md`.
 
 ## 1. Propósito y decisión actual
 
@@ -336,7 +336,7 @@ Escenarios manuales comunicados:
 
 **Alcance validado:** compilación/build y pruebas automatizadas del observador; clasificación diagnóstica de la ejecución directa como mismatch; coincidencia diagnóstica de la cadena sudo interactiva observada en esta VM.
 
-**No repetido en esta ejecución del 23-11:** los escenarios SSH con/sin PTY, wrapper/shell intermediaria y root sin sudo. El diseño V3 conserva resultados manuales históricos del propietario para SSH: shell SSH interactiva con PTY seguida de sudo directo coincidió; el comando remoto `ssh -t ... 'sudo ...'` y el wrapper fueron rechazados por la topología observada. Véase §4 y §5 de `local-bootstrap-chain-observer-v3-design.md`. Esos resultados no demuestran autenticidad SSH ni procedencia criptográfica del TTY. Siguen pendientes la política sudo efectiva, identidad del paquete y validación PAM. La salida no demuestra autorización ni presencia física. La observación de dos procesos sudo no elimina las limitaciones TOCTOU de procfs/pidfd descritas arriba.
+**No repetido en esta ejecución del 23-11:** los escenarios SSH con/sin PTY, wrapper/shell intermediaria y root sin sudo. El diseño V3 conserva resultados manuales históricos del propietario para SSH: shell SSH interactiva con PTY seguida de sudo directo coincidió; el comando remoto `ssh -t ... 'sudo ...'` y el wrapper fueron rechazados por la topología observada. Véase §4 y §5 de `local-bootstrap-chain-observer-v3-design.md`. Esos resultados no demuestran autenticidad SSH ni procedencia criptográfica del TTY. Siguen pendientes la política sudo efectiva, identidad del paquete y validación PAM. La salida no demuestra autorización ni presencia física. La observación de dos procesos sudo no elimina las limitaciones TOCTOU de procfs/pidfd descritas arriba. La auditoría estática posterior precisa que V3 comprueba la relación del TTY controlador del primer ancestro no sudo con el monitor, no la procedencia del canal SSH ni la mera asignación de un PTY; la política efectiva y el binario sudo aprobado tampoco quedan verificados por V3. Véase `local-bootstrap-sudo-tty-static-audit.md`.
 
 **Decisión:** V3 pasa de pendiente a validada localmente para el alcance anterior. Esto no aprueba el candidato A, no habilita helper privilegiado y no autoriza cambios en PAM, sudoers, systemd, claves, SQLite, CAM o el host. A sigue provisional; antes de decidir A/B deben cerrarse las comprobaciones obligatorias restantes, en particular la procedencia del TTY y la política efectiva de sudo.
 
@@ -352,4 +352,11 @@ No:
 - conectar el helper con el runtime;
 - aceptar observaciones diagnósticas como autorización.
 
-**Estado:** V1, V2 y V3 completadas y validadas localmente en el alcance documentado. El contrato general permanece abierto y el candidato A no está aprobado para ejecución privilegiada. La validación V3 no constituye autorización; las pruebas negativas restantes, decisión A/B, PAM, helper privilegiado o cambios del host requieren diseño, revisión y aprobación separados. Las pruebas negativas de autoridad, decisión A/B, PAM, helper privilegiado o cambios del host requieren diseño, revisión y aprobación separados.
+**Estado:** V1, V2 y V3 completadas y validadas localmente en el alcance documentado. El contrato general permanece abierto y el candidato A no está aprobado para ejecución privilegiada. La validación V3 no constituye autorización; las pruebas negativas restantes, decisión A/B, PAM, helper privilegiado o cambios del host requieren diseño, revisión y aprobación separados. La política efectiva de sudo, la referencia de confianza del ejecutable y la semántica de SSH interactivo/PTy siguen abiertas; véase la auditoría estática. Las pruebas negativas restantes, decisión A/B, PAM, helper privilegiado o cambios del host requieren diseño, revisión y aprobación separados.
+
+
+## 13. Auditoría estática de sudo, ejecutable y TTY — 2026-11-23
+
+Se añadió `local-bootstrap-sudo-tty-static-audit.md`. La revisión de código confirma que V3 clasifica sudo por basename, archivo regular, UID/GID 0/0, setuid y ausencia de escritura por grupo/otros; no verifica identidad de paquete, hash contra una referencia protegida, política efectiva ni integridad de sudoers. Su comprobación TTY exige que el primer ancestro no sudo tenga TTY controlador y que coincida con el monitor sudo externo; no inspecciona el PTY master de `sshd-session` ni autentica procedencia SSH. Por ello, el rechazo histórico de `ssh -t host 'sudo ...'` no demuestra que no hubiera PTY: solo que el ancestro no cumplió la regla de TTY controlador.
+
+La evidencia histórica reportada para Debian es sudo 1.9.16p2, defaults `env_reset`, `mail_badpass`, `secure_path`, `use_pty` y autorización irrestricta `(ALL : ALL) ALL` para `greed`; falta reconfirmar la política efectiva completa y la identidad/integridad del binario. El acceso root irrestricto define el límite de amenaza: Candidate A no protege frente a `greed` actuando como root. No se han realizado cambios de host ni pruebas desde GitHub. Candidate A continúa bloqueado por política efectiva, trust reference del ejecutable y semántica/procedencia TTY.
