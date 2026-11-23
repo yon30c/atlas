@@ -1,8 +1,8 @@
 # Contrato de validación de privilegios para bootstrap LOCAL (candidato A)
 
-**Estado:** V1 y V2 completadas y validadas en Debian; V3 (observador diagnóstico de cadena sudo) implementada y pendiente de validación Debian. Contrato general abierto; candidato A no aprobado para ejecución privilegiada.  
-**Rama:** `feature/terminal-commands`.  
-**Fecha:** 16 de noviembre de 2026.  
+**Estado:** V1 y V2 completadas y validadas en Debian; V3 (observador diagnóstico de cadena sudo) validada localmente en Debian dentro del alcance documentado; contrato general abierto y candidato A no aprobado para ejecución privilegiada. Contrato general abierto; candidato A no aprobado para ejecución privilegiada.  
+**Rama de trabajo actual:** `work/atlas-mvp-runtime`.  
+**Fecha de actualización:** 23 de noviembre de 2026. La sección 11 conserva el corte histórico del 16-11-2026.  
 **Relacionado:** `local-bootstrap-privilege-boundary.md`, `local-pam-bootstrap-authenticator.md`, `local-pam-bootstrap-proof-protocol.md`, `local-bootstrap-coordination-architecture.md`, `local-bootstrap-chain-observer-v3-design.md`.
 
 ## 1. Propósito y decisión actual
@@ -266,7 +266,7 @@ Escenarios de integración previstos:
 
 No se cambia timestamp, no se habilita NOPASSWD, no se usa sudo -S y no se altera ninguna política. Los binarios se ejecutan desde `/tmp`. La salida nunca autoriza bootstrap ni prueba la procedencia del PTY.
 
-### Etapa V3 — observador diagnóstico de cadena sudo (IMPLEMENTADO; VALIDACIÓN DEBIAN PENDIENTE)
+### Etapa V3 — observador diagnóstico de cadena sudo (IMPLEMENTADO Y VALIDADO LOCALMENTE; SOLO DIAGNÓSTICO)
 
 El propietario autorizó el 16-11-2026 desarrollar conjuntamente los puntos 1–7 como prototipo C no privilegiado. El diseño está en `local-bootstrap-chain-observer-v3-design.md` y el código en `tools/bootstrap-chain-observer/`.
 
@@ -274,7 +274,7 @@ El prototipo observa el padre directo, clasifica metadatos compatibles con sudo 
 
 Resultados limitados a `CHAIN_PATTERN_MATCHED_DIAGNOSTICALLY`, `CHAIN_MISMATCH` y `CHAIN_INCOMPLETE`, siempre con `AUTHORIZATION=NOT_PROVIDED`. La coincidencia no prueba identidad de paquete, política sudo efectiva, autenticidad SSH, presencia física ni autorización. No integra PAM, helper privilegiado, configuración protegida, claves, Broker, SQLite, CAM o runtime.
 
-El propietario debe ejecutar `sh tools/bootstrap-chain-observer/test_chain.sh` en Debian antes de considerar V3 validada. Después se ejecutarán los escenarios manuales documentados, sin alterar sudoers, timestamp, PAM, SSH ni configuración del host.
+El propietario ejecutó `sh tools/bootstrap-chain-observer/test_chain.sh` en Debian y comunicó `bootstrap-chain-observer: tests passed`. También completó los escenarios manuales de invocación directa y mediante sudo descritos en §11.1. V3 queda validada localmente solo para esos escenarios. No se alteraron sudoers, timestamp, PAM, SSH ni configuración del host.
 
 ### Etapa V4 — pruebas negativas de autoridad
 
@@ -318,6 +318,28 @@ Observaciones recibidas del propietario:
 
 El recorrido de ancestros y el pidfd del probe son lecturas diagnósticas no atómicas. No se ha ejecutado un validador, no se ha probado PAM dentro de helper, no se han emitido pruebas y no se ha modificado el host.
 
+## 11.1 Validación local de V3 — 2026-11-23
+
+El propietario ejecutó en Debian 13, VM `Atlas-VM-test`, checkout `/opt/atlas-dev`:
+
+```text
+bootstrap-chain-observer: tests passed
+Bootstrap chain observer build and tests completed.
+Observer binary: /tmp/atlas-bootstrap-chain-observer
+```
+
+Escenarios manuales comunicados:
+
+- Ejecución directa desde la shell interactiva: `CHAIN_MISMATCH`, con razón `DIRECT_PARENT_IS_NOT_ROOT_OWNED_SETUID_SUDO`. La shell `bash` era el padre directo. Resultado esperado: no aceptar una invocación que no venga directamente del patrón sudo.
+- Ejecución `sudo -- /tmp/atlas-bootstrap-chain-observer`: `CHAIN_PATTERN_MATCHED_DIAGNOSTICALLY`. Se observaron dos procesos sudo contiguos (ejecutor y monitor), seguidos por la shell de origen. `chain_stable=yes`, `pidfds_stable=yes` y `collection_complete=yes`; el ancestro de origen se encontró en el índice 2. El primer intento de contraseña fue rechazado por sudo; el segundo permitió ejecutar el observador.
+- Ambos resultados mantuvieron `AUTHORIZATION=NOT_PROVIDED`.
+
+**Alcance validado:** compilación/build y pruebas automatizadas del observador; clasificación diagnóstica de la ejecución directa como mismatch; coincidencia diagnóstica de la cadena sudo interactiva observada en esta VM.
+
+**No validado por esta ejecución:** SSH con PTY, SSH sin PTY, wrapper/shell intermediaria, ejecución por root sin sudo, comportamiento bajo otras versiones/configuraciones de sudo, política sudo efectiva, identidad de paquete, PAM o autenticidad/procedencia criptográfica del TTY. La salida no demuestra autorización ni presencia física. La observación de dos procesos sudo no elimina las limitaciones TOCTOU de procfs/pidfd descritas arriba.
+
+**Decisión:** V3 pasa de pendiente a validada localmente para el alcance anterior. Esto no aprueba el candidato A, no habilita helper privilegiado y no autoriza cambios en PAM, sudoers, systemd, claves, SQLite, CAM o el host. A sigue provisional; antes de decidir A/B deben cerrarse las comprobaciones obligatorias restantes, en particular la procedencia del TTY y la política efectiva de sudo.
+
 ## 12. Prohibiciones fuera del alcance V1–V3 aprobado
 
 No:
@@ -330,4 +352,4 @@ No:
 - conectar el helper con el runtime;
 - aceptar observaciones diagnósticas como autorización.
 
-**Estado:** V1 y V2 completadas y validadas en Debian. V3 de observación específica de la cadena sudo implementada y pendiente de validación Debian. El contrato general permanece abierto y el candidato A no está aprobado para ejecución privilegiada. Las pruebas negativas de autoridad, decisión A/B, PAM, helper privilegiado o cambios del host requieren diseño, revisión y aprobación separados.
+**Estado:** V1, V2 y V3 completadas y validadas localmente en el alcance documentado. El contrato general permanece abierto y el candidato A no está aprobado para ejecución privilegiada. La validación V3 no constituye autorización; las pruebas negativas restantes, decisión A/B, PAM, helper privilegiado o cambios del host requieren diseño, revisión y aprobación separados. Las pruebas negativas de autoridad, decisión A/B, PAM, helper privilegiado o cambios del host requieren diseño, revisión y aprobación separados.
