@@ -681,3 +681,10 @@ Se revisaron directamente en GitHub `local-bootstrap-privilege-validation-contra
 La evidencia histórica del host reporta sudo 1.9.16p2, defaults `env_reset`, `mail_badpass`, `secure_path`, `use_pty`, y `greed` con `(ALL : ALL) ALL`. Esto significa que Candidate A no protege frente al propio `greed` actuando como root. Falta reconfirmar defaults/reglas efectivos, identidad/integridad del binario y definir si “SSH interactivo con PTY” significa shell interactiva o cualquier solicitud SSH con PTY asignado. V3 build/tests y los escenarios directo/sudo fueron validados localmente el 23-11; esa evidencia es solo diagnóstica.
 
 Referencia normativa y próximos comandos read-only: `docs/design/local-bootstrap-sudo-tty-static-audit.md`. No se modificó el host, no se instaló helper, no se tocó PAM/sudoers/systemd/SSH y no se ejecutaron pruebas desde GitHub.
+
+
+### Decisión SSH/PTY para bootstrap LOCAL — 2026-11-23
+
+El propietario aceptó la recomendación conservadora: solo permitir SSH cuando primero se abre una shell interactiva con PTY y desde ella se ejecuta sudo/helper directamente. Rechazar `ssh -t host 'sudo ...'` aunque tenga PTY, SSH sin PTY, comandos remotos no interactivos y wrappers/shells intermedias.
+
+Esta decisión cierra la política funcional, no el mecanismo técnico. V3 sigue siendo observador diagnóstico: no autentica el canal SSH ni la procedencia del PTY. Candidate A no está aprobado; debe demostrarse la distinción de forma estable y fail-closed o descartarse sin relajar la política. Candidate B no se adopta automáticamente y requiere evaluación independiente. No se han realizado cambios de host.
